@@ -3,7 +3,10 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
-import type { PrepaidCreditSummary } from "@/lib/api/prepaid"
+import {
+  type PrepaidCreditSummary,
+  PrepaidPurchaseNotStarted,
+} from "@/lib/api/prepaid"
 
 const mocks = vi.hoisted(() => ({
   data: null as PrepaidCreditSummary | null,
@@ -617,10 +620,13 @@ it("refreshes every billing read after Auto Reload is saved", async () => {
   )
 })
 
-it("keeps Buy disabled for an amount the backend refuses", async () => {
+it("keeps Buy disabled for an amount the backend refuses and says why", async () => {
   render(page())
   const input = await screen.findByRole("textbox", { name: "Amount (USD)" })
   fireEvent.change(input, { target: { value: "12" } })
+  expect(
+    screen.getByText("Enter a multiple of $5, from $5 to $10,000."),
+  ).toBeTruthy()
   expect(screen.getByRole("button", { name: /Buy .*credit/ })).toBeDisabled()
   fireEvent.change(input, { target: { value: "15" } })
   await waitFor(() =>
@@ -632,7 +638,7 @@ it("keeps Buy disabled for an amount the backend refuses", async () => {
 
 it("says nothing was charged when the backend refuses a purchase outright", async () => {
   mocks.checkout.mockRejectedValueOnce(
-    new ApiError(400, "bad_request", "amount_cents must be a multiple of 500"),
+    new PrepaidPurchaseNotStarted(400, "bad_request", "amount rejected"),
   )
   render(page())
   await waitFor(() =>
@@ -647,4 +653,20 @@ it("says nothing was charged when the backend refuses a purchase outright", asyn
     ).toBeTruthy(),
   )
   expect(screen.queryByText(/Payment status is uncertain/)).toBeNull()
+})
+
+it("keeps a refused retry of a kept purchase uncertain", async () => {
+  mocks.checkout.mockRejectedValueOnce(
+    new ApiError(400, "bad_request", "refused"),
+  )
+  render(page())
+  await waitFor(() =>
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).not.toBeDisabled(),
+  )
+  fireEvent.click(screen.getByRole("button", { name: "Buy $25 credit" }))
+  await waitFor(() =>
+    expect(screen.getByText(/Payment status is uncertain/)).toBeTruthy(),
+  )
 })

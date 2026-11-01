@@ -150,6 +150,9 @@ export interface PrepaidCheckoutResult {
   url?: string
 }
 
+// A new purchase the backend refused before it started: nothing was charged.
+export class PrepaidPurchaseNotStarted extends ApiError {}
+
 export async function startPrepaidCheckout(
   teamKey: string,
   amountCents: number,
@@ -226,6 +229,11 @@ export async function startPrepaidCheckout(
     ) {
       sessionStorage.removeItem(key)
       notifyPrepaidOperationsChanged()
+      throw new PrepaidPurchaseNotStarted(
+        error.status,
+        error.code,
+        error.message,
+      )
     }
     throw error
   }

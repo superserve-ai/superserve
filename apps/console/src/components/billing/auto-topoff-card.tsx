@@ -120,7 +120,8 @@ export function AutoTopoffCard({
           <Field
             label="When credit falls below (USD)"
             error={
-              thresholdCents === null || !validThresholdCents(thresholdCents)
+              threshold &&
+              (thresholdCents === null || !validThresholdCents(thresholdCents))
                 ? THRESHOLD_ERROR
                 : undefined
             }
@@ -135,7 +136,8 @@ export function AutoTopoffCard({
           <Field
             label="Add this much credit (USD)"
             error={
-              amountCents === null || !validPurchaseCents(amountCents)
+              amount &&
+              (amountCents === null || !validPurchaseCents(amountCents))
                 ? AMOUNT_ERROR
                 : undefined
             }

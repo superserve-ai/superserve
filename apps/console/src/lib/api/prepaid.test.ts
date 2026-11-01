@@ -8,6 +8,7 @@ import {
   type PrepaidPurchase,
   validPurchaseCents,
   validThresholdCents,
+  PrepaidPurchaseNotStarted,
 } from "./prepaid"
 const api = vi.hoisted(() => vi.fn())
 vi.mock("./client", async (original) => ({
@@ -34,7 +35,7 @@ describe("Starter durable checkout", () => {
     )
     await expect(
       startPrepaidCheckout("use:team", 1_234_567, route, "actor"),
-    ).rejects.toThrow("amount rejected")
+    ).rejects.toBeInstanceOf(PrepaidPurchaseNotStarted)
     expect(body(0).amount_cents).toBe(1_234_567)
     expect(retainedPrepaidOperations("actor", "use:team")).toEqual([])
     respond()
@@ -44,6 +45,19 @@ describe("Starter durable checkout", () => {
       startPrepaidCheckout("use:team", 0, route, "actor"),
     ).rejects.toThrow()
     expect(api).toHaveBeenCalledTimes(2)
+  })
+
+  it("keeps a retried purchase uncertain when its replay is refused", async () => {
+    const { ApiError } = await import("./client")
+    api.mockRejectedValueOnce(new Error("lost response"))
+    await expect(
+      startPrepaidCheckout("use:team", 500, route, "actor"),
+    ).rejects.toThrow("lost response")
+    api.mockRejectedValueOnce(new ApiError(400, "bad_request", "refused"))
+    const replay = startPrepaidCheckout("use:team", 500, route, "actor")
+    await expect(replay).rejects.toBeInstanceOf(ApiError)
+    await expect(replay).rejects.not.toBeInstanceOf(PrepaidPurchaseNotStarted)
+    expect(retainedPrepaidOperations("actor", "use:team")).toHaveLength(1)
   })
 
   it("replays original identity, amount and frozen redirect URLs after response loss", async () => {

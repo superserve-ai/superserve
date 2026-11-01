@@ -28,11 +28,11 @@ import {
 import { useUser } from "@/hooks/use-user"
 import { canBuyFundedCredit } from "@/lib/api/billing-capabilities"
 import { fundedByCredit, planTopoff, UPGRADE_PATH } from "@/lib/api/billing-v2"
-import { ApiError } from "@/lib/api/client"
 import {
   type PrepaidCreditSummary,
   type PrepaidPurchase,
   type PrepaidOperation,
+  PrepaidPurchaseNotStarted,
   startPrepaidCheckout,
   validPrepaidCents,
   validPurchaseCents,
@@ -403,7 +403,7 @@ function PurchaseCard({
     } catch (err) {
       if (target.current !== originalTeam) return
       setStatus(
-        err instanceof ApiError && err.status === 400
+        err instanceof PrepaidPurchaseNotStarted
           ? "This purchase wasn't started, so nothing was charged."
           : "Payment status is uncertain. Retry to check the same purchase.",
       )
