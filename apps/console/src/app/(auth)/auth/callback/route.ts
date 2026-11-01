@@ -537,10 +537,11 @@ export async function GET(request: Request) {
                 )
             }
           }
-          if (isNewUser && !googleEvidence) {
+          if (isNewUser && !googleEvidence && createdInThisCallback(user)) {
             // The signup proof was valid, but its capture evidence did not
             // survive OAuth. Record it as a missing capture so the backend
             // device policy decides; a recorded failure still withholds credit.
+            // A team-less account created earlier is not this signup.
             try {
               signupEligibilitySnapshot = await publishOriginalSignupEvidence(
                 user,
@@ -599,8 +600,7 @@ export async function GET(request: Request) {
             }
           }
         } else {
-          const createdAt = new Date(user.created_at)
-          isNewUser = Date.now() - createdAt.getTime() < 30000
+          isNewUser = createdInThisCallback(user)
         }
 
         if (type === "signup") {
@@ -826,4 +826,10 @@ export async function GET(request: Request) {
     }
   }
   return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+}
+
+// Auth creates the account while exchanging this callback's code, so only a
+// just-created account belongs to this signup.
+function createdInThisCallback(user: { created_at: string }): boolean {
+  return Date.now() - Date.parse(user.created_at) < 30000
 }

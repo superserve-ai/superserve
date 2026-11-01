@@ -2240,6 +2240,28 @@ describe("auth callback", () => {
     )
   })
 
+  it.each([
+    ["with an attempt ID", "&signup_attempt_id=attempt-1"],
+    ["on a legacy proof", ""],
+  ])(
+    "writes no provenance for an older team-less Google account %s",
+    async (_case, query) => {
+      googleMembershipState = { kind: "first_time" }
+      currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+      mockHasValidGoogleSignupProof.mockResolvedValue(true)
+      mockHasValidLegacyGoogleSignupProof.mockResolvedValue(true)
+      mockReadGooglePromotionEvidence.mockResolvedValue(undefined)
+
+      await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?code=abc${query}`,
+        ),
+      )
+
+      expect(mockPublishOriginalSignupEvidence).not.toHaveBeenCalled()
+    },
+  )
+
   it("publishes retained Google evidence once, unchanged", async () => {
     googleMembershipState = { kind: "first_time" }
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
