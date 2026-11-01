@@ -91,7 +91,7 @@ const writeFile = createTool({
   inputSchema: z.object({ path: z.string(), content: z.string() }),
   execute: async ({ path, content }) => {
     await sandbox.files.write(path, content)
-    return { path, bytes: content.length }
+    return `Wrote ${content.length} characters to ${path}`
   },
 })
 
