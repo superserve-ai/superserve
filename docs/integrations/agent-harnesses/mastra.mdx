@@ -194,15 +194,15 @@ See [Streaming](/commands/streaming) to stream a single command's output.
 
 The examples above close over one sandbox. To serve many conversations with one agent, pass the sandbox ID to the tools through [request context](https://mastra.ai/docs/server/request-context). Store `sandbox.id` with the conversation, reconnect on each turn, and pause between turns so files and installed packages stay available without paying for an idle VM.
 
-```typescript {7-8,14-17,36-38,43}
+```typescript {7-8,14-17,34-38,51}
 import { Agent } from "@mastra/core/agent"
 import { RequestContext } from "@mastra/core/request-context"
 import { createTool } from "@mastra/core/tools"
 import { Sandbox } from "@superserve/sdk"
 import { z } from "zod"
 
-// Connected sandboxes, keyed by ID. They stay in your process.
-const sandboxes = new Map<string, Sandbox>()
+// Sandboxes with a turn in progress, keyed by ID. They stay in your process.
+const sandboxes = new Map<string, Promise<Sandbox>>()
 
 const bash = createTool({
   id: "bash",
@@ -210,7 +210,7 @@ const bash = createTool({
   inputSchema: z.object({ command: z.string() }),
   requestContextSchema: z.object({ sandboxId: z.string() }),
   execute: async ({ command }, { requestContext }) => {
-    const sandbox = sandboxes.get(requestContext.get("sandboxId"))
+    const sandbox = await sandboxes.get(requestContext.get("sandboxId"))
     if (!sandbox) throw new Error("No sandbox is connected for this turn.")
     const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
       timeoutMs: 60_000,
@@ -228,18 +228,24 @@ const agent = new Agent({
 })
 
 async function runTurn(sandboxId: string, prompt: string) {
+  // The turn pauses the sandbox when it ends, so allow one turn at a time.
+  if (sandboxes.has(sandboxId)) throw new Error("A turn is already running.")
   // Resumes the sandbox if it is paused.
-  const sandbox = await Sandbox.connect(sandboxId)
-  sandboxes.set(sandboxId, sandbox)
-  const requestContext = new RequestContext<{ sandboxId: string }>()
-  requestContext.set("sandboxId", sandboxId)
+  const connecting = Sandbox.connect(sandboxId)
+  sandboxes.set(sandboxId, connecting)
   try {
-    const result = await agent.generate(prompt, { requestContext, maxSteps: 10 })
-    return result.text
+    const sandbox = await connecting
+    const requestContext = new RequestContext<{ sandboxId: string }>()
+    requestContext.set("sandboxId", sandboxId)
+    try {
+      const result = await agent.generate(prompt, { requestContext, maxSteps: 10 })
+      return result.text
+    } finally {
+      // Pause between turns. Files and memory are kept until the next connect.
+      await sandbox.pause()
+    }
   } finally {
     sandboxes.delete(sandboxId)
-    // Pause between turns. Files and memory are kept until the next connect.
-    await sandbox.pause()
   }
 }
 
@@ -256,6 +262,8 @@ try {
 ```
 
 Put only the ID in request context, not the `Sandbox` object. Mastra serializes request context, for example into traces and stored workflow snapshots, and a `Sandbox` object holds your API key and a sandbox access token. The connected `Sandbox` objects stay in a map in your process.
+
+Each turn pauses the sandbox when it ends, so `runTurn` rejects a second turn for a conversation while one is running. The map works in one process. If several servers handle the same conversation, use a shared lock or a queue per conversation.
 
 `requestContextSchema` types `requestContext.get("sandboxId")` and checks the value before the tool runs. If a call has no sandbox ID in its context, the tool returns a validation error to the model instead of running. `Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
 
