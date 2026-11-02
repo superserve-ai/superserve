@@ -42,6 +42,26 @@ export function validPrepaidCents(cents: number): boolean {
   return Number.isSafeInteger(cents) && cents > 0
 }
 
+// The amounts the backend accepts for a new purchase or reload, and for the
+// reload threshold, so a form can say so before submitting.
+export function validPurchaseCents(cents: number): boolean {
+  return (
+    Number.isSafeInteger(cents) &&
+    cents >= 500 &&
+    cents % 500 === 0 &&
+    cents <= 1_000_000
+  )
+}
+
+export function validThresholdCents(cents: number): boolean {
+  return (
+    Number.isSafeInteger(cents) &&
+    cents >= 100 &&
+    cents % 100 === 0 &&
+    cents <= 1_000_000
+  )
+}
+
 export function getPrepaidCredit(): Promise<PrepaidCreditSummary> {
   return apiClient<PrepaidCreditSummary>("/billing/prepaid", {
     cache: "no-store",
@@ -130,6 +150,9 @@ export interface PrepaidCheckoutResult {
   url?: string
 }
 
+// A new purchase the backend refused before it started: nothing was charged.
+export class PrepaidPurchaseNotStarted extends ApiError {}
+
 export async function startPrepaidCheckout(
   teamKey: string,
   amountCents: number,
@@ -206,6 +229,11 @@ export async function startPrepaidCheckout(
     ) {
       sessionStorage.removeItem(key)
       notifyPrepaidOperationsChanged()
+      throw new PrepaidPurchaseNotStarted(
+        error.status,
+        error.code,
+        error.message,
+      )
     }
     throw error
   }
@@ -233,8 +261,8 @@ export function setPrepaidAutoRecharge(
 ): Promise<PrepaidCreditSummary> {
   if (
     settings.enabled &&
-    (!validPrepaidCents(settings.thresholdCents ?? NaN) ||
-      !validPrepaidCents(settings.amountCents ?? NaN))
+    (!validThresholdCents(settings.thresholdCents ?? NaN) ||
+      !validPurchaseCents(settings.amountCents ?? NaN))
   )
     throw new Error("Enter dollar amounts above $0.")
   return apiClient<PrepaidCreditSummary>("/billing/prepaid/auto-recharge", {
