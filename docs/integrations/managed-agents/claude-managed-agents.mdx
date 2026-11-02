@@ -341,8 +341,8 @@ export async function handleWebhook(req: Request): Promise<Response> {
 ```
 
 ```python Python
-# Reuses AsyncAnthropic, ENVIRONMENT_ID, ENVIRONMENT_KEY, and handle_work
-# from the orchestrator above.
+# Use in place of asyncio.run(main()) in the orchestrator above. Reuses its
+# AsyncAnthropic, ENVIRONMENT_ID, ENVIRONMENT_KEY, and handle_work.
 client = AsyncAnthropic(auth_token=ENVIRONMENT_KEY)
 
 
