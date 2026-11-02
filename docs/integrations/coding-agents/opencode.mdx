@@ -16,8 +16,9 @@ Opencode is an open-source terminal coding agent. Run it in a Superserve sandbox
 5. Create the sandbox, open its **Terminal**, and run:
 
    ```bash
-   curl -fsSL https://opencode.ai/install | bash && opencode
-   export PATH=/home/user/.opencode/bin:$PATH
+   curl -fsSL https://opencode.ai/install | bash
+   export PATH="$HOME/.opencode/bin:$PATH"
+   opencode
    ```
 
 ## Via the SDK
