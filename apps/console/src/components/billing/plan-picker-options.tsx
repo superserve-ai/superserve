@@ -1,12 +1,15 @@
 "use client"
 
 import { CheckIcon } from "@phosphor-icons/react"
-import { Button, cn } from "@superserve/ui"
+import { Button, cn, Spinner } from "@superserve/ui"
 import Link from "next/link"
-import { useEffect, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 
+import { useSignOut } from "@/hooks/use-sign-out"
+import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
+  canManageTeamBillingAction,
   getTeamCatalogAction,
   type TeamCatalog,
 } from "@/lib/billing/plan-offers-actions"
@@ -86,16 +89,21 @@ function PlanOption({
   card,
   locator,
   highlighted,
+  submitting,
+  onSubmit,
 }: {
   plan: PickerPlan
   card: PickerCard
   locator: CheckoutLocator
   highlighted: boolean
+  submitting: SignupCheckoutOffer | null
+  onSubmit: (offer: SignupCheckoutOffer) => (event: FormEvent) => void
 }) {
   return (
     <form
       method="post"
       action={signupCheckoutPath(plan.offer, locator)}
+      onSubmit={onSubmit(plan.offer)}
       aria-label={`${plan.label} plan`}
       data-highlighted={highlighted}
       className={cn(
@@ -133,8 +141,16 @@ function PlanOption({
         type="submit"
         variant={highlighted ? "default" : "outline"}
         className="mt-auto h-11 w-full"
+        disabled={submitting !== null}
       >
-        Choose {plan.label}
+        {submitting === plan.offer ? (
+          <>
+            <Spinner size="sm" />
+            Opening checkout…
+          </>
+        ) : (
+          `Choose ${plan.label}`
+        )}
       </Button>
     </form>
   )
@@ -143,9 +159,12 @@ function PlanOption({
 export function PlanPickerOptions({
   preselected,
   locator,
+  adminRequired = false,
 }: {
   preselected: SignupCheckoutOffer | null
   locator: CheckoutLocator
+  // Checkout already refused this user for lacking billing access.
+  adminRequired?: boolean
 }) {
   const { account, team } = locator
   const key = `${account}:${team}`
@@ -154,22 +173,48 @@ export function PlanPickerOptions({
   const [loaded, setLoaded] = useState<{
     key: string
     catalog: TeamCatalog | null
+    canManage: boolean | null
   }>()
   useEffect(() => {
     let live = true
-    getTeamCatalogAction({ account, team }).then(
-      (catalog) => live && setLoaded({ key, catalog }),
-      () => live && setLoaded({ key, catalog: null }),
+    // Either read failing leaves the picker as it was: plans, offered to all.
+    const settle = <T,>(read: () => Promise<T>) =>
+      Promise.resolve()
+        .then(read)
+        .catch(() => null)
+    void Promise.all([
+      settle(() => getTeamCatalogAction({ account, team })),
+      settle(() => canManageTeamBillingAction({ account, team })),
+    ]).then(
+      ([catalog, canManage]) => live && setLoaded({ key, catalog, canManage }),
     )
     return () => {
       live = false
     }
   }, [account, team, key])
-  const catalog = loaded?.key === key ? loaded.catalog : undefined
+  const current = loaded?.key === key ? loaded : undefined
+  const catalog = current?.catalog
+  const { submitting, onSubmit } = useSubmitOnce<SignupCheckoutOffer>()
+  const signOut = useSignOut()
 
-  if (catalog === undefined)
+  if (current === undefined)
     return (
       <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
+    )
+  // Only billing administrators can buy; anyone else would only be refused.
+  if (adminRequired || current.canManage === false)
+    return (
+      <div className="mt-5 flex flex-col items-center gap-4">
+        {adminRequired ? null : (
+          <p className="max-w-sm text-center text-sm text-muted">
+            Only your team&apos;s billing administrators can choose a plan. Ask
+            one of them to upgrade this team.
+          </p>
+        )}
+        <Button variant="outline" size="sm" onClick={() => void signOut()}>
+          Sign out
+        </Button>
+      </div>
     )
   const plans = pickerPlans(catalog?.offers)
   const asked = preselected === "starter" ? "developer" : preselected
@@ -197,12 +242,15 @@ export function PlanPickerOptions({
             key={offer}
             method="post"
             action={signupCheckoutPath(offer, locator)}
+            onSubmit={onSubmit(offer)}
           >
             <Button
               type="submit"
               size="sm"
               variant={highlighted(offer) ? "default" : "outline"}
+              disabled={submitting !== null}
             >
+              {submitting === offer ? <Spinner size="sm" /> : null}
               {label}
             </Button>
           </form>
@@ -226,6 +274,8 @@ export function PlanPickerOptions({
           card={pickerCard(plan.catalog, catalog?.cards ?? [])}
           locator={locator}
           highlighted={highlighted(plan.offer)}
+          submitting={submitting}
+          onSubmit={onSubmit}
         />
       ))}
       {enterprise ? (

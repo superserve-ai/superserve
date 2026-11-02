@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, cleanup, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
@@ -392,6 +392,18 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(container.textContent).not.toMatch(/Add Payment|\$95/)
   })
 
+  it("sends only the first Upgrade while Checkout opens", () => {
+    entry("trial")
+    mocks.offers = [{ offer_key: "developer_monthly", display_name: "Builder" }]
+    mocks.summary.mockReturnValue({ data: trial(5) })
+    mount("developer")
+    const upgrade = screen.getByRole("button", { name: "Upgrade to Builder" })
+    const form = upgrade.closest("form")!
+    expect(fireEvent.submit(form)).toBe(true)
+    expect(upgrade).toBeDisabled()
+    expect(fireEvent.submit(form)).toBe(false)
+  })
+
   it("sends Upgrade to the picker when the chosen plan isn't sold any more", () => {
     entry("trial")
     mocks.offers = [
@@ -419,6 +431,14 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(banner()).toHaveTextContent("You're on a free trial with $0.01 left")
     expect(banner()).not.toHaveTextContent(/almost used up/)
     expect(screen.getByRole("button", { name: /Upgrade/ })).toBeTruthy()
+  })
+
+  it("asks for nothing while a paid plan activates", () => {
+    entry("activating")
+    mocks.summary.mockReturnValue({ data: trial(5) })
+    const { container } = mount()
+    expect(container.textContent).not.toMatch(/Add Payment|payment method/)
+    expect(screen.queryByRole("region", { name: "Free trial" })).toBeNull()
   })
 
   it("says sandboxes are paused and nothing is deleted once the trial ends", () => {
