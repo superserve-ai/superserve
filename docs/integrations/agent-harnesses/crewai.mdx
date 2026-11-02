@@ -15,7 +15,7 @@ export SUPERSERVE_API_KEY=ss_live_...
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
-CrewAI needs Python 3.10 to 3.13. The examples use Anthropic through CrewAI's native provider, which reads the key from the environment. Any supported provider works: set `OPENAI_API_KEY` and pass `"openai/gpt-5.5"` as the `llm`. See [LLMs](https://docs.crewai.com/en/concepts/llms) in the CrewAI docs for the full list, and [API keys](/api-key) to create a Superserve API key.
+CrewAI needs Python 3.10 to 3.13. The examples use Anthropic through CrewAI's native provider, which reads the key from the environment. To use another provider, install its extra if it has one, set its API key, and change `llm`. For example, set `OPENAI_API_KEY` and pass `"openai/gpt-5.5"`; OpenAI needs no extra. See [LLMs](https://docs.crewai.com/en/concepts/llms) in the CrewAI docs for the full list, and [API keys](/api-key) to create a Superserve API key.
 
 ## Wire the sandbox into the agent
 
@@ -117,7 +117,7 @@ finally:
     sandbox.kill()
 ```
 
-With `verbose=True`, the crew prints each tool call and its result. Output from a run with `claude-haiku-4-5` (trimmed; the model's wording varies):
+With `verbose=True`, the crew prints each tool call and its result. Output from a run with `claude-haiku-4-5` (trimmed, with the panel borders removed; the model's wording varies):
 
 ```text
 Tool: write_file
@@ -126,7 +126,7 @@ Output: Wrote 688 characters to /home/user/prime_numbers.py
 
 Tool: bash
 Args: {'command': 'python3 /home/user/prime_numbers.py'}
-Output: {"stdout":"The first 10 prime numbers are:\n2\n3\n5\n...","stderr":"","exit_code":0,"truncated":false}
+Output: {"stdout":"The first 10 prime numbers are:\n1. 2\n2. 3\n3. 5\n...","stderr":"","exit_code":0,"truncated":false}
 ```
 
 `sandbox.files` paths must be absolute. See [Read & write files](/filesystem/read-write) for binary content and directory downloads.
@@ -184,7 +184,7 @@ finally:
     sandbox.kill()
 ```
 
-`kickoff()` is typed as `CrewOutput | CrewStreamingOutput`, so the `assert` narrows the type for type checkers. Read `streaming.result` after the loop for the final `CrewOutput`. The event handler is registered globally, so it runs for every crew in the process. See [Streaming Crew Execution](https://docs.crewai.com/en/learn/streaming-crew-execution) and [Event Listeners](https://docs.crewai.com/en/concepts/event-listener) in the CrewAI docs, and [Streaming](/commands/streaming) to stream a single command's output.
+`kickoff()` is typed as `CrewOutput | CrewStreamingOutput`, so the `assert` narrows the type for type checkers. Read `streaming.result` after the loop for the final `CrewOutput`. The event handler is registered globally, so it runs for every crew in the process. CrewAI runs it on a worker thread, so its output can interleave with the streamed text. A tool call that raises, such as a command that exceeds its timeout, emits `ToolUsageErrorEvent` instead. See [Streaming Crew Execution](https://docs.crewai.com/en/learn/streaming-crew-execution) and [Event Listeners](https://docs.crewai.com/en/concepts/event-listener) in the CrewAI docs, and [Streaming](/commands/streaming) to stream a single command's output.
 
 ## One sandbox per conversation
 
@@ -223,7 +223,7 @@ def run_crew(sandbox_id: str, request: str) -> str:
     try:
         return str(build_crew(sandbox).kickoff(inputs={"request": request}))
     finally:
-        # Pause between runs. Files and memory are kept until the next connect.
+        # Pause between runs. Files, processes, and VM memory are kept.
         sandbox.pause()
 
 
@@ -241,7 +241,7 @@ finally:
 
 `Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
 
-The second run finds the file because it lives in the sandbox, not because the crew remembers the first run. To keep context between runs too, give the crew [CrewAI memory](https://docs.crewai.com/en/concepts/memory) scoped to the conversation, for example `memory=Memory().scope(f"/conversation/{sandbox.id}")`. With `memory=True`, crews without a `name` share one memory scope, so context can leak between conversations.
+The second run finds the file because it lives in the sandbox, not because the crew remembers the first run. To keep context between runs too, give the crew [CrewAI memory](https://docs.crewai.com/en/concepts/memory) scoped to the conversation, for example `memory=Memory(llm="anthropic/claude-sonnet-5-5").scope(f"/conversation/{sandbox.id}")` with `Memory` imported from `crewai`. Memory also needs an embedding model. The default is OpenAI's, so set `OPENAI_API_KEY` or pass an `embedder` to `Memory`. Do not use `memory=True` here: crews without a `name` share one memory scope, so context can leak between conversations.
 
 ## Good to know
 
