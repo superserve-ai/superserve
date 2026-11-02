@@ -119,6 +119,13 @@ describe("startSignupCheckout", () => {
     )
   })
 
+  it("tells someone without billing access to ask an administrator", async () => {
+    checkout = { status: 403, body: { error: { code: "forbidden" } } }
+    expect(await startSignupCheckout(user, "developer", origin, mine)).toBe(
+      `/auth/choose-plan/?reason=billing_admin_required&${pinned}`,
+    )
+  })
+
   it("returns to the paid page while a paid checkout settles", async () => {
     checkout = {
       status: 202,

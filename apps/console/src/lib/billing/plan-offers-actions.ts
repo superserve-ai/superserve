@@ -59,3 +59,34 @@ export async function getTeamOffersAction(
 ): Promise<BillingOffer[] | null> {
   return (await getTeamCatalogAction(locator))?.offers ?? null
 }
+
+// Whether the signed-in user may buy a plan for the picker's team, or null
+// when it can't be read and the picker should offer its plans as before.
+export async function canManageTeamBillingAction(
+  locator: CheckoutLocator,
+): Promise<boolean | null> {
+  try {
+    const {
+      data: { user },
+    } = await (await createServerClient()).auth.getUser()
+    if (!user || locator.account !== user.id) return null
+    const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
+    if (locator.team !== `${team.region}:${team.teamId}`) return null
+    const response = await fetch(
+      new URL("/billing/summary", cellFor(team.region).apiBaseUrl),
+      {
+        headers: { "X-API-Key": apiKey },
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      },
+    )
+    if (!response.ok) return null
+    const body = (await response.json()) as {
+      permissions?: { can_manage?: unknown }
+    }
+    const canManage = body.permissions?.can_manage
+    return typeof canManage === "boolean" ? canManage : null
+  } catch {
+    return null
+  }
+}
