@@ -2,15 +2,10 @@
 
 import { CaretUpDownIcon, SignOutIcon, UserIcon } from "@phosphor-icons/react"
 import { Avatar, cn } from "@superserve/ui"
-import { useRouter } from "next/navigation"
-import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef, useState } from "react"
 
-import { markSigningOut } from "@/components/layout/session-expiry-redirect"
+import { useSignOut } from "@/hooks/use-sign-out"
 import { useUser } from "@/hooks/use-user"
-import { AUTH_EVENTS } from "@/lib/posthog/events"
-import { createBrowserClient } from "@/lib/supabase/client"
-import { clearTerminalTabsStorage } from "@/lib/terminal-tabs-storage"
 
 import { useSidebar } from "./sidebar-context"
 
@@ -26,8 +21,6 @@ function getInitials(name: string): string {
 export function SidebarUserMenu() {
   const { user } = useUser()
   const { isCollapsed } = useSidebar()
-  const router = useRouter()
-  const posthog = usePostHog()
   const [open, setOpen] = useState(false)
   const menuRef = useRef<HTMLDivElement>(null)
 
@@ -57,20 +50,10 @@ export function SidebarUserMenu() {
     return () => document.removeEventListener("keydown", handleKey)
   }, [open])
 
+  const signOut = useSignOut()
   const handleLogout = async () => {
     setOpen(false)
-    posthog.capture(AUTH_EVENTS.SIGN_OUT)
-    markSigningOut()
-    try {
-      const supabase = createBrowserClient()
-      await supabase.auth.signOut()
-    } catch {
-      // Sign out failed, but redirect to sign-in anyway
-    }
-    // Drop any locally-scoped state tied to the previous user.
-    clearTerminalTabsStorage()
-    posthog.reset()
-    router.push("/auth/signin")
+    await signOut()
   }
 
   return (
