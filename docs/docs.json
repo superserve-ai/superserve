@@ -247,7 +247,8 @@
               "integrations/coding-agents/claude",
               "integrations/coding-agents/codex",
               "integrations/coding-agents/opencode",
-              "integrations/coding-agents/kilocode"
+              "integrations/coding-agents/kilocode",
+              "integrations/coding-agents/pi"
             ]
           },
           {
@@ -270,7 +271,8 @@
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/langchain",
-              "integrations/agent-harnesses/openai-agents-sdk"
+              "integrations/agent-harnesses/openai-agents-sdk",
+              "integrations/agent-harnesses/vercel-ai-sdk"
             ]
           },
           {

@@ -23,6 +23,7 @@
     "directory": "packages/mcp"
   },
   "bin": {
+    "mcp": "./dist/index.js",
     "superserve-mcp": "./dist/index.js",
     "superserve-mcp-http": "./dist/httpServer.js"
   },
