@@ -24,6 +24,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 
 import {
   beginGoogleSignup,
+  claimGoogleRecoveryContinuation,
   isCloudflareSignupObservationEnabled,
   signUpWithEmail,
 } from "./action"
@@ -340,8 +341,9 @@ export default function SignUpContent() {
     googleSignIn.current = handleGoogleSignIn
   })
 
-  // A reported reason means Google already succeeded; run the check and go
-  // back to Google without asking for another click.
+  // When this browser's own callback just failed the check, run the check and
+  // go back to Google without asking for another click. A link alone only
+  // shows the button.
   useEffect(() => {
     if (!isCompleteGoogleSignup || !googleRecoveryMessage) return
     if (autoContinued.current) return
@@ -349,12 +351,17 @@ export default function SignUpContent() {
     try {
       const last = Number(sessionStorage.getItem(GOOGLE_RECOVERY_AUTO_KEY))
       if (last && Date.now() - last < GOOGLE_RECOVERY_AUTO_WINDOW_MS) return
-      sessionStorage.setItem(GOOGLE_RECOVERY_AUTO_KEY, String(Date.now()))
     } catch {
       return
     }
-    void googleSignIn.current()
-  }, [isCompleteGoogleSignup, googleRecoveryMessage])
+    void claimGoogleRecoveryContinuation(googleRecoveryReason)
+      .then((claimed) => {
+        if (!claimed) return
+        sessionStorage.setItem(GOOGLE_RECOVERY_AUTO_KEY, String(Date.now()))
+        return googleSignIn.current()
+      })
+      .catch(() => undefined)
+  }, [isCompleteGoogleSignup, googleRecoveryMessage, googleRecoveryReason])
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">

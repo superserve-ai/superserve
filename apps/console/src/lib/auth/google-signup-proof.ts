@@ -358,6 +358,61 @@ export async function googleSignupProofFailure(
   }
 }
 
+const RECOVERY_COOKIE = "__Host-superserve-google-recovery"
+const RECOVERY_PURPOSE = "google_signup_recovery"
+const RECOVERY_TTL_SECONDS = 10 * 60
+
+/**
+ * Marks that this browser's own Google callback just failed the signup check,
+ * so the recovery page may continue to Google without a click. A link alone
+ * carries no such mark.
+ */
+export async function markGoogleSignupRecovery(
+  reason: GoogleSignupProofFailure,
+): Promise<void> {
+  const encoded = Buffer.from(
+    JSON.stringify({
+      purpose: RECOVERY_PURPOSE,
+      reason,
+      exp: Math.floor(Date.now() / 1000) + RECOVERY_TTL_SECONDS,
+    }),
+  ).toString("base64url")
+  ;(await cookies()).set(
+    RECOVERY_COOKIE,
+    `${encoded}.${signature(encoded).toString("base64url")}`,
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: RECOVERY_TTL_SECONDS,
+    },
+  )
+}
+
+/** Consumes the recovery mark; true only for an unexpired mark for reason. */
+export async function claimGoogleSignupRecovery(
+  reason: string,
+): Promise<boolean> {
+  try {
+    const store = await cookies()
+    const value = store.get(RECOVERY_COOKIE)?.value
+    if (!value || value.length > 1024) return false
+    expireCookie(store, RECOVERY_COOKIE)
+    const payload = signedPayload(value) as
+      | { purpose?: string; reason?: string; exp?: number }
+      | undefined
+    return (
+      payload?.purpose === RECOVERY_PURPOSE &&
+      payload.reason === reason &&
+      typeof payload.exp === "number" &&
+      payload.exp >= Math.floor(Date.now() / 1000)
+    )
+  } catch {
+    return false
+  }
+}
+
 /** Compatibility-only check for proofs issued before attempt-scoped cookies. */
 export async function hasValidLegacyGoogleSignupProof(): Promise<boolean> {
   try {

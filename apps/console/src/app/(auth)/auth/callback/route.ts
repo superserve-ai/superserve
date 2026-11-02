@@ -24,6 +24,7 @@ import {
   hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
+  markGoogleSignupRecovery,
   readGooglePromotionEvidence,
   retainOriginalGoogleSignup,
   revokeGoogleSignupAuthorization,
@@ -448,6 +449,7 @@ export async function GET(request: Request) {
                 reason: "missing_or_invalid_proof",
                 proofFailure,
               })
+              await markGoogleSignupRecovery(proofFailure)
               const recoveryUrl = new URL("/auth/signup", origin)
               recoveryUrl.searchParams.set("complete_google", "1")
               recoveryUrl.searchParams.set("reason", proofFailure)

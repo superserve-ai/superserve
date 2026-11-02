@@ -94,7 +94,12 @@ const mockBeginGoogleSignup = vi.fn<
     signupAttemptId: "attempt-default",
   }),
 )
+const mockClaimGoogleRecoveryContinuation = vi.fn<
+  (reason: string) => Promise<boolean>
+>(() => Promise.resolve(false))
 vi.mock("./action", () => ({
+  claimGoogleRecoveryContinuation: (reason: string) =>
+    mockClaimGoogleRecoveryContinuation(reason),
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
   beginGoogleSignup: (...args: Parameters<typeof mockBeginGoogleSignup>) =>
     mockBeginGoogleSignup(...args),
@@ -157,6 +162,7 @@ describe("SignUpPage", () => {
     mockCapture.mockReset()
     mockRouterPush.mockReset()
     mockSearchParams = new URLSearchParams()
+    mockClaimGoogleRecoveryContinuation.mockReset().mockResolvedValue(false)
     sessionStorage.clear()
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
     vi.resetModules()
@@ -483,6 +489,8 @@ describe("SignUpPage", () => {
       "complete_google=1&reason=started_from_signin",
     )
     mockSignInWithOAuth.mockResolvedValue({ error: null })
+    // The browser's own failed callback left a recovery mark.
+    mockClaimGoogleRecoveryContinuation.mockResolvedValue(true)
     const { default: RecoverySignUpPage } = await import("./page")
     const first = render(<RecoverySignUpPage />)
 
@@ -492,6 +500,9 @@ describe("SignUpPage", () => {
       ),
     ).toBeInTheDocument()
     await waitFor(() => {
+      expect(mockClaimGoogleRecoveryContinuation).toHaveBeenCalledWith(
+        "started_from_signin",
+      )
       expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
       expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1)
     })
@@ -505,6 +516,25 @@ describe("SignUpPage", () => {
       }),
     ).toBeInTheDocument()
     expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for a click when a link reports a reason the browser never hit", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1&reason=expired")
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(mockClaimGoogleRecoveryContinuation).toHaveBeenCalledWith(
+        "expired",
+      ),
+    )
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
   })
 
   it("waits for a click when the recovery page has no reported reason", async () => {

@@ -84,6 +84,8 @@ import {
   retainOriginalGoogleSignup,
   readGooglePromotionEvidence,
   googleSignupProofFailure,
+  markGoogleSignupRecovery,
+  claimGoogleSignupRecovery,
 } from "./google-signup-proof"
 
 describe("google-signup-proof", () => {
@@ -757,6 +759,45 @@ describe("google-signup-proof", () => {
           : cookie,
       )
       expect(await googleSignupProofFailure("attempt-a")).toBe("invalid_proof")
+    })
+  })
+
+  describe("Google signup recovery mark", () => {
+    it("lets the recovery page continue once, for the callback's reason only", async () => {
+      await markGoogleSignupRecovery("expired")
+      expect(
+        cookieEntries.find(
+          ({ name }) => name === "__Host-superserve-google-recovery",
+        ),
+      ).toBeDefined()
+      expect(await claimGoogleSignupRecovery("no_proof")).toBe(false)
+      await markGoogleSignupRecovery("expired")
+      expect(await claimGoogleSignupRecovery("expired")).toBe(true)
+      expect(await claimGoogleSignupRecovery("expired")).toBe(false)
+    })
+
+    it("refuses a link without a mark, a forged mark and an expired mark", async () => {
+      expect(await claimGoogleSignupRecovery("expired")).toBe(false)
+      cookieEntries = [
+        {
+          name: "__Host-superserve-google-recovery",
+          value: signProofPayload({
+            purpose: "google_signup_recovery",
+            reason: "expired",
+            exp: Math.floor(Date.now() / 1000) + 600,
+          }).replace(/.$/, "x"),
+        },
+      ]
+      expect(await claimGoogleSignupRecovery("expired")).toBe(false)
+      await markGoogleSignupRecovery("expired")
+      const markedAt = Date.now()
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(markedAt + 601_000)
+        expect(await claimGoogleSignupRecovery("expired")).toBe(false)
+      } finally {
+        vi.useRealTimers()
+      }
     })
   })
 })

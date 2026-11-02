@@ -214,6 +214,7 @@ vi.mock("@/lib/cells", () => ({
 const mockHasValidGoogleSignupProof = vi.fn()
 const mockHasValidLegacyGoogleSignupProof = vi.fn()
 const mockGoogleSignupProofFailure = vi.fn()
+const mockMarkGoogleSignupRecovery = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
 const mockMarkGoogleSignupAttempt = vi.fn()
 const mockRevokeGoogleSignupAuthorization = vi.fn()
@@ -249,6 +250,8 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockHasValidLegacyGoogleSignupProof(...args),
   googleSignupProofFailure: (...args: unknown[]) =>
     mockGoogleSignupProofFailure(...args),
+  markGoogleSignupRecovery: (...args: unknown[]) =>
+    mockMarkGoogleSignupRecovery(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
   retainOriginalGoogleSignup: (...args: unknown[]) =>
@@ -457,6 +460,7 @@ describe("auth callback", () => {
       .mockReset()
       .mockImplementation(async () => proofAvailable)
     mockGoogleSignupProofFailure.mockReset().mockResolvedValue("no_proof")
+    mockMarkGoogleSignupRecovery.mockReset().mockResolvedValue(undefined)
     mockConsumeGoogleSignupProof.mockReset()
     mockRevokeGoogleSignupAuthorization.mockReset().mockResolvedValue(undefined)
     mockMarkGoogleSignupAttempt.mockReset().mockResolvedValue(undefined)
@@ -1151,6 +1155,7 @@ describe("auth callback", () => {
         expect(location.pathname).toBe("/auth/signup")
         expect(location.searchParams.get("complete_google")).toBe("1")
         expect(location.searchParams.get("reason")).toBe(failure)
+        expect(mockMarkGoogleSignupRecovery).toHaveBeenLastCalledWith(failure)
         expect(mockGoogleSignupProofFailure).toHaveBeenLastCalledWith(
           query.startsWith("signup_attempt_id") ? "attempt-1" : undefined,
         )
