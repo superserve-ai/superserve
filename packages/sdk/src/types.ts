@@ -268,6 +268,11 @@ export interface CommandOptions {
    */
   user?: string
   env?: Record<string, string>
+  /**
+   * Command timeout, sent to the server rounded up to whole seconds; the
+   * client waits 5s past it. 0 is the same as omitting it. Negative,
+   * non-finite, or over 2,147,478,000 (~24.8 days) throws `ValidationError`.
+   */
   timeoutMs?: number
   onStdout?: (data: string) => void
   onStderr?: (data: string) => void
