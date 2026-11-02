@@ -7,6 +7,7 @@ import { useEffect, useRef, useState } from "react"
 import { useSignOut } from "@/hooks/use-sign-out"
 import { useUser } from "@/hooks/use-user"
 
+import { PlanBadge } from "./plan-badge"
 import { useSidebar } from "./sidebar-context"
 
 function getInitials(name: string): string {
@@ -72,6 +73,7 @@ export function SidebarUserMenu() {
             <span className="flex-1 truncate text-left text-sm leading-none tracking-tight">
               {name}
             </span>
+            <PlanBadge />
             <CaretUpDownIcon className="size-4 shrink-0" weight="light" />
           </>
         )}
