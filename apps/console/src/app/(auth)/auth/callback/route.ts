@@ -134,6 +134,7 @@ async function pendingSignupResponse(
 }
 
 export async function GET(request: Request) {
+  const callbackStartedAt = Date.now()
   const { searchParams, origin } = new URL(request.url)
   const requestedOffer = normalizeSignupRequestedOffer(
     searchParams.get("offer"),
@@ -208,6 +209,7 @@ export async function GET(request: Request) {
 
       let newSignup = false
       if (user) {
+        const createdInThisSignup = createdBefore(user, callbackStartedAt)
         if (code && searchParams.has("staff_google_nonce")) {
           const staffProof = await completeStaffGoogle(
             exchangedSession,
@@ -537,7 +539,7 @@ export async function GET(request: Request) {
                 )
             }
           }
-          if (isNewUser && !googleEvidence && createdInThisCallback(user)) {
+          if (isNewUser && !googleEvidence && createdInThisSignup) {
             // The signup proof was valid, but its capture evidence did not
             // survive OAuth. Record it as a missing capture so the backend
             // device policy decides; a recorded failure still withholds credit.
@@ -600,7 +602,7 @@ export async function GET(request: Request) {
             }
           }
         } else {
-          isNewUser = createdInThisCallback(user)
+          isNewUser = createdInThisSignup
         }
 
         if (type === "signup") {
@@ -828,8 +830,12 @@ export async function GET(request: Request) {
   return NextResponse.redirect(`${origin}/auth/auth-code-error`)
 }
 
-// Auth creates the account while exchanging this callback's code, so only a
-// just-created account belongs to this signup.
-function createdInThisCallback(user: { created_at: string }): boolean {
-  return Date.now() - Date.parse(user.created_at) < 30000
+// Auth creates the account just before this callback exchanges its code, so
+// only an account created shortly before the callback began belongs to this
+// signup. Later awaited work must not age it out.
+function createdBefore(
+  user: { created_at: string },
+  callbackStartedAt: number,
+): boolean {
+  return callbackStartedAt - Date.parse(user.created_at) < 30000
 }

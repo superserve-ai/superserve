@@ -2262,6 +2262,45 @@ describe("auth callback", () => {
     },
   )
 
+  it.each([
+    ["with an attempt ID", "&signup_attempt_id=attempt-1", "attempt-1"],
+    ["on a legacy proof", "", undefined],
+  ])(
+    "records a missing capture %s when directory work outlasts the creation window",
+    async (_case, query, attempt) => {
+      googleMembershipState = { kind: "first_time" }
+      currentUser!.created_at = new Date(Date.now() - 1000).toISOString()
+      mockHasValidGoogleSignupProof.mockResolvedValue(true)
+      mockHasValidLegacyGoogleSignupProof.mockResolvedValue(true)
+      mockReadGooglePromotionEvidence.mockResolvedValue(undefined)
+      const realNow = Date.now
+      mockListTeamMembershipsForUserDetailed.mockImplementationOnce(
+        async () => {
+          const later = realNow() + 31000
+          vi.spyOn(Date, "now").mockReturnValue(later)
+          return directoryState
+        },
+      )
+      try {
+        await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc${query}`,
+          ),
+        )
+      } finally {
+        vi.mocked(Date.now).mockRestore?.()
+      }
+
+      expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledTimes(1)
+      expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+        currentUser,
+        undefined,
+        true,
+        attempt,
+      )
+    },
+  )
+
   it("publishes retained Google evidence once, unchanged", async () => {
     googleMembershipState = { kind: "first_time" }
     mockHasValidGoogleSignupProof.mockResolvedValue(true)
