@@ -4,6 +4,7 @@ import {
   type PlanCard,
   planConcurrency,
   planSandboxSize,
+  planSupport,
 } from "@/lib/billing/plans"
 import {
   SIGNUP_CHECKOUT_OFFERS,
@@ -63,8 +64,6 @@ export interface PickerCard {
   limits: string[]
 }
 
-const SUPPORT_FEATURE = /\bsupport\b/i
-
 export function pickerCard(
   offer: BillingOffer,
   cards: readonly PlanCard[],
@@ -76,9 +75,6 @@ export function pickerCard(
         entry.annual?.offer_key === offer.offer_key,
     ) ?? cards.find((entry) => entry.family === offer.family)
   const size = card ? planSandboxSize(card.limits) : null
-  const support = card?.features.find((feature) =>
-    SUPPORT_FEATURE.test(feature),
-  )
   return {
     price: formatUsdCents(offer.price_cents),
     interval: offer.interval_months === 12 ? "year" : "month",
@@ -94,7 +90,7 @@ export function pickerCard(
         : offer.funding_policy === "postpaid"
           ? "Extra usage billed at the end of each billing period"
           : null,
-      support ?? null,
+      card ? planSupport(card.features) : null,
     ].filter((line): line is string => line !== null),
   }
 }

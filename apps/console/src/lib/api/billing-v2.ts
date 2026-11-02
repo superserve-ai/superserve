@@ -13,6 +13,7 @@ import {
 } from "@/lib/billing/plans"
 import {
   isAwaitingPlanState,
+  isPaymentActivating,
   type AwaitingPlanState,
 } from "@/lib/billing/signup-checkout-paths"
 
@@ -115,12 +116,20 @@ export const teamPlanSchema = z
         },
   )
 
-// The new-team entry state from the plan read. Anything but a team that has
-// not paid for a plan yet, including a backend without trials, is null.
+// The new-team entry state from the plan read: a team that has not paid for a
+// plan yet, one whose payment is activating its plan, or null otherwise,
+// including a backend without trials.
 export const teamEntrySchema = z
-  .object({ entry_state: z.unknown().optional() })
-  .transform(({ entry_state }): AwaitingPlanState | null =>
-    isAwaitingPlanState(entry_state) ? entry_state : null,
+  .object({
+    entry_state: z.unknown().optional(),
+    pro_checkout: z.unknown().optional(),
+  })
+  .transform((plan): AwaitingPlanState | "activating" | null =>
+    isPaymentActivating(plan)
+      ? "activating"
+      : isAwaitingPlanState(plan.entry_state)
+        ? plan.entry_state
+        : null,
   )
 
 const decimalCents = z.number().nonnegative()
