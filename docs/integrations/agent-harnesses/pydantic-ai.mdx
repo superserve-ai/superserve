@@ -113,7 +113,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-- `ModelRetry` sends the message back to the model as the tool result, so the model can correct the path and try again. Any other exception from a tool stops the run.
+- `ModelRetry` sends the message back to the model as the tool result, so the model can correct the path and try again. Unhandled ordinary exceptions from a tool stop the run.
 - `UsageLimits(request_limit=10)` caps the model requests in the run (the default is 50). Past the limit, the run raises `UsageLimitExceeded`.
 
 Output from a run (the model's wording varies):
