@@ -271,7 +271,8 @@
               "integrations/agent-harnesses/crewai",
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/langchain",
-              "integrations/agent-harnesses/openai-agents-sdk"
+              "integrations/agent-harnesses/openai-agents-sdk",
+              "integrations/agent-harnesses/vercel-ai-sdk"
             ]
           },
           {
