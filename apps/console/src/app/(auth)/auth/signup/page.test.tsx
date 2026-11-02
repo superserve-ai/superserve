@@ -157,6 +157,7 @@ describe("SignUpPage", () => {
     mockCapture.mockReset()
     mockRouterPush.mockReset()
     mockSearchParams = new URLSearchParams()
+    sessionStorage.clear()
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
     vi.resetModules()
     ;({ default: SignUpPage } = await import("./page"))
@@ -476,6 +477,48 @@ describe("SignUpPage", () => {
       ).toBe(expected)
     },
   )
+
+  it("explains a reported recovery reason and continues to Google once", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&reason=started_from_signin",
+    )
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    const { default: RecoverySignUpPage } = await import("./page")
+    const first = render(<RecoverySignUpPage />)
+
+    expect(
+      await screen.findByText(
+        "Looks like you're new here. One quick check to finish creating your account.",
+      ),
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+      expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1)
+    })
+
+    // Coming back with the check still failing leaves the button to the user.
+    first.unmount()
+    render(<RecoverySignUpPage />)
+    expect(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    ).toBeInTheDocument()
+    expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for a click when the recovery page has no reported reason", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    expect(
+      await screen.findByText(
+        "Google sign-in succeeded. Complete signup to finish verification and provision your Superserve account.",
+      ),
+    ).toBeInTheDocument()
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+  })
 
   it("triggers Google OAuth on button click", async () => {
     mockBeginGoogleSignup.mockResolvedValue({

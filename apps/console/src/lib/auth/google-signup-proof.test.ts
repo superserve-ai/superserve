@@ -83,6 +83,7 @@ import {
   beginGoogleSigninOrigin,
   retainOriginalGoogleSignup,
   readGooglePromotionEvidence,
+  googleSignupProofFailure,
 } from "./google-signup-proof"
 
 describe("google-signup-proof", () => {
@@ -110,7 +111,8 @@ describe("google-signup-proof", () => {
         secure: true,
         sameSite: "lax",
         path: "/",
-        maxAge: 300,
+        // 15 minutes valid, then kept an hour to report the expiry.
+        maxAge: 900 + 3600,
       },
     })
     expect(cookieSets[0].value).toContain(".")
@@ -244,8 +246,8 @@ describe("google-signup-proof", () => {
       vi.setSystemTime(issuedAt + 100_000)
       await markGoogleSignupAttempt("attempt-a", "user-123")
       expect(await requireGoogleSignupProof("user-123")).toBe("attempt-a")
-      expect(cookieSets.at(-2)?.options.maxAge).toBeLessThanOrEqual(200)
-      vi.setSystemTime(issuedAt + 301_000)
+      expect(cookieSets.at(-2)?.options.maxAge).toBeLessThanOrEqual(800 + 3600)
+      vi.setSystemTime(issuedAt + 901_000)
       expect(await hasValidGoogleSignupProof("attempt-a")).toBe(false)
       await expect(requireGoogleSignupProof("user-123")).rejects.toThrow()
     } finally {
@@ -509,8 +511,11 @@ describe("google-signup-proof", () => {
 
     const issuedAt = Date.now()
     vi.useFakeTimers()
-    vi.setSystemTime(issuedAt + 301_000)
+    vi.setSystemTime(issuedAt + 299_000)
     try {
+      // Still valid after the former five-minute limit.
+      expect(await hasValidGoogleSignupProof()).toBe(true)
+      vi.setSystemTime(issuedAt + 901_000)
       expect(await hasValidGoogleSignupProof()).toBe(false)
     } finally {
       vi.useRealTimers()
@@ -711,5 +716,47 @@ describe("google-signup-proof", () => {
     expect(
       await readGooglePromotionEvidence("retry", "actor", created_at),
     ).toMatchObject({ originalSignup: false })
+  })
+
+  describe("googleSignupProofFailure", () => {
+    it("reports a callback without a signup attempt as started from sign-in", async () => {
+      await issueGoogleSignupProof("attempt-a")
+      expect(await googleSignupProofFailure()).toBe("started_from_signin")
+    })
+
+    it("reports a lost proof cookie", async () => {
+      expect(await googleSignupProofFailure("attempt-a")).toBe("no_proof")
+    })
+
+    it("reports an expired proof the browser still holds", async () => {
+      await issueGoogleSignupProof("attempt-a")
+      const issuedAt = Date.now()
+      vi.useFakeTimers()
+      try {
+        vi.setSystemTime(issuedAt + 901_000)
+        expect(await hasValidGoogleSignupProof("attempt-a")).toBe(false)
+        expect(await googleSignupProofFailure("attempt-a")).toBe("expired")
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("reports a proof issued for another signup attempt", async () => {
+      await issueGoogleSignupProof("attempt-b")
+      expect(await googleSignupProofFailure("attempt-a")).toBe(
+        "attempt_mismatch",
+      )
+    })
+
+    it("reports a proof that is not correctly signed", async () => {
+      await issueGoogleSignupProof("attempt-a")
+      const name = "__Host-superserve-google-signup-attempt-a"
+      cookieEntries = cookieEntries.map((cookie) =>
+        cookie.name === name
+          ? { name, value: `${cookie.value.split(".")[0]}.forged` }
+          : cookie,
+      )
+      expect(await googleSignupProofFailure("attempt-a")).toBe("invalid_proof")
+    })
   })
 })
