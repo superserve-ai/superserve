@@ -170,16 +170,26 @@ async function holdsFreeTeamElsewhere(
     configuredRegions()
       .filter((other) => other !== region)
       .map(async (other) => {
-        const { data, error } = await cellFor(other)
-          .createAdminClient()
+        const admin = cellFor(other).createAdminClient()
+        const { data, error } = await admin
           .from("billing_account_free_team")
           .select("team_id")
           .eq("user_id", userId)
           .limit(1)
-        // A cell without the claim table has never claimed a Free team.
-        if (error && error.code !== "42P01" && error.code !== "PGRST205")
+        if (!error) return (data?.length ?? 0) > 0
+        if (error.code !== "42P01" && error.code !== "PGRST205")
           throw new Error("Unable to check your plan. Please retry.")
-        return !error && (data?.length ?? 0) > 0
+        // A cell from before Free claims records none, but a team the user
+        // owns there may be their Free one, so a new team is additional.
+        const owned = await admin
+          .from("team_member")
+          .select("team_id")
+          .eq("profile_id", userId)
+          .eq("role", "owner")
+          .limit(1)
+        if (owned.error)
+          throw new Error("Unable to check your plan. Please retry.")
+        return (owned.data?.length ?? 0) > 0
       }),
   )
   return claims.some(Boolean)
