@@ -247,7 +247,8 @@
               "integrations/coding-agents/claude",
               "integrations/coding-agents/codex",
               "integrations/coding-agents/opencode",
-              "integrations/coding-agents/kilocode"
+              "integrations/coding-agents/kilocode",
+              "integrations/coding-agents/pi"
             ]
           },
           {
