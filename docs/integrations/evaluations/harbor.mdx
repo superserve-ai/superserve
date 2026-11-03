@@ -60,7 +60,7 @@ Harbor picks one of two modes for each task:
 If an image cannot boot as a sandbox, Harbor runs the task with Docker inside the sandbox instead. The first trial for a new image or resource shape waits for the template build. Later trials start from the cached template.
 
 <Note>
-  An image's `ENTRYPOINT` and `CMD` do not run in a template-booted sandbox. Commands run as `root` by default.
+  An image's `ENTRYPOINT` and `CMD` do not run in a template-booted sandbox. Commands run as the image's `USER` (`root` if the image does not set one), unless Harbor requests a specific user.
 </Note>
 
 ## Configure the environment
