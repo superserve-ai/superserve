@@ -118,10 +118,11 @@ The worker keeps its protocol on a private copy of stdout. Output that the model
 
 Save this file as `superserve_interpreter.py`, next to `rlm_worker.py`. The highlighted lines are the Superserve calls: create the sandbox, start the worker, write to its stdin, and clean up.
 
-```python superserve_interpreter.py {62-71,90,155-158}
+```python superserve_interpreter.py {68-77,97,169-172}
 """A dspy.RLM code interpreter that runs the REPL in a Superserve sandbox."""
 
 import asyncio
+import concurrent.futures
 import contextlib
 import contextvars
 import inspect
@@ -168,11 +169,16 @@ class SuperserveInterpreter:
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._loop.run_forever, daemon=True).start()
 
-    def _run(self, awaitable: Awaitable[T]) -> T:
+    def _run(self, awaitable: Awaitable[T], timeout: float | None = None) -> T:
         async def wrapper() -> T:
             return await awaitable
 
-        return asyncio.run_coroutine_threadsafe(wrapper(), self._loop).result()
+        future = asyncio.run_coroutine_threadsafe(wrapper(), self._loop)
+        try:
+            return future.result(timeout)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            raise CodeInterpreterError("The sandbox step timed out.") from None
 
     def _on_stdout(self, chunk: str) -> None:
         *lines, self._partial_line = (self._partial_line + chunk).split("\n")
@@ -206,9 +212,10 @@ class SuperserveInterpreter:
             if self._receive(time.monotonic() + self._step_timeout)["type"] != "ready":
                 raise CodeInterpreterError("The sandbox worker did not start.")
 
-    def _send(self, message: dict[str, Any]) -> None:
+    def _send(self, message: dict[str, Any], deadline: float) -> None:
         assert self._session is not None
-        self._run(self._session.stdin.write(json.dumps(message, default=str) + "\n"))
+        line = json.dumps(message, default=str) + "\n"
+        self._run(self._session.stdin.write(line), max(0, deadline - time.monotonic()))
 
     @staticmethod
     def _get(items: "queue.Queue[T]", deadline: float) -> T:
@@ -227,11 +234,17 @@ class SuperserveInterpreter:
     def _run_tool(self, request: dict[str, Any]) -> dict[str, Any]:
         try:
             tool = self.tools[request["name"]]
-            # RLM wraps custom tools to take keyword arguments only, so bind
-            # positional arguments to parameter names first.
-            signature = inspect.signature(tool)
-            bound = signature.bind(*request["args"], **request["kwargs"])
-            value = tool(**bound.arguments)
+            # RLM wraps custom tools to take keyword arguments only, so pass
+            # positional arguments by their parameter names.
+            names = [
+                p.name
+                for p in inspect.signature(tool).parameters.values()
+                if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            ]
+            if len(request["args"]) > len(names):
+                raise TypeError("too many positional arguments")
+            positional = dict(zip(names, request["args"], strict=False))
+            value = tool(**positional, **request["kwargs"])
             if inspect.isawaitable(value):
                 value = self._run(value)
             return {"value": value}
@@ -256,12 +269,13 @@ class SuperserveInterpreter:
                 "variables": variables or {},
                 "tools": list(self.tools),
                 "output_fields": self.output_fields,
-            }
+            },
+            deadline,
         )
         message = self._receive(deadline)
         # Host tools such as llm_query run here, while the sandbox code waits.
         while message["type"] == "tool_call":
-            self._send(self._call_tool(message, deadline))
+            self._send(self._call_tool(message, deadline), deadline)
             message = self._receive(deadline)
 
         if message["type"] == "final":
