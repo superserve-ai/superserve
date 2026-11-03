@@ -55,9 +55,7 @@ function FingerprintAccountDeviceObserverEnabled({
     started.add(key)
     getData({ tag: { device_owner: user.id } })
       .then((result) =>
-        result?.event_id
-          ? recordAccountDevice(user.id, result.event_id)
-          : false,
+        result?.event_id ? recordAccountDevice(result.event_id) : false,
       )
       .then((recorded) => {
         if (recorded) store(key)

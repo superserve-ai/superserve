@@ -1,18 +1,22 @@
 "use server"
 
 import { recordExistingAccountDevice } from "@/lib/api/promotion-device-evidence"
+import { createServerClient } from "@/lib/supabase/server"
 
 import { verifiedAccountDevice } from "./observe"
 
 /** Best effort: a missing or unverifiable device never affects the session. */
-export async function recordAccountDevice(
-  userId: string,
-  eventId: string,
-): Promise<boolean> {
+export async function recordAccountDevice(eventId: string): Promise<boolean> {
   try {
-    const fingerprint = await verifiedAccountDevice(eventId, userId)
+    // Authenticate before spending a provider lookup on the request.
+    const supabase = await createServerClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (!user) return false
+    const fingerprint = await verifiedAccountDevice(eventId, user.id)
     return fingerprint
-      ? await recordExistingAccountDevice(userId, fingerprint)
+      ? await recordExistingAccountDevice(user.id, fingerprint)
       : false
   } catch {
     return false
