@@ -118,7 +118,7 @@ The worker keeps its protocol on a private copy of stdout. Output that the model
 
 Save this file as `superserve_interpreter.py`, next to `rlm_worker.py`. The highlighted lines are the Superserve calls: create the sandbox, start the worker, write to its stdin, and clean up.
 
-```python superserve_interpreter.py {68-77,97,169-172}
+```python superserve_interpreter.py {69-78,100,176-179}
 """A dspy.RLM code interpreter that runs the REPL in a Superserve sandbox."""
 
 import asyncio
@@ -139,6 +139,7 @@ from dspy.primitives.code_interpreter import (
     CodeInterpreterError,
     FinalOutput,
 )
+from pydantic_core import to_jsonable_python
 from superserve import AsyncCommandSession, AsyncSandbox
 
 T = TypeVar("T")
@@ -214,7 +215,9 @@ class SuperserveInterpreter:
 
     def _send(self, message: dict[str, Any], deadline: float) -> None:
         assert self._session is not None
-        line = json.dumps(message, default=str) + "\n"
+        # Send Pydantic models and dataclasses as JSON objects, like DSPy does.
+        data = to_jsonable_python(message, fallback=str)
+        line = json.dumps(data) + "\n"
         self._run(self._session.stdin.write(line), max(0, deadline - time.monotonic()))
 
     @staticmethod
@@ -287,6 +290,10 @@ class SuperserveInterpreter:
         return message["stdout"] or None
 
     async def _stop(self) -> None:
+        # Cancel async tools that still run after a step timed out.
+        for task in asyncio.all_tasks():
+            if task is not asyncio.current_task():
+                task.cancel()
         if self._session is not None:
             await self._session.close()
         if self._sandbox is not None:
