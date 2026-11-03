@@ -27,7 +27,7 @@ The examples were tested with `google-adk` 2.13.0, `litellm` 1.106.2, and `super
 
 An ADK tool is a Python function. The highlighted lines define a `bash` tool backed by the sandbox, and store the sandbox ID in the session state. Everything else is standard ADK usage.
 
-```python {12-16,23,34}
+```python {11-12,15-19,26,33,38,54}
 import asyncio
 from typing import Any
 
@@ -38,10 +38,13 @@ from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 from superserve import AsyncSandbox
 
+# Sandbox handles by ID. The session state holds only the ID.
+sandboxes: dict[str, AsyncSandbox] = {}
+
 
 async def bash(command: str, tool_context: ToolContext) -> dict[str, Any]:
     """Run a shell command in the sandbox."""
-    sandbox = await AsyncSandbox.connect(tool_context.state["sandbox_id"])
+    sandbox = sandboxes[tool_context.state["sandbox_id"]]
     result = await sandbox.commands.run(command, timeout_seconds=60)
     return result.model_dump()
 
@@ -57,6 +60,7 @@ runner = InMemoryRunner(agent=agent, app_name="sandbox_app")
 
 async def main() -> None:
     sandbox = await AsyncSandbox.create(name="agent-runtime")
+    sandboxes[sandbox.id] = sandbox
     try:
         session = await runner.session_service.create_session(
             app_name="sandbox_app",
@@ -77,6 +81,7 @@ async def main() -> None:
             if event.is_final_response() and event.content and event.content.parts:
                 print(event.content.parts[0].text)
     finally:
+        del sandboxes[sandbox.id]
         await sandbox.kill()
 
 
@@ -85,7 +90,7 @@ asyncio.run(main())
 
 ADK builds the tool declaration from the function signature and docstring. It passes `tool_context` to every tool that declares it, and does not show that parameter to the model. See [Context injection](https://adk.dev/tools-custom/function-tools/#context-injection) in the ADK docs.
 
-The session state holds the sandbox ID, not the sandbox object, so one agent defined at module level can work with a different sandbox in every session. `AsyncSandbox.connect()` makes one API call and returns a handle to the sandbox. See [State](https://adk.dev/sessions/state/) in the ADK docs.
+The session state holds the sandbox ID, not the sandbox object, so one agent defined at module level can work with a different sandbox in every session. The `sandboxes` dictionary maps each ID to its sandbox handle in this process. Do not put the handle in the session state: session services copy the state, and `DatabaseSessionService` stores it as JSON. See [State](https://adk.dev/sessions/state/) in the ADK docs.
 
 ADK prefers tools that return a dictionary. `result.model_dump()` gives the model `stdout`, `stderr`, `exit_code`, and `truncated`, so the model sees failed commands as well as their output.
 
@@ -93,7 +98,7 @@ ADK prefers tools that return a dictionary. `result.model_dump()` gives the mode
 
 Add file tools next to `bash` to let the model write a script, run it, and read the result.
 
-```python {19-34,44,70}
+```python {22-37,47,74}
 import asyncio
 from typing import Any
 
@@ -104,10 +109,13 @@ from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 from superserve import AsyncSandbox, NotFoundError
 
+# Sandbox handles by ID. The session state holds only the ID.
+sandboxes: dict[str, AsyncSandbox] = {}
+
 
 async def bash(command: str, tool_context: ToolContext) -> dict[str, Any]:
     """Run a shell command in the sandbox."""
-    sandbox = await AsyncSandbox.connect(tool_context.state["sandbox_id"])
+    sandbox = sandboxes[tool_context.state["sandbox_id"]]
     result = await sandbox.commands.run(command, timeout_seconds=60)
     return result.model_dump()
 
@@ -116,14 +124,14 @@ async def write_file(
     path: str, content: str, tool_context: ToolContext
 ) -> dict[str, Any]:
     """Write a text file in the sandbox. Use an absolute path."""
-    sandbox = await AsyncSandbox.connect(tool_context.state["sandbox_id"])
+    sandbox = sandboxes[tool_context.state["sandbox_id"]]
     await sandbox.files.write(path, content)
     return {"status": "success", "path": path, "characters": len(content)}
 
 
 async def read_file(path: str, tool_context: ToolContext) -> dict[str, Any]:
     """Read a text file from the sandbox. Use an absolute path."""
-    sandbox = await AsyncSandbox.connect(tool_context.state["sandbox_id"])
+    sandbox = sandboxes[tool_context.state["sandbox_id"]]
     try:
         return {"status": "success", "content": await sandbox.files.read_text(path)}
     except NotFoundError:
@@ -144,6 +152,7 @@ runner = InMemoryRunner(agent=agent, app_name="code_runner_app")
 
 async def main() -> None:
     sandbox = await AsyncSandbox.create(name="code-runner")
+    sandboxes[sandbox.id] = sandbox
     try:
         session = await runner.session_service.create_session(
             app_name="code_runner_app",
@@ -170,6 +179,7 @@ async def main() -> None:
             if event.is_final_response() and event.content and event.content.parts:
                 print(event.content.parts[0].text)
     finally:
+        del sandboxes[sandbox.id]
         await sandbox.kill()
 
 
@@ -220,7 +230,7 @@ A run that asked the model to read `/home/user/config.json` first got the error 
 
 `runner.run_async()` yields ADK events. With `StreamingMode.SSE`, the model's text arrives in partial events as it is generated. Tool calls and tool results arrive in events that are not partial.
 
-```python {5,49-59}
+```python {5,53-63}
 import asyncio
 from typing import Any
 
@@ -232,10 +242,13 @@ from google.adk.tools.tool_context import ToolContext
 from google.genai import types
 from superserve import AsyncSandbox
 
+# Sandbox handles by ID. The session state holds only the ID.
+sandboxes: dict[str, AsyncSandbox] = {}
+
 
 async def bash(command: str, tool_context: ToolContext) -> dict[str, Any]:
     """Run a shell command in the sandbox."""
-    sandbox = await AsyncSandbox.connect(tool_context.state["sandbox_id"])
+    sandbox = sandboxes[tool_context.state["sandbox_id"]]
     result = await sandbox.commands.run(command, timeout_seconds=60)
     return result.model_dump()
 
@@ -251,6 +264,7 @@ runner = InMemoryRunner(agent=agent, app_name="sandbox_app")
 
 async def main() -> None:
     sandbox = await AsyncSandbox.create(name="agent-runtime")
+    sandboxes[sandbox.id] = sandbox
     try:
         session = await runner.session_service.create_session(
             app_name="sandbox_app",
@@ -282,6 +296,7 @@ async def main() -> None:
                 print(f"< {response.response}")
         print()
     finally:
+        del sandboxes[sandbox.id]
         await sandbox.kill()
 
 
@@ -295,11 +310,10 @@ The event that ends a streamed text response is not partial and repeats the full
 
 > bash {'command': 'uname -a'}
 < {'stdout': 'PRETTY_NAME="Ubuntu 24.04.5 LTS"\n...Python 3.12.3\n', 'stderr': '/bin/sh: 1: python: not found\n', 'exit_code': 127, 'truncated': False}
-< {'stdout': 'Linux sandbox-a1d22a3b 6.1.158 #1 SMP PREEMPT_DYNAMIC Wed Oct 21 22:41:16 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n', 'stderr': '', 'exit_code': 0, 'truncated': False}
-This machine runs **Ubuntu 24.04.5 LTS (Noble Numbat)** with **Python 3.12.3**.
+< {'stdout': 'Linux sandbox-c7cbc8e3 6.1.158 #1 SMP PREEMPT_DYNAMIC Wed Oct 21 22:41:16 UTC 2026 x86_64 x86_64 x86_64 GNU/Linux\n', 'stderr': '', 'exit_code': 0, 'truncated': False}
+The machine runs **Ubuntu 24.04.5 LTS (Noble Numbat)** and has **Python 3.12.3**.
 
-- **Python:** Python 3.12.3 is available as `python3`. There is no plain `python` command.
-- **Kernel:** Linux 6.1.158 on x86_64.
+Python is only available as `python3`. There is no `python` command. The kernel is Linux 6.1.158 on x86_64.
 ```
 
 See [Events](https://adk.dev/events/) in the ADK docs, and [Streaming](/commands/streaming) to stream a single command's output.
@@ -308,7 +322,7 @@ See [Events](https://adk.dev/events/) in the ADK docs, and [Streaming](/commands
 
 To serve many conversations, create one sandbox for each ADK session, and keep its ID in the session state. On each turn, connect to the sandbox, run the agent, and pause the sandbox afterwards. Files and installed packages stay available, and you do not pay for an idle VM between turns.
 
-```python {33-37,52-53,63-65,70}
+```python {16,21,37-46,61-64,74-77,82}
 import asyncio
 from typing import Any
 
@@ -323,9 +337,13 @@ from superserve import AsyncSandbox
 APP_NAME = "chat_app"
 
 
+# Sandbox handles by ID. The session state holds only the ID.
+sandboxes: dict[str, AsyncSandbox] = {}
+
+
 async def bash(command: str, tool_context: ToolContext) -> dict[str, Any]:
     """Run a shell command in the sandbox."""
-    sandbox = await AsyncSandbox.connect(tool_context.state["sandbox_id"])
+    sandbox = sandboxes[tool_context.state["sandbox_id"]]
     result = await sandbox.commands.run(command, timeout_seconds=60)
     return result.model_dump()
 
@@ -342,10 +360,15 @@ session_service = runner.session_service
 
 async def start_chat(user_id: str) -> str:
     sandbox = await AsyncSandbox.create(name="chat-session")
-    session = await session_service.create_session(
-        app_name=APP_NAME, user_id=user_id, state={"sandbox_id": sandbox.id}
-    )
-    await sandbox.pause()
+    try:
+        session = await session_service.create_session(
+            app_name=APP_NAME, user_id=user_id, state={"sandbox_id": sandbox.id}
+        )
+        await sandbox.pause()
+    except BaseException:
+        # Delete the sandbox if setup fails, so it does not keep running.
+        await sandbox.kill()
+        raise
     return session.id
 
 
@@ -360,8 +383,10 @@ async def get_chat(user_id: str, session_id: str) -> Session:
 
 async def send(user_id: str, session_id: str, text: str) -> str:
     session = await get_chat(user_id, session_id)
-    # Resumes the sandbox if it is paused.
-    sandbox = await AsyncSandbox.connect(session.state["sandbox_id"])
+    sandbox_id = session.state["sandbox_id"]
+    # Resumes the sandbox if it is paused. The tools use this handle.
+    sandbox = await AsyncSandbox.connect(sandbox_id)
+    sandboxes[sandbox_id] = sandbox
     try:
         reply = ""
         message = types.Content(role="user", parts=[types.Part(text=text)])
@@ -372,6 +397,7 @@ async def send(user_id: str, session_id: str, text: str) -> str:
                 reply = event.content.parts[0].text or ""
         return reply
     finally:
+        del sandboxes[sandbox_id]
         # Pause between turns. Files and memory are kept until the next connect.
         await sandbox.pause()
 
@@ -404,7 +430,9 @@ asyncio.run(main())
 
 The session keeps the conversation history and the sandbox ID. The second turn understands "that file" because of the session history, and finds the file because it lives in the sandbox.
 
-`AsyncSandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. The `connect()` call in each tool also resumes the sandbox, so a tool call never fails because the sandbox is paused. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
+`AsyncSandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. `send` connects once for each turn, and the tools use that handle. Connect again on the next turn: a handle does not resume the sandbox after `pause()`. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
+
+If `create_session()` or `pause()` fails, `start_chat` deletes the sandbox, so no sandbox runs without a session. Run one turn at a time for each session. If two turns overlap, the first turn to finish pauses the sandbox while the other turn still uses it.
 
 <Note>
   `InMemoryRunner` keeps sessions in memory, so they are lost when the process stops. To keep sessions across restarts, install `google-adk[db]` and pass a `DatabaseSessionService`, for example `DatabaseSessionService(db_url="sqlite+aiosqlite:///sessions.db")`, as `session_service` to `Runner`. The sandbox ID is stored with the rest of the session state. See [Session](https://adk.dev/sessions/session/#databasesessionservice) in the ADK docs.
@@ -412,6 +440,7 @@ The session keeps the conversation history and the sandbox ID. The second turn u
 
 ## Good to know
 
+- Each `AsyncSandbox` handle opens its own HTTP connection, which stays open until `kill()` or until Python frees the handle. Share one handle with the tools, and do not call `connect()` in each tool call.
 - The model can call only the tools you define. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
 - To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
 - Pass `timeout_seconds` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
