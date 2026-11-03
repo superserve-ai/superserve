@@ -1,0 +1,419 @@
+---
+title: "OpenAI computer use"
+sidebarTitle: OpenAI
+description: Run the OpenAI computer-use agent loop against a desktop in a Superserve sandbox.
+icon: "/logos/integrations/openai-agents-sdk.svg"
+---
+
+The `computer` tool in the OpenAI Responses API lets a model operate a graphical desktop: it reads a screenshot, returns mouse and keyboard actions, and your code runs them and sends back the next screenshot. Point that loop at a `superserve/desktop` sandbox so the model works an isolated Linux desktop (xfce and Google Chrome) instead of your machine. Each model turn is one [`desktop.step`](/sandbox/desktop#the-agent-loop) request: the sandbox runs the actions and returns the screen after them.
+
+## Setup
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk openai
+export SUPERSERVE_API_KEY=ss_live_...
+export OPENAI_API_KEY=sk-...
+```
+
+```bash Python
+pip install superserve openai
+export SUPERSERVE_API_KEY=ss_live_...
+export OPENAI_API_KEY=sk-...
+```
+</CodeGroup>
+
+## Run the agent loop
+
+The script creates a desktop sandbox, sends the task with the `computer` tool, and then answers each `computer_call` with a screenshot taken after its actions ran. It stops when the model replies with text, and kills the sandbox at the end.
+
+<CodeGroup>
+```typescript TypeScript
+import { type DesktopAction, Sandbox, type Screenshot } from "@superserve/sdk"
+import OpenAI from "openai"
+import type {
+  ComputerAction,
+  ResponseComputerToolCall,
+} from "openai/resources/responses/responses"
+
+const client = new OpenAI()
+const MODEL = "gpt-6.1-sol"
+const MAX_TURNS = 30
+
+// Key names the model sends that the sandbox spells differently.
+const KEYS: Record<string, string> = {
+  ARROWUP: "up",
+  ARROWDOWN: "down",
+  ARROWLEFT: "left",
+  ARROWRIGHT: "right",
+  DEL: "delete",
+  OPTION: "alt",
+  META: "cmd",
+  COMMAND: "cmd",
+}
+
+function toKey(key: string): string {
+  return KEYS[key.toUpperCase()] ?? (key.length === 1 ? key.toLowerCase() : key)
+}
+
+// The model scrolls in pixels; the sandbox scrolls in wheel clicks.
+function toClicks(pixels: number): number {
+  if (pixels === 0) return 0
+  return Math.sign(pixels) * Math.max(1, Math.round(Math.abs(pixels) / 100))
+}
+
+function toDesktopActions(action: ComputerAction): DesktopAction[] {
+  if (action.type !== "keypress" && "keys" in action && action.keys?.length) {
+    throw new Error(`${action.type} with held keys is not supported`)
+  }
+  switch (action.type) {
+    case "click":
+      if (action.button === "back" || action.button === "forward") {
+        throw new Error(`mouse button ${action.button} is not supported`)
+      }
+      return [
+        {
+          type: "click",
+          x: action.x,
+          y: action.y,
+          button: action.button === "wheel" ? "middle" : action.button,
+        },
+      ]
+    case "double_click":
+      return [{ type: "doubleClick", x: action.x, y: action.y }]
+    case "move":
+      return [{ type: "move", x: action.x, y: action.y }]
+    case "drag": {
+      const [start, ...rest] = action.path
+      if (!start) return []
+      const end = rest.at(-1) ?? start
+      return [
+        { type: "mouseDown", x: start.x, y: start.y },
+        ...rest.map((p): DesktopAction => ({ type: "move", x: p.x, y: p.y })),
+        { type: "mouseUp", x: end.x, y: end.y },
+      ]
+    }
+    case "scroll":
+      return [
+        { type: "move", x: action.x, y: action.y },
+        {
+          type: "scroll",
+          dx: toClicks(action.scroll_x),
+          dy: toClicks(action.scroll_y),
+        },
+      ]
+    case "keypress":
+      return [{ type: "press", key: action.keys.map(toKey) }]
+    case "type":
+      return [{ type: "write", text: action.text }]
+    case "wait":
+    case "screenshot":
+      return []
+  }
+}
+
+// GA models send a batch of actions; computer-use-preview sends one action.
+function actionsOf(call: ResponseComputerToolCall): ComputerAction[] {
+  return call.actions ?? (call.action ? [call.action] : [])
+}
+
+// Run one computer_call's actions in the sandbox and return the screen after them.
+async function act(
+  sandbox: Sandbox,
+  call: ResponseComputerToolCall,
+): Promise<Screenshot> {
+  let batch: DesktopAction[] = []
+  for (const action of actionsOf(call)) {
+    if (action.type === "wait") {
+      await sandbox.desktop.actions(batch)
+      batch = []
+      await new Promise((resolve) => setTimeout(resolve, 2_000))
+    } else {
+      batch.push(...toDesktopActions(action))
+    }
+  }
+  if (batch.length === 0) {
+    return sandbox.desktop.screenshot({ format: "jpeg" })
+  }
+  const step = await sandbox.desktop.step(batch, {
+    waitForChange: true,
+    quietMs: 300,
+    format: "jpeg",
+  })
+  if (step.actionError) throw new Error(step.actionError)
+  if (!step.screenshot) throw new Error(step.screenshotError)
+  return step.screenshot
+}
+
+async function runTask(sandbox: Sandbox, task: string): Promise<string> {
+  let response = await client.responses.create({
+    model: MODEL,
+    tools: [{ type: "computer" }],
+    instructions:
+      "You operate a Linux xfce desktop. Google Chrome is in the dock at the bottom of the screen.",
+    input: task,
+  })
+  for (let turn = 0; turn < MAX_TURNS; turn++) {
+    const call = response.output.find((item) => item.type === "computer_call")
+    if (!call) return response.output_text
+    // The API can flag an action for review; stop and hand it to a person.
+    const checks = call.pending_safety_checks ?? []
+    if (checks.length > 0) {
+      throw new Error(checks.map((check) => check.message).join("\n"))
+    }
+    for (const action of actionsOf(call)) console.log(JSON.stringify(action))
+    const screen = await act(sandbox, call)
+    const image = Buffer.from(screen.data).toString("base64")
+    response = await client.responses.create({
+      model: MODEL,
+      tools: [{ type: "computer" }],
+      previous_response_id: response.id,
+      input: [
+        {
+          type: "computer_call_output",
+          call_id: call.call_id,
+          output: {
+            type: "computer_screenshot",
+            image_url: `data:image/jpeg;base64,${image}`,
+          },
+        },
+      ],
+    })
+  }
+  throw new Error(`No answer after ${MAX_TURNS} turns`)
+}
+
+const sandbox = await Sandbox.create({
+  name: "openai-computer-use",
+  fromTemplate: "superserve/desktop",
+  previewAccess: "private",
+})
+try {
+  console.log(
+    "Watch live:",
+    await sandbox.desktop.getStreamUrl({ viewOnly: true }),
+  )
+  const answer = await runTask(
+    sandbox,
+    "Open Google Chrome, go to https://example.com, and tell me the title of the page.",
+  )
+  console.log(answer)
+} finally {
+  await sandbox.kill()
+}
+```
+
+```python Python
+from __future__ import annotations
+
+import base64
+import time
+from typing import Any
+
+from openai import OpenAI
+from openai.types.responses import ComputerAction, Response, ResponseComputerToolCall
+from openai.types.responses.response_computer_tool_call import Action
+from superserve import Sandbox, Screenshot
+
+client = OpenAI()
+MODEL = "gpt-6.1-sol"
+MAX_TURNS = 30
+
+# Key names the model sends that the sandbox spells differently.
+KEYS = {
+    "ARROWUP": "up",
+    "ARROWDOWN": "down",
+    "ARROWLEFT": "left",
+    "ARROWRIGHT": "right",
+    "DEL": "delete",
+    "OPTION": "alt",
+    "META": "cmd",
+    "COMMAND": "cmd",
+}
+
+
+def to_key(key: str) -> str:
+    return KEYS.get(key.upper(), key.lower() if len(key) == 1 else key)
+
+
+# The model scrolls in pixels; the sandbox scrolls in wheel clicks.
+def to_clicks(pixels: int) -> int:
+    if pixels == 0:
+        return 0
+    return (1 if pixels > 0 else -1) * max(1, round(abs(pixels) / 100))
+
+
+def to_desktop_actions(action: ComputerAction | Action) -> list[dict[str, Any]]:
+    if action.type != "keypress" and getattr(action, "keys", None):
+        raise RuntimeError(f"{action.type} with held keys is not supported")
+    if action.type == "click":
+        if action.button in ("back", "forward"):
+            raise RuntimeError(f"mouse button {action.button} is not supported")
+        button = "middle" if action.button == "wheel" else action.button
+        return [{"type": "click", "x": action.x, "y": action.y, "button": button}]
+    if action.type == "double_click":
+        return [{"type": "double_click", "x": action.x, "y": action.y}]
+    if action.type == "move":
+        return [{"type": "move", "x": action.x, "y": action.y}]
+    if action.type == "drag":
+        if not action.path:
+            return []
+        start, end = action.path[0], action.path[-1]
+        return [
+            {"type": "mouse_down", "x": start.x, "y": start.y},
+            *({"type": "move", "x": p.x, "y": p.y} for p in action.path[1:]),
+            {"type": "mouse_up", "x": end.x, "y": end.y},
+        ]
+    if action.type == "scroll":
+        return [
+            {"type": "move", "x": action.x, "y": action.y},
+            {
+                "type": "scroll",
+                "dx": to_clicks(action.scroll_x),
+                "dy": to_clicks(action.scroll_y),
+            },
+        ]
+    if action.type == "keypress":
+        return [{"type": "press", "key": [to_key(key) for key in action.keys]}]
+    if action.type == "type":
+        return [{"type": "write", "text": action.text}]
+    return []  # wait and screenshot need no input
+
+
+# GA models send a batch of actions; computer-use-preview sends one action.
+def actions_of(call: ResponseComputerToolCall) -> list[ComputerAction | Action]:
+    if call.actions:
+        return [*call.actions]
+    return [call.action] if call.action else []
+
+
+# Run one computer_call's actions in the sandbox and return the screen after them.
+def act(sandbox: Sandbox, call: ResponseComputerToolCall) -> Screenshot:
+    batch: list[dict[str, Any]] = []
+    for action in actions_of(call):
+        if action.type == "wait":
+            sandbox.desktop.actions(batch)
+            batch = []
+            time.sleep(2)
+        else:
+            batch.extend(to_desktop_actions(action))
+    if not batch:
+        return sandbox.desktop.screenshot(format="jpeg")
+    step = sandbox.desktop.step(
+        batch, wait_for_change=True, quiet_ms=300, format="jpeg"
+    )
+    if step.action_error:
+        raise RuntimeError(step.action_error)
+    if step.screenshot is None:
+        raise RuntimeError(step.screenshot_error)
+    return step.screenshot
+
+
+def run_task(sandbox: Sandbox, task: str) -> str:
+    response: Response = client.responses.create(
+        model=MODEL,
+        tools=[{"type": "computer"}],
+        instructions=(
+            "You operate a Linux xfce desktop. "
+            "Google Chrome is in the dock at the bottom of the screen."
+        ),
+        input=task,
+    )
+    for _ in range(MAX_TURNS):
+        call = next(
+            (item for item in response.output if item.type == "computer_call"), None
+        )
+        if call is None:
+            return response.output_text
+        # The API can flag an action for review; stop and hand it to a person.
+        checks = getattr(call, "pending_safety_checks", None) or []
+        if checks:
+            raise RuntimeError("\n".join(str(check.message) for check in checks))
+        for action in actions_of(call):
+            print(action.model_dump_json(exclude_none=True))
+        screen = act(sandbox, call)
+        image = base64.b64encode(screen.data).decode()
+        response = client.responses.create(
+            model=MODEL,
+            tools=[{"type": "computer"}],
+            previous_response_id=response.id,
+            input=[
+                {
+                    "type": "computer_call_output",
+                    "call_id": call.call_id,
+                    "output": {
+                        "type": "computer_screenshot",
+                        "image_url": f"data:image/jpeg;base64,{image}",
+                    },
+                }
+            ],
+        )
+    raise RuntimeError(f"No answer after {MAX_TURNS} turns")
+
+
+sandbox = Sandbox.create(
+    name="openai-computer-use",
+    from_template="superserve/desktop",
+    preview_access="private",
+)
+try:
+    print("Watch live:", sandbox.desktop.get_stream_url(view_only=True))
+    answer = run_task(
+        sandbox,
+        "Open Google Chrome, go to https://example.com, "
+        "and tell me the title of the page.",
+    )
+    print(answer)
+finally:
+    sandbox.kill()
+```
+</CodeGroup>
+
+The display starts at 1280x800 and the loop sends screenshots at that size, so the model's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` returns the first frame after the screen repainted and then stayed still for 300 ms, so the model sees the result of its actions instead of a frame from the middle of a repaint. Set `MODEL` to any model your OpenAI project can use with the `computer` tool.
+
+## How actions map to the desktop
+
+| OpenAI action                        | Sandbox desktop action                                                       |
+| ------------------------------------ | ---------------------------------------------------------------------------- |
+| `click` (`left`, `right`, `wheel`)   | `click` with button `left`, `right`, or `middle`                             |
+| `double_click`                       | `doubleClick` / `double_click`                                               |
+| `move`                               | `move`                                                                       |
+| `drag`                               | `mouseDown` at the first point, `move` along the path, `mouseUp` at the last |
+| `scroll` (`scroll_x`, `scroll_y` px) | `move` to the point, then `scroll` one wheel click per 100 px (at least 1)   |
+| `keypress`                           | `press` with all keys held together, such as `["CTRL", "L"]`                 |
+| `type`                               | `write`                                                                      |
+| `wait`                               | Runs the actions before it, then pauses 2 seconds                            |
+| `screenshot`                         | Nothing to run; every turn returns a screenshot                              |
+
+The sandbox reads key names such as `ENTER`, `CTRL`, `ALT`, `TAB`, and `F2` without regard to case. `KEYS` renames the few that the model spells differently. Clicks with the `back` or `forward` button and actions that hold modifier `keys` throw an error; add them to `toDesktopActions` / `to_desktop_actions` if your tasks need them. The [desktop API](/sandbox/desktop) lists every action the sandbox accepts.
+
+## Watch it live
+
+`getStreamUrl` / `get_stream_url` returns a browser URL for the desktop viewer. The script creates the sandbox with the `private` [preview policy](/sandbox/preview-urls), so that URL carries a signed credential that expires after 60 seconds. On first open, the viewer moves the credential into a cookie and drops it from the address bar. Until then, treat the URL as a secret, and mint a fresh one for each viewer. `viewOnly` / `view_only` stops that viewer from sending input, but anyone who has the URL can open it without the flag, so keep the policy `private` when the screen shows anything sensitive.
+
+## Safety
+
+- Everything the model reads from the screen is untrusted input: web pages, files, and dialogs can carry instructions aimed at the model. Keep credentials and personal data out of the desktop.
+- The model calls run in your code, not in the sandbox, so the sandbox needs to reach only the sites the task uses. Restrict everything else with [network rules](/sandbox/networking).
+- A `computer_call` can carry `pending_safety_checks`. The script stops on them. To continue after a person reviews the checks, send them back as `acknowledged_safety_checks` on the next `computer_call_output`.
+- Keep a person in the loop before actions with an outside effect, such as sending a message, submitting a form, or making a purchase.
+
+## Use computer-use-preview
+
+The loop above targets the `computer` tool. An integration built on the older `computer-use-preview` model changes the request as follows:
+
+|            | `computer` tool                        | `computer-use-preview`                                                                             |
+| ---------- | -------------------------------------- | -------------------------------------------------------------------------------------------------- |
+| Model      | A current model, such as `gpt-6.1-sol` | `computer-use-preview`                                                                             |
+| Tool       | `{ type: "computer" }`                 | `{ type: "computer_use_preview", display_width: 1280, display_height: 800, environment: "linux" }` |
+| Truncation | Not needed                             | `truncation: "auto"` on every request                                                              |
+| Actions    | `actions[]`, a batch per call          | `action`, one per call                                                                             |
+
+`actionsOf` / `actions_of` already reads both shapes, so only the request parameters change.
+
+## Related
+
+- [Computer use](/sandbox/desktop): screenshots, mouse, keyboard, and the live viewer
+- [Preview URLs](/sandbox/preview-urls): access policies for the viewer port
+- [Network rules](/sandbox/networking): limit where the sandbox can connect
+- [MCP Sandboxes](/integrations/mcp#computer-use): the same desktop as an MCP tool
