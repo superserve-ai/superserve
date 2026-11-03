@@ -85,9 +85,9 @@ Templates specify the VM shape; sandboxes inherit these and cannot override them
 | ----------- | ---- | -------- | ------------- | ------- | ------- |
 | `vcpu`      | 1    | 2        | 4             | 16      | 1       |
 | `memoryMib` | 256  | 4096     | 16384         | 65536   | 1024    |
-| `diskMib`   | 1024 | 8192     | 51200         | 51200   | 4096    |
+| `diskMib`   | 1024 | —        | —             | —       | 4096    |
 
-The plan columns show each plan's limits as sold today. Your team's maximum depends on its plan: a team keeps the limits it had when it joined its plan, and a team with custom limits keeps those. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
+The plan columns show each plan's vCPU and memory limits as sold today. Each plan also caps `diskMib`. If a build asks for more disk than your team allows, the error message shows your team's limit. Your team's maximum depends on its plan: a team keeps the limits it had when it joined its plan, and a team with custom limits keeps those. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
 
 ## Build error codes
 
