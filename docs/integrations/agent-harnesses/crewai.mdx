@@ -19,14 +19,12 @@ CrewAI needs Python 3.10 to 3.13. The examples use Anthropic through CrewAI's na
 
 ## Wire the sandbox into the agent
 
-The highlighted block defines a `bash` tool backed by the sandbox. Everything else is standard CrewAI usage.
+The highlighted block defines a `bash` tool backed by the sandbox. Everything else is standard CrewAI usage. The tool looks up `sandbox` only when the model calls it, so the sandbox is created after the rest of the setup, right before the `try` block that kills it.
 
-```python {8-11}
+```python {6-9}
 from crewai import Agent, Crew, Task
 from crewai.tools import tool
 from superserve import CommandResult, Sandbox
-
-sandbox = Sandbox.create(name="agent-runtime")
 
 
 @tool("bash")
@@ -49,6 +47,8 @@ task = Task(
     agent=assistant,
 )
 
+sandbox = Sandbox.create(name="agent-runtime")
+
 try:
     result = Crew(agents=[assistant], tasks=[task]).kickoff()
     print(result)
@@ -62,12 +62,10 @@ The tool returns the SDK's `CommandResult`. CrewAI reads the return annotation a
 
 Add file tools next to `bash` to let the model write a script, run it, and read the result. `max_iter` caps the iterations the agent runs on a task (the default is 25). After that, the agent must give its best answer.
 
-```python {14-24}
+```python {12-22}
 from crewai import Agent, Crew, Task
 from crewai.tools import tool
 from superserve import CommandResult, Sandbox
-
-sandbox = Sandbox.create(name="code-runner")
 
 
 @tool("bash")
@@ -110,6 +108,8 @@ task = Task(
     agent=coder,
 )
 
+sandbox = Sandbox.create(name="code-runner")
+
 try:
     result = Crew(agents=[coder], tasks=[task], verbose=True).kickoff()
     print(result)
@@ -135,14 +135,12 @@ Output: {"stdout":"The first 10 prime numbers are:\n1. 2\n2. 3\n3. 5\n...","stde
 
 Set `stream=True` on the crew, and `kickoff()` returns a `CrewStreamingOutput` that yields the model's text as it arrives. To show each command and its result, listen for `ToolUsageFinishedEvent` on the CrewAI event bus.
 
-```python {31-33,36,39-43}
+```python {29-31,34,39-43}
 from crewai import Agent, Crew, Task
 from crewai.events import ToolUsageFinishedEvent, crewai_event_bus
 from crewai.tools import tool
 from crewai.types.streaming import CrewStreamingOutput, StreamChunkType
 from superserve import CommandResult, Sandbox
-
-sandbox = Sandbox.create(name="agent-runtime")
 
 
 @tool("bash")
@@ -172,6 +170,8 @@ def print_tool_result(source: object, event: ToolUsageFinishedEvent) -> None:
 
 
 crew = Crew(agents=[assistant], tasks=[task], stream=True)
+
+sandbox = Sandbox.create(name="agent-runtime")
 
 try:
     streaming = crew.kickoff()
