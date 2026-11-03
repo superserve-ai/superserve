@@ -81,13 +81,13 @@ Polled every 2s after `startCmd` until it exits `0` or 10 minutes elapse. Use th
 
 Templates specify the VM shape; sandboxes inherit these and cannot override them per-sandbox.
 
-| Field       | Min  | Free max | Pro max | Default |
-| ----------- | ---- | -------- | ------- | ------- |
-| `vcpu`      | 1    | 2        | 16      | 1       |
-| `memoryMib` | 256  | 4096     | 65536   | 1024    |
-| `diskMib`   | 1024 | 8192     | 65536   | 4096    |
+| Field       | Min  | Free max | Developer max | Pro max | Default |
+| ----------- | ---- | -------- | ------------- | ------- | ------- |
+| `vcpu`      | 1    | 2        | 4             | 16      | 1       |
+| `memoryMib` | 256  | 4096     | 16384         | 65536   | 1024    |
+| `diskMib`   | 1024 | 8192     | 51200         | 51200   | 4096    |
 
-Your team's maximum depends on its plan. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
+The plan columns show each plan's limits as sold today. Your team's maximum depends on its plan: a team keeps the limits it had when it joined its plan, and a team with custom limits keeps those. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
 
 ## Build error codes
 
