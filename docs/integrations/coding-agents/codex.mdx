@@ -62,7 +62,7 @@ Codex reads `OPENAI_API_KEY` as usual, but its value is a [stand-in token](/secr
 
 Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `codex`.
 
-For non-interactive runs, `codex exec` does not read `OPENAI_API_KEY`: run `printenv OPENAI_API_KEY | codex login --with-api-key` once, or set `CODEX_API_KEY="$OPENAI_API_KEY"`.
+For non-interactive runs, `codex exec` does not read `OPENAI_API_KEY`: run `printenv OPENAI_API_KEY | codex login --with-api-key` once, or run `export CODEX_API_KEY="$OPENAI_API_KEY"` first.
 
 ## Persist sessions
 
