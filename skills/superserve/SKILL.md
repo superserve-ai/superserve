@@ -206,9 +206,7 @@ memory · 8192 MiB disk**.
 | `vcpu`      | 1   | 2        | 4             | 16      | 1       |
 | `memoryMib` | 256 | 4096     | 16384         | 65536   | 1024    |
 
-- The plan columns show each plan's limits as sold today. A team keeps the limits it had
-  when it joined its plan, and a team with custom limits keeps those. Email
-  support@superserve.ai to raise a team's limits.
+- Limits depend on the team's plan. For larger sandboxes, email support@superserve.ai.
 - `diskMib`: minimum 1024, default 4096; the maximum depends on the team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
   including the heavier ones (`python-ml`, `code-interpreter`, `claude-code`, `openclaw`,
