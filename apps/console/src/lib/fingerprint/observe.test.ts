@@ -24,7 +24,11 @@ import { after } from "next/server"
 
 import { trackEvent } from "@/lib/posthog/actions"
 
-import { observeFingerprintSignup, resolveFingerprintSignup } from "./observe"
+import {
+  observeFingerprintSignup,
+  resolveFingerprintSignup,
+  verifiedAccountDevice,
+} from "./observe"
 
 const originalSecret = process.env.FINGERPRINT_SECRET_API_KEY
 
@@ -566,3 +570,43 @@ it.each(["headers", "body"])(
     )
   },
 )
+
+describe("verifiedAccountDevice", () => {
+  const event = (tags: Record<string, unknown>, ageMs: number) =>
+    new Response(
+      JSON.stringify({
+        event_id: "event-1",
+        timestamp: Date.now() - ageMs,
+        tags,
+        identification: { visitor_id: "visitor-1" },
+      }),
+      { status: 200 },
+    )
+
+  it("returns the visitor for a fresh event tagged for the account", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      event({ device_owner: "user-1" }, 1000),
+    )
+    await expect(verifiedAccountDevice("event-1", "user-1")).resolves.toBe(
+      "visitor-1",
+    )
+  })
+
+  it.each([
+    ["another account's tag", { device_owner: "user-2" }, 1000],
+    ["no tag", {}, 1000],
+    ["a stale event", { device_owner: "user-1" }, 6 * 60 * 1000],
+  ])("rejects %s", async (_, tags, ageMs) => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(event(tags, ageMs))
+    await expect(verifiedAccountDevice("event-1", "user-1")).resolves.toBeNull()
+  })
+
+  it("does not call the provider when unconfigured", async () => {
+    delete process.env.FINGERPRINT_SECRET_API_KEY
+    const fetchSpy = vi.spyOn(globalThis, "fetch")
+    await expect(verifiedAccountDevice("event-1", "user-1")).resolves.toBeNull()
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})

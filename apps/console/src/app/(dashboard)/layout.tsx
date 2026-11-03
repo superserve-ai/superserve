@@ -2,6 +2,7 @@ import { redirect } from "next/navigation"
 
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { PlanBanner } from "@/components/billing/plan-banner"
+import { FingerprintAccountDeviceObserver } from "@/components/fingerprint-account-device-observer"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
@@ -46,6 +47,7 @@ export default async function DashboardLayout({
       }
     >
       <SessionExpiryRedirect />
+      {!impersonationContext && <FingerprintAccountDeviceObserver />}
       <SignupPlanGate>
         <DashboardShell
           globalBanner={<PlanBanner />}

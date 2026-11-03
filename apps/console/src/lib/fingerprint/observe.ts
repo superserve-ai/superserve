@@ -203,6 +203,50 @@ export async function observeFingerprintSignup({
   })
 }
 
+const DEVICE_EVENT_MAX_AGE_MS = 5 * 60 * 1000
+
+/** The visitor ID of a fresh event the browser tagged for this account, or null. */
+export async function verifiedAccountDevice(
+  eventId: string,
+  userId: string,
+): Promise<string | null> {
+  const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
+  if (!eventId || !secretApiKey) return null
+  const baseUrl =
+    process.env.FINGERPRINT_SERVER_API_URL || DEFAULT_FINGERPRINT_SERVER_API
+  try {
+    const response = await fetch(
+      `${baseUrl.replace(/\/$/, "")}/v4/events/${encodeURIComponent(eventId)}`,
+      {
+        headers: { Authorization: `Bearer ${secretApiKey}` },
+        signal: AbortSignal.timeout(FINGERPRINT_EVENT_TIMEOUT_MS),
+        cache: "no-store",
+      },
+    )
+    if (!response.ok) return null
+    const payload: unknown = await response.json()
+    const event = normalizeFingerprintEvent(payload, eventId)
+    if (!event || !isRecord(payload)) return null
+    const eventAt = new Date(
+      typeof payload.timestamp === "number" ||
+        typeof payload.timestamp === "string"
+        ? payload.timestamp
+        : NaN,
+    ).getTime()
+    const age = Date.now() - eventAt
+    if (
+      recordOrNull(payload.tags)?.device_owner !== userId ||
+      !Number.isFinite(age) ||
+      age < -60_000 ||
+      age > DEVICE_EVENT_MAX_AGE_MS
+    )
+      return null
+    return event.visitorId
+  } catch {
+    return null
+  }
+}
+
 /** Return only the exact visitor ID verified by the provider's server API. */
 export async function resolveFingerprintSignup({
   eventId,
