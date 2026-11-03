@@ -16,11 +16,13 @@ icon: "flask"
 Install Harbor with the `superserve` extra from the pull request:
 
 ```bash
-uv tool install "harbor[superserve] @ git+https://github.com/harbor-framework/harbor@refs/pull/4037/head"
+uv tool install --python 3.13 "harbor[superserve] @ git+https://github.com/harbor-framework/harbor@refs/pull/4037/head"
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
-After a Harbor release includes the environment, install it with `uv tool install "harbor[superserve]"` instead.
+`--python 3.13` pins a Python version that all of Harbor's dependencies support. Without it, uv can select a newer Python for which some dependencies have no prebuilt wheels, and the install fails.
+
+After a Harbor release includes the environment, install it with `uv tool install --python 3.13 "harbor[superserve]"` instead.
 
 See [API keys](/api-key) to create a Superserve API key. Also export the key for the agent you evaluate, for example `ANTHROPIC_API_KEY` for Claude Code.
 
