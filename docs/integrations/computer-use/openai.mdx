@@ -153,9 +153,12 @@ async function runTask(sandbox: Sandbox, task: string): Promise<string> {
       "You operate a Linux xfce desktop. Google Chrome is in the dock at the bottom of the screen.",
     input: task,
   })
-  for (let turn = 0; turn < MAX_TURNS; turn++) {
+  for (let turn = 0; ; turn++) {
     const call = response.output.find((item) => item.type === "computer_call")
     if (!call) return response.output_text
+    if (turn === MAX_TURNS) {
+      throw new Error(`No answer after ${MAX_TURNS} turns`)
+    }
     // The API can flag an action for review; stop and hand it to a person.
     const checks = call.pending_safety_checks ?? []
     if (checks.length > 0) {
@@ -180,7 +183,6 @@ async function runTask(sandbox: Sandbox, task: string): Promise<string> {
       ],
     })
   }
-  throw new Error(`No answer after ${MAX_TURNS} turns`)
 }
 
 const sandbox = await Sandbox.create({
@@ -319,12 +321,16 @@ def run_task(sandbox: Sandbox, task: str) -> str:
         ),
         input=task,
     )
-    for _ in range(MAX_TURNS):
+    turn = 0
+    while True:
         call = next(
             (item for item in response.output if item.type == "computer_call"), None
         )
         if call is None:
             return response.output_text
+        if turn == MAX_TURNS:
+            raise RuntimeError(f"No answer after {MAX_TURNS} turns")
+        turn += 1
         # The API can flag an action for review; stop and hand it to a person.
         checks = getattr(call, "pending_safety_checks", None) or []
         if checks:
@@ -348,7 +354,6 @@ def run_task(sandbox: Sandbox, task: str) -> str:
                 }
             ],
         )
-    raise RuntimeError(f"No answer after {MAX_TURNS} turns")
 
 
 sandbox = Sandbox.create(
