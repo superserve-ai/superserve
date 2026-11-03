@@ -89,14 +89,14 @@ function formatUsd(amount: number | null | undefined): string | null {
     : null
 }
 
-export type TrialStage = "trial" | "ended" | "payment_failed"
+export type TrialStage = "trial" | "ended" | "payment_failed" | "plan_required"
 
 // The trial's stage from its entry state and balance.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
 ): TrialStage {
-  if (entry === "payment_failed") return "payment_failed"
+  if (entry === "payment_failed" || entry === "plan_required") return entry
   const remaining = trial?.remaining_usd
   if (
     entry === "trial_ended" ||
@@ -138,7 +138,7 @@ function TrialEntryBanner({
   return (
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
-      label="Free trial"
+      label={stage === "plan_required" ? "No plan" : "Free trial"}
       action={
         <ManageAction canManage={canManage}>
           {selected && locator ? (
@@ -173,7 +173,12 @@ function TrialEntryBanner({
         </ManageAction>
       }
     >
-      {stage === "payment_failed" ? (
+      {stage === "plan_required" ? (
+        <>
+          Free covers your first team. Choose a plan to run sandboxes in this
+          one.
+        </>
+      ) : stage === "payment_failed" ? (
         <>
           We couldn&apos;t confirm a card for your plan. Your sandboxes are
           paused and nothing is deleted. Upgrade to resume.
