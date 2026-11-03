@@ -74,7 +74,7 @@ template = Template.create(
 |---|---|---|
 | `name` | `string` | **Required.** Team-scoped identifier. Must not start with `superserve/`. Names are unique per team among non-deleted templates and are released for reuse the moment a template is deleted. |
 | `from` / `from_` | `string` | **Required.** OCI base image (e.g. `python:3.11`). See [BuildSpec](/templates/build-spec#from-base-image). |
-| `vcpu` | `number` | Number of vCPUs. Minimum 1. Maximum 2 on Free, 4 on Developer, 16 on Pro. Default `1`. See [Resource limits](/templates/build-spec#resource-limits). |
+| `vcpu` | `number` | Number of vCPUs. Minimum 1 vCPU. Maximum 2 vCPU on Free, 4 vCPU on Developer, 16 vCPU on Pro. Default `1` (1 vCPU). See [Resource limits](/templates/build-spec#resource-limits). |
 | `memoryMib` / `memory_mib` | `number` | Memory in MiB. Minimum 256 MiB. Maximum 4096 MiB (4 GiB) on Free, 16384 MiB (16 GiB) on Developer, 65536 MiB (64 GiB) on Pro. Default `1024` (1 GiB). |
 | `diskMib` / `disk_mib` | `number` | Disk in MiB. Minimum 1024 MiB (1 GiB). The maximum depends on your team's plan. Default `4096` (4 GiB). |
 | `steps` | [`BuildStep[]`](#buildstep) | Ordered build steps. |
