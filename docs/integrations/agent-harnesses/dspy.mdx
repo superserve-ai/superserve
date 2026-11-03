@@ -118,7 +118,7 @@ The worker keeps its protocol on a private copy of stdout. Output that the model
 
 Save this file as `superserve_interpreter.py`, next to `rlm_worker.py`. The highlighted lines are the Superserve calls: create the sandbox, start the worker, write to its stdin, and clean up.
 
-```python superserve_interpreter.py {69-78,100,176-179}
+```python superserve_interpreter.py {70-79,101,175-178}
 """A dspy.RLM code interpreter that runs the REPL in a Superserve sandbox."""
 
 import asyncio
@@ -170,11 +170,12 @@ class SuperserveInterpreter:
         self._loop = asyncio.new_event_loop()
         threading.Thread(target=self._loop.run_forever, daemon=True).start()
 
-    def _run(self, awaitable: Awaitable[T], timeout: float | None = None) -> T:
-        async def wrapper() -> T:
-            return await awaitable
+    @staticmethod
+    async def _await(awaitable: Awaitable[T]) -> T:
+        return await awaitable
 
-        future = asyncio.run_coroutine_threadsafe(wrapper(), self._loop)
+    def _run(self, awaitable: Awaitable[T], timeout: float | None = None) -> T:
+        future = asyncio.run_coroutine_threadsafe(self._await(awaitable), self._loop)
         try:
             return future.result(timeout)
         except concurrent.futures.TimeoutError:
@@ -249,7 +250,9 @@ class SuperserveInterpreter:
             positional = dict(zip(names, request["args"], strict=False))
             value = tool(**positional, **request["kwargs"])
             if inspect.isawaitable(value):
-                value = self._run(value)
+                # Use a separate loop, so a blocking async tool cannot stall
+                # the sandbox I/O loop.
+                value = asyncio.run(self._await(value))
             return {"value": value}
         except Exception as exc:
             return {"error": f"{type(exc).__name__}: {exc}"}
@@ -290,10 +293,6 @@ class SuperserveInterpreter:
         return message["stdout"] or None
 
     async def _stop(self) -> None:
-        # Cancel async tools that still run after a step timed out.
-        for task in asyncio.all_tasks():
-            if task is not asyncio.current_task():
-                task.cancel()
         if self._session is not None:
             await self._session.close()
         if self._sandbox is not None:
