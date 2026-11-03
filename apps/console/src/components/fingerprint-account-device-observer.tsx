@@ -10,6 +10,21 @@ const RECORDED_KEY = "superserve_account_device_recorded"
 // One attempt per page load; a failed one retries on the next visit.
 const started = new Set<string>()
 
+// The marker only saves repeat identifications; without storage, record anyway.
+function stored(key: string): boolean {
+  try {
+    return localStorage.getItem(key) !== null
+  } catch {
+    return false
+  }
+}
+
+function store(key: string) {
+  try {
+    localStorage.setItem(key, "1")
+  } catch {}
+}
+
 /**
  * Records this browser's device once per account and region set, for accounts
  * that predate signup evidence; a newly added region records it again.
@@ -36,11 +51,7 @@ function FingerprintAccountDeviceObserverEnabled({
     if (!user) return
     const key = `${RECORDED_KEY}:${user.id}:${regions}`
     if (started.has(key)) return
-    try {
-      if (localStorage.getItem(key)) return
-    } catch {
-      return
-    }
+    if (stored(key)) return
     started.add(key)
     getData({ tag: { device_owner: user.id } })
       .then((result) =>
@@ -49,7 +60,7 @@ function FingerprintAccountDeviceObserverEnabled({
           : false,
       )
       .then((recorded) => {
-        if (recorded) localStorage.setItem(key, "1")
+        if (recorded) store(key)
       })
       .catch(() => {})
   }, [user, getData, regions])
