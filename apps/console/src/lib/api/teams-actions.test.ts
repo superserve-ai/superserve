@@ -589,6 +589,10 @@ describe("createTeamAction", () => {
       expectUnavailable(await createTeamAction("acme", "use", "team-me"))
     })
 
+    it("refuses a team that is not in the user's directory", async () => {
+      expectUnavailable(await createTeamAction("acme", "use", "team-other"))
+    })
+
     it("refuses a region other than the account's", async () => {
       expectUnavailable(await createTeamAction("acme", "usw", "team-me"))
       expect(cellClients.usw.writes).toEqual({})
