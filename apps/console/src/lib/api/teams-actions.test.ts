@@ -153,6 +153,12 @@ function recordingCellClient() {
             }),
           }),
         }
+      case "billing_account_free_team":
+        return {
+          select: () => ({
+            eq: () => ({ limit: async () => ({ data: [], error: null }) }),
+          }),
+        }
       default:
         throw new Error(`unexpected table ${table}`)
     }
@@ -348,7 +354,10 @@ describe("createTeamAction", () => {
     expect(mockEnsureGoogleOnboardingMembership).not.toHaveBeenCalled()
 
     // Nothing leaked into the default cell.
-    expect(cellClients.use.from).not.toHaveBeenCalled()
+    // The other cell is only read for the user's Free claim.
+    expect(cellClients.use.from.mock.calls).toEqual([
+      ["billing_account_free_team"],
+    ])
 
     // The creator lands in the new team.
     expect(cookieSets).toEqual([
@@ -361,7 +370,10 @@ describe("createTeamAction", () => {
 
     expect(team.region).toBe("use")
     expect(cellClients.use.writes.team).toBeUndefined()
-    expect(cellClients.usw.from).not.toHaveBeenCalled()
+    // The other cell is only read for the user's Free claim.
+    expect(cellClients.usw.from.mock.calls).toEqual([
+      ["billing_account_free_team"],
+    ])
   })
 
   it("returns a serializable denial without selecting a team", async () => {

@@ -153,7 +153,7 @@ try {
 
 ## Full documentation
 
-[docs.superserve.ai](https://docs.superserve.ai/sdk/typescript/sandbox?utm_source=npm&utm_medium=readme)
+[docs.superserve.ai](https://docs.superserve.ai/sdk-reference/sandbox?utm_source=npm&utm_medium=readme)
 
 ## Development
 

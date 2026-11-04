@@ -13,7 +13,7 @@ Add to your MCP client and set `SUPERSERVE_API_KEY` in its `env` (clients do not
 ```bash
 claude mcp add superserve \
   --env SUPERSERVE_API_KEY=ss_live_xxxxxxxxxxxxxxxx \
-  -- npx -y @superserve/mcp
+  -- npx -y -p @superserve/mcp superserve-mcp
 ```
 
 **Claude Desktop / Cursor / Windsurf** (`claude_desktop_config.json`, `.cursor/mcp.json`, `mcp_config.json`):
@@ -23,7 +23,7 @@ claude mcp add superserve \
   "mcpServers": {
     "superserve": {
       "command": "npx",
-      "args": ["-y", "@superserve/mcp"],
+      "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
       "env": { "SUPERSERVE_API_KEY": "ss_live_xxxxxxxxxxxxxxxx" }
     }
   }
@@ -46,7 +46,7 @@ claude mcp add superserve \
     "superserve": {
       "type": "stdio",
       "command": "npx",
-      "args": ["-y", "@superserve/mcp"],
+      "args": ["-y", "-p", "@superserve/mcp", "superserve-mcp"],
       "env": { "SUPERSERVE_API_KEY": "${input:superserve-key}" }
     }
   }
@@ -58,7 +58,7 @@ claude mcp add superserve \
 ```toml
 [mcp_servers.superserve]
 command = "npx"
-args = ["-y", "@superserve/mcp"]
+args = ["-y", "-p", "@superserve/mcp", "superserve-mcp"]
 env_vars = ["SUPERSERVE_API_KEY"]
 ```
 
@@ -67,6 +67,8 @@ env_vars = ["SUPERSERVE_API_KEY"]
 A hosted instance runs at `https://mcp.superserve.ai` (Streamable HTTP) — no local install. Send your Superserve API key as a bearer token; the server is stateless and account-scoped (the key already maps to your team).
 
 > Bearer auth works in Claude Code, Cursor, VS Code, and the Anthropic Messages API connector. Claude.ai, Claude Desktop's Custom Connector UI, and ChatGPT developer mode expect OAuth (no static-bearer field), which the hosted endpoint does not support yet.
+
+> The hosted endpoint limits each request body to about 4.5 MB, so keep `sandbox_files_write` inline content under about 4 MiB of text or 3 MiB of binary data sent as base64; larger requests fail with HTTP `413 Request Entity Too Large`. The local server accepts up to 8 MiB.
 
 **Claude Code:**
 
@@ -119,7 +121,7 @@ It serves the MCP endpoint at `/` (POST) and a `GET /health` liveness probe. Con
 | `sandbox_exec`               | Run a shell command; returns stdout, stderr, exit code. Auto-resumes a paused sandbox.                                                     |
 | `sandbox_computer`           | Drive a GUI desktop sandbox: screenshot, mouse, keyboard, scroll, resize, live viewer URL. Input actions return a fresh screenshot (JPEG). |
 | `sandbox_files_read`         | Read a file (UTF-8 text or base64). Rejects files over 1 MiB.                                                                              |
-| `sandbox_files_write`        | Create or overwrite a file (inline content capped at 8 MiB).                                                                               |
+| `sandbox_files_write`        | Create or overwrite a file (inline content capped at 8 MiB locally, about 4 MiB on the hosted endpoint).                                   |
 | `sandbox_files_list`         | List a directory.                                                                                                                          |
 | `sandbox_files_download_dir` | Download a directory as a base64 ZIP (symlinks skipped). Capped at 10 MiB.                                                                 |
 | `sandbox_pause`              | Pause a sandbox (state preserved).                                                                                                         |
