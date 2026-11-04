@@ -334,9 +334,14 @@ describe("PlanUsagePage", () => {
     expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
     expect(screen.queryByText("Tracked but not billed")).not.toBeInTheDocument()
     expect(screen.queryByText("Charge: $60.00")).not.toBeInTheDocument()
+    // The summary error state is the only billing status; no stale payment
+    // controls remain.
     expect(
-      screen.getByText("Billing data is unavailable for this team right now."),
-    ).toBeInTheDocument()
+      screen.queryByTestId("plan-billing-controls"),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("customer-billing-section"),
+    ).not.toBeInTheDocument()
     fireEvent.click(screen.getByRole("button", { name: /try again/i }))
     expect(refetch).toHaveBeenCalledOnce()
   })
@@ -419,7 +424,7 @@ describe("PlanUsagePage", () => {
       useTeamPlan.mockReturnValue(planQuery)
       renderPage()
       expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
-      expect(screen.getByTestId("customer-billing-section")).toBeInTheDocument()
+      expect(screen.getByTestId("plan-billing-controls")).toBeInTheDocument()
       expect(
         screen.getByRole("button", { name: "Open Customer Portal" }),
       ).toBeInTheDocument()
@@ -1094,6 +1099,19 @@ describe("PlanUsagePage", () => {
     expect(screen.queryByText("CPU Usage")).not.toBeInTheDocument()
   })
 
+  it("moves the payment action into the plan card", () => {
+    renderPage()
+
+    const planCard = screen.getByTestId("current-plan")
+    expect(
+      within(planCard).getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Payment Status")).not.toBeInTheDocument()
+    expect(
+      screen.queryByTestId("customer-billing-section"),
+    ).not.toBeInTheDocument()
+  })
+
   it("shows customer billing for impersonated teams outside the member directory", () => {
     useDashboardTeamContext.mockReturnValue({
       teamId: "impersonated-team",
@@ -1113,7 +1131,7 @@ describe("PlanUsagePage", () => {
 
     renderPage()
 
-    expect(screen.getByTestId("customer-billing-section")).toBeInTheDocument()
+    expect(screen.getByTestId("plan-billing-controls")).toBeInTheDocument()
     expect(useCustomerBillingPeriods).toHaveBeenCalledWith(
       "impersonated-team",
       "use:impersonated-team",

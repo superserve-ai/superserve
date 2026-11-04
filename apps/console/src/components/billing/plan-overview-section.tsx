@@ -1,5 +1,7 @@
 "use client"
 
+import type { ReactNode } from "react"
+
 import { CurrentPlan } from "@/components/current-plan"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
@@ -32,9 +34,13 @@ function recentlyEffective(effectiveFrom: string): boolean {
 export function PlanOverviewSection({
   summary,
   details = false,
+  billingControls,
 }: {
   summary: BillingSummaryResponse
   details?: boolean
+  // Payment action and billing problems for the plan card. They stay visible
+  // while the plan loads or fails, because the summary authorizes them.
+  billingControls?: ReactNode
 }) {
   const scope = useQueryScope()
   const capabilities = useBillingCapabilities()
@@ -51,14 +57,17 @@ export function PlanOverviewSection({
   ).data
   if (plan === undefined)
     return (
-      <p className="text-sm text-muted">
-        {planQuery.isError
-          ? "Your plan could not be loaded."
-          : "Loading your plan…"}
-      </p>
+      <div className="mx-auto w-full max-w-4xl space-y-3">
+        <p className="text-sm text-muted">
+          {planQuery.isError
+            ? "Your plan could not be loaded."
+            : "Loading your plan…"}
+        </p>
+        {billingControls}
+      </div>
     )
   if (!plan || plan.kind === "legacy_payg")
-    return <CurrentPlan summary={summary} />
+    return <CurrentPlan summary={summary} billingControls={billingControls} />
   const commercial = summary.plan?.key === plan.key ? summary.plan : null
   const matchingPeriod =
     Date.parse(plan.period_start ?? "") ===
@@ -147,6 +156,7 @@ export function PlanOverviewSection({
           ? canStartAnyPlan(capabilities.data)
           : canStartPlan(capabilities.data, plan)
       }
+      billingControls={billingControls}
     />
   )
 }

@@ -27,7 +27,10 @@ import {
   billingStatusNote,
   resourceSwatch,
 } from "@/components/billing/usage-breakdown"
-import { CustomerBillingSection } from "@/components/customer-billing-section"
+import {
+  CustomerBillingSection,
+  PlanBillingControls,
+} from "@/components/customer-billing-section"
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -654,7 +657,18 @@ export function PlanUsagePageClient() {
               />
             ) : summary ? (
               <>
-                <PlanOverviewSection summary={summary} />
+                <PlanOverviewSection
+                  summary={summary}
+                  billingControls={
+                    billingTeam && teamPlan?.kind !== "free" ? (
+                      <PlanBillingControls
+                        teamId={billingTeam.teamId}
+                        teamRegion={billingTeam.region}
+                        summary={summary}
+                      />
+                    ) : null
+                  }
+                />
                 {showPayments ? <BillingSummary summary={summary} /> : null}
               </>
             ) : null}

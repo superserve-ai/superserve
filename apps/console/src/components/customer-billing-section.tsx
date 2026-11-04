@@ -4,6 +4,7 @@ import {
   ArrowSquareOutIcon,
   CreditCardIcon,
   SpinnerGapIcon,
+  WarningIcon,
 } from "@phosphor-icons/react"
 import { Alert, Button } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
@@ -17,6 +18,7 @@ import {
 import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useCustomerBillingPeriods } from "@/hooks/use-customer-billing"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
+import type { CustomerBillingPeriodResponse } from "@/lib/api/billing-stripe"
 import { billingKeys } from "@/lib/api/query-keys"
 
 interface CustomerBillingSectionProps {
@@ -25,23 +27,6 @@ interface CustomerBillingSectionProps {
   teamName: string
   summary: BillingSummaryResponse | null | undefined
   cardless?: boolean
-}
-
-function friendlyPeriodStatus(status: string): string {
-  if (status === "active" || status === "exported" || status === "approved") {
-    return "Live"
-  }
-  if (status === "validating") {
-    return "Under review"
-  }
-  if (status === "pending" || status === "processing") {
-    return "Pending"
-  }
-  return status
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(" ")
 }
 
 function billingModeCopy(
@@ -86,102 +71,55 @@ function noticeFromQuery(value: string | null) {
   return null
 }
 
-function paymentSummary(
+// The plan card shows a payment status line only when billing needs
+// attention. A connected team in its normal state shows no line. Shadow mode
+// is explained by its own notice, so it adds no line either.
+export function billingProblem(
   summary:
-    | {
-        billing_mode?: "shadow" | "live"
-        payment_setup_required?: boolean
-        portal_available?: boolean
-      }
+    | Pick<
+        BillingSummaryResponse,
+        "billing_mode" | "payment_setup_required" | "portal_available"
+      >
     | null
     | undefined,
   period:
-    | {
-        stripe_subscription_id?: string
-        stripe_subscription_status?: string
-        stripe_invoice_status?: string
-        cancel_at_period_end?: boolean
-      }
+    | Pick<
+        CustomerBillingPeriodResponse,
+        | "status"
+        | "cancel_at_period_end"
+        | "stripe_subscription_status"
+        | "stripe_invoice_status"
+      >
     | null
     | undefined,
-): {
-  headline: string
-  detail: string
-} {
-  if (summary?.payment_setup_required) {
-    return {
-      headline: "Payment setup required",
-      detail: "Start checkout to connect Stripe for this team.",
-    }
-  }
-
-  if (summary?.billing_mode === "shadow") {
-    return {
-      headline: "Tracked only",
-      detail: "Usage is being tracked, but this team is not being charged yet.",
-    }
-  }
-
-  if (summary?.portal_available) {
-    if (period?.cancel_at_period_end) {
-      return {
-        headline: "Connected",
-        detail:
-          "Billing is scheduled to end at the close of the current period.",
-      }
-    }
-
-    if (period?.stripe_invoice_status === "open") {
-      return {
-        headline: "Connected",
-        detail: "Stripe is ready to invoice this team.",
-      }
-    }
-
-    return {
-      headline: "Connected",
-      detail: period?.stripe_invoice_status
-        ? `Invoice status: ${friendlyPeriodStatus(period.stripe_invoice_status)}`
-        : "Stripe subscription details are available for this team.",
-    }
-  }
-
-  if (!summary) {
-    return {
-      headline: "Unavailable",
-      detail: "Billing data is unavailable for this team right now.",
-    }
-  }
-
-  return summary.billing_mode === "live"
-    ? {
-        headline: "Billing unavailable",
-        detail:
-          "Billing is live, but no customer portal is currently available.",
-      }
-    : {
-        headline: "Tracking only",
-        detail: "Usage is tracked, but billing actions are not available yet.",
-      }
+): string | null {
+  if (!summary) return null
+  if (summary.payment_setup_required)
+    return "Payment setup required. Start checkout to connect Stripe for this team."
+  if (summary.billing_mode === "shadow") return null
+  if (!summary.portal_available)
+    return summary.billing_mode === "live"
+      ? "Billing is live, but no customer portal is currently available."
+      : "Usage is tracked, but billing actions are not available yet."
+  if (!period) return null
+  if (period.cancel_at_period_end)
+    return "Billing is scheduled to end at the close of the current period."
+  const subscription = period.stripe_subscription_status
+  if (subscription === "past_due" || subscription === "unpaid")
+    return "The last payment failed. Update your payment method in the customer portal."
+  if (subscription === "incomplete" || subscription === "incomplete_expired")
+    return "The subscription is waiting for payment confirmation."
+  if (subscription === "canceled") return "The subscription is canceled."
+  if (period.stripe_invoice_status === "uncollectible")
+    return "The latest invoice could not be collected. Update your payment method in the customer portal."
+  if (period.status === "failed")
+    return "Billing for the current period failed."
+  if (["pending", "processing", "validating"].includes(period.status))
+    return "Billing for the current period is still processing."
+  return null
 }
 
-export function CustomerBillingSection({
-  teamId,
-  teamRegion,
-  teamName,
-  summary,
-  cardless = false,
-}: CustomerBillingSectionProps) {
-  const queryClient = useQueryClient()
-  const [notice, setNotice] = useState<ReturnType<typeof noticeFromQuery>>()
-
-  const teamKey = `${teamRegion}:${teamId}`
-  const { submitting, available, openSession } = useBillingPayment(
-    cardless && summary
-      ? { ...summary, checkout_available: false, payment_setup_required: false }
-      : summary,
-    teamKey,
-  )
+function useLatestBillingPeriod(teamId: string, teamKey: string) {
   const periodsQuery = useCustomerBillingPeriods(teamId, teamKey)
   const latestPeriod = useMemo(() => {
     return (
@@ -196,38 +134,25 @@ export function CustomerBillingSection({
       })[0] ?? null
     )
   }, [periodsQuery.data?.periods])
+  return { periodsQuery, latestPeriod }
+}
 
-  useEffect(() => {
-    const query = new URLSearchParams(window.location.search)
-    const billingState = query.get("billing")
-    setNotice(noticeFromQuery(billingState))
-    if (billingState) {
-      query.delete("billing")
-      const nextUrl = new URL(window.location.href)
-      nextUrl.search = query.toString()
-      window.history.replaceState({}, "", nextUrl.toString())
-      void queryClient.invalidateQueries({
-        queryKey: billingKeys.all,
-      })
-    }
-  }, [queryClient])
-
-  const payment = paymentSummary(summary, latestPeriod)
-  const successfulPayment =
-    payment.headline === "Connected" &&
-    !periodsQuery.error &&
-    latestPeriod !== null &&
-    ["active", "exported", "approved"].includes(latestPeriod.status) &&
-    !latestPeriod.blocked_reason &&
-    !latestPeriod.cancel_at_period_end &&
-    (!latestPeriod?.stripe_invoice_status ||
-      latestPeriod.stripe_invoice_status === "paid") &&
-    latestPeriod.stripe_subscription_status === "active"
-  const modeCopy = billingModeCopy(summary?.billing_mode)
+function useBillingAction(
+  teamId: string,
+  teamKey: string,
+  summary: BillingSummaryResponse | null | undefined,
+  cardless: boolean,
+) {
+  const { submitting, available, openSession } = useBillingPayment(
+    cardless && summary
+      ? { ...summary, checkout_available: false, payment_setup_required: false }
+      : summary,
+    teamKey,
+  )
+  const { periodsQuery, latestPeriod } = useLatestBillingPeriod(teamId, teamKey)
   const canManageBilling = Boolean(summary?.permissions?.can_manage)
   const canOpenPortal = Boolean(summary?.portal_available)
-  const canStartCheckout = Boolean(summary?.checkout_available)
-  const billingActionAvailable = canOpenPortal || canStartCheckout
+  const canStartCheckout = !cardless && Boolean(summary?.checkout_available)
 
   const manageLabel = canOpenPortal
     ? "Open Customer Portal"
@@ -240,7 +165,7 @@ export function CustomerBillingSection({
     periodsQuery.isPending ||
     periodsQuery.isFetching ||
     !canManageBilling ||
-    !billingActionAvailable ||
+    !(canOpenPortal || canStartCheckout) ||
     !available
 
   const actionButton =
@@ -262,6 +187,82 @@ export function CustomerBillingSection({
           : manageLabel}
       </Button>
     ) : null
+
+  return { actionButton, canManageBilling, canOpenPortal, latestPeriod }
+}
+
+interface PlanBillingControlsProps {
+  teamId: string
+  teamRegion: string
+  summary: BillingSummaryResponse | null | undefined
+}
+
+// The payment action and any billing problem, shown inside the plan card.
+export function PlanBillingControls({
+  teamId,
+  teamRegion,
+  summary,
+}: PlanBillingControlsProps) {
+  const { actionButton, canManageBilling, latestPeriod } = useBillingAction(
+    teamId,
+    `${teamRegion}:${teamId}`,
+    summary,
+    false,
+  )
+  const problem = billingProblem(summary, latestPeriod)
+  const viewOnly = !canManageBilling && Boolean(summary)
+  if (!actionButton && !viewOnly && !problem) return null
+
+  return (
+    <div className="space-y-3" data-testid="plan-billing-controls">
+      {problem ? (
+        <p
+          className="flex items-start gap-2 text-xs text-warning"
+          data-testid="plan-billing-problem"
+        >
+          <WarningIcon className="mt-px size-3.5 shrink-0" weight="light" />
+          <span>{problem}</span>
+        </p>
+      ) : null}
+      {actionButton ??
+        (viewOnly ? (
+          <p className="text-xs text-muted">
+            Billing is view-only for your role.
+          </p>
+        ) : null)}
+    </div>
+  )
+}
+
+export function CustomerBillingSection({
+  teamId,
+  teamRegion,
+  teamName,
+  summary,
+  cardless = false,
+}: CustomerBillingSectionProps) {
+  const queryClient = useQueryClient()
+  const [notice, setNotice] = useState<ReturnType<typeof noticeFromQuery>>()
+
+  const { actionButton, canManageBilling, canOpenPortal, latestPeriod } =
+    useBillingAction(teamId, `${teamRegion}:${teamId}`, summary, cardless)
+
+  useEffect(() => {
+    const query = new URLSearchParams(window.location.search)
+    const billingState = query.get("billing")
+    setNotice(noticeFromQuery(billingState))
+    if (billingState) {
+      query.delete("billing")
+      const nextUrl = new URL(window.location.href)
+      nextUrl.search = query.toString()
+      window.history.replaceState({}, "", nextUrl.toString())
+      void queryClient.invalidateQueries({
+        queryKey: billingKeys.all,
+      })
+    }
+  }, [queryClient])
+
+  const modeCopy = billingModeCopy(summary?.billing_mode)
 
   if (cardless) {
     const credits = summary ? billingCredits(summary) : null
@@ -294,14 +295,9 @@ export function CustomerBillingSection({
     )
   }
 
-  // Shadow mode is explained by its own notice, so its payment headline is
-  // not repeated in the payments row.
-  const showPaymentStatus =
-    !successfulPayment && payment.headline !== "Tracked only"
-  const viewOnly = !canManageBilling && summary
-  const showPaymentsRow = showPaymentStatus || actionButton || viewOnly
-  if (!showPaymentsRow && !modeCopy && !notice && !latestPeriod?.blocked_reason)
-    return null
+  // The payment status and action live in the plan card. This section keeps
+  // only the notices that need the full width.
+  if (!modeCopy && !notice && !latestPeriod?.blocked_reason) return null
 
   return (
     <section
@@ -326,39 +322,6 @@ export function CustomerBillingSection({
           {latestPeriod.blocked_reason}
         </Alert>
       )}
-
-      {showPaymentsRow ? (
-        <div className="flex flex-wrap items-center justify-between gap-3 border border-dashed border-border bg-surface/40 px-5 py-3.5">
-          <div className="min-w-0 space-y-1">
-            <p className={EYEBROW}>
-              {showPaymentStatus ? "Payment Status" : "Payments"}
-            </p>
-            {showPaymentStatus ? (
-              <>
-                <p className="text-sm font-medium text-foreground">
-                  {payment.headline}
-                </p>
-                <p className="text-xs text-muted">{payment.detail}</p>
-                {latestPeriod?.cancel_at_period_end && (
-                  <p className="text-xs text-muted">
-                    Cancel at period end: yes
-                  </p>
-                )}
-              </>
-            ) : (
-              <p className="text-sm text-muted">
-                Payment details and invoices are in the customer portal.
-              </p>
-            )}
-          </div>
-          {actionButton ??
-            (viewOnly ? (
-              <p className="text-xs text-muted">
-                Billing is view-only for your role.
-              </p>
-            ) : null)}
-        </div>
-      ) : null}
     </section>
   )
 }
