@@ -63,6 +63,6 @@ The [SDK reference](/sdk-reference/commands#commandsession) lists the full surfa
 
 ## If the connection drops
 
-`wait()` throws `SandboxError` if the socket closes before the process exits. The sandbox then stops the process, and there's no way to reattach to a session. `Sandbox.connect(id)` gets you the sandbox back, so you can start a new session. If you need a process's output after a drop, have it write to a file in the sandbox.
+`wait()` throws `SandboxError` if the socket closes before the process exits. The sandbox then stops the process, and there's no way to reattach to a session. `Sandbox.connect(id)` gets you the sandbox back, so you can start a new session. For a job that has to outlive the connection, start it in the background with `nohup` and its output in a file. See [If the connection drops](/commands/streaming#if-the-connection-drops).
 
 A paused sandbox wakes on its own before the session opens.

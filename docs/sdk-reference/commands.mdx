@@ -107,7 +107,7 @@ In Python the methods are awaitable (`await session.stdin.write(...)`, `await se
 | `timeoutMs` / `timeout_seconds` | `number` | Hard limit on how long the command runs. At the limit, the command stops and the result has exit code `124`. When unset, `run` stops the command after 30 seconds and `spawn` has no limit. TypeScript rounds up to whole seconds; `run` treats `0` as unset and throws `ValidationError` for a value that is negative, not finite, or out of range. |
 | `onStdout` / `on_stdout` | `(data: string) => void` | Stream stdout chunks. |
 | `onStderr` / `on_stderr` | `(data: string) => void` | Stream stderr chunks. |
-| `signal` | `AbortSignal` | TypeScript only. On `run`, stops waiting and throws; the command keeps running in the sandbox until it exits or reaches its timeout. On `spawn`, cancels the start, or kills the process once it's running. |
+| `signal` | `AbortSignal` | TypeScript only. On `run`, stops waiting and throws. Without callbacks, the command keeps running in the sandbox until it exits or reaches its timeout; with callbacks, the sandbox stops it. On `spawn`, cancels the start, or kills the process once it's running. |
 | `startupSignal` | `AbortSignal` | TypeScript only, `spawn` only. Cancels only the connect and start; a command already running is left alone. Defaults to `signal`. |
 | `maxOutputBytes` | `number` | TypeScript only, `run` without callbacks. Largest response body the SDK buffers. Defaults to 10 MiB. A larger response throws `ValidationError`. |
 
@@ -165,6 +165,6 @@ Commonly raised:
 - `ValidationError`: an invalid `timeoutMs`, or a response larger than `maxOutputBytes` (TypeScript)
 - `NotFoundError`: the sandbox was deleted
 - `ConflictError`: the sandbox is in an invalid state
-- `SandboxError`: the connection dropped before the command finished (streaming and `spawn`), or a TypeScript `signal` aborted a `run()`. A `run()` command keeps running in the sandbox; a `spawn()` process is stopped. Neither can be reattached.
+- `SandboxError`: the connection dropped before the command finished (streaming and `spawn`), or a TypeScript `signal` aborted a `run()`. The sandbox stops a streamed `run()` command or a `spawn()` process. A `run()` without callbacks keeps running until it exits or reaches its timeout. None can be reattached.
 
 See [Errors](/errors) for the full hierarchy.

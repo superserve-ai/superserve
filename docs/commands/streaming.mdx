@@ -45,7 +45,13 @@ Streaming doesn't change the timeout. It's still a hard limit on how long the co
 
 ## If the connection drops
 
-If the stream ends before the `finished` event (a network hiccup, say), `run()` throws `SandboxError`. The command doesn't stop: it keeps running in the sandbox until it exits or reaches its timeout. You can't reattach to its output, though. `Sandbox.connect(id)` gets you the sandbox back to run new commands, not the old stream. If you need a job's output after a drop, redirect it to a file in the sandbox and read the file later.
+If the stream ends before the `finished` event (a network hiccup, say), `run()` throws `SandboxError`, and the sandbox then stops the command. A `run()` without callbacks is different: if the client goes away, the command keeps running until it exits or reaches its timeout. Either way, nothing reattaches to command output. `Sandbox.connect(id)` gets you the sandbox back to run new commands, not the old stream.
+
+For a job that has to outlive the connection, start it in the background with its output in a file, then read the file later. `run()` returns as soon as the job starts, and the job isn't bound by the command timeout:
+
+```bash
+nohup ./job.sh > /home/user/job.log 2>&1 &
+```
 
 ## Capture and stream together
 
