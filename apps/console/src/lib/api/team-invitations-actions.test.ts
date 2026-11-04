@@ -11,6 +11,7 @@ const mocks = vi.hoisted(() => ({
   completed: vi.fn(),
   writeSelection: vi.fn(),
   sendEmail: vi.fn(),
+  rpc: vi.fn(),
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
@@ -33,8 +34,10 @@ vi.mock("@/lib/api/active-team", async () => ({
   writeTeamSelection: mocks.writeSelection,
 }))
 vi.mock("@/lib/cells", () => ({
+  DEFAULT_REGION: "use",
   cellFor: (region: string) => ({
     apiBaseUrl: `https://api.${region}.test`,
+    createAdminClient: () => ({ rpc: mocks.rpc }),
   }),
 }))
 vi.mock("@/lib/email/send", () => ({ sendEmail: mocks.sendEmail }))
@@ -69,6 +72,37 @@ const invitation = {
   token_hash: "must-not-leak",
 }
 
+// Behaves like acquire/release_team_leave_lease: one live holder per user, an
+// expired lease is taken over, release only deletes the caller's own lease.
+function installLeaseStore(): Map<string, { holder: string; expires: number }> {
+  const leases = new Map<string, { holder: string; expires: number }>()
+  mocks.rpc.mockImplementation(
+    async (
+      fn: string,
+      args: { p_user_id: string; p_holder: string; p_ttl_seconds?: number },
+    ) => {
+      const live = leases.get(args.p_user_id)
+      if (fn === "acquire_team_leave_lease") {
+        if (
+          live &&
+          live.expires > Date.now() &&
+          live.holder !== args.p_holder
+        ) {
+          return { data: false, error: null }
+        }
+        leases.set(args.p_user_id, {
+          holder: args.p_holder,
+          expires: Date.now() + (args.p_ttl_seconds ?? 0) * 1000,
+        })
+        return { data: true, error: null }
+      }
+      if (live?.holder === args.p_holder) leases.delete(args.p_user_id)
+      return { data: null, error: null }
+    },
+  )
+  return leases
+}
+
 function json(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -99,6 +133,7 @@ beforeEach(() => {
     { id: "team-1", name: "Acme", region: "use" },
   ])
   mocks.sendEmail.mockResolvedValue({ success: true })
+  installLeaseStore()
   fetchSpy.mockImplementation(async (url: string) =>
     url.endsWith("/delivery")
       ? new Response(null, { status: 204 })
@@ -367,6 +402,131 @@ describe("leaveTeamAction", () => {
       degradedRegions: [],
     })
   }
+
+  it("reads the directory strictly while holding the lease", async () => {
+    memberships([here, other])
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
+
+    await leaveTeamAction(here)
+
+    expect(mocks.listMemberships).toHaveBeenCalledWith("user-1", {
+      strict: true,
+    })
+    expect(mocks.rpc.mock.calls.map(([fn]) => fn)).toEqual([
+      "acquire_team_leave_lease",
+      "release_team_leave_lease",
+    ])
+    const [, acquire] = mocks.rpc.mock.calls[0]
+    expect(acquire).toMatchObject({ p_user_id: "user-1", p_ttl_seconds: 60 })
+    expect(mocks.rpc.mock.calls[1][1].p_holder).toBe(acquire.p_holder)
+  })
+
+  it("releases the lease when the backend refuses the leave", async () => {
+    const leases = installLeaseStore()
+    memberships([here, other])
+    fetchSpy.mockResolvedValue(
+      json({ error: { code: "last_owner", message: "x" } }, 409),
+    )
+
+    await leaveTeamAction(here)
+
+    expect(leases.size).toBe(0)
+  })
+
+  it("still succeeds when the lease release fails", async () => {
+    memberships([here, other])
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
+    const real = mocks.rpc.getMockImplementation()!
+    mocks.rpc.mockImplementation(async (fn: string, args: never) =>
+      fn === "release_team_leave_lease"
+        ? { data: null, error: { message: "db down" } }
+        : real(fn, args),
+    )
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    expect(await leaveTeamAction(here)).toEqual({ ok: true })
+    expect(log).toHaveBeenCalled()
+    log.mockRestore()
+  })
+
+  it.each([
+    ["is held by another leave", { data: false, error: null }],
+    ["errors", { data: null, error: { message: "db down" } }],
+  ])("fails closed when the lease %s", async (_n, outcome) => {
+    memberships([here, other])
+    mocks.rpc.mockResolvedValue(outcome)
+
+    expect(await leaveTeamAction(here)).toMatchObject({
+      ok: false,
+      code: "leave_in_progress",
+      message: "Another leave is in progress. Try again in a moment.",
+    })
+    expect(mocks.listMemberships).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(mocks.invalidate).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when the lease call throws", async () => {
+    memberships([here, other])
+    mocks.rpc.mockRejectedValue(new Error("network"))
+
+    expect(await leaveTeamAction(here)).toMatchObject({
+      ok: false,
+      code: "leave_in_progress",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("never lets overlapping leaves of two teams both succeed", async () => {
+    const teamA = { teamId: "team-a", region: "use" }
+    const teamB = { teamId: "team-b", region: "usw" }
+    // The backend's leave removes the membership; both requests read the
+    // directory through the same shared state, as they would in production.
+    const state = { teams: [teamA, teamB] }
+    const readDirectory = () => ({
+      memberships: [...state.teams],
+      degradedRegions: [] as string[],
+    })
+    mocks.listMemberships.mockImplementation(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      return readDirectory()
+    })
+    mocks.completed.mockImplementation(async (_u: string, d: unknown) => d)
+    fetchSpy.mockImplementation(async (url: string) => {
+      await new Promise((resolve) => setTimeout(resolve, 5))
+      const left = url.includes("/teams/team-a/") ? teamA : teamB
+      state.teams = state.teams.filter((t) => t.teamId !== left.teamId)
+      return new Response(null, { status: 204 })
+    })
+    const asTeam = (team: typeof teamA) =>
+      mocks.getKeyAndTeam.mockResolvedValueOnce({
+        apiKey: "ss_live_key",
+        team,
+      })
+    asTeam(teamA)
+    asTeam(teamB)
+
+    const results = await Promise.all([
+      leaveTeamAction(teamA),
+      leaveTeamAction(teamB),
+    ])
+
+    expect(results.filter((r) => r.ok)).toHaveLength(1)
+    expect(results.find((r) => !r.ok)).toMatchObject({
+      code: "leave_in_progress",
+    })
+    expect(state.teams).toHaveLength(1)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+
+    // Once the first leave finished, the lease is free and the remaining
+    // team is now the only one.
+    const remaining = state.teams[0]
+    asTeam(remaining)
+    expect(await leaveTeamAction(remaining)).toMatchObject({
+      code: "only_team",
+    })
+    expect(state.teams).toHaveLength(1)
+  })
 
   it("blocks leaving the only team without calling the backend", async () => {
     memberships([here])

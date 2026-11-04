@@ -22,7 +22,7 @@ import {
   SIGNUP_RESTRICTED_MESSAGE,
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
-import { cellFor } from "@/lib/cells"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { sendEmail } from "@/lib/email/send"
 import {
   TeamInvitationEmail,
@@ -46,6 +46,7 @@ export type InvitationErrorCode =
   | "last_owner"
   | "conflict"
   | "only_team"
+  | "leave_in_progress"
   | "team_changed"
   | "forbidden"
   | "unauthorized"
@@ -90,6 +91,7 @@ const MESSAGES: Record<InvitationErrorCode, string> = {
     "A team needs at least one owner. Make someone else an owner first.",
   conflict: "You are no longer an active member of this team.",
   only_team: "You can't leave your only team.",
+  leave_in_progress: "Another leave is in progress. Try again in a moment.",
   team_changed: "Your active team changed. Reload the page and try again.",
   forbidden: "You don't have permission to do that.",
   unauthorized: "Your session has expired. Sign in again.",
@@ -385,10 +387,52 @@ export async function revokeInvitationAction(
   return { ok: true }
 }
 
+// Departures are serialized per user across instances and regions with a
+// lease in the default cell (one global lock per user). It must outlast the
+// worst case of the membership read plus the 15s backend leave call; the TTL
+// also frees the lock if a release is lost.
+const LEAVE_LEASE_TTL_SECONDS = 60
+
+async function acquireLeaveLease(
+  userId: string,
+  holder: string,
+): Promise<boolean> {
+  try {
+    const { data, error } = await cellFor(DEFAULT_REGION)
+      .createAdminClient()
+      .rpc("acquire_team_leave_lease", {
+        p_user_id: userId,
+        p_holder: holder,
+        p_ttl_seconds: LEAVE_LEASE_TTL_SECONDS,
+      })
+    return !error && data === true
+  } catch {
+    return false
+  }
+}
+
+async function releaseLeaveLease(
+  userId: string,
+  holder: string,
+): Promise<void> {
+  try {
+    const { error } = await cellFor(DEFAULT_REGION)
+      .createAdminClient()
+      .rpc("release_team_leave_lease", { p_user_id: userId, p_holder: holder })
+    if (error) throw new Error(error.message)
+  } catch (error) {
+    // The TTL expires the lease; a failed release only delays the next leave.
+    console.error("team leave: lease release failed:", error)
+  }
+}
+
 /**
  * Leaves the active team. The only-team rule is enforced here, not in the
  * backend, because this server owns the cross-region membership directory.
- * An ambiguous directory read fails closed.
+ * An ambiguous directory read fails closed. Departures are serialized per
+ * user by a lease so the fresh membership check and the leave cannot overlap
+ * with another leave (otherwise two teams could both pass the check and the
+ * user would end up with none).
  */
 export async function leaveTeamAction(
   expected: TeamScope,
@@ -396,10 +440,24 @@ export async function leaveTeamAction(
   const context = await loadContext(expected)
   if (isFailure(context)) return context
 
+  const holder = crypto.randomUUID()
+  if (!(await acquireLeaveLease(context.userId, holder))) {
+    return failure("leave_in_progress")
+  }
+  try {
+    return await leaveWithLease(context)
+  } finally {
+    await releaseLeaveLease(context.userId, holder)
+  }
+}
+
+async function leaveWithLease(
+  context: Context,
+): Promise<{ ok: true } | InvitationActionError> {
   let remaining: TeamMembership[]
   try {
     const directory = await listTeamMembershipsForUserDetailed(context.userId, {
-      maxAgeMs: 0,
+      strict: true,
     })
     const completed = await completedMemberships(context.userId, directory)
     if (
