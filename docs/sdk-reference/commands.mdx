@@ -70,7 +70,7 @@ const result = await session.wait()
 ```
 
 ```python Python
-# async only, so use AsyncSandbox
+# async only: run inside an async function on an AsyncSandbox
 session = await sandbox.commands.spawn(
     "python3 -i",
     on_stdout=lambda data: print(data, end=""),
