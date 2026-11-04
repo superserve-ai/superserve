@@ -209,9 +209,8 @@ class Computer {
         await new Promise((resolve) =>
           setTimeout(resolve, block.input.duration * 1000),
         )
-        // Replace the frame from before the pause.
-        if (this.frame)
-          this.frame = await desktop.screenshot({ format: "jpeg" })
+        // Show Claude the screen after the pause.
+        this.frame = await desktop.screenshot({ format: "jpeg" })
         return "OK"
       default: {
         const step = await desktop.step(
@@ -224,7 +223,10 @@ class Computer {
         )
         if (step.actionError) throw new Error(step.actionError)
         this.frame = step.screenshot
-        return "OK"
+        // The input ran even when the capture after it failed.
+        return step.screenshot
+          ? "OK"
+          : `OK, but the screen capture failed: ${step.screenshotError}`
       }
     }
   }
@@ -270,6 +272,7 @@ async function edit(sandbox: Sandbox, input: EditorInput): Promise<string> {
     }
     case "create": {
       const exists = await commands.run('test -e "$P"', {
+        user: "root",
         env: { P: path },
         timeoutMs: TIMEOUT_MS,
       })
@@ -343,7 +346,11 @@ async function runTools(
       } catch (error) {
         result.content = `Error: ${error instanceof Error ? error.message : String(error)}`
         result.is_error = true
-        failed ||= isComputer
+        if (isComputer) {
+          failed = true
+          // The frame shows the screen from before the failed action.
+          computer.frame = undefined
+        }
       }
     }
     results.push(result)
@@ -351,14 +358,10 @@ async function runTools(
   // When a batch does not end with a screenshot, send the screen anyway.
   // An error result can carry only text.
   const last = results.at(-1)
-  if (
-    last &&
-    computer.frame &&
-    !last.is_error &&
-    typeof last.content === "string"
-  ) {
-    last.content = [{ type: "text", text: last.content }, image(computer.frame)]
-    computer.frame = undefined
+  const { frame } = computer
+  computer.frame = undefined
+  if (last && frame && !last.is_error && typeof last.content === "string") {
+    last.content = [{ type: "text", text: last.content }, image(frame)]
   }
   return results
 }
@@ -366,7 +369,7 @@ async function runTools(
 async function runTask(sandbox: Sandbox, task: string): Promise<string> {
   const computer = new Computer(sandbox)
   const messages: Anthropic.MessageParam[] = [{ role: "user", content: task }]
-  for (let turn = 0; turn < MAX_TURNS; turn++) {
+  for (let turn = 0; ; turn++) {
     const response = await client.messages.create({
       model: MODEL,
       max_tokens: 4096,
@@ -374,16 +377,20 @@ async function runTask(sandbox: Sandbox, task: string): Promise<string> {
       tools: TOOLS,
       messages,
     })
-    messages.push({ role: "assistant", content: response.content })
-    const results = await runTools(sandbox, computer, response.content)
-    if (results.length === 0) {
+    if (!response.content.some((block) => block.type === "tool_use")) {
       return response.content
         .flatMap((block) => (block.type === "text" ? [block.text] : []))
         .join("\n")
     }
-    messages.push({ role: "user", content: results })
+    if (turn === MAX_TURNS) {
+      throw new Error(`No answer after ${MAX_TURNS} turns`)
+    }
+    messages.push({ role: "assistant", content: response.content })
+    messages.push({
+      role: "user",
+      content: await runTools(sandbox, computer, response.content),
+    })
   }
-  throw new Error(`No answer after ${MAX_TURNS} turns`)
 }
 
 const sandbox = await Sandbox.create({
@@ -580,9 +587,8 @@ class Computer:
                 return f"X={at['x']}, Y={at['y']}"
             case "wait":
                 time.sleep(cast(ComputerInput, block.input)["duration"])
-                # Replace the frame from before the pause.
-                if self.frame:
-                    self.frame = desktop.screenshot(format="jpeg")
+                # Show Claude the screen after the pause.
+                self.frame = desktop.screenshot(format="jpeg")
                 return "OK"
             case _:
                 step = desktop.step(
@@ -594,6 +600,9 @@ class Computer:
                 if step.action_error:
                     raise RuntimeError(step.action_error)
                 self.frame = step.screenshot
+                # The input ran even when the capture after it failed.
+                if step.screenshot is None:
+                    return f"OK, but the screen capture failed: {step.screenshot_error}"
                 return "OK"
 
 
@@ -630,7 +639,10 @@ def edit(sandbox: Sandbox, args: EditorInput) -> str:
             return "\n".join(f"{start + i}\t{line}" for i, line in enumerate(shown))
         case "create":
             exists = sandbox.commands.run(
-                'test -e "$P"', env={"P": path}, timeout_seconds=TIMEOUT_SECONDS
+                'test -e "$P"',
+                user="root",
+                env={"P": path},
+                timeout_seconds=TIMEOUT_SECONDS,
             )
             if exists.exit_code == 0:
                 raise RuntimeError(f"{path} already exists")
@@ -693,22 +705,26 @@ def run_tools(
                 # Report sandbox failures and bad tool input back to Claude.
                 result["content"] = f"Error: {error}"
                 result["is_error"] = True
-                failed = failed or is_computer
+                if is_computer:
+                    failed = True
+                    # The frame shows the screen from before the failed action.
+                    computer.frame = None
         results.append(result)
     # When a batch does not end with a screenshot, send the screen anyway.
     # An error result can carry only text.
     last = results[-1] if results else None
     text = last.get("content") if last else None
-    if last and computer.frame and not last.get("is_error") and isinstance(text, str):
-        last["content"] = [{"type": "text", "text": text}, image(computer.frame)]
-        computer.frame = None
+    frame, computer.frame = computer.frame, None
+    if last and frame and not last.get("is_error") and isinstance(text, str):
+        last["content"] = [{"type": "text", "text": text}, image(frame)]
     return results
 
 
 def run_task(sandbox: Sandbox, task: str) -> str:
     computer = Computer(sandbox)
     messages: list[MessageParam] = [{"role": "user", "content": task}]
-    for _ in range(MAX_TURNS):
+    turn = 0
+    while True:
         response = client.messages.create(
             model=MODEL,
             max_tokens=4096,
@@ -716,12 +732,15 @@ def run_task(sandbox: Sandbox, task: str) -> str:
             tools=TOOLS,
             messages=messages,
         )
-        messages.append({"role": "assistant", "content": response.content})
-        results = run_tools(sandbox, computer, response.content)
-        if not results:
+        if not any(b.type == "tool_use" for b in response.content):
             return "\n".join(b.text for b in response.content if b.type == "text")
-        messages.append({"role": "user", "content": results})
-    raise RuntimeError(f"No answer after {MAX_TURNS} turns")
+        if turn == MAX_TURNS:
+            raise RuntimeError(f"No answer after {MAX_TURNS} turns")
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append(
+            {"role": "user", "content": run_tools(sandbox, computer, response.content)}
+        )
+        turn += 1
 
 
 sandbox = Sandbox.create(
@@ -742,7 +761,7 @@ finally:
 ```
 </CodeGroup>
 
-The display starts at 1280x800, which is within the image size that current Claude models read without downscaling, so Claude's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` waits for the screen to repaint and then stay still for 300 ms, for at most the step's settle timeout, so check the frame for what you expect. When a response does not end with a screenshot, the loop attaches the latest frame to the last tool result, so Claude sees the result of its actions without another turn. A `wait` takes a new frame, and an error result carries only text, so the loop skips the frame there. Set `MODEL` to any Claude model that supports the `computer_toolset_20260801` tool.
+The display starts at 1280x800, which is within the image size that current Claude models read without downscaling, so Claude's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` waits for the screen to repaint and then stay still for 300 ms, for at most the step's settle timeout, so check the frame for what you expect. When a response does not end with a screenshot, the loop attaches the latest frame to the last tool result, so Claude sees the result of its actions without another turn. A `wait` takes a new frame. A failed computer action drops the frame, and an error result carries only text, so the loop sends no frame then. If the capture after an action fails, the result says so. After `MAX_TURNS` rounds of tool calls, the loop stops with an error if Claude still asks for tools. Set `MODEL` to any Claude model that supports the `computer_toolset_20260801` tool.
 
 ## How tool calls map to the sandbox
 
