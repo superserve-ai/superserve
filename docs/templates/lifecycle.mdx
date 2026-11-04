@@ -48,7 +48,7 @@ print(build.status.value, build.error_message or "")
 </CodeGroup>
 
 <Note>
-`rebuild()` does not change which build `waitUntilReady()` / `wait_until_ready()` and `streamBuildLogs()` / `stream_build_logs()` follow on an existing `template` object. On a template returned by `Template.create`, they keep following the first build. To wait for the new build, poll `getBuild()` / `get_build()` with the ID that `rebuild()` returns.
+`rebuild()` does not update `latestBuildId` / `latest_build_id`. On a template returned by `Template.create`, `waitUntilReady()` / `wait_until_ready()` and `streamBuildLogs()` / `stream_build_logs()` keep following the first build. A template returned by `Template.connect` has no `latestBuildId`, so they follow the most recent build. Polling `getBuild()` / `get_build()` with the ID that `rebuild()` returns works in both cases.
 </Note>
 
 ## List and inspect builds

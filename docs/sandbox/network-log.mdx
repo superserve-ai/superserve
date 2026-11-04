@@ -107,22 +107,37 @@ window = sandbox.get_network_log(
   `errorCode` `host_not_allowed`). `verdict: "blocked"` does not return that row.
 </Note>
 
-To see everything that was denied, read the unfiltered log and keep both kinds:
+To see everything that was denied, page through the unfiltered log and keep both kinds:
 
 <CodeGroup>
 ```typescript TypeScript
-const page = await sandbox.getNetworkLog({ limit: 1000 })
-const denied = page.events.filter(
-  (e) => e.verdict === "blocked" || (e.kind === "request" && e.errorCode !== undefined),
-)
+import type { NetworkEvent } from "@superserve/sdk"
+
+const denied: NetworkEvent[] = []
+let cursor: string | undefined
+do {
+  const page = await sandbox.getNetworkLog({ before: cursor, limit: 1000 })
+  denied.push(
+    ...page.events.filter(
+      (e) => e.verdict === "blocked" || (e.kind === "request" && e.errorCode !== undefined),
+    ),
+  )
+  cursor = page.nextCursor
+} while (cursor)
 ```
 
 ```python Python
-page = sandbox.get_network_log(limit=1000)
-denied = [
-    e for e in page.events
-    if e.verdict == "blocked" or (e.kind == "request" and e.error_code)
-]
+denied = []
+cursor = None
+while True:
+    page = sandbox.get_network_log(before=cursor, limit=1000)
+    denied += [
+        e for e in page.events
+        if e.verdict == "blocked" or (e.kind == "request" and e.error_code)
+    ]
+    cursor = page.next_cursor
+    if not cursor:
+        break
 ```
 
 </CodeGroup>
