@@ -37,8 +37,9 @@ The compatibility mode cannot be selected through create or update APIs.
 ## Choose the sandbox default
 
 The Python samples on this page use `AsyncSandbox`, because `commands.spawn` is
-available only on the async client. Await every `AsyncSandbox` method except
-`get_preview_url`, which only builds a string.
+available only on the async client. Run them inside an `async` function, for
+example one started with `asyncio.run()`. Await every `AsyncSandbox` method
+except `get_preview_url`, which only builds a string.
 
 <CodeGroup>
 ```typescript TypeScript

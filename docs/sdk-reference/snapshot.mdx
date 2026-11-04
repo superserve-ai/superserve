@@ -148,16 +148,26 @@ If the snapshot failed or was deleted, this raises `SandboxError`. If it still i
 `AsyncSnapshot` has the same methods as `Snapshot`. Every method is a coroutine. `AsyncSandbox.snapshot()` returns an `AsyncSnapshot`.
 
 ```python
+import asyncio
+
 from superserve import AsyncSandbox, AsyncSnapshot
 
-sandbox = await AsyncSandbox.create(name="snapshot-demo")
-snapshot = await sandbox.snapshot(name="nightly", wait=False)
-snapshot = await snapshot.wait_until_ready()
 
-snapshots = await AsyncSnapshot.list(sandbox.id)
-info = await snapshot.get_info()
-snapshot = await snapshot.rename("nightly-ready")
-await snapshot.delete()
+async def main():
+    sandbox = await AsyncSandbox.create(name="snapshot-demo")
+    try:
+        snapshot = await sandbox.snapshot(name="nightly", wait=False)
+        snapshot = await snapshot.wait_until_ready()
+
+        snapshots = await AsyncSnapshot.list(sandbox.id)
+        info = await snapshot.get_info()
+        snapshot = await snapshot.rename("nightly-ready")
+        await snapshot.delete()
+    finally:
+        await sandbox.kill()
+
+
+asyncio.run(main())
 ```
 
 ## Types
