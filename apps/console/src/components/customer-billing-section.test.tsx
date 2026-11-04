@@ -16,14 +16,7 @@ vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "u1" }, loading: false }),
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
@@ -191,7 +184,7 @@ describe("CustomerBillingSection", () => {
 
   it("preserves historical periods, credits and portal on Free without setup prompts", async () => {
     renderSection({ ...baseSummary, payment_setup_required: true }, true)
-    expect(screen.getByText("Billing history")).toBeInTheDocument()
+    expect(screen.getByText("Billing account")).toBeInTheDocument()
     expect(screen.getByText("Credits remaining: $76.55")).toBeInTheDocument()
     expect(
       screen.getByText("Current billing period estimate: $100.00"),
@@ -199,7 +192,6 @@ describe("CustomerBillingSection", () => {
     expect(
       screen.queryByText(/Outstanding balance|Overdue balance/),
     ).not.toBeInTheDocument()
-    expect(screen.getByText("May 1, 2026 - Jun 1, 2026")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Open Customer Portal" }),
     ).toBeEnabled()
@@ -234,60 +226,23 @@ describe("CustomerBillingSection", () => {
     ).not.toBeInTheDocument()
   })
 
-  it.each([false, true])(
-    "shows unknown storage usage without hiding known charges (billable %s)",
-    (billable) => {
-      renderSection({
-        ...baseSummary,
-        resources: baseSummary.resources.map((resource) =>
-          resource.resource_key === "storage_gib"
-            ? {
-                ...resource,
-                usage: null,
-                billable,
-                charge_usd: billable ? 1.25 : 0,
-              }
-            : resource,
-        ),
-      })
-
-      const card = screen
-        .getByText("Storage")
-        .closest(".border-dashed") as HTMLElement
-      expect(within(card).getByText("Usage unavailable")).toBeInTheDocument()
-      expect(within(card).queryByText(/0.*GiB-hours/)).not.toBeInTheDocument()
-      expect(
-        within(card).getByText(
-          billable ? "Charge: $1.25" : "Tracked but not billed",
-        ),
-      ).toBeInTheDocument()
-      expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
-      expect(screen.getByText("Open Customer Portal")).toBeEnabled()
-    },
-  )
-
   it("uses the latest billing period even when the API returns unsorted rows", () => {
     renderSection()
 
     expect(screen.getByText("Open Customer Portal")).toBeInTheDocument()
-    expect(screen.getAllByText("Jun 1, 2026 - Jul 1, 2026")).toHaveLength(2)
     expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
     expect(screen.queryByText("Tracking only")).not.toBeInTheDocument()
-    expect(screen.getByText("CPU")).toBeInTheDocument()
-    expect(screen.getByText("Memory")).toBeInTheDocument()
-    expect(screen.getByText("Storage")).toBeInTheDocument()
-    expect(screen.getByText("Tracked only")).toBeInTheDocument()
-    expect(screen.getAllByText("Billed")).toHaveLength(2)
-    expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
-    expect(screen.getByText("0.56 GiB-hours")).toBeInTheDocument()
-    expect(screen.getByText("1.11 GiB-hours")).toBeInTheDocument()
+    expect(screen.getByText("Connected")).toBeInTheDocument()
+    expect(
+      screen.getByText("Stripe is ready to invoice this team."),
+    ).toBeInTheDocument()
   })
 
   it("keeps payment status neutral while the authoritative summary is unavailable", () => {
     renderSection(null)
 
     expect(screen.getByText("Payment Status")).toBeInTheDocument()
-    expect(screen.getAllByText("Unavailable")).toHaveLength(2)
+    expect(screen.getAllByText("Unavailable")).toHaveLength(1)
     expect(
       screen.getByText("Billing data is unavailable for this team right now."),
     ).toBeInTheDocument()
@@ -419,13 +374,13 @@ describe("CustomerBillingSection", () => {
       </QueryClientProvider>,
     )
 
+    expect(screen.getByRole("alert")).toHaveTextContent("Tracking only")
     expect(
-      screen.getByText("Usage is being tracked but you are not being charged"),
+      screen.getByText(
+        "Usage is tracked at standard rates, but this team is not charged yet.",
+      ),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: /tracking only/i }),
-    ).toBeDisabled()
-    expect(screen.getByText("Tracked only")).toBeInTheDocument()
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
   })
 
   it("shows a refresh notice when returning from Stripe", () => {
@@ -463,7 +418,6 @@ describe("CustomerBillingSection", () => {
       })
       renderSection()
       expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
-      expect(screen.getByText("Billing Periods")).toBeInTheDocument()
       expect(
         screen.getByRole("button", { name: "Open Customer Portal" }),
       ).toBeEnabled()

@@ -330,7 +330,7 @@ describe("PlanUsagePage", () => {
     renderPage()
 
     expect(screen.queryByTestId("billing-statement")).not.toBeInTheDocument()
-    expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
+    expect(screen.queryByText("Cost so far")).not.toBeInTheDocument()
     expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
     expect(screen.queryByText("Tracked but not billed")).not.toBeInTheDocument()
     expect(screen.queryByText("Charge: $60.00")).not.toBeInTheDocument()
@@ -378,7 +378,7 @@ describe("PlanUsagePage", () => {
     })
     rerender(page())
     assertRange("2026-06-01T00:00:00.000Z", "2026-07-01T00:00:00.000Z")
-    expect(screen.queryByText("Current Balance")).not.toBeInTheDocument()
+    expect(screen.queryByText("Cost so far")).not.toBeInTheDocument()
     expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
 
     useBillingUsage.mockClear()
@@ -394,7 +394,7 @@ describe("PlanUsagePage", () => {
     })
     rerender(page())
     assertRange("2026-07-01T00:00:00.000Z", "2026-08-01T00:00:00.000Z")
-    expect(screen.getByText("Current Balance")).toBeInTheDocument()
+    expect(screen.getByText("Cost so far")).toBeInTheDocument()
   })
 
   it.each([
@@ -427,7 +427,7 @@ describe("PlanUsagePage", () => {
         "team-1",
         "use:team-1",
       )
-      expect(screen.getByText("Current Balance")).toBeInTheDocument()
+      expect(screen.getByText("Cost so far")).toBeInTheDocument()
     },
   )
 
@@ -461,11 +461,11 @@ describe("PlanUsagePage", () => {
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
     expect(
       screen.queryByText(
-        /Set up billing|Payment setup required|Current Balance|Invoice history|no card required/,
+        /Set up billing|Payment setup required|Cost so far|Invoice history|no card required/,
       ),
     ).not.toBeInTheDocument()
     expect(useCustomerBillingPeriods).toHaveBeenCalled()
-    expect(screen.getByText("Billing history")).toBeInTheDocument()
+    expect(screen.getByText("Billing account")).toBeInTheDocument()
     expect(screen.getByText("Credits remaining: $76.55")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Open Customer Portal" }),
@@ -549,33 +549,31 @@ describe("PlanUsagePage", () => {
     ).not.toBeInTheDocument()
     expect(
       within(screen.getByTestId("customer-billing-section")).getByText(
-        "Billing Period",
+        "Tracking only",
       ),
     ).toBeInTheDocument()
-    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
+    const statement = within(screen.getByTestId("billing-statement"))
     expect(
-      within(screen.getByTestId("customer-billing-section")).getByText(
-        "Credits remaining: $76.55",
-      ),
-    ).toBeInTheDocument()
+      statement.getByText("Credits left").nextElementSibling,
+    ).toHaveTextContent("$76.55")
     expect(screen.getByText("Running")).toBeInTheDocument()
     expect(screen.getByText("Paused")).toBeInTheDocument()
   })
 
   it.each([
     {
-      name: "billed maximum",
-      cpu: 0.006,
-      memory: 0.004,
-      storage: 0.005,
-      heights: [60, 40, 50],
+      name: "compute-heavy usage",
+      cpu: 0.004,
+      memory: 0.003,
+      storage: 0.003,
+      heights: [40, 30, 30],
     },
     {
-      name: "storage maximum",
-      cpu: 0.002,
-      memory: 0.003,
-      storage: 0.01,
-      heights: [20, 30, 100],
+      name: "storage-heavy usage",
+      cpu: 0.001,
+      memory: 0.002,
+      storage: 0.007,
+      heights: [10, 20, 70],
     },
     {
       name: "zero costs with nonzero usage",
@@ -585,7 +583,7 @@ describe("PlanUsagePage", () => {
       heights: [0, 0, 0],
     },
   ])(
-    "scales bars to the dataset's $name",
+    "scales stacked bars to the dataset's $name",
     ({ cpu, memory, storage, heights }) => {
       useBillingUsage.mockReturnValue({
         data: {
@@ -641,6 +639,51 @@ describe("PlanUsagePage", () => {
       }
     },
   )
+
+  it("shows legend totals and the billed total for the selected range", () => {
+    useBillingUsage.mockReturnValue({
+      data: {
+        start: "2026-06-01T00:00:00.000Z",
+        end: "2026-06-03T00:00:00.000Z",
+        granularity: "day",
+        timezone: "UTC",
+        buckets: [0, 1].map((index) => ({
+          start: `2026-06-0${index + 1}T00:00:00.000Z`,
+          end: `2026-06-0${index + 2}T00:00:00.000Z`,
+          cpu: { usage: 1, cost_usd: 1.5, tracked: true, billable: true },
+          memory: { usage: 1, cost_usd: 0.5, tracked: true, billable: true },
+          storage: { usage: 1, cost_usd: 0.25, tracked: true, billable: false },
+          billed_total_usd: 2,
+        })),
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    renderPage()
+
+    const legend = screen.getByLabelText("Chart legend")
+    expect(legend).toHaveTextContent("CPU$3.00")
+    expect(legend).toHaveTextContent("Memory$1.00")
+    expect(legend).toHaveTextContent("Storage equivalent (not billed)$0.50")
+    expect(legend).toHaveTextContent("Billed $4.00")
+  })
+
+  it("shows the usage breakdown for paid teams", () => {
+    renderPage()
+
+    const table = within(screen.getByTestId("usage-breakdown"))
+    const cpu = table.getByRole("row", { name: /^CPU/ })
+    expect(cpu).toHaveTextContent("60.0%")
+    expect(cpu).toHaveTextContent("$60.00")
+    const storage = table.getByRole("row", { name: /^Storage/ })
+    expect(within(storage).getByText("Not billed")).toBeInTheDocument()
+    expect(storage).toHaveTextContent("0.0%")
+    expect(table.getByRole("row", { name: /^Total/ })).toHaveTextContent(
+      "$100.00",
+    )
+  })
 
   it("shows the no-usage state when every bucket resource is zero", () => {
     useBillingUsage.mockReturnValue({
@@ -1033,13 +1076,12 @@ describe("PlanUsagePage", () => {
       renderPage()
     }
 
-    // The plan panel's headline figure plus the billing section's summary line.
+    // The plan panel's headline figure plus the billing statement figure.
     const creditsRemaining = () => [
       within(screen.getByTestId("current-plan")).getByText("Credits remaining")
         .nextElementSibling?.textContent,
-      ...screen
-        .getAllByText(/Credits remaining:/)
-        .map((node) => node.textContent),
+      within(screen.getByTestId("billing-statement")).getByText("Credits left")
+        .nextElementSibling?.textContent,
     ]
 
     it("shows Free with no included usage", () => {

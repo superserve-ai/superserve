@@ -1,7 +1,13 @@
 "use client"
 
 import { ChartBarIcon, LightningIcon } from "@phosphor-icons/react"
-import { Spinner, Tooltip, TooltipPopup, TooltipTrigger } from "@superserve/ui"
+import {
+  Spinner,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
+  cn,
+} from "@superserve/ui"
 import { usePathname, useRouter } from "next/navigation"
 import { useEffect, useMemo, useRef, useState } from "react"
 
@@ -12,6 +18,11 @@ import {
   billingErrorMessage,
 } from "@/components/billing-summary"
 import { PlanOverviewSection } from "@/components/billing/plan-overview-section"
+import {
+  NOT_BILLED_HATCH,
+  RESOURCE_SWATCH,
+  UsageBreakdown,
+} from "@/components/billing/usage-breakdown"
 import { CustomerBillingSection } from "@/components/customer-billing-section"
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
@@ -158,6 +169,210 @@ function bucketCostTotals(bucket: BillingUsageSeriesBucket) {
     memory: Math.max(bucketResource(bucket, "memory").cost_usd, 0),
     storage: Math.max(bucketResource(bucket, "storage").cost_usd, 0),
   }
+}
+
+type BucketCosts = ReturnType<typeof bucketCostTotals>
+
+function stackedCost(costs: BucketCosts) {
+  return costs.cpu + costs.memory + costs.storage
+}
+
+function storageSwatch(buckets: BillingUsageSeriesBucket[]) {
+  return buckets.length > 0 &&
+    buckets.every((bucket) => bucket.storage.billable)
+    ? RESOURCE_SWATCH.storage
+    : NOT_BILLED_HATCH
+}
+
+function LegendItem({
+  swatch,
+  label,
+  value,
+}: {
+  swatch: string
+  label: string
+  value: number
+}) {
+  return (
+    <span className="flex items-center gap-2">
+      <i aria-hidden className={cn("inline-block size-2", swatch)} />
+      <span>{label}</span>
+      <span className="font-mono text-foreground">
+        ${formatUsageCost(value)}
+      </span>
+    </span>
+  )
+}
+
+function ChartLegend({ buckets }: { buckets: BillingUsageSeriesBucket[] }) {
+  const totals = buckets.reduce(
+    (sum, bucket) => {
+      const costs = bucketCostTotals(bucket)
+      return {
+        cpu: sum.cpu + costs.cpu,
+        memory: sum.memory + costs.memory,
+        storage: sum.storage + costs.storage,
+        billed: sum.billed + Math.max(bucket.billed_total_usd, 0),
+      }
+    },
+    { cpu: 0, memory: 0, storage: 0, billed: 0 },
+  )
+  return (
+    <div
+      className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 text-xs text-muted"
+      aria-label="Chart legend"
+    >
+      <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
+        <LegendItem
+          swatch={RESOURCE_SWATCH.cpu}
+          label="CPU"
+          value={totals.cpu}
+        />
+        <LegendItem
+          swatch={RESOURCE_SWATCH.memory}
+          label="Memory"
+          value={totals.memory}
+        />
+        <LegendItem
+          swatch={storageSwatch(buckets)}
+          label={storageLegend(buckets)}
+          value={totals.storage}
+        />
+      </div>
+      <span className="font-mono uppercase">
+        Billed{" "}
+        <span className="text-foreground">
+          ${formatUsageCost(totals.billed)}
+        </span>
+      </span>
+    </div>
+  )
+}
+
+// Segments stack bottom-up as CPU, memory, then storage. A transparent top
+// border leaves a 2px gap below a visible segment without changing heights.
+const SEGMENT_GAP = "border-t-2 border-transparent bg-clip-content"
+const gapBelow = (value: number, above: number) =>
+  value > 0 && above > 0 ? SEGMENT_GAP : null
+
+function UsageBar({
+  bucket,
+  costs,
+  max,
+}: {
+  bucket: BillingUsageSeriesBucket
+  costs: BucketCosts
+  max: number
+}) {
+  const height = (value: number) => ({ height: `${(value / max) * 100}%` })
+  return (
+    <div
+      className="flex h-56 w-full max-w-10 flex-col justify-end opacity-90 transition-opacity group-hover:opacity-100"
+      data-testid="billed-cost-stack"
+    >
+      {bucket.storage.billable ? (
+        <div
+          className={cn("w-full", RESOURCE_SWATCH.storage)}
+          style={height(costs.storage)}
+        />
+      ) : (
+        <div
+          className={cn("w-full", NOT_BILLED_HATCH)}
+          data-testid="storage-equivalent-bar"
+          style={height(costs.storage)}
+          aria-label={`Storage equivalent $${formatUsageCost(costs.storage)} (not billed)`}
+        />
+      )}
+      <div
+        className={cn(
+          "w-full",
+          gapBelow(costs.memory, costs.storage),
+          RESOURCE_SWATCH.memory,
+        )}
+        style={height(costs.memory)}
+        aria-label={`Memory $${formatUsageCost(costs.memory)}`}
+      />
+      <div
+        className={cn(
+          "w-full",
+          gapBelow(costs.cpu, costs.memory + costs.storage),
+          RESOURCE_SWATCH.cpu,
+        )}
+        style={height(costs.cpu)}
+        aria-label={`CPU $${formatUsageCost(costs.cpu)}`}
+      />
+    </div>
+  )
+}
+
+function TooltipRow({
+  swatch,
+  label,
+  value,
+  note,
+}: {
+  swatch: string
+  label: string
+  value: number
+  note?: string
+}) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <span className="flex items-center gap-2">
+        <i aria-hidden className={cn("inline-block size-2", swatch)} />
+        {label}
+        {note ? <span className="text-muted">{note}</span> : null}
+      </span>
+      <span className="font-mono">${formatUsageCost(value)}</span>
+    </div>
+  )
+}
+
+function BucketTooltipBody({
+  bucket,
+  title,
+}: {
+  bucket: BillingUsageSeriesBucket
+  title: string
+}) {
+  const costs = bucketCostTotals(bucket)
+  const storageNote = [
+    bucket.storage.billable === false ? "not billed" : null,
+    bucket.storage.usage === null ? "usage unavailable" : null,
+  ]
+    .filter(Boolean)
+    .join(" · ")
+  return (
+    <div className="space-y-2 text-xs">
+      <p className="text-[11px] leading-relaxed text-muted">{title}</p>
+      <div className="space-y-1.5">
+        <TooltipRow
+          swatch={RESOURCE_SWATCH.cpu}
+          label="CPU"
+          value={costs.cpu}
+        />
+        <TooltipRow
+          swatch={RESOURCE_SWATCH.memory}
+          label="Memory"
+          value={costs.memory}
+        />
+        <TooltipRow
+          swatch={
+            bucket.storage.billable ? RESOURCE_SWATCH.storage : NOT_BILLED_HATCH
+          }
+          label="Storage"
+          value={costs.storage}
+          note={storageNote || undefined}
+        />
+      </div>
+      <div className="flex items-center justify-between gap-3 border-t border-dashed border-border pt-2 font-semibold">
+        <span>Billed total</span>
+        <span className="font-mono">
+          ${formatUsageCost(bucket.billed_total_usd)}
+        </span>
+      </div>
+    </div>
+  )
 }
 
 function defaultUsageRange(): DateRange {
@@ -314,6 +529,14 @@ export function PlanUsagePageClient() {
       ),
     )
 
+  const maxStackedCost =
+    Math.max(
+      ...buckets.map((bucket) => stackedCost(bucketCostTotals(bucket))),
+      0,
+    ) || 1
+
+  // Label at most about a dozen buckets so dates do not crowd or wrap.
+  const labelStep = Math.max(1, Math.ceil(buckets.length / 12))
   const usageErrorDetails = usageQuery.error
     ? billingErrorMessage(usageQuery.error)
     : null
@@ -372,7 +595,11 @@ export function PlanUsagePageClient() {
               />
             )}
 
-            <div className="border-t border-border/80 pt-4">
+            {showPayments && summary ? (
+              <UsageBreakdown summary={summary} />
+            ) : null}
+
+            <div className="mx-auto w-full max-w-4xl space-y-3">
               <div className="flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
                 <div className="space-y-1">
                   <h2 className="text-base font-semibold text-foreground">
@@ -407,7 +634,7 @@ export function PlanUsagePageClient() {
                 />
               ) : (
                 <section
-                  className="space-y-4 border border-border/70 bg-surface/40 p-4"
+                  className="space-y-4 border border-dashed border-border bg-surface/40 p-5"
                   data-testid="usage-cost-chart"
                 >
                   {buckets.some((bucket) => bucket.storage.usage === null) ? (
@@ -417,11 +644,14 @@ export function PlanUsagePageClient() {
                     </output>
                   ) : null}
                   <div className="flex flex-wrap items-center justify-between gap-3">
-                    <h3 className="text-base font-semibold">Cost over time</h3>
-                    <label className="text-sm">
-                      View by{" "}
+                    <h3 className="text-sm font-semibold text-foreground">
+                      Usage over time
+                    </h3>
+                    <label className="flex items-center gap-2 font-mono text-xs text-muted uppercase">
+                      View by
                       <select
                         aria-label="View by"
+                        className="cursor-pointer border border-dashed border-border bg-background px-2 py-1 font-mono text-xs text-foreground uppercase"
                         value={effectiveGranularity}
                         onChange={(e) => {
                           granularitySelectedByUser.current = true
@@ -440,40 +670,14 @@ export function PlanUsagePageClient() {
                       </select>
                     </label>
                   </div>
+                  <ChartLegend buckets={buckets} />
                   <div
-                    className="flex flex-wrap gap-4 text-xs text-muted"
-                    aria-label="Chart legend"
-                  >
-                    <span>
-                      <i className="mr-1 inline-block size-2 rounded-sm bg-primary" />
-                      CPU
-                    </span>
-                    <span>
-                      <i className="mr-1 inline-block size-2 rounded-sm bg-primary/60" />
-                      Memory
-                    </span>
-                    <span>
-                      <i className="mr-1 inline-block size-2 rounded-sm bg-muted" />
-                      {storageLegend(buckets)}
-                    </span>
-                  </div>
-                  <div
-                    className="flex h-64 items-end gap-1 overflow-x-auto"
+                    className="flex h-64 items-end gap-1.5 overflow-x-auto border-b border-dashed border-border"
                     aria-label="Usage cost chart"
                     data-testid="usage-cost-chart-plot"
                   >
-                    <div className="flex h-56 items-center pr-2 text-[10px] text-muted [writing-mode:vertical-rl]">
-                      Billed cost (USD)
-                    </div>
-                    {buckets.map((bucket) => {
-                      const { cpu, memory, storage } = bucketCostTotals(bucket)
-                      const max =
-                        Math.max(
-                          ...buckets.map((b) =>
-                            Math.max(b.billed_total_usd, b.storage.cost_usd, 0),
-                          ),
-                          0,
-                        ) || 1
+                    {buckets.map((bucket, index) => {
+                      const costs = bucketCostTotals(bucket)
                       const label = bucketLabel(
                         bucket.start,
                         renderGranularity,
@@ -485,61 +689,32 @@ export function PlanUsagePageClient() {
                         renderGranularity,
                         usageData?.timezone ?? timezone,
                       )
-                      const tooltip = tooltipLines.join("\n")
                       return (
                         <Tooltip key={bucket.start}>
                           <TooltipTrigger
-                            className="relative flex min-w-10 flex-1 flex-col items-center justify-end gap-1"
-                            aria-label={tooltip}
+                            className="group relative flex min-w-8 flex-1 cursor-default flex-col items-center justify-end gap-1.5"
+                            aria-label={tooltipLines.join("\n")}
                             delay={0}
                           >
-                            <div className="flex h-56 w-full items-end justify-center gap-0.5">
-                              <div
-                                className="flex h-full w-1/2 flex-col justify-end"
-                                data-testid="billed-cost-stack"
-                                aria-label={`Billed cost: CPU $${formatUsageCost(cpu)}, Memory $${formatUsageCost(memory)}`}
-                              >
-                                <div
-                                  className="w-full bg-primary/60"
-                                  style={{ height: `${(memory / max) * 100}%` }}
-                                  aria-label={`Memory $${formatUsageCost(memory)}`}
-                                />
-                                <div
-                                  className="w-full bg-primary"
-                                  style={{ height: `${(cpu / max) * 100}%` }}
-                                  aria-label={`CPU $${formatUsageCost(cpu)}`}
-                                />
-                                {bucket.storage.billable && (
-                                  <div
-                                    className="w-full bg-muted/70"
-                                    style={{
-                                      height: `${(storage / max) * 100}%`,
-                                    }}
-                                  />
-                                )}
-                              </div>
-                              {!bucket.storage.billable && (
-                                <div
-                                  className="w-1/2 bg-muted"
-                                  data-testid="storage-equivalent-bar"
-                                  style={{
-                                    height: `${(storage / max) * 100}%`,
-                                  }}
-                                  aria-label={`Storage equivalent $${formatUsageCost(storage)}${bucket.storage.billable === false ? " (not billed)" : ""}`}
-                                />
+                            <UsageBar
+                              bucket={bucket}
+                              costs={costs}
+                              max={maxStackedCost}
+                            />
+                            <span
+                              className={cn(
+                                "pb-1 font-mono text-[10px] whitespace-nowrap text-muted",
+                                index % labelStep !== 0 && "invisible",
                               )}
-                            </div>
-                            <span className="text-[10px] text-muted">
+                            >
                               {label}
                             </span>
                           </TooltipTrigger>
-                          <TooltipPopup className="w-64 max-w-[calc(100vw-1rem)] rounded-md border border-border bg-surface p-2 text-foreground shadow-lg">
-                            <p className="mb-1">{tooltipLines[0]}</p>
-                            <ul className="list-disc space-y-1 pl-4">
-                              {tooltipLines.slice(1).map((line) => (
-                                <li key={line}>{line}</li>
-                              ))}
-                            </ul>
+                          <TooltipPopup className="w-60 max-w-[calc(100vw-1rem)] border border-dashed border-border bg-surface/90 p-3 text-foreground shadow-lg backdrop-blur-md">
+                            <BucketTooltipBody
+                              bucket={bucket}
+                              title={tooltipLines[0]}
+                            />
                           </TooltipPopup>
                         </Tooltip>
                       )

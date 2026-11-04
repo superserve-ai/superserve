@@ -1,29 +1,11 @@
 "use client"
 
-import { Skeleton, cn } from "@superserve/ui"
-import type { ReactNode } from "react"
+import { Skeleton } from "@superserve/ui"
 
+import { CornerBrackets } from "@/components/corner-brackets"
 import { ErrorState } from "@/components/error-state"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import { ApiError } from "@/lib/api/client"
-
-const BREAKDOWN_ROWS = [
-  {
-    key: "compute",
-    label: "Compute (vCPU)",
-    barClassName: "bg-primary",
-  },
-  {
-    key: "memory",
-    label: "Memory (GiB)",
-    barClassName: "bg-success",
-  },
-  {
-    key: "storage",
-    label: "Storage (GiB)",
-    barClassName: "bg-warning",
-  },
-] as const
 
 const MIN_PROJECTION_ELAPSED_MS = 4 * 60 * 60 * 1000
 export const MINUTE_MS = 60 * 1000
@@ -140,12 +122,6 @@ export interface ProjectedPeriodEndEstimate {
   estimatedInvoice: number | null
 }
 
-export interface StatementBreakdownRow {
-  label: string
-  value: number
-  negative?: boolean
-}
-
 export function getProjectedPeriodEndEstimate(
   summary: BillingSummaryResponse,
   nowMs: number = Date.now(),
@@ -218,34 +194,6 @@ export function getProjectedStatementRows(
   ]
 }
 
-export function getCurrentBreakdownRows(
-  summary: BillingSummaryResponse,
-): StatementBreakdownRow[] {
-  return BREAKDOWN_ROWS.map((row) => ({
-    label: row.label,
-    value: summary.cost_breakdown_usd[row.key],
-  }))
-}
-
-export function getProjectedBreakdownRows(
-  summary: BillingSummaryResponse,
-  projectedCharges: number,
-): StatementBreakdownRow[] {
-  const currentTotal = Math.max(summary.current_charges_usd, 0)
-  if (currentTotal <= 0 || projectedCharges <= 0) {
-    return BREAKDOWN_ROWS.map((row) => ({
-      label: row.label,
-      value: 0,
-    }))
-  }
-
-  const scale = projectedCharges / currentTotal
-  return BREAKDOWN_ROWS.map((row) => ({
-    label: row.label,
-    value: summary.cost_breakdown_usd[row.key] * scale,
-  }))
-}
-
 export function billingErrorMessage(error: unknown): {
   title: string
   message: string
@@ -282,184 +230,78 @@ export function BillingSummary({
   summary: BillingSummaryResponse
 }) {
   const currency = currencyCode(summary)
-  const periodStart = formatPeriodDate(summary.billing_period.start)
-  const periodEnd = formatPeriodDate(summary.billing_period.end)
-  const remainingDays = Math.max(
-    Math.ceil(
-      getBillingCycleProgress(
-        summary.billing_period.start,
-        summary.billing_period.end,
-      ).remainingMs / DAY_MS,
-    ),
-    0,
+  const progress = getBillingCycleProgress(
+    summary.billing_period.start,
+    summary.billing_period.end,
   )
   const credits = billingCredits(summary)
-  const projectedRows = getProjectedStatementRows(summary)
-  const projectedCharges = projectedRows?.[0]?.value ?? null
-  const currentBreakdownRows = getCurrentBreakdownRows(summary)
-  const projectedBreakdownRows =
-    projectedCharges == null
-      ? null
-      : getProjectedBreakdownRows(summary, projectedCharges)
+  const estimate = getProjectedPeriodEndEstimate(summary)
+  const money = (value: number | null) =>
+    value == null ? "Unavailable" : formatCurrency(value, currency)
 
   return (
-    <section className="space-y-2" data-testid="billing-statement">
-      <div className="mx-auto w-full max-w-4xl space-y-2">
-        <div className="space-y-2 text-center">
-          <h2 className="text-base font-semibold tracking-tight text-foreground">
-            Billing Summary
-          </h2>
-          <p className="text-sm text-muted">
-            {periodStart} - {periodEnd} · {remainingDays} days remaining
-          </p>
-        </div>
-        <div className="border-t border-border/70" />
+    <section
+      className="relative mx-auto w-full max-w-4xl border border-dashed border-border bg-surface/40 p-5"
+      aria-label="Billing summary"
+      data-testid="billing-statement"
+    >
+      <CornerBrackets size="sm" className="border-brand/70" />
+      <div className="flex flex-wrap items-baseline justify-between gap-2">
+        <p className="text-sm text-foreground">
+          {formatPeriodDate(summary.billing_period.start)} -{" "}
+          {formatPeriodDate(summary.billing_period.end)}
+        </p>
+        <p className="font-mono text-xs text-muted uppercase">
+          {formatDurationRemaining(progress.remainingMs)} left
+        </p>
+      </div>
+      <div aria-hidden className="mt-2 h-1 bg-foreground/10">
         <div
-          className="border border-border/70 bg-gradient-to-br from-surface/80 via-surface/55 to-background p-4 shadow-sm shadow-black/5 sm:p-5"
-          data-testid="billing-statement-grid"
-        >
-          <div className="grid gap-8 lg:grid-cols-2">
-            <StatementColumn
-              title="Current Balance"
-              sectionLabel="Charges"
-              total={credits.payable}
-              unknownLabel="Unavailable"
-              currency={currency}
-              totalTone="current"
-            >
-              <div className="space-y-1.5">
-                {currentBreakdownRows.map((row) => (
-                  <StatementLine
-                    key={row.label}
-                    label={row.label}
-                    value={row.value}
-                    currency={currency}
-                  />
-                ))}
-              </div>
-              <StatementLine
-                label="Credits Applied"
-                value={credits.applied}
-                currency={currency}
-                negative
-              />
-            </StatementColumn>
+          className="h-full bg-brand"
+          style={{ width: `${progress.percentage}%` }}
+        />
+      </div>
 
-            <StatementColumn
-              title="Estimated Invoice"
-              sectionLabel="Estimated Invoice"
-              total={
-                projectedRows?.find((row) => row.label === "Estimated Invoice")
-                  ?.value ?? null
-              }
-              unknownLabel={
-                projectedRows ? "Unavailable" : "Not enough usage data"
-              }
-              currency={currency}
-              totalTone="projected"
-              available={projectedRows != null}
-            >
-              {projectedRows ? (
-                <>
-                  <div className="space-y-1.5">
-                    {projectedBreakdownRows?.map((row) => (
-                      <StatementLine
-                        key={row.label}
-                        label={row.label}
-                        value={row.value}
-                        currency={currency}
-                      />
-                    ))}
-                  </div>
-                  <StatementLine
-                    label="Estimated Credits Applied"
-                    value={
-                      projectedRows.find(
-                        (row) => row.label === "Estimated Credits",
-                      )?.value ?? null
-                    }
-                    currency={currency}
-                    negative
-                  />
-                </>
-              ) : (
-                <p className="text-sm text-muted">Not enough usage data</p>
-              )}
-            </StatementColumn>
-          </div>
+      <div className="mt-5 flex flex-wrap items-end justify-between gap-6 border-t border-dashed border-border pt-5">
+        <div className="space-y-1">
+          <p className={EYEBROW}>Cost so far</p>
+          <p className="font-mono text-4xl font-semibold tracking-tight text-foreground">
+            {formatCurrency(summary.current_charges_usd, currency)}
+          </p>
+          {credits.applied ? (
+            <p className="font-mono text-xs text-muted">
+              -{formatCurrency(Math.abs(credits.applied), currency)} credits
+              applied · {money(credits.payable)} due
+            </p>
+          ) : null}
         </div>
+        <dl className="flex gap-8">
+          <HeadlineFigure
+            label="Est. invoice"
+            value={
+              estimate.available
+                ? money(estimate.estimatedInvoice)
+                : "Not enough data"
+            }
+          />
+          <HeadlineFigure
+            label="Credits left"
+            value={money(credits.remaining)}
+          />
+        </dl>
       </div>
     </section>
   )
 }
 
-function StatementColumn({
-  title,
-  sectionLabel,
-  total,
-  currency,
-  totalTone,
-  available = true,
-  unknownLabel,
-  children,
-}: {
-  title: string
-  sectionLabel: string
-  total: number | null
-  unknownLabel: string
-  currency: string
-  totalTone: "current" | "projected"
-  available?: boolean
-  children: ReactNode
-}) {
-  return (
-    <div className="space-y-4">
-      <div className="space-y-1">
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
-        <div
-          className={cn(
-            "font-mono text-2xl font-semibold tracking-tight text-foreground sm:text-3xl",
-            totalTone === "projected" && "text-foreground",
-          )}
-        >
-          {total == null ? unknownLabel : formatCurrency(total, currency)}
-        </div>
-      </div>
-      <div className="space-y-1">
-        <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-          {sectionLabel}
-        </p>
-      </div>
-      <div className="space-y-3">{available ? children : null}</div>
-    </div>
-  )
-}
+export const EYEBROW =
+  "font-mono text-[10px] font-semibold tracking-[0.18em] text-muted uppercase"
 
-function StatementLine({
-  label,
-  value,
-  currency,
-  negative = false,
-}: {
-  label: string
-  value: number | null
-  currency: string
-  negative?: boolean
-}) {
-  const prefix = negative && value !== 0 ? "-" : ""
+function HeadlineFigure({ label, value }: { label: string; value: string }) {
   return (
-    <div className="grid grid-cols-[minmax(0,1fr)_auto] items-baseline gap-x-3 text-sm">
-      <span className="text-foreground">{label}</span>
-      <span className="font-mono text-foreground">
-        {value == null ? (
-          "Unavailable"
-        ) : (
-          <>
-            {prefix}
-            {formatCurrency(Math.abs(value), currency)}
-          </>
-        )}
-      </span>
+    <div className="space-y-1">
+      <dt className={EYEBROW}>{label}</dt>
+      <dd className="font-mono text-base text-foreground">{value}</dd>
     </div>
   )
 }
@@ -484,43 +326,19 @@ export function BillingError({
 
 export function BillingSkeleton() {
   return (
-    <div className="space-y-4">
-      <div className="grid gap-3 lg:grid-cols-2">
-        {Array.from({ length: 2 }).map((_, index) => (
-          <div
-            key={index}
-            className="space-y-3 border border-border bg-surface/30 p-3"
-          >
-            <Skeleton className="h-4 w-44" />
-            <Skeleton className="h-3 w-32" />
-            <Skeleton className="h-2 w-32" />
-            <div className="space-y-2">
-              {Array.from({ length: 3 }).map((__, rowIndex) => (
-                <div
-                  key={rowIndex}
-                  className="flex items-center justify-between gap-3"
-                >
-                  <Skeleton className="h-4 w-28" />
-                  <Skeleton className="h-4 w-20" />
-                </div>
-              ))}
-            </div>
-          </div>
-        ))}
-      </div>
+    <div className="mx-auto w-full max-w-4xl space-y-5 border border-dashed border-border bg-surface/40 p-5">
       <div className="space-y-2">
-        <Skeleton className="h-3 w-32" />
-        <Skeleton className="h-2 w-full" />
+        <Skeleton className="h-4 w-44" />
+        <Skeleton className="h-1 w-full" />
+      </div>
+      <div className="flex items-end justify-between gap-6 border-t border-dashed border-border pt-5">
         <div className="space-y-2">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div
-              key={index}
-              className="flex items-center justify-between gap-3"
-            >
-              <Skeleton className="h-4 w-24" />
-              <Skeleton className="h-4 w-16" />
-            </div>
-          ))}
+          <Skeleton className="h-3 w-24" />
+          <Skeleton className="h-9 w-36" />
+        </div>
+        <div className="flex gap-8">
+          <Skeleton className="h-9 w-20" />
+          <Skeleton className="h-9 w-20" />
         </div>
       </div>
     </div>
