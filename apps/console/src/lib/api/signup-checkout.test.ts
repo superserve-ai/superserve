@@ -202,6 +202,50 @@ describe("startSignupCheckout", () => {
     },
   )
 
+  it.each([
+    [200, { outcome: "payment_confirmation_pending" }],
+    [202, { outcome: "payment_confirmation_pending" }],
+    [202, {}],
+    [200, { outcome: "active" }],
+  ])(
+    "waits for an open checkout the restart cannot clear yet (%i %j)",
+    async (status, body) => {
+      recovered = { status, body }
+      checkout = { status: 409, body: { error: { code: "plan_conflict" } } }
+      expect(
+        await startSignupCheckout(user, "developer", origin, mine, true),
+      ).toBe(`/onboarding/payment/?${pinned}`)
+      expect(
+        fetchMock.mock.calls.filter(([url]) =>
+          String(url).endsWith("/stripe/checkout-session"),
+        ),
+      ).toHaveLength(1)
+    },
+  )
+
+  it("does not create a checkout after an unknown restart outcome", async () => {
+    recovered = { status: 200, body: { outcome: "something_new" } }
+    checkout = { status: 409, body: { error: { code: "plan_conflict" } } }
+    await expect(
+      startSignupCheckout(user, "developer", origin, mine, true),
+    ).rejects.toThrow("restart failed: 200")
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/stripe/checkout-session"),
+      ),
+    ).toHaveLength(1)
+  })
+
+  it("waits for a payment the checkout reports as still confirming", async () => {
+    checkout = {
+      status: 409,
+      body: { error: { code: "payment_confirmation_pending" } },
+    }
+    expect(
+      await startSignupCheckout(user, "developer", origin, mine, true),
+    ).toBe(`/onboarding/payment/?${pinned}`)
+  })
+
   it("refuses an explicit choice whose restart the backend refuses", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {})
     recovered = { status: 409, body: { error: { code: "plan_conflict" } } }

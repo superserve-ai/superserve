@@ -14,6 +14,8 @@ vi.mock("@/lib/api/signup-checkout", async (importOriginal) => ({
   startSignupCheckout: (...args: unknown[]) => start(...args),
 }))
 
+import { SignupCheckoutError } from "@/lib/api/signup-checkout"
+
 import { GET, POST } from "./route"
 
 const visit = async (query: string) =>
@@ -61,8 +63,31 @@ describe("signup checkout resume", () => {
     expect(location.searchParams.get("reason")).toBe("checkout_unavailable")
     expect(location.searchParams.get("offer")).toBe("developer")
     expect(error).toHaveBeenCalledWith("Signup checkout unavailable", {
-      error: "cell down",
+      kind: "unknown",
     })
+    error.mockRestore()
+  })
+
+  it.each([
+    [
+      new SignupCheckoutError("checkout", 503),
+      { stage: "checkout", status: 503 },
+    ],
+    [
+      new SyntaxError('Unexpected token, "pii@example.com" is not valid JSON'),
+      { kind: "SyntaxError" },
+    ],
+    [
+      new Error("lookup failed for pii@example.com token=secret"),
+      { kind: "unknown" },
+    ],
+    ["pii@example.com", { kind: "unknown" }],
+  ])("logs only fields checkout controls for %s", async (failure, logged) => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    start.mockRejectedValue(failure)
+    await visit("offer=developer&account=u1&team=use%3Ateam-1")
+    expect(error).toHaveBeenCalledWith("Signup checkout unavailable", logged)
+    expect(JSON.stringify(error.mock.calls)).not.toMatch(/pii@|secret/)
     error.mockRestore()
   })
 

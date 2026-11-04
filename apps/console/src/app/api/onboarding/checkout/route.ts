@@ -1,6 +1,9 @@
 import { NextResponse } from "next/server"
 
-import { startSignupCheckout } from "@/lib/api/signup-checkout"
+import {
+  SignupCheckoutError,
+  startSignupCheckout,
+} from "@/lib/api/signup-checkout"
 import {
   checkoutLocator,
   isSignupCheckoutOffer,
@@ -53,10 +56,24 @@ async function checkout(request: Request, switchPlan: boolean) {
       (await startSignupCheckout(user, offer, origin, locator, switchPlan)) ??
       "/sandboxes"
   } catch (error) {
-    console.error("Signup checkout unavailable", {
-      error: error instanceof Error ? error.message : String(error),
-    })
+    console.error("Signup checkout unavailable", failureDetails(error))
     target = planPickerPath("checkout_unavailable", offer, locator)
   }
   return NextResponse.redirect(new URL(target, origin), 303)
+}
+
+// Logs only fields checkout controls. A caught message can quote a backend
+// response or a database error, so it is never logged.
+const LOGGED_ERROR_NAMES = new Set([
+  "TimeoutError",
+  "AbortError",
+  "SyntaxError",
+  "TypeError",
+])
+
+function failureDetails(error: unknown) {
+  if (error instanceof SignupCheckoutError)
+    return { stage: error.stage, status: error.status }
+  const name = error instanceof Error ? error.name : ""
+  return { kind: LOGGED_ERROR_NAMES.has(name) ? name : "unknown" }
 }
