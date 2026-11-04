@@ -444,15 +444,19 @@ export async function leaveTeamAction(
   if (!(await acquireLeaveLease(context.userId, holder))) {
     return failure("leave_in_progress")
   }
+  const outcome = { unknown: false }
   try {
-    return await leaveWithLease(context)
+    return await leaveWithLease(context, outcome)
   } finally {
-    await releaseLeaveLease(context.userId, holder)
+    // A timed-out leave can still commit, so the lease is left to expire
+    // rather than letting another leave read the directory before it lands.
+    if (!outcome.unknown) await releaseLeaveLease(context.userId, holder)
   }
 }
 
 async function leaveWithLease(
   context: Context,
+  outcome: { unknown: boolean },
 ): Promise<{ ok: true } | InvitationActionError> {
   let remaining: TeamMembership[]
   try {
@@ -476,7 +480,10 @@ async function leaveWithLease(
   if (remaining.length === 0) return failure("only_team")
 
   const response = await backend(context, "/leave")
-  if (!response) return failure("unavailable")
+  if (!response) {
+    outcome.unknown = true
+    return failure("unavailable")
+  }
   if (!response.ok) return errorFromResponse(response)
 
   invalidateMembershipDirectory(context.userId)

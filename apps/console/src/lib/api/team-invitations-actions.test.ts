@@ -433,6 +433,18 @@ describe("leaveTeamAction", () => {
     expect(leases.size).toBe(0)
   })
 
+  it("keeps the lease when the leave call has no answer", async () => {
+    const leases = installLeaseStore()
+    memberships([here, other])
+    fetchSpy.mockRejectedValue(new Error("timeout"))
+
+    expect(await leaveTeamAction(here)).toMatchObject({
+      ok: false,
+      code: "unavailable",
+    })
+    expect(leases.size).toBe(1)
+  })
+
   it("still succeeds when the lease release fails", async () => {
     memberships([here, other])
     fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
