@@ -263,19 +263,26 @@ r = sandbox.commands.run("npm run build",
 print(f"exited {r.exit_code}", len(r.stdout))
 ```
 
-Streaming uses an **idle timeout** that resets on each chunk (a chatty command never trips
-it; a silent one still must finish in time). If the stream drops before the `finished`
-event, `run()` **throws** — but the command keeps running in the sandbox, so reconnect with
-`Sandbox.connect(id)` if you saved the ID.
+The command timeout is a **hard limit**, streamed or not: output does **not** reset it. At
+the limit the sandbox stops the command and `run()` returns **exit code `124`** (no throw).
+With no timeout set, the sandbox stops the command after 30 s (a sync `run()` throws
+`TimeoutError` / `SandboxTimeoutError`), so set one for longer jobs. If the stream drops
+before the `finished` event, `run()` **throws** `SandboxError` and the sandbox **stops the
+command**. Without callbacks, the command keeps running if the client goes away, until it
+exits or hits its timeout. **Nothing reattaches to command output** (`Sandbox.connect(id)`
+only returns the sandbox). For a job that must outlive your client, start it in the
+background, where the timeout doesn't apply (`nohup job > /home/user/job.log 2>&1 &`), and
+read the log later.
 
 Use **`spawn()`** when you need to send stdin, signal the process, or keep a REPL open. It
 resolves once the process is _running_ and hands back a session: `stdin.write(data)`,
 `stdin.close()` (EOF), `kill(signal?)` (default `SIGTERM`), `wait()` (resolves on exit;
-rejects if the socket drops first). `spawn()` is **async-only in Python** (`AsyncSandbox`;
-sync raises and points you there) and needs **Node 22+** in TS (or a `ws` polyfill).
+rejects if the socket drops first, and the sandbox then stops the process). `spawn()` is
+**async-only in Python** (`AsyncSandbox`; sync raises and points you there) and needs
+**Node 22+** in TS (or a `ws` polyfill).
 
 ```ts
-const session = await sandbox.commands.spawn("python -i", {
+const session = await sandbox.commands.spawn("python3 -i", {
   onStdout: (data) => process.stdout.write(data),
 })
 session.stdin.write("print(2 + 2)\n")
@@ -285,7 +292,7 @@ console.log((await session.wait()).exitCode)
 
 ```python
 # spawn is async only → use AsyncSandbox; `async with` kills + closes on exit
-session = await sandbox.commands.spawn("python -i",
+session = await sandbox.commands.spawn("python3 -i",
     on_stdout=lambda data: print(data, end=""))
 async with session:
     await session.stdin.write("print(2 + 2)\n")
@@ -555,8 +562,10 @@ try {
 - No `vcpu`/`memory`/`disk` on `create()` — size the VM via the template.
 - `Template.create()` returns when the build is _queued_; boot a sandbox only **after**
   `waitUntilReady()` resolves.
-- Streaming `run()` uses an idle timeout (resets per chunk) and throws if the stream ends
-  without a `finished` event; the command keeps running — reconnect via `connect(id)`.
+- The command timeout is a hard limit, not an idle timeout: output doesn't reset it, and at
+  the limit `run()` returns exit code `124`. If a streamed `run()` drops, it throws and the
+  sandbox stops the command; a sync `run()` keeps running until it exits or hits its
+  timeout. No API reattaches to command output.
 - (Python) the sandbox holds a shared `httpx` client, closed on `kill()` — always
   `kill()` rather than just dropping the reference.
 
