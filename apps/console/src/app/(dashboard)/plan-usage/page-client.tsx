@@ -19,9 +19,13 @@ import {
 } from "@/components/billing-summary"
 import { PlanOverviewSection } from "@/components/billing/plan-overview-section"
 import {
-  NOT_BILLED_HATCH,
+  BILLING_UNKNOWN_LABEL,
+  type BillingStatus,
   RESOURCE_SWATCH,
   UsageBreakdown,
+  billingStatus,
+  billingStatusNote,
+  resourceSwatch,
 } from "@/components/billing/usage-breakdown"
 import { CustomerBillingSection } from "@/components/customer-billing-section"
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
@@ -41,6 +45,7 @@ import { useUser } from "@/hooks/use-user"
 import type {
   BillingUsageGranularity,
   BillingUsageSeriesBucket,
+  BillingUsageSeriesResource,
 } from "@/lib/api/billing"
 
 export {
@@ -51,7 +56,6 @@ export {
   formatDurationRemaining,
   getBillingCycleProgress,
   getProjectedPeriodEndEstimate,
-  getProjectedStatementRows,
 } from "@/components/billing-summary"
 
 const getLocalTimezone = () => Intl.DateTimeFormat().resolvedOptions().timeZone
@@ -116,14 +120,57 @@ export function formatUsageCost(value: number): string {
     : value.toFixed(2)
 }
 
+// A missing status in any bucket wins, so unknown eligibility is never shown
+// as a known billed or not-billed state.
+function rangeBillingStatus(
+  buckets: BillingUsageSeriesBucket[],
+  key: UsageResourceKey,
+): BillingStatus | "mixed" {
+  const statuses = new Set(
+    buckets.map((bucket) => billingStatus(bucket[key].billable)),
+  )
+  if (statuses.has("unknown")) return "unknown"
+  if (statuses.size > 1) return "mixed"
+  return statuses.has("not-billed") ? "not-billed" : "billed"
+}
+
 function storageLegend(buckets: BillingUsageSeriesBucket[]): string {
   if (buckets.length === 0) return "Storage"
-  const billable = buckets.map((bucket) => bucket.storage.billable)
-  if (billable.every(Boolean)) return "Storage"
-  if (billable.every((value) => value === false)) {
-    return "Storage equivalent (not billed)"
+  switch (rangeBillingStatus(buckets, "storage")) {
+    case "billed":
+      return "Storage"
+    case "not-billed":
+      return "Storage equivalent (not billed)"
+    case "unknown":
+      return `Storage (${BILLING_UNKNOWN_LABEL.toLowerCase()})`
+    case "mixed":
+      return "Storage (mixed billing eligibility)"
   }
-  return "Storage (mixed billing eligibility)"
+}
+
+function legendSwatch(
+  buckets: BillingUsageSeriesBucket[],
+  key: UsageResourceKey,
+): string {
+  if (buckets.length === 0) return RESOURCE_SWATCH[key]
+  const status = rangeBillingStatus(buckets, key)
+  return resourceSwatch(key, status === "mixed" ? "not-billed" : status)
+}
+
+function legendLabel(
+  buckets: BillingUsageSeriesBucket[],
+  key: "cpu" | "memory",
+  label: string,
+): string {
+  return buckets.length > 0 && rangeBillingStatus(buckets, key) === "unknown"
+    ? `${label} (${BILLING_UNKNOWN_LABEL.toLowerCase()})`
+    : label
+}
+
+// Cost text for one resource, with its billing note when it is not billed.
+function resourceCostText(resource: BillingUsageSeriesResource): string {
+  const note = billingStatusNote(billingStatus(resource.billable))
+  return `$${formatUsageCost(resource.cost_usd)}${note ? ` (${note})` : ""}`
 }
 
 function bucketTooltip(
@@ -145,12 +192,11 @@ function bucketTooltip(
   })
   const start = tooltipDate.format(startDate)
   const end = tooltipDate.format(endDate)
-  const storage = `$${formatUsageCost(bucket.storage.cost_usd)}${bucket.storage.billable === false ? " (not billed)" : ""}`
   return [
     `${bucketLabel(bucket.start, granularity, granularity === "monthly", timezone)} (${start} – ${end})`,
-    `CPU $${formatUsageCost(bucket.cpu.cost_usd)}`,
-    `Memory $${formatUsageCost(bucket.memory.cost_usd)}`,
-    `Storage ${storage}${bucket.storage.usage === null ? " · usage unavailable" : ""}`,
+    `CPU ${resourceCostText(bucket.cpu)}`,
+    `Memory ${resourceCostText(bucket.memory)}`,
+    `Storage ${resourceCostText(bucket.storage)}${bucket.storage.usage === null ? " · usage unavailable" : ""}`,
     `Billed total $${formatUsageCost(bucket.billed_total_usd)}`,
   ]
 }
@@ -175,13 +221,6 @@ type BucketCosts = ReturnType<typeof bucketCostTotals>
 
 function stackedCost(costs: BucketCosts) {
   return costs.cpu + costs.memory + costs.storage
-}
-
-function storageSwatch(buckets: BillingUsageSeriesBucket[]) {
-  return buckets.length > 0 &&
-    buckets.every((bucket) => bucket.storage.billable)
-    ? RESOURCE_SWATCH.storage
-    : NOT_BILLED_HATCH
 }
 
 function LegendItem({
@@ -224,17 +263,17 @@ function ChartLegend({ buckets }: { buckets: BillingUsageSeriesBucket[] }) {
     >
       <div className="flex flex-wrap items-center gap-x-5 gap-y-2">
         <LegendItem
-          swatch={RESOURCE_SWATCH.cpu}
-          label="CPU"
+          swatch={legendSwatch(buckets, "cpu")}
+          label={legendLabel(buckets, "cpu", "CPU")}
           value={totals.cpu}
         />
         <LegendItem
-          swatch={RESOURCE_SWATCH.memory}
-          label="Memory"
+          swatch={legendSwatch(buckets, "memory")}
+          label={legendLabel(buckets, "memory", "Memory")}
           value={totals.memory}
         />
         <LegendItem
-          swatch={storageSwatch(buckets)}
+          swatch={legendSwatch(buckets, "storage")}
           label={storageLegend(buckets)}
           value={totals.storage}
         />
@@ -251,9 +290,58 @@ function ChartLegend({ buckets }: { buckets: BillingUsageSeriesBucket[] }) {
 
 // Segments stack bottom-up as CPU, memory, then storage. A transparent top
 // border leaves a 2px gap below a visible segment without changing heights.
+// Segments shorter than the gap keep their full fill so small costs show.
+const BAR_HEIGHT_PX = 224
 const SEGMENT_GAP = "border-t-2 border-transparent bg-clip-content"
-const gapBelow = (value: number, above: number) =>
-  value > 0 && above > 0 ? SEGMENT_GAP : null
+const gapBelow = (value: number, above: number, max: number) =>
+  above > 0 && (value / max) * BAR_HEIGHT_PX > 4 ? SEGMENT_GAP : null
+
+const SEGMENT_LABEL: Record<UsageResourceKey, string> = {
+  cpu: "CPU",
+  memory: "Memory",
+  storage: "Storage",
+}
+
+function BarSegment({
+  resourceKey,
+  resource,
+  value,
+  above,
+  max,
+}: {
+  resourceKey: UsageResourceKey
+  resource: BillingUsageSeriesResource
+  value: number
+  above: number
+  max: number
+}) {
+  const status = billingStatus(resource.billable)
+  const cost = `$${formatUsageCost(value)}`
+  const notBilledStorage = resourceKey === "storage" && status === "not-billed"
+  const note = billingStatusNote(status)
+  return (
+    <div
+      className={cn(
+        "w-full",
+        status === "unknown" ? null : gapBelow(value, above, max),
+        resourceSwatch(resourceKey, status),
+      )}
+      data-testid={
+        notBilledStorage
+          ? "storage-equivalent-bar"
+          : status === "unknown"
+            ? "billing-unknown-bar"
+            : undefined
+      }
+      style={{ height: `${(value / max) * 100}%` }}
+      aria-label={
+        notBilledStorage
+          ? `Storage equivalent ${cost} (not billed)`
+          : `${SEGMENT_LABEL[resourceKey]} ${cost}${note ? ` (${note})` : ""}`
+      }
+    />
+  )
+}
 
 function UsageBar({
   bucket,
@@ -264,42 +352,31 @@ function UsageBar({
   costs: BucketCosts
   max: number
 }) {
-  const height = (value: number) => ({ height: `${(value / max) * 100}%` })
   return (
     <div
       className="flex h-56 w-full max-w-10 flex-col justify-end opacity-90 transition-opacity group-hover:opacity-100"
       data-testid="billed-cost-stack"
     >
-      {bucket.storage.billable ? (
-        <div
-          className={cn("w-full", RESOURCE_SWATCH.storage)}
-          style={height(costs.storage)}
-        />
-      ) : (
-        <div
-          className={cn("w-full", NOT_BILLED_HATCH)}
-          data-testid="storage-equivalent-bar"
-          style={height(costs.storage)}
-          aria-label={`Storage equivalent $${formatUsageCost(costs.storage)} (not billed)`}
-        />
-      )}
-      <div
-        className={cn(
-          "w-full",
-          gapBelow(costs.memory, costs.storage),
-          RESOURCE_SWATCH.memory,
-        )}
-        style={height(costs.memory)}
-        aria-label={`Memory $${formatUsageCost(costs.memory)}`}
+      <BarSegment
+        resourceKey="storage"
+        resource={bucket.storage}
+        value={costs.storage}
+        above={0}
+        max={max}
       />
-      <div
-        className={cn(
-          "w-full",
-          gapBelow(costs.cpu, costs.memory + costs.storage),
-          RESOURCE_SWATCH.cpu,
-        )}
-        style={height(costs.cpu)}
-        aria-label={`CPU $${formatUsageCost(costs.cpu)}`}
+      <BarSegment
+        resourceKey="memory"
+        resource={bucket.memory}
+        value={costs.memory}
+        above={costs.storage}
+        max={max}
+      />
+      <BarSegment
+        resourceKey="cpu"
+        resource={bucket.cpu}
+        value={costs.cpu}
+        above={costs.memory + costs.storage}
+        max={max}
       />
     </div>
   )
@@ -336,34 +413,31 @@ function BucketTooltipBody({
   title: string
 }) {
   const costs = bucketCostTotals(bucket)
-  const storageNote = [
-    bucket.storage.billable === false ? "not billed" : null,
-    bucket.storage.usage === null ? "usage unavailable" : null,
-  ]
-    .filter(Boolean)
-    .join(" · ")
+  const keys: UsageResourceKey[] = ["cpu", "memory", "storage"]
   return (
     <div className="space-y-2 text-xs">
       <p className="text-[11px] leading-relaxed text-muted">{title}</p>
       <div className="space-y-1.5">
-        <TooltipRow
-          swatch={RESOURCE_SWATCH.cpu}
-          label="CPU"
-          value={costs.cpu}
-        />
-        <TooltipRow
-          swatch={RESOURCE_SWATCH.memory}
-          label="Memory"
-          value={costs.memory}
-        />
-        <TooltipRow
-          swatch={
-            bucket.storage.billable ? RESOURCE_SWATCH.storage : NOT_BILLED_HATCH
-          }
-          label="Storage"
-          value={costs.storage}
-          note={storageNote || undefined}
-        />
+        {keys.map((key) => {
+          const status = billingStatus(bucket[key].billable)
+          const note = [
+            billingStatusNote(status),
+            bucket[key].usage === null && key === "storage"
+              ? "usage unavailable"
+              : null,
+          ]
+            .filter(Boolean)
+            .join(" · ")
+          return (
+            <TooltipRow
+              key={key}
+              swatch={resourceSwatch(key, status)}
+              label={SEGMENT_LABEL[key]}
+              value={costs[key]}
+              note={note || undefined}
+            />
+          )
+        })}
       </div>
       <div className="flex items-center justify-between gap-3 border-t border-dashed border-border pt-2 font-semibold">
         <span>Billed total</span>

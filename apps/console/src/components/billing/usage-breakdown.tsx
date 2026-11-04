@@ -11,7 +11,8 @@ import type {
 } from "@/lib/api/billing"
 
 // Chart and table colours per resource. CPU uses the brand mint; storage is
-// hatched instead of solid when it is tracked but not billed.
+// hatched instead of solid when it is tracked but not billed. A resource
+// whose billing status is missing gets a dashed outline instead of a fill.
 export const RESOURCE_SWATCH: Record<string, string> = {
   cpu: "bg-brand",
   memory: "bg-[#468e50]",
@@ -19,10 +20,35 @@ export const RESOURCE_SWATCH: Record<string, string> = {
 }
 export const NOT_BILLED_HATCH =
   "bg-[image:repeating-linear-gradient(45deg,#575757_0_1.5px,transparent_1.5px_3.5px)]"
+export const BILLING_UNKNOWN_OUTLINE =
+  "border border-dashed border-foreground/50"
+export const BILLING_UNKNOWN_LABEL = "Billing status unavailable"
 
-export function resourceSwatch(resource: string, billable: boolean): string {
-  if (resource === "storage" && !billable) return NOT_BILLED_HATCH
+export type BillingStatus = "billed" | "not-billed" | "unknown"
+
+// The API can omit `billable`; only an explicit false means "not billed".
+export function billingStatus(
+  billable: boolean | null | undefined,
+): BillingStatus {
+  if (billable === true) return "billed"
+  if (billable === false) return "not-billed"
+  return "unknown"
+}
+
+export function resourceSwatch(
+  resource: string,
+  status: BillingStatus,
+): string {
+  if (status === "unknown") return BILLING_UNKNOWN_OUTLINE
+  if (resource === "storage" && status === "not-billed") return NOT_BILLED_HATCH
   return RESOURCE_SWATCH[resource] ?? "bg-foreground/40"
+}
+
+// Short note for chart labels and tooltips; null when the resource is billed.
+export function billingStatusNote(status: BillingStatus): string | null {
+  if (status === "not-billed") return "not billed"
+  if (status === "unknown") return "billing status unavailable"
+  return null
 }
 
 function formatMetric(value: number, suffix: string): string {
@@ -61,6 +87,13 @@ function usageLabel(resource: BillingSummaryResource): string | null {
   return formatMetric(value, resource.display_unit)
 }
 
+// Only billable charges count toward the total and each row's share.
+function billedCharge(resource: BillingSummaryResource): number {
+  return billingStatus(resource.billable) === "billed"
+    ? Math.max(resource.charge_usd, 0)
+    : 0
+}
+
 export function UsageBreakdown({
   summary,
 }: {
@@ -75,9 +108,11 @@ export function UsageBreakdown({
   })
   if (resources.length === 0) return null
 
+  const hasUnknown = resources.some(
+    (resource) => billingStatus(resource.billable) === "unknown",
+  )
   const billedTotal = resources.reduce(
-    (total, resource) =>
-      resource.billable ? total + Math.max(resource.charge_usd, 0) : total,
+    (total, resource) => total + billedCharge(resource),
     0,
   )
 
@@ -131,6 +166,11 @@ export function UsageBreakdown({
                 className="px-5 py-3.5 text-left font-semibold text-foreground"
               >
                 Total
+                {hasUnknown ? (
+                  <span className="ml-2 font-normal text-muted">
+                    Excludes resources with billing status unavailable
+                  </span>
+                ) : null}
               </th>
               <td className="px-5 py-3.5 text-right font-mono font-semibold text-foreground">
                 {formatCurrency(billedTotal, currency)}
@@ -141,6 +181,21 @@ export function UsageBreakdown({
       </div>
     </section>
   )
+}
+
+function BillingStatusBadge({ status }: { status: BillingStatus }) {
+  if (status === "not-billed") return <Badge variant="muted">Not billed</Badge>
+  if (status === "unknown") {
+    return (
+      <Badge
+        variant="muted"
+        className="border border-dashed border-foreground/30 bg-transparent"
+      >
+        {BILLING_UNKNOWN_LABEL}
+      </Badge>
+    )
+  }
+  return null
 }
 
 function UsageRow({
@@ -155,65 +210,63 @@ function UsageRow({
   currency: string
 }) {
   const usage = usageLabel(resource)
-  const charge = resource.billable ? Math.max(resource.charge_usd, 0) : 0
+  const status = billingStatus(resource.billable)
+  const billed = status === "billed"
+  const charge = billedCharge(resource)
   const share = billedTotal > 0 ? (charge / billedTotal) * 100 : 0
+  const swatch = resourceSwatch(resource.resource, status)
 
   return (
     <tr className="border-b border-dashed border-border">
       <th scope="row" className="px-5 py-3 text-left font-normal">
-        <span className="flex items-center gap-2 text-foreground">
-          <span
-            aria-hidden
-            className={cn(
-              "size-2 shrink-0",
-              resourceSwatch(resource.resource, resource.billable),
-            )}
-          />
+        <span className="flex items-center gap-2 whitespace-nowrap text-foreground">
+          <span aria-hidden className={cn("size-2 shrink-0", swatch)} />
           {resource.display_name}
-          {resource.billable ? null : <Badge variant="muted">Not billed</Badge>}
+          <BillingStatusBadge status={status} />
         </span>
       </th>
       <td
         className={cn(
-          "px-3 py-3 text-right font-mono",
+          "px-3 py-3 text-right font-mono whitespace-nowrap",
           usage ? "text-foreground" : "text-muted",
         )}
       >
         {usage ?? "Usage unavailable"}
       </td>
-      <td className="px-3 py-3 text-right font-mono text-muted">
-        {resource.billable && rate
+      <td className="px-3 py-3 text-right font-mono whitespace-nowrap text-muted">
+        {billed && rate
           ? `${formatRate(rate.price_usd_hourly, currency)} / ${rate.display_unit}`
           : "—"}
       </td>
       <td className="px-3 py-3">
-        <span className="flex items-center justify-end gap-3">
-          <span aria-hidden className="h-1 w-[90px] bg-foreground/10">
+        {status === "unknown" ? (
+          <span className="block text-right font-mono text-muted">—</span>
+        ) : (
+          <span className="flex items-center justify-end gap-3">
+            <span aria-hidden className="h-1 w-[90px] bg-foreground/10">
+              <span
+                className={cn("block h-full", swatch)}
+                style={{ width: `${share}%` }}
+              />
+            </span>
             <span
               className={cn(
-                "block h-full",
-                resourceSwatch(resource.resource, resource.billable),
+                "w-12 text-right font-mono",
+                billed ? "text-foreground" : "text-muted",
               )}
-              style={{ width: `${share}%` }}
-            />
+            >
+              {share.toFixed(1)}%
+            </span>
           </span>
-          <span
-            className={cn(
-              "w-12 text-right font-mono",
-              resource.billable ? "text-foreground" : "text-muted",
-            )}
-          >
-            {share.toFixed(1)}%
-          </span>
-        </span>
+        )}
       </td>
       <td
         className={cn(
           "px-5 py-3 text-right font-mono",
-          resource.billable ? "text-foreground" : "text-muted",
+          billed ? "text-foreground" : "text-muted",
         )}
       >
-        {formatCurrency(charge, currency)}
+        {status === "unknown" ? "—" : formatCurrency(charge, currency)}
       </td>
     </tr>
   )

@@ -175,6 +175,44 @@ describe("UsageBreakdown", () => {
     },
   )
 
+  it.each([undefined, null])(
+    "shows billing status unavailable when billable is %s",
+    (billable) => {
+      render(
+        <UsageBreakdown
+          summary={summary({
+            resources: [
+              {
+                ...resources[0],
+                billable: billable as unknown as boolean,
+                charge_usd: 20,
+              },
+              ...resources.slice(1),
+            ],
+          })}
+        />,
+      )
+
+      const storage = rowFor(/^Storage/)
+      const badge = within(storage).getByText("Billing status unavailable")
+      expect(badge.className).toContain("border-dashed")
+      expect(within(storage).queryByText("Not billed")).toBeNull()
+      expect(storage).toHaveTextContent("1.11 GiB-hours")
+      expect(storage).not.toHaveTextContent("$20.00")
+      expect(storage).not.toHaveTextContent("%")
+
+      const swatch = storage.querySelector("[aria-hidden]")
+      expect(swatch?.className).toContain("border-dashed")
+      expect(swatch?.className).not.toContain("repeating-linear-gradient")
+
+      const total = rowFor(/^Total/)
+      expect(total).toHaveTextContent("$80.00")
+      expect(total).toHaveTextContent(
+        "Excludes resources with billing status unavailable",
+      )
+    },
+  )
+
   it("shows no rate when pricing is unavailable", () => {
     useAllowancePricing.mockReturnValue({ data: undefined })
     render(<UsageBreakdown summary={summary()} />)

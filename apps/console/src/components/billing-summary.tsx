@@ -108,13 +108,6 @@ export function formatDurationRemaining(ms: number): string {
   return "less than a minute"
 }
 
-export interface ProjectedStatementRow {
-  label: string
-  value: number | null
-  emphasize?: boolean
-  negative?: boolean
-}
-
 export interface ProjectedPeriodEndEstimate {
   available: boolean
   projectedCharges: number | null
@@ -170,28 +163,6 @@ export function getProjectedPeriodEndEstimate(
     estimatedCredits,
     estimatedInvoice: Math.max(projectedCharges - estimatedCredits, 0),
   }
-}
-
-export function getProjectedStatementRows(
-  summary: BillingSummaryResponse,
-  nowMs: number = Date.now(),
-): ProjectedStatementRow[] | null {
-  const estimate = getProjectedPeriodEndEstimate(summary, nowMs)
-  if (!estimate.available) return null
-
-  return [
-    { label: "Projected Charges", value: estimate.projectedCharges ?? 0 },
-    {
-      label: "Estimated Credits",
-      value: estimate.estimatedCredits,
-      negative: true,
-    },
-    {
-      label: "Estimated Invoice",
-      value: estimate.estimatedInvoice,
-      emphasize: true,
-    },
-  ]
 }
 
 export function billingErrorMessage(error: unknown): {

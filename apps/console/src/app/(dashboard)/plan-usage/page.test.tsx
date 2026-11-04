@@ -897,10 +897,78 @@ describe("PlanUsagePage", () => {
       screen.getByLabelText(/Storage \$17\.25 \(not billed\)/),
     ).toBeInTheDocument()
     expect(
-      screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
+      within(screen.getByTestId("usage-cost-chart")).getByLabelText(
+        "Storage $23.75",
+      ),
     ).toBeInTheDocument()
     expect(screen.getByLabelText(/Billed total \$32\.75/)).toBeInTheDocument()
   })
+
+  it.each([undefined, null])(
+    "shows billing status unavailable when billable is %s",
+    async (billable) => {
+      const missing = billable as unknown as boolean
+      useBillingUsage.mockReturnValue({
+        data: {
+          start: "2026-06-01T00:00:00.000Z",
+          end: "2026-06-02T00:00:00.000Z",
+          granularity: "day",
+          timezone: "UTC",
+          buckets: [
+            {
+              start: "2026-06-01T00:00:00.000Z",
+              end: "2026-06-02T00:00:00.000Z",
+              cpu: { usage: 1, cost_usd: 1, tracked: true, billable: true },
+              memory: { usage: 1, cost_usd: 2, tracked: true, billable: true },
+              storage: {
+                usage: 1000,
+                cost_usd: 4.5,
+                tracked: true,
+                billable: missing,
+              },
+              billed_total_usd: 3,
+            },
+          ],
+        },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+
+      renderPage()
+
+      const chart = within(screen.getByTestId("usage-cost-chart"))
+      expect(
+        chart.getByText("Storage (billing status unavailable)"),
+      ).toBeInTheDocument()
+      expect(
+        chart.queryByText("Storage equivalent (not billed)"),
+      ).not.toBeInTheDocument()
+      expect(chart.queryByTestId("storage-equivalent-bar")).toBeNull()
+
+      const segment = chart.getByTestId("billing-unknown-bar")
+      expect(segment).toHaveAccessibleName(
+        "Storage $4.50 (billing status unavailable)",
+      )
+      expect(segment.className).toContain("border-dashed")
+      expect(segment.className).not.toContain("repeating-linear-gradient")
+
+      const trigger = chart.getByLabelText(/Billed total \$3\.00/)
+      expect(trigger).toHaveAccessibleName(
+        expect.stringContaining("Storage $4.50 (billing status unavailable)"),
+      )
+      expect(trigger).not.toHaveAccessibleName(
+        expect.stringContaining("not billed"),
+      )
+
+      fireEvent.mouseEnter(trigger)
+      fireEvent.pointerEnter(trigger)
+      fireEvent.focus(trigger)
+      const note = await screen.findByText("billing status unavailable")
+      expect(note.closest("div")).toHaveTextContent("Storage")
+      expect(screen.queryByText("not billed")).toBeNull()
+    },
+  )
 
   it("does not add not-billed copy when every storage bucket is billable", () => {
     useBillingUsage.mockReturnValue({
@@ -939,7 +1007,9 @@ describe("PlanUsagePage", () => {
       screen.queryByText("Storage equivalent (not billed)"),
     ).not.toBeInTheDocument()
     expect(
-      screen.getByLabelText(/Storage \$23\.75(?! \(not billed\))/),
+      within(screen.getByTestId("usage-cost-chart")).getByLabelText(
+        "Storage $23.75",
+      ),
     ).toBeInTheDocument()
   })
 
