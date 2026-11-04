@@ -276,6 +276,10 @@
             ]
           },
           {
+            "group": "Reinforcement Learning",
+            "pages": ["integrations/reinforcement-learning/trl"]
+          },
+          {
             "group": "MCP Sandboxes",
             "pages": ["integrations/mcp"]
           }
