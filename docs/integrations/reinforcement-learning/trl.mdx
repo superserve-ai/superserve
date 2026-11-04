@@ -23,31 +23,34 @@ TRL needs Python 3.11 or later and installs PyTorch and Transformers. See [API k
 TRL calls a reward function once per batch with the completions and every extra column of the dataset as keyword arguments. The reward function on this page:
 
 1. Extracts the code from the first fenced Python code block in each completion.
-2. Appends the problem's tests and a random marker line, so a completion passes only if the tests run to the end.
+2. Appends a line that prints the result of the problem's test expression as JSON.
 3. Runs the program in a new sandbox with no internet access, then kills the sandbox. A thread pool scores several completions at the same time.
-4. Returns `1.0` if the tests pass and `0.0` otherwise.
+4. Returns `1.0` if the program exits with status 0 and its last line of output matches the expected result, and `0.0` otherwise.
 
 ## Add the reward function
 
 Save this file as `code_reward.py`. The highlighted lines are the Superserve calls: create a sandbox, write the program, run it, and kill the sandbox.
 
-```python code_reward.py {25-37}
+```python code_reward.py {28-40}
+import json
 import re
-import secrets
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any
 
+import httpx
 from superserve import (
     CommandResult,
     NetworkConfig,
     RateLimitError,
     Sandbox,
+    SandboxError,
     SandboxTimeoutError,
     ServerError,
 )
 
 MAX_SANDBOXES = 8  # completions scored at the same time
 CODE_BLOCK = re.compile(r"```(?:python)?\n(.*?)```", re.DOTALL)
+TRANSIENT_ERRORS = (RateLimitError, ServerError, SandboxTimeoutError)
 
 
 def extract_code(text: str) -> str:
@@ -71,34 +74,51 @@ def run_in_sandbox(program: str) -> CommandResult:
         sandbox.kill()
 
 
-def score(code: str, tests: str) -> float | None:
-    # The marker prints only after every test passes, so code that exits
-    # early with status 0 gets no reward.
-    marker = secrets.token_hex(8)
-    try:
-        result = run_in_sandbox(f"{code}\n\n{tests}\n\nprint({marker!r})\n")
-    except (RateLimitError, ServerError, SandboxTimeoutError):
-        return None  # TRL leaves completions with no score out of the update
+def is_transient(error: SandboxError) -> bool:
+    # Network failures arrive as a SandboxError caused by an httpx error.
+    return isinstance(error, TRANSIENT_ERRORS) or isinstance(
+        error.__cause__, httpx.HTTPError
+    )
 
-    passed = result.exit_code == 0 and result.stdout.strip().endswith(marker)
+
+def score(code: str, test: str, expected: str) -> float | None:
+    try:
+        result = run_in_sandbox(f"{code}\n\nimport json\nprint(json.dumps({test}))\n")
+    except SandboxError as error:
+        if is_transient(error):
+            return None  # TRL leaves completions with no score out of the update
+        raise
+
+    # The expected value never enters the sandbox, so the code cannot print it
+    # without computing it.
+    last_line = result.stdout.rstrip().rpartition("\n")[2]
+    try:
+        passed = result.exit_code == 0 and json.loads(last_line) == json.loads(expected)
+    except ValueError:
+        passed = False
     return 1.0 if passed else 0.0
 
 
 def code_reward(
-    completions: list[list[dict[str, str]]], tests: list[str], **kwargs: Any
+    completions: list[list[dict[str, str]]],
+    test: list[str],
+    expected: list[str],
+    **kwargs: Any,
 ) -> list[float | None]:
     codes = [extract_code(completion[0]["content"]) for completion in completions]
     with ThreadPoolExecutor(max_workers=MAX_SANDBOXES) as pool:
-        return list(pool.map(score, codes, tests))
+        return list(pool.map(score, codes, test, expected))
 ```
 
 Each sandbox blocks all outbound traffic with `deny_out=["0.0.0.0/0"]`, so generated code cannot download packages or send data out. `timeout -s KILL 10` stops code that never ends, such as an infinite loop, after 10 seconds. If your training process crashes before `kill()` runs, the sandbox auto-pauses after `timeout_seconds`, and `auto_delete_seconds=0` deletes it at once. See [Networking](/sandbox/networking) and [Lifecycle](/sandbox/lifecycle).
 
-If a sandbox call fails with a rate-limit, server, or timeout error, `score` returns `None` instead of `0.0`. TRL 1.6 and later leave a completion with no score out of the policy update, so a temporary outage does not teach the model that correct code is wrong.
+The expected result stays on your training machine and never goes into the sandbox. Code that exits early, or reads its own file, cannot print a passing result without computing it.
+
+If a sandbox call fails with a rate-limit, server, timeout, or network error, `score` returns `None` instead of `0.0`. Other errors, such as an invalid API key, still raise and stop training. TRL 1.6 and later leave a completion with no score out of the policy update, so a temporary outage does not teach the model that correct code is wrong.
 
 ## Train with GRPO
 
-Save this file as `train.py`, next to `code_reward.py`. TRL passes the `tests` column of the dataset to `code_reward` as the `tests` argument, one entry for each completion.
+Save this file as `train.py`, next to `code_reward.py`. TRL passes the `test` and `expected` columns of the dataset to `code_reward` as arguments with the same names, one entry for each completion.
 
 ```python train.py
 from datasets import Dataset
@@ -106,22 +126,27 @@ from trl import GRPOConfig, GRPOTrainer
 
 from code_reward import code_reward
 
+# Each problem: task, test expression, expected result of the test as JSON.
 problems = [
     (
         "is_prime(n) that returns True if n is a prime number.",
-        "assert is_prime(97) and not is_prime(1) and not is_prime(91)",
+        "[is_prime(97), is_prime(1), is_prime(91)]",
+        "[true, false, false]",
     ),
     (
         "roman(n) that converts an integer to a Roman numeral.",
-        "assert roman(4) == 'IV' and roman(1994) == 'MCMXCIV'",
+        "[roman(4), roman(1994)]",
+        '["IV", "MCMXCIV"]',
     ),
     (
         "flatten(xs) that flattens arbitrarily nested lists.",
-        "assert flatten([1, [2, [3, [4]]], []]) == [1, 2, 3, 4]",
+        "flatten([1, [2, [3, [4]]], []])",
+        "[1, 2, 3, 4]",
     ),
     (
         "median(xs) that returns the median of a list of numbers.",
-        "assert median([3, 1, 2]) == 2 and median([4, 1, 3, 2]) == 2.5",
+        "[median([3, 1, 2]), median([4, 1, 3, 2])]",
+        "[2, 2.5]",
     ),
 ]
 dataset = Dataset.from_list(
@@ -134,9 +159,10 @@ dataset = Dataset.from_list(
                     "Reply with only the code in one ```python block.",
                 }
             ],
-            "tests": tests,
+            "test": test,
+            "expected": expected,
         }
-        for task, tests in problems
+        for task, test, expected in problems
     ]
 )
 
@@ -172,7 +198,7 @@ TRL logs the reward for each step as `rewards/code_reward/mean`. The model learn
 
 - **Concurrency:** each completion uses one sandbox for a few seconds. `MAX_SANDBOXES` caps how many run at the same time. Keep it within your team's concurrent sandbox limit; limits depend on your team's plan.
 - **Dependencies:** the default sandbox has Python 3 and the standard library. If your tests import packages such as `numpy`, build a [template](/templates/overview) with them and pass `from_template=` to `Sandbox.create`.
-- **Partial credit:** to reward each passing test, run the tests one at a time in the same sandbox and return the fraction that passed.
+- **Partial credit:** when the test expression is a list, as in the `is_prime` problem, return the fraction of items that match the expected list instead of `1.0` or `0.0`.
 - **Other languages:** change the run command, for example to `node /tmp/solution.js`, and use a template that has the runtime.
 
 ## Resources
