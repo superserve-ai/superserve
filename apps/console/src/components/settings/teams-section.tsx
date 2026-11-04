@@ -28,6 +28,9 @@ import { regionLabel } from "@/lib/format"
  * (switching itself lives in the sidebar team dropdown). The create-team
  * form stays multi-cell-only: with a single configured cell there's no
  * region to choose, so the form has nothing to show.
+ *
+ * While the active team is the user's own account team, creating a team
+ * converts that account in its own region instead of adding another team.
  */
 export function TeamsSection() {
   const { data } = useTeams()
@@ -41,15 +44,23 @@ export function TeamsSection() {
     return null
   }
   const canCreate = data.regions.length > 1
+  const conversion =
+    data.convertibleTeam &&
+    data.convertibleTeam.id === data.activeTeamId &&
+    data.convertibleTeam.region === data.activeRegion
+      ? data.convertibleTeam
+      : null
 
   const handleCreate = () => {
     createTeam.mutate(
-      { name, region },
+      { name, region: conversion?.region ?? region },
       {
         onSuccess: (team) => {
           setName("")
           addToast(
-            `Team ${team.name} created in ${regionLabel(team.region)}`,
+            team.id === conversion?.id
+              ? `Your account is now the team ${team.name}`
+              : `Team ${team.name} created in ${regionLabel(team.region)}`,
             "success",
           )
         },
@@ -106,30 +117,38 @@ export function TeamsSection() {
           </div>
           {canCreate && (
             <>
-              <Field label="New Team Name">
+              <Field label={conversion ? "Team Name" : "New Team Name"}>
                 <Input
                   value={name}
                   onChange={(e) => setName(e.target.value)}
                   placeholder="my-team"
                 />
               </Field>
-              <Field label="Region">
-                <Select
-                  value={region}
-                  onValueChange={(v) => setRegion(v as string)}
-                >
-                  <SelectTrigger aria-label="Team region">
-                    <SelectValue>{() => regionLabel(region)}</SelectValue>
-                  </SelectTrigger>
-                  <SelectPopup>
-                    {data.regions.map((r) => (
-                      <SelectItem key={r} value={r}>
-                        {regionLabel(r)}
-                      </SelectItem>
-                    ))}
-                  </SelectPopup>
-                </Select>
-              </Field>
+              {conversion ? (
+                <p className="text-xs text-muted">
+                  Your current account becomes this team in{" "}
+                  {regionLabel(conversion.region)}. Its sandboxes, API keys,
+                  plan, and billing stay the same.
+                </p>
+              ) : (
+                <Field label="Region">
+                  <Select
+                    value={region}
+                    onValueChange={(v) => setRegion(v as string)}
+                  >
+                    <SelectTrigger aria-label="Team region">
+                      <SelectValue>{() => regionLabel(region)}</SelectValue>
+                    </SelectTrigger>
+                    <SelectPopup>
+                      {data.regions.map((r) => (
+                        <SelectItem key={r} value={r}>
+                          {regionLabel(r)}
+                        </SelectItem>
+                      ))}
+                    </SelectPopup>
+                  </Select>
+                </Field>
+              )}
               <div>
                 <Button
                   onClick={handleCreate}

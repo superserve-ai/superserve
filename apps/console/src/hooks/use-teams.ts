@@ -95,12 +95,16 @@ export function useCreateTeam() {
       queryClient.setQueryData<TeamDirectoryResponse>(
         teamKeys.directory(),
         (old) => ({
-          teams: [
-            ...(old?.teams ?? []).filter(
-              (item) => item.id !== team.id || item.region !== team.region,
-            ),
-            team,
-          ],
+          // A converted account keeps its place under its new name.
+          teams: (old?.teams ?? []).some(
+            (item) => item.id === team.id && item.region === team.region,
+          )
+            ? (old?.teams ?? []).map((item) =>
+                item.id === team.id && item.region === team.region
+                  ? team
+                  : item,
+              )
+            : [...(old?.teams ?? []), team],
           regions: old?.regions ?? [team.region],
           activeTeamId: team.id,
           activeRegion: team.region,
