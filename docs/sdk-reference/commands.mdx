@@ -136,7 +136,7 @@ class CommandResult(BaseModel):
 
 `exitCode` / `exit_code` is `124` when the command reached its timeout.
 
-`truncated` is `true` when a `run()` without callbacks printed more than 8 MiB of combined stdout and stderr. The sandbox drops the rest of the output and appends a notice to `stderr`. Streamed runs return the full output, and `truncated` is always `false` for them.
+`truncated` is `true` when the output of a `run()` without callbacks reached the 8 MiB cap on JSON-encoded stdout and stderr combined. Escaped characters count for more than one byte, so the cap can be reached below 8 MiB of raw output. The sandbox drops the rest of the output and appends a notice to `stderr`. Streamed runs return the full output, and `truncated` is always `false` for them.
 
 ## Non-zero exit codes
 

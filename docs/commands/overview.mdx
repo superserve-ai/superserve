@@ -121,20 +121,20 @@ TypeScript rounds `timeoutMs` up to whole seconds. `run()` treats `timeoutMs: 0`
 
 ## Large output
 
-Without callbacks, `run()` keeps at most 8 MiB of combined stdout and stderr. If a command prints more, the sandbox drops the rest, sets `truncated` to `true` on the result, and appends a notice to `stderr`. The command itself still runs to the end.
+Without callbacks, `run()` returns stdout and stderr in one JSON response, capped at 8 MiB of JSON-encoded output for both streams together. Characters that JSON escapes count for more than one byte (a `<` counts as six), so output with many of them is cut below 8 MiB of raw text. When the cap is reached, the sandbox drops the rest, sets `truncated` to `true` on the result, and appends a notice to `stderr`. The command itself still runs to the end.
 
 <CodeGroup>
 ```typescript TypeScript
 const result = await sandbox.commands.run("cat big.log")
 if (result.truncated) {
-  console.warn("Output past 8 MiB was dropped")
+  console.warn("Output was truncated")
 }
 ```
 
 ```python Python
 result = sandbox.commands.run("cat big.log")
 if result.truncated:
-    print("Output past 8 MiB was dropped")
+    print("Output was truncated")
 ```
 </CodeGroup>
 
