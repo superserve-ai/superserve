@@ -191,6 +191,27 @@ describe("startSignupCheckout", () => {
     },
   )
 
+  it.each([503, 429])(
+    "keeps the retry page when the restart itself fails with a %i",
+    async (status) => {
+      recovered = { status, body: {} }
+      checkout = { status: 409, body: { error: { code: "plan_conflict" } } }
+      await expect(
+        startSignupCheckout(user, "developer", origin, mine, true),
+      ).rejects.toThrow(`restart failed: ${status}`)
+    },
+  )
+
+  it("refuses an explicit choice whose restart the backend refuses", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    recovered = { status: 409, body: { error: { code: "plan_conflict" } } }
+    checkout = { status: 409, body: { error: { code: "plan_conflict" } } }
+    expect(
+      await startSignupCheckout(user, "developer", origin, mine, true),
+    ).toBe(`/auth/choose-plan/?reason=checkout_refused&${pinned}`)
+    error.mockRestore()
+  })
+
   it("refuses an explicit choice that still conflicts after the restart", async () => {
     const error = vi.spyOn(console, "error").mockImplementation(() => {})
     checkout = { status: 409, body: { error: { code: "plan_conflict" } } }

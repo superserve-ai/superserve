@@ -28,6 +28,10 @@ async function teamBackend(user: User) {
   }
 }
 
+function isTransient(status: number) {
+  return status >= 500 || status === 408 || status === 429
+}
+
 async function readEntryState(
   backend: Awaited<ReturnType<typeof teamBackend>>,
 ): Promise<AwaitingPlanState | "activating" | null> {
@@ -112,6 +116,8 @@ export async function startSignupCheckout(
       body: JSON.stringify({ restart: true }),
     })
     if (restart.ok) ({ response, result } = await create())
+    else if (isTransient(restart.status))
+      throw new Error(`signup checkout restart failed: ${restart.status}`)
   }
   if (response.status === 400 && result.error?.code === "invalid_offer")
     return planPickerPath("plan_unavailable", undefined, locator)
@@ -124,10 +130,9 @@ export async function startSignupCheckout(
     // A refusal that retrying cannot change goes to support instead of a
     // "try again" loop. A resumed checkout that conflicts with an open one is
     // still retryable: choosing a plan in the picker replaces it.
-    const transient = status >= 500 || status === 408 || status === 429
     const replaceable =
       !switchPlan && status === 409 && code === "plan_conflict"
-    if (!transient && !replaceable)
+    if (!isTransient(status) && !replaceable)
       return planPickerPath("checkout_refused", undefined, locator)
     throw new Error(`signup checkout failed: ${status}`)
   }
