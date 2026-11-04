@@ -94,7 +94,7 @@ def score(code: str, test: str, expected: str) -> float | None:
     last_line = result.stdout.rstrip().rpartition("\n")[2]
     try:
         passed = result.exit_code == 0 and json.loads(last_line) == json.loads(expected)
-    except ValueError:
+    except (ValueError, RecursionError):  # output that is not valid JSON
         passed = False
     return 1.0 if passed else 0.0
 
