@@ -46,12 +46,12 @@ export interface InviteUser {
 // personal team provisioning (proxy-auth / api-key-mint): an invited new
 // account joins the inviting team first, and only then could anything named
 // after its email be created. The read is fresh and cross-region: a cached
-// directory could still say "no team" after the account joined one, and a
+// (or substituted) directory could still say "no team" after the account joined one, and a
 // degraded read must never count as "no team".
 async function readTeamState(userId: string): Promise<InviteTeamState> {
   try {
     const directory = await listTeamMembershipsForUserDetailed(userId, {
-      maxAgeMs: 0,
+      strict: true,
     })
     const completed = await completedMemberships(userId, directory)
     if (completed.memberships.length > 0) return "has_teams"

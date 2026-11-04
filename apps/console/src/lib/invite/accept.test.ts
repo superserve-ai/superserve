@@ -120,7 +120,7 @@ describe("loadInviteView", () => {
     await loadInviteView(token)
 
     expect(mocks.listMemberships).toHaveBeenCalledWith("user-1", {
-      maxAgeMs: 0,
+      strict: true,
     })
   })
 
