@@ -40,6 +40,8 @@ export interface SandboxInfo {
   memoryMib: number
   createdAt: Date
   timeoutSeconds?: number
+  /** Pause the sandbox once nothing has used it for this many seconds. */
+  idleTimeoutSeconds?: number
   /** Delete the sandbox after it has been continuously paused for this many seconds. */
   autoDeleteSeconds?: number
   /** When the sandbox will be auto-deleted. Present only while paused with `autoDeleteSeconds` set. */
@@ -76,6 +78,12 @@ export interface SandboxCreateOptions extends ConnectionOptions {
    */
   fromSnapshot?: string | { id: string }
   timeoutSeconds?: number
+  /**
+   * Pause the sandbox once nothing has used it for this many seconds (60 to
+   * 604800). Commands still running, open terminals and command streams, file
+   * operations and preview traffic all count as use. Off when omitted.
+   */
+  idleTimeoutSeconds?: number
   /**
    * Delete the sandbox once it has been continuously paused for this
    * many seconds. The window arms on every pause and is cancelled by resume;
@@ -194,6 +202,11 @@ export interface SandboxUpdateOptions {
    * `undefined` leaves it unchanged.
    */
   timeoutSeconds?: number | null
+  /**
+   * Set or clear the idle timeout. `null` turns idle pausing off;
+   * `undefined` leaves it unchanged.
+   */
+  idleTimeoutSeconds?: number | null
   /** Set the default access for newly published ports. Existing ports keep theirs. */
   previewAccess?: PreviewAccessPolicy
 }
@@ -357,6 +370,7 @@ export interface ApiSandboxResponse {
   routing_hint?: string
   created_at?: string
   timeout_seconds?: number
+  idle_timeout_seconds?: number
   auto_delete_seconds?: number
   auto_delete_at?: string
   network?: { allow_out?: string[]; deny_out?: string[] }
@@ -440,6 +454,7 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
     memoryMib: raw.memory_mib ?? 0,
     createdAt: new Date(raw.created_at),
     timeoutSeconds: raw.timeout_seconds ?? undefined,
+    idleTimeoutSeconds: raw.idle_timeout_seconds ?? undefined,
     autoDeleteSeconds: raw.auto_delete_seconds ?? undefined,
     autoDeleteAt: raw.auto_delete_at ? new Date(raw.auto_delete_at) : undefined,
     network: raw.network
