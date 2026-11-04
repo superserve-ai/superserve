@@ -392,6 +392,9 @@ export async function revokeInvitationAction(
 // worst case of the membership read plus the 15s backend leave call; the TTL
 // also frees the lock if a release is lost.
 const LEAVE_LEASE_TTL_SECONDS = 60
+// The backend leave call must start early enough to finish (15s timeout)
+// before the lease can expire, with a margin for clock and network skew.
+const LEAVE_START_DEADLINE_MS = 40_000
 
 async function acquireLeaveLease(
   userId: string,
@@ -441,12 +444,14 @@ export async function leaveTeamAction(
   if (isFailure(context)) return context
 
   const holder = crypto.randomUUID()
+  // Taken before the acquire call so the deadline errs on the early side.
+  const deadline = Date.now() + LEAVE_START_DEADLINE_MS
   if (!(await acquireLeaveLease(context.userId, holder))) {
     return failure("leave_in_progress")
   }
   const outcome = { unknown: false }
   try {
-    return await leaveWithLease(context, outcome)
+    return await leaveWithLease(context, deadline, outcome)
   } finally {
     // A timed-out leave can still commit, so the lease is left to expire
     // rather than letting another leave read the directory before it lands.
@@ -456,6 +461,7 @@ export async function leaveTeamAction(
 
 async function leaveWithLease(
   context: Context,
+  deadline: number,
   outcome: { unknown: boolean },
 ): Promise<{ ok: true } | InvitationActionError> {
   let remaining: TeamMembership[]
@@ -478,6 +484,8 @@ async function leaveWithLease(
     return failure("only_team")
   }
   if (remaining.length === 0) return failure("only_team")
+  // A lease that may have lapsed no longer excludes another leave's check.
+  if (Date.now() > deadline) return failure("unavailable")
 
   const response = await backend(context, "/leave")
   if (!response) {

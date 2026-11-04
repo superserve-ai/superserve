@@ -433,6 +433,24 @@ describe("leaveTeamAction", () => {
     expect(leases.size).toBe(0)
   })
 
+  it("does not leave once the lease could have lapsed", async () => {
+    installLeaseStore()
+    memberships([here, other])
+    const now = Date.now()
+    const clock = vi.spyOn(Date, "now").mockReturnValue(now)
+    mocks.listMemberships.mockImplementationOnce(async () => {
+      clock.mockReturnValue(now + 41_000)
+      return { memberships: [here, other], degradedRegions: [] }
+    })
+
+    expect(await leaveTeamAction(here)).toMatchObject({
+      ok: false,
+      code: "unavailable",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+    clock.mockRestore()
+  })
+
   it("keeps the lease when the leave call has no answer", async () => {
     const leases = installLeaseStore()
     memberships([here, other])
