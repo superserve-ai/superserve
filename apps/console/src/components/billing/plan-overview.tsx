@@ -1,5 +1,6 @@
 import { Badge, Button, cn } from "@superserve/ui"
 import Link from "next/link"
+import type { ReactNode } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import type {
@@ -349,6 +350,7 @@ export interface PlanOverviewProps {
   allowancePricing?: BillingPricingResponse | null
   bridgeMonthlyStartsAt?: string
   funded?: boolean
+  billingControls?: ReactNode
 }
 
 const SUPPORT_EMAIL = "support@superserve.ai"
@@ -486,6 +488,7 @@ export function PlanOverview({
   canPurchase = true,
   bridgeMonthlyStartsAt,
   funded = false,
+  billingControls,
 }: PlanOverviewProps) {
   return (
     <section
@@ -559,6 +562,9 @@ export function PlanOverview({
               {plan.kind === "free" ? "Upgrade" : "Add more"}
             </Button>
           </div>
+        ) : null}
+        {billingControls ? (
+          <div className="px-5 pb-5 sm:px-6 sm:pb-6">{billingControls}</div>
         ) : null}
       </div>
     </section>
