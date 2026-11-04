@@ -12,11 +12,11 @@ icon: "flask"
 Install Harbor with the `superserve` extra:
 
 ```bash
-uv tool install --python 3.13 --prerelease allow "harbor[superserve]>=0.25.1.dev202611040613"
+uv tool install --python 3.13 "harbor[superserve]>=0.25.1.dev202611040613"
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
-`--prerelease allow` installs Harbor's nightly build, which includes the `superserve` environment until the next stable release. `--python 3.13` pins a Python version that all of Harbor's dependencies support. Without it, uv can select a newer Python for which some dependencies have no prebuilt wheels, and the install fails.
+The version specifier selects Harbor's nightly build, which includes the `superserve` environment until the next stable release. Do not add `--prerelease allow`: it also lets uv pick prereleases of Harbor's dependencies, and `harbor run` then fails with `ModuleNotFoundError`. `--python 3.13` pins a Python version that all of Harbor's dependencies support. Without it, uv can select a newer Python for which some dependencies have no prebuilt wheels, and the install fails.
 
 See [API keys](/api-key) to create a Superserve API key. Also export the key for the agent you evaluate, for example `ANTHROPIC_API_KEY` for Claude Code.
 
