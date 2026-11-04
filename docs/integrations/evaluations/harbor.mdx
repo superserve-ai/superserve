@@ -8,21 +8,21 @@ icon: "flask"
 [Harbor](https://github.com/harbor-framework/harbor) is a framework for evaluating agents on containerized tasks. Its `superserve` environment runs each trial in its own Superserve sandbox, so you can run many trials in parallel without a local Docker daemon.
 
 <Note>
-  The `superserve` environment is in review in [harbor-framework/harbor#4037](https://github.com/harbor-framework/harbor/pull/4037) and is not in a Harbor release yet. Until it is released, install Harbor from that pull request as shown below.
+  The `superserve` environment is on Harbor's `main` branch but is not in a Harbor release yet. Until a release includes the `superserve` extra, install Harbor from the `main` commit that added the environment, as shown below.
 </Note>
 
 ## Setup
 
-Install Harbor with the `superserve` extra from the pull request:
+Install Harbor with the `superserve` extra from Harbor's `main` branch:
 
 ```bash
-uv tool install --python 3.13 "harbor[superserve] @ git+https://github.com/harbor-framework/harbor@refs/pull/4037/head"
+uv tool install --python 3.13 "harbor[superserve] @ git+https://github.com/harbor-framework/harbor@466bcc7e234c4ede10e9e2c5df0132b718a8a45d"
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
 `--python 3.13` pins a Python version that all of Harbor's dependencies support. Without it, uv can select a newer Python for which some dependencies have no prebuilt wheels, and the install fails.
 
-After a Harbor release includes the environment, install it with `uv tool install --python 3.13 "harbor[superserve]"` instead.
+The commit hash pins the `main` commit that added the environment, so the install does not change when `main` moves. When a Harbor release includes the `superserve` extra, install that release instead, for example `uv tool install --python 3.13 "harbor[superserve]>=<version>"`.
 
 See [API keys](/api-key) to create a Superserve API key. Also export the key for the agent you evaluate, for example `ANTHROPIC_API_KEY` for Claude Code.
 
@@ -120,8 +120,8 @@ superserve template delete harbor/<name>-<hash>
   <Card title="Harbor documentation" icon="book" href="https://harborframework.com/docs/sandboxes/pre-integrated-sandboxes">
     Read how Harbor runs tasks in cloud sandboxes.
   </Card>
-  <Card title="Harbor pull request" icon="github" href="https://github.com/harbor-framework/harbor/pull/4037">
-    Follow the review of the `superserve` environment.
+  <Card title="Harbor source" icon="github" href="https://github.com/harbor-framework/harbor/blob/main/src/harbor/environments/superserve.py">
+    Read the `superserve` environment's source on Harbor's `main` branch.
   </Card>
   <Card title="Templates" icon="layer-group" href="/templates/overview">
     Learn how Superserve builds and caches templates.
