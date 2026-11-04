@@ -35,12 +35,13 @@ export function TeamsSection() {
   const { addToast } = useToast()
 
   const [name, setName] = useState("")
-  const [region, setRegion] = useState("use")
+  const [chosenRegion, setRegion] = useState<string | null>(null)
 
   if (!data || (data.regions.length <= 1 && data.teams.length <= 1)) {
     return null
   }
   const canCreate = data.regions.length > 1
+  const region = chosenRegion ?? data.activeRegion ?? "use"
 
   const handleCreate = () => {
     createTeam.mutate(

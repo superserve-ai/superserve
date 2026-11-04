@@ -59,6 +59,7 @@ export async function middleware(request: NextRequest) {
               ([
                 "/onboarding/plan",
                 "/onboarding/payment",
+                "/onboarding/region",
                 "/auth/choose-plan",
               ].includes(pathname.replace(/\/$/, ""))
                 ? request.nextUrl.search

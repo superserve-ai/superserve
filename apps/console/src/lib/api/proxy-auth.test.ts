@@ -37,6 +37,8 @@ vi.mock("@/lib/admin/impersonation", () => ({
 
 // No cookie set: active-team resolution falls back to the first membership.
 let activeTeamCookie: string | undefined
+// New users have picked East unless a test says otherwise.
+let firstTeamRegionCookie: string | undefined = "use"
 vi.mock("next/headers", () => ({
   cookies: async () => ({
     get: (name: string) =>
@@ -45,6 +47,25 @@ vi.mock("next/headers", () => ({
         : undefined,
   }),
 }))
+
+// The region module has its own tests; here it reports the user's choice.
+vi.mock("@/lib/onboarding/first-team-region", async (importOriginal) => {
+  const actual =
+    await importOriginal<typeof import("@/lib/onboarding/first-team-region")>()
+  return {
+    ...actual,
+    firstTeamTarget: async () => {
+      if (!firstTeamRegionCookie)
+        throw new actual.FirstTeamRegionRequiredError()
+      return firstTeamRegionCookie === "use"
+        ? { region: "use" }
+        : {
+            region: firstTeamRegionCookie,
+            operationId: "77777777-7777-5777-8777-777777777777",
+          }
+    },
+  }
+})
 
 // The user's team lives in the usw cell — used by the cell-targeting tests.
 vi.mock("@/lib/api/team-directory", () => ({
@@ -192,6 +213,7 @@ import {
   provisionTeam,
 } from "@/lib/api/team-provisioning"
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
+import { FirstTeamRegionRequiredError } from "@/lib/onboarding/first-team-region"
 
 import {
   deriveRawKey,
@@ -756,6 +778,50 @@ describe("proxy-auth new-user provisioning", () => {
     )
   })
 
+  it("creates the first team in the region the user picked", async () => {
+    firstTeamRegionCookie = "usw"
+    try {
+      vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+        memberships: [],
+        degradedRegions: [],
+      })
+      const { team } = await getAuthApiKeyAndTeamForUser({
+        id: "west-new",
+        email: "west@example.com",
+      } as never)
+      expect(team.region).toBe("usw")
+      expect(provisionTeam).toHaveBeenCalledWith(
+        "usw",
+        "west-new",
+        "west@example.com",
+        "west@example.com",
+        undefined,
+        expect.stringMatching(/^[0-9a-f-]{36}$/),
+      )
+    } finally {
+      firstTeamRegionCookie = "use"
+    }
+  })
+
+  it("asks for a region instead of defaulting a first team to East", async () => {
+    firstTeamRegionCookie = undefined
+    try {
+      vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
+        memberships: [],
+        degradedRegions: [],
+      })
+      await expect(
+        getAuthApiKeyForUser({
+          id: "undecided",
+          email: "undecided@example.com",
+        } as never),
+      ).rejects.toBeInstanceOf(FirstTeamRegionRequiredError)
+      expect(provisionTeam).not.toHaveBeenCalled()
+    } finally {
+      firstTeamRegionCookie = "use"
+    }
+  })
+
   it("provisions a full RBAC team when the user has no memberships", async () => {
     vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValueOnce({
       memberships: [],
@@ -774,6 +840,7 @@ describe("proxy-auth new-user provisioning", () => {
       "brand-new",
       "new@example.com",
       "new@example.com",
+      undefined,
       undefined,
     )
     expect(key).toMatch(/^ss_live_/)
@@ -869,6 +936,7 @@ describe("proxy-auth new-user provisioning", () => {
       "failed-cleanup-user",
       "retry@example.com",
       "retry@example.com",
+      undefined,
       undefined,
     )
     expect(useApiKeyUpserts).toEqual([])

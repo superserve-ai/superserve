@@ -7,6 +7,10 @@ import {
   proAuthReturnPath,
   starterAuthReturnPath,
 } from "@/lib/billing/pro-auth-return"
+import {
+  FirstTeamRegionRequiredError,
+  firstTeamRegionPath,
+} from "@/lib/onboarding/first-team-region"
 
 export async function GET(request: Request) {
   const query = new URL(request.url).searchParams
@@ -52,6 +56,10 @@ export async function GET(request: Request) {
     )
   } catch (error) {
     unstable_rethrow(error)
+    if (error instanceof FirstTeamRegionRequiredError) {
+      const here = new URL(request.url)
+      redirect(firstTeamRegionPath(here.pathname + here.search))
+    }
     if (retry && error instanceof SignupSetupBlockedError) {
       const terminal = new URL(retry, request.url)
       terminal.searchParams.set("reason", error.reason)

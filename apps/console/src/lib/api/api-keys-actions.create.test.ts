@@ -45,6 +45,10 @@ vi.mock("@/lib/supabase/server", () => ({
 vi.mock("next/headers", () => ({
   cookies: async () => ({ get: () => undefined }),
 }))
+// A new user has picked East for their first team.
+vi.mock("@/lib/onboarding/first-team-region", () => ({
+  firstTeamTarget: async () => ({ region: "use" }),
+}))
 
 // Per-test knobs read lazily by the admin-client mock.
 let homeRegionResult: { data: unknown; error: unknown } = {
@@ -192,6 +196,7 @@ describe("createApiKeyAction region-prefixed keys", () => {
         user: expect.objectContaining({ id: "a1" }),
         observedAt: expect.any(String),
       },
+      undefined,
     )
     expect(insertedApiKeyRow).toBeNull()
   })

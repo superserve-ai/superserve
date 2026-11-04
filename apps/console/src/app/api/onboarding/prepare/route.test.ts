@@ -115,3 +115,18 @@ it("rejects conflicting checkout team locators before preparation", async () => 
   await expect(GET(new Request(url))).rejects.toThrow("reason=team_conflict")
   expect(m.prepare).not.toHaveBeenCalled()
 })
+
+it("sends a user without a team to the region picker and back", async () => {
+  const { FirstTeamRegionRequiredError } =
+    await import("@/lib/onboarding/first-team-region")
+  m.prepare.mockRejectedValue(new FirstTeamRegionRequiredError())
+  await expect(
+    GET(
+      new Request(
+        "https://console.test/api/onboarding/prepare/?account=owner&billing=cancel",
+      ),
+    ),
+  ).rejects.toThrow(
+    `/onboarding/region/?next=${encodeURIComponent("/api/onboarding/prepare/?account=owner&billing=cancel")}`,
+  )
+})

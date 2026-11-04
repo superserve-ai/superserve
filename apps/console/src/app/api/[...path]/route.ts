@@ -27,6 +27,10 @@ import {
   SIGNUP_REVIEW_PENDING_MESSAGE,
 } from "@/lib/auth/signup-review"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import {
+  FirstTeamRegionRequiredError,
+  REGION_REQUIRED_RESPONSE,
+} from "@/lib/onboarding/first-team-region"
 import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
@@ -412,6 +416,8 @@ async function proxyRequest(
           },
           { status: 403 },
         )
+      if (error instanceof FirstTeamRegionRequiredError)
+        return NextResponse.json(REGION_REQUIRED_RESPONSE, { status: 409 })
       throw error
     }
     if (!apiKey) {
