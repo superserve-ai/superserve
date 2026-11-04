@@ -46,7 +46,7 @@ describe("TeamsSection", () => {
     await user.click(screen.getByRole("button", { name: "Create Team" }))
 
     expect(mutate).toHaveBeenCalledWith(
-      { name: "acme", region: "usw" },
+      { name: "acme", region: "usw", convertTeamId: "team-me" },
       expect.anything(),
     )
     mutate.mock.calls[0][1].onSuccess({ ...account, name: "acme" })

@@ -53,7 +53,9 @@ export function TeamsSection() {
 
   const handleCreate = () => {
     createTeam.mutate(
-      { name, region: conversion?.region ?? region },
+      conversion
+        ? { name, region: conversion.region, convertTeamId: conversion.id }
+        : { name, region },
       {
         onSuccess: (team) => {
           setName("")

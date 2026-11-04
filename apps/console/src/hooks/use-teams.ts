@@ -54,36 +54,55 @@ export function useCreateTeam() {
   return useMutation({
     // Creation also changes the active-team cookie; share billing's switch guard.
     mutationKey: ["switch-team", "create"],
-    mutationFn: async ({ name, region }: { name: string; region: string }) => {
+    mutationFn: async ({
+      name,
+      region,
+      convertTeamId,
+    }: {
+      name: string
+      region: string
+      // The user's own account team, when the form converts it.
+      convertTeamId?: string
+    }) => {
       if (!user) throw new Error("Not authenticated")
       if (!name.trim() || new TextEncoder().encode(name).length > 256)
         throw new Error("Enter a team name between 1 and 256 bytes")
       const key = `superserve:team-creation:${user.id}:${region}`
       const stored = sessionStorage.getItem(key)
+      // A pending intent finishes the way it started, as a conversion or as a
+      // new team.
       let intent: {
         operationId: string
         name: string
         nameRejected?: boolean
+        convertTeamId?: string
       } = stored
         ? JSON.parse(stored)
-        : { operationId: crypto.randomUUID(), name }
+        : { operationId: crypto.randomUUID(), name, convertTeamId }
       if (intent.nameRejected && intent.name !== name)
-        intent = { operationId: crypto.randomUUID(), name }
+        intent = { operationId: crypto.randomUUID(), name, convertTeamId }
       if (intent.name !== name)
         throw new Error(
           "Retry the pending team creation using its original name",
         )
       sessionStorage.setItem(key, JSON.stringify(intent))
-      const result = await createTeamAction(
-        intent.name,
-        region,
-        intent.operationId,
-      )
+      const result = await (intent.convertTeamId
+        ? createTeamAction(
+            intent.name,
+            region,
+            intent.operationId,
+            intent.convertTeamId,
+          )
+        : createTeamAction(intent.name, region, intent.operationId))
       if ("code" in result) {
         if (result.code === "team_name_conflict") {
           intent.nameRejected = true
           sessionStorage.setItem(key, JSON.stringify(intent))
         }
+        // The account can no longer be converted; let the reloaded form start
+        // over.
+        if (result.code === "team_conversion_unavailable")
+          sessionStorage.removeItem(key)
         throw new ApiError(403, result.code, result.message)
       }
       sessionStorage.removeItem(key)

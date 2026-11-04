@@ -9,10 +9,7 @@ import {
   serializeTeamSelection,
   type TeamSelection,
 } from "@/lib/api/active-team"
-import {
-  PromotionEvidenceError,
-  recoverPromotionTeam,
-} from "@/lib/api/promotion-device-evidence"
+import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
 import { isPersonalTeam, ownsTeam, renameTeam } from "@/lib/api/team-conversion"
 import {
   invalidateMembershipDirectory,
@@ -137,6 +134,7 @@ export async function createTeamAction(
   name: string,
   region?: string,
   operationId?: string,
+  convertTeamId?: string,
 ): Promise<
   | TeamSummary
   | {
@@ -144,6 +142,7 @@ export async function createTeamAction(
         | "signup_blocked"
         | "google_signup_recovery_required"
         | "team_name_conflict"
+        | "team_conversion_unavailable"
       message: string
     }
 > {
@@ -164,35 +163,31 @@ export async function createTeamAction(
     throw new Error(`Region ${targetRegion} is not available`)
   }
 
-  // Creating a team from the user's own account converts that account. A
-  // retry after a converted response was lost finds it already renamed.
-  const { activeTeam } = await readTeamDirectory(user.id)
-  if (
-    activeTeam?.region === targetRegion &&
-    (isPersonalTeam(activeTeam, user.email) || activeTeam.name === trimmed) &&
-    (await ownsTeam(targetRegion, user.id, activeTeam.id)) &&
-    // An earlier attempt of this operation that already started a new team
-    // must finish as that team.
-    !(await recoverPromotionTeam({
-      userId: user.id,
-      region: targetRegion,
-      operationId,
-    }))
-  ) {
-    if (activeTeam.name !== trimmed) {
+  // The form asks to convert the user's own account team. A conversion never
+  // falls back to a new team: that is the outcome the user did not ask for.
+  if (convertTeamId) {
+    const { teams } = await readTeamDirectory(user.id)
+    const target = teams.find(
+      (t) => t.id === convertTeamId && t.region === targetRegion,
+    )
+    if (!target || !(await ownsTeam(targetRegion, user.id, target.id)))
+      return teamConversionUnavailable()
+    // A retry after the converted response was lost finds the new name.
+    if (target.name !== trimmed) {
+      if (!isPersonalTeam(target, user.email))
+        return teamConversionUnavailable()
       const renamed = await renameTeam(
         targetRegion,
-        activeTeam.id,
-        activeTeam.name,
+        target.id,
+        target.name,
         trimmed,
       )
       if (renamed === "name_taken") return teamNameConflict()
-      if (renamed === "changed")
-        throw new Error("Your team changed. Reload the page and try again.")
+      if (renamed === "changed") return teamConversionUnavailable()
     }
     invalidateMembershipDirectory(user.id)
-    await storeTeamSelection({ region: targetRegion, teamId: activeTeam.id })
-    return { id: activeTeam.id, name: trimmed, region: targetRegion }
+    await storeTeamSelection({ region: targetRegion, teamId: target.id })
+    return { id: target.id, name: trimmed, region: targetRegion }
   }
 
   let team: ProvisionedTeam
@@ -229,5 +224,13 @@ function teamNameConflict() {
     code: "team_name_conflict" as const,
     message:
       "That team name is already taken. Submit a different name to start a new creation.",
+  }
+}
+
+function teamConversionUnavailable() {
+  return {
+    code: "team_conversion_unavailable" as const,
+    message:
+      "Your account can no longer be converted. Reload the page and try again.",
   }
 }

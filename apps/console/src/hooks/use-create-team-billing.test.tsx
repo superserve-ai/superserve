@@ -276,3 +276,47 @@ it("restores billing readiness on creation failure and ignores payment completio
   expect(result.current.summary.data).toEqual(summaryA)
   expect(mocks.summary).not.toHaveBeenCalled()
 })
+
+it("converts the account and retries the conversion with its original intent", async () => {
+  mocks.create
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({ ...teamA, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+  // The retry comes from a form that no longer offers the conversion.
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "acme", region: "use" })
+  })
+
+  const [first, second] = mocks.create.mock.calls
+  expect(first).toEqual(["acme", "use", expect.any(String), "a"])
+  expect(second).toEqual(first)
+  expect(sessionStorage.getItem("superserve:team-creation:u1:use")).toBeNull()
+})
+
+it("drops a conversion the server refuses so the form can start over", async () => {
+  mocks.create.mockResolvedValue({
+    code: "team_conversion_unavailable",
+    message: "Your account can no longer be converted.",
+  })
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+
+  await waitFor(() =>
+    expect(result.current.create.error?.message).toBe(
+      "Your account can no longer be converted.",
+    ),
+  )
+  expect(sessionStorage.getItem("superserve:team-creation:u1:use")).toBeNull()
+})

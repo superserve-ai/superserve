@@ -78,15 +78,15 @@ let cellClients: Record<string, ReturnType<typeof recordingCellClient>> = {}
 let existingRbacAssignment = false
 let unfinishedTeamId: string | null = null
 // Teams the current user owns through a legacy owner row or an RBAC owner
-// assignment, and the outcome of a team rename.
+// assignment, teams with an RBAC membership, and the outcome of a team rename.
 let legacyOwnerTeamIds: string[] = []
 let rbacOwnerTeamIds: string[] = []
+let rbacMemberTeamIds: string[] = []
 let renameResult: {
   data: Array<{ id: string }> | null
   error: { code: string; message: string } | null
 } = { data: [{ id: "renamed" }], error: null }
 let ownerRoleUnavailable = false
-const mockRecoverPromotionTeam = vi.fn(async (..._args: unknown[]) => null)
 
 // Records every write per table so tests can assert the full create chain
 // landed in one cell and nowhere else.
@@ -161,6 +161,15 @@ function recordingCellClient() {
                       : rbacOwnerTeamIds
                     ).includes(teamId)
                       ? [{ id: "owner", role: "owner" }]
+                      : [],
+                    error: null,
+                  }
+                if (table === "team_memberships")
+                  return {
+                    data: [...rbacMemberTeamIds, ...rbacOwnerTeamIds].includes(
+                      teamId,
+                    )
+                      ? [{ id: teamId }]
                       : [],
                     error: null,
                   }
@@ -290,11 +299,16 @@ async function createAllowedTeam(name: string, region?: string) {
   return result
 }
 
-function createTeamAction(name: string, region?: string) {
+function createTeamAction(
+  name: string,
+  region?: string,
+  convertTeamId?: string,
+) {
   return createActualTeamAction(
     name,
     region,
     "11111111-1111-4111-8111-111111111111",
+    convertTeamId,
   )
 }
 
@@ -352,9 +366,9 @@ describe("createTeamAction", () => {
     )
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
-    mockRecoverPromotionTeam.mockReset().mockResolvedValue(null)
     legacyOwnerTeamIds = []
     rbacOwnerTeamIds = []
+    rbacMemberTeamIds = []
     renameResult = { data: [{ id: "team-me" }], error: null }
     cellClients = {
       use: recordingCellClient(),
@@ -532,7 +546,7 @@ describe("createTeamAction", () => {
     })
 
     it("converts the account in place instead of creating a team", async () => {
-      const team = await createAllowedTeam("acme", "use")
+      const team = await convertAccount("acme")
 
       expect(team).toEqual({ id: "team-me", name: "acme", region: "use" })
       expect(cellClients.use.writes).toEqual({
@@ -540,11 +554,6 @@ describe("createTeamAction", () => {
       })
       expect(cellClients.usw.writes).toEqual({})
       expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
-      expect(mockRecoverPromotionTeam).toHaveBeenCalledWith({
-        userId: "u1",
-        region: "use",
-        operationId: "11111111-1111-4111-8111-111111111111",
-      })
       expect(cookieSets).toEqual([
         { name: "ss-active-team", value: "use:team-me" },
       ])
@@ -555,68 +564,55 @@ describe("createTeamAction", () => {
         { id: "team-me", name: "Pavitra@Superserve.ai", region: "use" },
       ]
 
-      expect(await createAllowedTeam("acme", "use")).toMatchObject({
-        id: "team-me",
-      })
+      expect(await convertAccount("acme")).toMatchObject({ id: "team-me" })
     })
 
     it("converts an account owned through an RBAC owner assignment", async () => {
       legacyOwnerTeamIds = []
       rbacOwnerTeamIds = ["team-me"]
 
-      expect(await createAllowedTeam("acme", "use")).toMatchObject({
+      expect(await convertAccount("acme")).toMatchObject({
         id: "team-me",
         name: "acme",
       })
     })
 
-    it("creates a new team for a member who does not own the account", async () => {
+    it("refuses an owner whose RBAC owner grant was revoked", async () => {
+      rbacMemberTeamIds = ["team-me"]
+
+      expectUnavailable(await createTeamAction("acme", "use", "team-me"))
+    })
+
+    it("refuses a member who does not own the account", async () => {
       legacyOwnerTeamIds = []
 
-      const team = await createAllowedTeam("acme", "use")
-
-      expect(team.id).toBe("team-new")
-      expect(cellClients.use.writes.team).toBeUndefined()
-      expect(cellClients.use.writes.team_member).toHaveLength(1)
+      expectUnavailable(await createTeamAction("acme", "use", "team-me"))
     })
 
-    it("creates a new team in a region other than the account's", async () => {
-      const team = await createAllowedTeam("acme", "usw")
-
-      expect(team).toEqual({ id: "team-new", name: "acme", region: "usw" })
-      expect(cellClients.use.writes).toEqual({})
+    it("refuses a region other than the account's", async () => {
+      expectUnavailable(await createTeamAction("acme", "usw", "team-me"))
+      expect(cellClients.usw.writes).toEqual({})
     })
 
-    it("creates a new team when the active team is not the account", async () => {
-      directoryTeams = [{ id: "team-me", name: "existing", region: "use" }]
+    it("refuses a stale form after the account was renamed", async () => {
+      directoryTeams = [{ id: "team-me", name: "alpha", region: "use" }]
 
-      const team = await createAllowedTeam("acme", "use")
-
-      expect(team.id).toBe("team-new")
-      expect(cellClients.use.writes.team).toBeUndefined()
+      expectUnavailable(await createTeamAction("beta", "use", "team-me"))
     })
 
-    it("finishes an earlier attempt that already started a new team", async () => {
-      mockRecoverPromotionTeam.mockResolvedValueOnce({
-        userId: "u1",
-        region: "use",
-        operationId: "11111111-1111-4111-8111-111111111111",
-        name: "acme",
-        teamId: "team-new",
-        attemptId: "backend-attempt",
-        state: "prepared",
-      } as never)
+    it("refuses when the account is renamed concurrently", async () => {
+      renameResult = { data: [], error: null }
 
-      const team = await createAllowedTeam("acme", "use")
+      const result = await createTeamAction("acme", "use", "team-me")
 
-      expect(team).toEqual({ id: "team-new", name: "acme", region: "use" })
-      expect(cellClients.use.writes.team).toBeUndefined()
+      expect(result).toMatchObject({ code: "team_conversion_unavailable" })
+      expect(cookieSets).toEqual([])
     })
 
     it("returns the converted account when a retry finds it renamed", async () => {
       directoryTeams = [{ id: "team-me", name: "acme", region: "use" }]
 
-      const team = await createAllowedTeam("acme", "use")
+      const team = await convertAccount("acme")
 
       expect(team).toEqual({ id: "team-me", name: "acme", region: "use" })
       expect(cellClients.use.writes).toEqual({})
@@ -628,23 +624,50 @@ describe("createTeamAction", () => {
         error: { code: "23505", message: "duplicate key" },
       }
 
-      expect(await createTeamAction("acme", "use")).toEqual({
+      expect(await createTeamAction("acme", "use", "team-me")).toEqual({
         code: "team_name_conflict",
         message: expect.stringContaining("already taken"),
       })
       expect(cookieSets).toEqual([])
     })
 
-    it("fails when the account was renamed concurrently", async () => {
-      renameResult = { data: [], error: null }
+    it("creates a new team when the form does not ask for a conversion", async () => {
+      const team = await createAllowedTeam("acme", "use")
 
-      await expect(createTeamAction("acme", "use")).rejects.toThrow(
-        "Your team changed",
-      )
-      expect(cookieSets).toEqual([])
+      expect(team.id).toBe("team-new")
+      // The account keeps its name: the new team is not a rename.
+      expect(cellClients.use.writes.team).toBeUndefined()
+    })
+
+    it("creates a new team named like the converted account when asked", async () => {
+      directoryTeams = [{ id: "team-me", name: "acme", region: "use" }]
+
+      const team = await createAllowedTeam("acme", "use")
+
+      expect(team.id).toBe("team-new")
     })
   })
 })
+
+async function convertAccount(name: string) {
+  const result = await createTeamAction(name, "use", "team-me")
+  if ("code" in result) throw new Error(result.message)
+  return result
+}
+
+// A refused conversion never falls back to a new team.
+function expectUnavailable(
+  result: Awaited<ReturnType<typeof createTeamAction>>,
+) {
+  expect(result).toEqual({
+    code: "team_conversion_unavailable",
+    message: expect.stringContaining("can no longer be converted"),
+  })
+  expect(cellClients.use.writes).toEqual({})
+  expect(cellClients.usw.writes).toEqual({})
+  expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
+  expect(cookieSets).toEqual([])
+}
 
 describe("active team", () => {
   beforeEach(() => {
@@ -653,6 +676,7 @@ describe("active team", () => {
     unfinishedTeamId = null
     legacyOwnerTeamIds = []
     rbacOwnerTeamIds = []
+    rbacMemberTeamIds = []
     ownerRoleUnavailable = false
     cellClients = { use: recordingCellClient(), usw: recordingCellClient() }
     cookieValue = undefined
@@ -689,6 +713,12 @@ describe("active team", () => {
     legacyOwnerTeamIds = []
     expect((await listTeamsAction()).convertibleTeam).toBeNull()
 
+    // A revoked RBAC owner grant leaves the legacy owner row in place.
+    legacyOwnerTeamIds = ["team-me"]
+    rbacMemberTeamIds = ["team-me"]
+    expect((await listTeamsAction()).convertibleTeam).toBeNull()
+    rbacMemberTeamIds = []
+
     // Any other active team is not the account.
     legacyOwnerTeamIds = ["team-me", "team-w"]
     cookieValue = "usw:team-w"
@@ -700,6 +730,7 @@ describe("active team", () => {
     directoryTeams = [
       { id: "team-me", name: "pavitra@superserve.ai", region: "use" },
     ]
+    rbacMemberTeamIds = ["team-me"]
     ownerRoleUnavailable = true
     const error = vi.spyOn(console, "error").mockImplementation(() => {})
 
@@ -770,8 +801,7 @@ vi.mock("@/lib/api/promotion-publication", () => ({
 }))
 vi.mock("@/lib/api/promotion-device-evidence", () => ({
   PromotionEvidenceError: class extends Error {},
-  recoverPromotionTeam: (...args: unknown[]) =>
-    mockRecoverPromotionTeam(...args),
+  recoverPromotionTeam: async () => null,
   preparePromotionTeam: async (input: object) => ({
     ...input,
     teamId: "team-new",

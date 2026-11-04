@@ -12,23 +12,35 @@ export function isPersonalTeam(
   return !!email && team.name.toLowerCase() === email.toLowerCase()
 }
 
-// Mirrors the control plane's owner check: a legacy owner row, or an
-// unrevoked team_owner assignment.
+// The control plane authorizes by RBAC: once the user has an RBAC membership
+// for the team, only an unrevoked team_owner assignment counts, because a
+// revoked grant leaves the legacy owner row in place. The legacy row decides
+// only for a membership that was never migrated to RBAC.
 export async function ownsTeam(
   region: string,
   userId: string,
   teamId: string,
 ): Promise<boolean> {
   const admin = cellFor(region).createAdminClient()
-  const { data: legacy, error: legacyError } = await admin
-    .from("team_member")
-    .select("role")
-    .eq("profile_id", userId)
+  const { data: membership, error: membershipError } = await admin
+    .from("team_memberships")
+    .select("id")
+    .eq("user_id", userId)
     .eq("team_id", teamId)
-    .in("role", ["owner", TEAM_OWNER_ROLE])
     .limit(1)
-  if (legacyError) throw new Error(legacyError.message)
-  if (legacy?.length) return true
+  if (membershipError) throw new Error(membershipError.message)
+
+  if (!membership?.length) {
+    const { data: legacy, error: legacyError } = await admin
+      .from("team_member")
+      .select("role")
+      .eq("profile_id", userId)
+      .eq("team_id", teamId)
+      .in("role", ["owner", TEAM_OWNER_ROLE])
+      .limit(1)
+    if (legacyError) throw new Error(legacyError.message)
+    return !!legacy?.length
+  }
 
   const { data: role, error: roleError } = await admin
     .from("roles")
