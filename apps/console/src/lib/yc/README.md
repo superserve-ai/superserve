@@ -56,3 +56,6 @@ The confirmation document uses `same-origin` referrer policy in both its header
 and meta tag so a native form POST retains its Origin. Cross-origin referrers
 remain suppressed; the fragment is cleared before enabling the form. Missing
 or `null` Origin remains rejected.
+
+The pre-enable verification checklist for these flags is kept in the team's
+Runbooks collection, not in this repository.

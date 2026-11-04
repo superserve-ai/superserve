@@ -63,3 +63,10 @@ for a new intent, retaining the previous receipt; backend subscription and
 reservation fences still decide whether it can proceed. Network/server failures
 retain the identical intent. Cancellation revokes the activation promotion on
 the backend. Neither billing nor West entry captures another Fingerprint event.
+
+## Operations
+
+Operational procedures are kept in the team's Runbooks collection, not in this
+repository. This covers private single-box environment setup, the promotion
+identity rollout, and the signup device evidence rollout, including the backend
+deploy order before Console promotion.
