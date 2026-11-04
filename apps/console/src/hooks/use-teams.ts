@@ -6,6 +6,10 @@ import { useUser } from "@/hooks/use-user"
 import { ApiError } from "@/lib/api/client"
 import { billingKeys, teamKeys } from "@/lib/api/query-keys"
 import {
+  getTeamRenameAccessAction,
+  renameTeamAction,
+} from "@/lib/api/team-rename-actions"
+import {
   createTeamAction,
   listTeamsAction,
   setActiveTeamAction,
@@ -195,6 +199,53 @@ export function useCreateTeam() {
       refreshTeamScopedQueries(queryClient)
       // Keep billing guarded through reconciliation. The returned selection
       // remains correct even if the directory refresh fails.
+      await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
+    },
+  })
+}
+
+/** Whether the user may rename the given (active) team; false until known. */
+export function useCanRenameTeam(team: { id: string; region: string } | null) {
+  return useQuery({
+    queryKey: teamKeys.renameAccess(team?.region ?? "", team?.id ?? ""),
+    queryFn: getTeamRenameAccessAction,
+    enabled: !!team,
+    staleTime: 60_000,
+  })
+}
+
+export function useRenameTeam() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      team,
+      name,
+    }: {
+      team: { id: string; region: string }
+      name: string
+    }) => {
+      const result = await renameTeamAction(
+        { teamId: team.id, region: team.region },
+        name,
+      )
+      if (!result.ok) throw new Error(result.message)
+      return result.team
+    },
+    onSuccess: async (team) => {
+      // Update the label in place so the sidebar switcher changes at once,
+      // then reconcile with the server's directory.
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        (old) =>
+          old && {
+            ...old,
+            teams: old.teams.map((item) =>
+              item.id === team.id && item.region === team.region
+                ? { ...item, name: team.name }
+                : item,
+            ),
+          },
+      )
       await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
     },
   })
