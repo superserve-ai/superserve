@@ -52,7 +52,10 @@ async function checkout(request: Request, switchPlan: boolean) {
     target =
       (await startSignupCheckout(user, offer, origin, locator, switchPlan)) ??
       "/sandboxes"
-  } catch {
+  } catch (error) {
+    console.error("Signup checkout unavailable", {
+      error: error instanceof Error ? error.message : String(error),
+    })
     target = planPickerPath("checkout_unavailable", offer, locator)
   }
   return NextResponse.redirect(new URL(target, origin), 303)

@@ -159,6 +159,52 @@ describe("startSignupCheckout", () => {
     ).rejects.toThrow()
   })
 
+  it.each([
+    [503, { error: { code: "billing_unavailable" } }],
+    [502, {}],
+    [429, { error: { code: "rate_limited" } }],
+    [408, {}],
+  ])("throws on a %i so the picker offers a retry", async (status, body) => {
+    checkout = { status, body }
+    await expect(
+      startSignupCheckout(user, "developer", origin, mine, true),
+    ).rejects.toThrow()
+  })
+
+  it.each([
+    [409, { error: { code: "plan_conflict" } }],
+    [400, { error: { code: "bad_request" } }],
+    [404, {}],
+  ])(
+    "sends a %i that a retry cannot change to support, not to a retry loop",
+    async (status, body) => {
+      const error = vi.spyOn(console, "error").mockImplementation(() => {})
+      checkout = { status, body }
+      expect(
+        await startSignupCheckout(user, "pro_monthly", origin, mine, true),
+      ).toBe(`/auth/choose-plan/?reason=checkout_refused&${pinned}`)
+      expect(error).toHaveBeenCalledWith("Signup checkout refused", {
+        status,
+        code: (body as { error?: { code?: string } }).error?.code,
+      })
+      error.mockRestore()
+    },
+  )
+
+  it("refuses an explicit choice that still conflicts after the restart", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    checkout = { status: 409, body: { error: { code: "plan_conflict" } } }
+    expect(
+      await startSignupCheckout(user, "developer", origin, mine, true),
+    ).toBe(`/auth/choose-plan/?reason=checkout_refused&${pinned}`)
+    expect(
+      fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/stripe/checkout-session"),
+      ),
+    ).toHaveLength(2)
+    error.mockRestore()
+  })
+
   it("replaces an open checkout for another plan only on an explicit choice", async () => {
     const conflict = { status: 409, body: { error: { code: "plan_conflict" } } }
     checkouts = [conflict]

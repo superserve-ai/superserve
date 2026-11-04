@@ -55,10 +55,15 @@ describe("signup checkout resume", () => {
   })
 
   it("keeps the offer on a retry page when checkout cannot start", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
     start.mockRejectedValue(new Error("cell down"))
     const location = await visit("offer=developer&account=u1&team=use%3Ateam-1")
     expect(location.searchParams.get("reason")).toBe("checkout_unavailable")
     expect(location.searchParams.get("offer")).toBe("developer")
+    expect(error).toHaveBeenCalledWith("Signup checkout unavailable", {
+      error: "cell down",
+    })
+    error.mockRestore()
   })
 
   it("asks for sign-in and returns to the plan picker so the choice is made again", async () => {

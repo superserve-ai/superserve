@@ -117,8 +117,20 @@ export async function startSignupCheckout(
     return planPickerPath("plan_unavailable", undefined, locator)
   if (response.status === 403)
     return planPickerPath("billing_admin_required", undefined, locator)
-  if (!response.ok)
-    throw new Error(`signup checkout failed: ${response.status}`)
+  if (!response.ok) {
+    const { status } = response
+    const code = result.error?.code
+    console.error("Signup checkout refused", { status, code })
+    // A refusal that retrying cannot change goes to support instead of a
+    // "try again" loop. A resumed checkout that conflicts with an open one is
+    // still retryable: choosing a plan in the picker replaces it.
+    const transient = status >= 500 || status === 408 || status === 429
+    const replaceable =
+      !switchPlan && status === 409 && code === "plan_conflict"
+    if (!transient && !replaceable)
+      return planPickerPath("checkout_refused", undefined, locator)
+    throw new Error(`signup checkout failed: ${status}`)
+  }
   if (result.url && isStripeCheckoutUrl(result.url)) return result.url
   if (result.outcome === "active") return "/sandboxes"
   return success
