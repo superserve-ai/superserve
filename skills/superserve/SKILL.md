@@ -201,13 +201,18 @@ or `disk` argument on `create()`**. To change the shape, boot from (or build) a 
 template. The default template `superserve/base` (`ubuntu:24.04`) is **2 vCPU · 4096 MiB
 memory · 8192 MiB disk**.
 
-| Shape field | Min  | Max (platform ceiling) | Default |
-| ----------- | ---- | ---------------------- | ------- |
-| `vcpu`      | 1    | 4                      | 1       |
-| `memoryMib` | 256  | 4096                   | 1024    |
-| `diskMib`   | 1024 | 8192                   | 4096    |
+| Limit         | `vcpu` (vCPUs) | `memoryMib` (MiB)  |
+| ------------- | -------------- | ------------------ |
+| Min           | 1 vCPU         | 256 MiB            |
+| Default       | 1 vCPU         | 1 GiB (1024 MiB)   |
+| Free max      | 2 vCPU         | 4 GiB (4096 MiB)   |
+| Developer max | 4 vCPU         | 16 GiB (16384 MiB) |
+| Pro max       | 16 vCPU        | 64 GiB (65536 MiB) |
 
-- **New teams are capped at 2 vCPU / 4096 MiB / 8192 MiB disk** — email support@superserve.ai to raise it.
+- Limits depend on the team's plan. For larger sandboxes, email support@superserve.ai.
+- `memoryMib` and `diskMib` take values in MiB (1 GiB = 1024 MiB).
+- `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
+  team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
   including the heavier ones (`python-ml`, `code-interpreter`, `claude-code`, `openclaw`,
   `hermes`, `omnara`, `desktop`). See the full catalog in the docs.
