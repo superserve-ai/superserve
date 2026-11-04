@@ -195,7 +195,7 @@ These don't count:
 - CPU or disk activity on its own.
 - Changes to the sandbox's settings, such as metadata or egress rules.
 
-The pause lands within about a minute after the timeout. Like any pause, it checkpoints memory and filesystem, and the next request resumes the sandbox where it left off. The value can be from 60 to 604800 seconds (7 days); leave it unset (the default) and the sandbox is never paused for being idle.
+The sandbox is paused shortly after the timeout. Like any pause, it checkpoints memory and filesystem, and the next request resumes the sandbox where it left off. The value can be from 60 to 604800 seconds (7 days); leave it unset (the default) and the sandbox is never paused for being idle.
 
 `idleTimeoutSeconds` and `timeoutSeconds` are independent, and whichever fires first pauses the sandbox. Use both to pause on inactivity while still capping a session that never goes quiet.
 
