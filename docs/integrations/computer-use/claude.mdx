@@ -316,6 +316,8 @@ async function runTools(
   content: Anthropic.ContentBlock[],
 ): Promise<Anthropic.ToolResultBlockParam[]> {
   const results: Anthropic.ToolResultBlockParam[] = []
+  // The result of the call that captured computer.frame.
+  let frameOwner: Anthropic.ToolResultBlockParam | undefined
   let failed = false
   for (const block of content) {
     if (block.type !== "tool_use") continue
@@ -333,9 +335,11 @@ async function runTools(
     } else {
       try {
         if (isComputer) {
+          const before = computer.frame
           result.content = await computer.run(
             block as Anthropic.ComputerToolUseBlock,
           )
+          if (computer.frame !== before) frameOwner = result
         } else if (block.name === "bash") {
           result.content = await bash(sandbox, block.input as BashInput)
         } else if (block.name === "str_replace_based_edit_tool") {
@@ -355,13 +359,15 @@ async function runTools(
     }
     results.push(result)
   }
-  // When a batch does not end with a screenshot, send the screen anyway.
-  // An error result can carry only text.
-  const last = results.at(-1)
+  // When a batch does not end with a screenshot, send the screen anyway,
+  // with the call that captured it, since later bash calls can change it.
   const { frame } = computer
   computer.frame = undefined
-  if (last && frame && !last.is_error && typeof last.content === "string") {
-    last.content = [{ type: "text", text: last.content }, image(frame)]
+  if (frame && typeof frameOwner?.content === "string") {
+    frameOwner.content = [
+      { type: "text", text: frameOwner.content },
+      image(frame),
+    ]
   }
   return results
 }
@@ -678,6 +684,8 @@ def run_tools(
     sandbox: Sandbox, computer: Computer, content: list[ContentBlock]
 ) -> list[ToolResultBlockParam]:
     results: list[ToolResultBlockParam] = []
+    # The result of the call that captured computer.frame.
+    frame_owner: ToolResultBlockParam | None = None
     failed = False
     for block in content:
         if block.type != "tool_use":
@@ -694,7 +702,10 @@ def run_tools(
         else:
             try:
                 if is_computer:
+                    before = computer.frame
                     result["content"] = computer.run(block)
+                    if computer.frame is not before:
+                        frame_owner = result
                 elif block.name == "bash":
                     result["content"] = bash(sandbox, cast(BashInput, block.input))
                 elif block.name == "str_replace_based_edit_tool":
@@ -710,13 +721,12 @@ def run_tools(
                     # The frame shows the screen from before the failed action.
                     computer.frame = None
         results.append(result)
-    # When a batch does not end with a screenshot, send the screen anyway.
-    # An error result can carry only text.
-    last = results[-1] if results else None
-    text = last.get("content") if last else None
+    # When a batch does not end with a screenshot, send the screen anyway,
+    # with the call that captured it, since later bash calls can change it.
     frame, computer.frame = computer.frame, None
-    if last and frame and not last.get("is_error") and isinstance(text, str):
-        last["content"] = [{"type": "text", "text": text}, image(frame)]
+    text = frame_owner.get("content") if frame_owner else None
+    if frame_owner and frame and isinstance(text, str):
+        frame_owner["content"] = [{"type": "text", "text": text}, image(frame)]
     return results
 
 
@@ -761,7 +771,7 @@ finally:
 ```
 </CodeGroup>
 
-The display starts at 1280x800, which is within the image size that current Claude models read without downscaling, so Claude's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` waits for the screen to repaint and then stay still for 300 ms, for at most the step's settle timeout, so check the frame for what you expect. When a response does not end with a screenshot, the loop attaches the latest frame to the last tool result, so Claude sees the result of its actions without another turn. A `wait` takes a new frame. A failed computer action drops the frame, and an error result carries only text, so the loop sends no frame then. If the capture after an action fails, the result says so. After `MAX_TURNS` rounds of tool calls, the loop stops with an error if Claude still asks for tools. Set `MODEL` to any Claude model that supports the `computer_toolset_20260801` tool.
+The display starts at 1280x800, which is within the image size that current Claude models read without downscaling, so Claude's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` waits for the screen to repaint and then stay still for 300 ms, for at most the step's settle timeout, so check the frame for what you expect. When a response does not end with a screenshot, the loop attaches the latest frame to the result of the call that captured it, so Claude sees the result of its actions without another turn. A `wait` takes a new frame. A failed computer action drops the frame, because the screen may have changed after the capture. If the capture after an action fails, the result says so. After `MAX_TURNS` rounds of tool calls, the loop stops with an error if Claude still asks for tools. Set `MODEL` to any Claude model that supports the `computer_toolset_20260801` tool.
 
 ## How tool calls map to the sandbox
 
