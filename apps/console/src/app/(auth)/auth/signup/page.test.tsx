@@ -537,6 +537,25 @@ describe("SignUpPage", () => {
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
   })
 
+  it.each(["__proto__", "constructor", "something_else"])(
+    "shows the default recovery copy for an unknown reason %s",
+    async (reason) => {
+      mockSearchParams = new URLSearchParams(
+        `complete_google=1&reason=${reason}`,
+      )
+      const { default: RecoverySignUpPage } = await import("./page")
+      render(<RecoverySignUpPage />)
+
+      expect(
+        await screen.findByText(
+          "Google sign-in succeeded. Complete signup to finish verification and provision your Superserve account.",
+        ),
+      ).toBeInTheDocument()
+      expect(mockClaimGoogleRecoveryContinuation).not.toHaveBeenCalled()
+      expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    },
+  )
+
   it("waits for a click when the recovery page has no reported reason", async () => {
     mockSearchParams = new URLSearchParams("complete_google=1")
     const { default: RecoverySignUpPage } = await import("./page")
