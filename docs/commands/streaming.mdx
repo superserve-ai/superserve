@@ -39,13 +39,13 @@ Even while streaming, the returned `result` still holds the complete `stdout` an
 `AsyncSandbox` takes the same callbacks with an awaitable `run()`. See the [Sandbox reference](/sdk-reference/sandbox).
 </Note>
 
-## Idle timeout
+## Timeouts
 
-The timer resets on every chunk, so a command that keeps producing output won't trip `timeoutMs` no matter how long it runs. A command that goes completely silent still has to finish before the timeout.
+Streaming doesn't change the timeout. It's still a hard limit on how long the command runs, and output doesn't reset it. When the limit is reached, the command stops and `run()` returns with exit code `124`. If you leave the timeout off, the limit is 30 seconds, so set `timeoutMs` / `timeout_seconds` for anything longer. See [Timeouts](/commands/overview#timeouts) for the defaults.
 
-## Network drops
+## If the connection drops
 
-If the stream ends before the `finished` event (a network hiccup, say), `run()` throws. Retry from the caller if you need the resilience. The command keeps running in the sandbox after your client disconnects, so you can reconnect with `Sandbox.connect(id)` if you saved the ID.
+If the stream ends before the `finished` event (a network hiccup, say), `run()` throws `SandboxError`. The command doesn't stop: it keeps running in the sandbox until it exits or reaches its timeout. You can't reattach to its output, though. `Sandbox.connect(id)` gets you the sandbox back to run new commands, not the old stream. If you need a job's output after a drop, redirect it to a file in the sandbox and read the file later.
 
 ## Capture and stream together
 
@@ -55,6 +55,7 @@ Streaming and sync return aren't mutually exclusive - capture chunks for logs wh
 ```typescript TypeScript
 const result = await sandbox.commands.run("./long-job.sh", {
   onStdout: (data) => process.stdout.write(data), // watch it live
+  timeoutMs: 600_000,
 })
 
 await uploadLogs(result.stdout) // full buffer, already captured for you
@@ -64,6 +65,7 @@ await uploadLogs(result.stdout) // full buffer, already captured for you
 result = sandbox.commands.run(
     "./long-job.sh",
     on_stdout=lambda data: print(data, end=""),  # watch it live
+    timeout_seconds=600,
 )
 
 upload_logs(result.stdout)  # full buffer, already captured for you
