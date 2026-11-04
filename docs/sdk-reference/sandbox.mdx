@@ -590,6 +590,7 @@ interface NetworkEvent {
 ```python Python
 from datetime import datetime
 from pydantic import BaseModel
+from superserve import NetworkVerdict
 
 class NetworkEvent(BaseModel):
     kind: str  # "connection" or "request"
