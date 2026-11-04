@@ -131,6 +131,23 @@ describe("joinInviteAction", () => {
       code: "failed",
     })
   })
+
+  it("keeps Join available after a retryable failure", async () => {
+    mocks.acceptInviteAndSelectTeam.mockResolvedValueOnce({
+      ok: false,
+      error: "retry",
+    })
+    expect(await joinInviteAction(token)).toEqual({
+      status: "error",
+      code: "failed",
+    })
+
+    mocks.acceptInviteAndSelectTeam.mockResolvedValueOnce({ ok: true })
+    expect(await joinInviteAction(token)).toEqual({
+      status: "redirect",
+      to: "/sandboxes",
+    })
+  })
 })
 
 describe("signOutForInviteAction", () => {

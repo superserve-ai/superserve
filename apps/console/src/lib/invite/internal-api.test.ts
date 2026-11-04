@@ -116,6 +116,27 @@ describe("acceptInvitation", () => {
     expect(await acceptInvitation(token, user)).toEqual({ ok: false, error })
   })
 
+  it.each([
+    ["an unreachable backend", () => Promise.reject(new Error("timeout"))],
+    ["429", () => Promise.resolve(new Response(null, { status: 429 }))],
+    ["503", () => Promise.resolve(json({ error: { code: "x" } }, 503))],
+    ["an unreadable 200", () => Promise.resolve(new Response("<html>"))],
+  ])("asks for a retry after %s, then joins", async (_n, failure) => {
+    fetchSpy.mockImplementationOnce(failure)
+    expect(await acceptInvitation(token, user)).toEqual({
+      ok: false,
+      error: "retry",
+    })
+
+    fetchSpy.mockResolvedValueOnce(
+      json({ team_id: "t", team_name: "Acme", result: "joined" }),
+    )
+    expect(await acceptInvitation(token, user)).toMatchObject({
+      ok: true,
+      result: "joined",
+    })
+  })
+
   it("treats 404 and 410 as unavailable even without a body", async () => {
     for (const status of [404, 410]) {
       fetchSpy.mockResolvedValue(new Response(null, { status }))

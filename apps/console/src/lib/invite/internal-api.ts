@@ -20,6 +20,9 @@ export type InvitePreviewResult =
   | { ok: false }
 
 export type InviteAcceptError =
+  // No definitive answer (unreachable, 429, 5xx, unreadable success): the
+  // invitation may still be valid, so the caller offers Join again.
+  | "retry"
   | "unavailable"
   | "email_mismatch"
   | "email_unverified"
@@ -129,7 +132,9 @@ export async function acceptInvitation(
       email_verified: true,
     },
   )
-  if (!response) return { ok: false, error: "unavailable" }
+  if (!response || response.status === 429 || response.status >= 500) {
+    return { ok: false, error: "retry" }
+  }
   const data = (await response.json().catch(() => null)) as Record<
     string,
     unknown
@@ -143,11 +148,11 @@ export async function acceptInvitation(
       !teamName ||
       (result !== "joined" && result !== "already_owner")
     ) {
-      return { ok: false, error: "unavailable" }
+      return { ok: false, error: "retry" }
     }
     return { ok: true, result, teamId, teamName, region }
   }
-  // 404 and 410 both mean the invitation is gone; anything unrecognised is
+  // 404 and 410 both mean the invitation is gone; any other refusal is
   // reported the same way so the page never explains why a link stopped working.
   const code = (data?.error as { code?: unknown } | undefined)?.code
   if (

@@ -50,6 +50,8 @@ async function acceptForSignedInUser(
     return { status: "error", code: "failed" }
   }
   if (!result.ok) {
+    // A retryable failure stays on the page with Join, never ?failed=.
+    if (result.error === "retry") return { status: "error", code: "failed" }
     return { status: "error", code: failureForAcceptError(result.error) }
   }
   await clearInviteIntent()

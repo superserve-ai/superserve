@@ -90,7 +90,7 @@ export function decideInviteView(input: {
 }
 
 export function failureForAcceptError(
-  error: InviteAcceptError | "not_eligible",
+  error: Exclude<InviteAcceptError, "retry"> | "not_eligible",
 ): InviteFailure {
   if (
     error === "already_member" ||
