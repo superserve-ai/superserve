@@ -94,7 +94,12 @@ const mockBeginGoogleSignup = vi.fn<
     signupAttemptId: "attempt-default",
   }),
 )
+const mockClaimGoogleRecoveryContinuation = vi.fn<
+  (reason: string) => Promise<boolean>
+>(() => Promise.resolve(false))
 vi.mock("./action", () => ({
+  claimGoogleRecoveryContinuation: (reason: string) =>
+    mockClaimGoogleRecoveryContinuation(reason),
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
   beginGoogleSignup: (...args: Parameters<typeof mockBeginGoogleSignup>) =>
     mockBeginGoogleSignup(...args),
@@ -157,6 +162,8 @@ describe("SignUpPage", () => {
     mockCapture.mockReset()
     mockRouterPush.mockReset()
     mockSearchParams = new URLSearchParams()
+    mockClaimGoogleRecoveryContinuation.mockReset().mockResolvedValue(false)
+    sessionStorage.clear()
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
     vi.resetModules()
     ;({ default: SignUpPage } = await import("./page"))
@@ -476,6 +483,91 @@ describe("SignUpPage", () => {
       ).toBe(expected)
     },
   )
+
+  it("explains a reported recovery reason and continues to Google once", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&reason=started_from_signin",
+    )
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    // The browser's own failed callback left a recovery mark.
+    mockClaimGoogleRecoveryContinuation.mockResolvedValue(true)
+    const { default: RecoverySignUpPage } = await import("./page")
+    const first = render(<RecoverySignUpPage />)
+
+    expect(
+      await screen.findByText(
+        "Looks like you're new here. One quick check to finish creating your account.",
+      ),
+    ).toBeInTheDocument()
+    await waitFor(() => {
+      expect(mockClaimGoogleRecoveryContinuation).toHaveBeenCalledWith(
+        "started_from_signin",
+      )
+      expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+      expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1)
+    })
+
+    // Coming back with the check still failing leaves the button to the user.
+    first.unmount()
+    render(<RecoverySignUpPage />)
+    expect(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    ).toBeInTheDocument()
+    expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for a click when a link reports a reason the browser never hit", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1&reason=expired")
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    expect(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(mockClaimGoogleRecoveryContinuation).toHaveBeenCalledWith(
+        "expired",
+      ),
+    )
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+  })
+
+  it.each(["__proto__", "constructor", "something_else"])(
+    "shows the default recovery copy for an unknown reason %s",
+    async (reason) => {
+      mockSearchParams = new URLSearchParams(
+        `complete_google=1&reason=${reason}`,
+      )
+      const { default: RecoverySignUpPage } = await import("./page")
+      render(<RecoverySignUpPage />)
+
+      expect(
+        await screen.findByText(
+          "Google sign-in succeeded. Complete signup to finish verification and provision your Superserve account.",
+        ),
+      ).toBeInTheDocument()
+      expect(mockClaimGoogleRecoveryContinuation).not.toHaveBeenCalled()
+      expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    },
+  )
+
+  it("waits for a click when the recovery page has no reported reason", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    expect(
+      await screen.findByText(
+        "Google sign-in succeeded. Complete signup to finish verification and provision your Superserve account.",
+      ),
+    ).toBeInTheDocument()
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+  })
 
   it("triggers Google OAuth on button click", async () => {
     mockBeginGoogleSignup.mockResolvedValue({

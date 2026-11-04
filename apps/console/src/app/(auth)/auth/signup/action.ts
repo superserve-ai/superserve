@@ -11,7 +11,10 @@ import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidenc
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { deviceReturnPath } from "@/lib/auth/device-return-path"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
-import { issueGoogleSignupProof } from "@/lib/auth/google-signup-proof"
+import {
+  claimGoogleSignupRecovery,
+  issueGoogleSignupProof,
+} from "@/lib/auth/google-signup-proof"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
@@ -66,6 +69,13 @@ const signUpSchema = z.object({
   password: z.string().min(8, "Password must be at least 8 characters."),
   fullName: z.string().min(1, "Name is required.").max(200),
 })
+
+/** True once for the recovery mark this browser's failed callback set. */
+export async function claimGoogleRecoveryContinuation(
+  reason: string,
+): Promise<boolean> {
+  return claimGoogleSignupRecovery(reason)
+}
 
 export async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
   return Promise.race([
