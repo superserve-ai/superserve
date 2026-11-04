@@ -4,7 +4,7 @@ sidebarTitle: Sandbox
 description: The Sandbox class - factory methods, sandbox methods, properties, and types.
 ---
 
-The `Sandbox` class is the main entry point for the SDK. Python ships both a sync `Sandbox` and an `AsyncSandbox` with identical method names.
+The `Sandbox` class is the main entry point for the SDK. Python ships both a sync `Sandbox` and an `AsyncSandbox` with identical method names. On `AsyncSandbox`, every method that calls the API is a coroutine. `get_preview_url` only builds a string, so it is a plain method on both classes: call it without `await`.
 
 ## Import
 
@@ -15,7 +15,7 @@ import { Sandbox } from "@superserve/sdk"
 
 ```python Python
 from superserve import Sandbox
-# Async variant with awaitable methods:
+# Async variant (await every method except get_preview_url):
 from superserve import AsyncSandbox
 ```
 
@@ -341,7 +341,7 @@ does not publish or authenticate a port.
 
 | TypeScript                              | Python                                                | Description                                                                           |
 | --------------------------------------- | ----------------------------------------------------- | ------------------------------------------------------------------------------------- |
-| `getPreviewUrl(port)`                   | `get_preview_url(port)`                               | Construct `https://{port}-{id}.{host}` without a network call.                        |
+| `getPreviewUrl(port)`                   | `get_preview_url(port)`                               | Construct `https://{port}-{id}.{host}` without a network call. Synchronous in both SDKs; do not `await` it on `AsyncSandbox`. |
 | `listPreviewPorts()`                    | `list_preview_ports()`                                | Return the sandbox default plus every port's access; tokens are never listed.         |
 | `publishPreviewPort(port, { access? })` | `publish_preview_port(port, access=...)`              | Publish a port; omit access to preserve an existing mode or use the new-port default. |
 | `unpublishPreviewPort(port)`            | `unpublish_preview_port(port)`                        | Close a port and revoke its credentials.                                              |
@@ -361,7 +361,7 @@ resumes on first use.
 | TypeScript                            | Python                                    | Description                                                                       |
 | ------------------------------------- | ----------------------------------------- | --------------------------------------------------------------------------------- |
 | `desktop.screenshot({ format? })`     | `desktop.screenshot(format="png")`        | Capture the screen; returns `data` (PNG, or JPEG with `format`) plus `width`, `height` and `format`. |
-| `desktop.click(x, y, { button? })`    | `desktop.click(x, y, button=...)`         | Move and click in one request. Also `doubleClick`, `rightClick`, `middleClick`.   |
+| `desktop.click(x, y, { button? })`    | `desktop.click(x, y, button=...)`         | Move and click in one request. Also `doubleClick` / `double_click`, `rightClick` / `right_click`, `middleClick` / `middle_click`. |
 | `desktop.moveMouse(x, y)`             | `desktop.move_mouse(x, y)`                | Move the pointer without clicking.                                                |
 | `desktop.drag(from, to, { button? })` | `desktop.drag(start, end, button=...)`    | Press, move, release as one atomic batch.                                         |
 | `desktop.scroll({ dx?, dy? })`        | `desktop.scroll(dx=0, dy=0)`              | Scroll by wheel clicks under the pointer; positive `dy` scrolls down.             |
@@ -424,16 +424,16 @@ for e in page.events:
 
 | Option    | Type                                 | Description                                                                                                                                                                 |
 | --------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `limit`   | `number`                             | Max events per page.                                                                                                                                                        |
+| `limit`   | `number`                             | Events per page. Default `100`, maximum `1000`.                                                                                                                             |
 | `before`  | `string`                             | Opaque pagination cursor — pass the previous page's `nextCursor` to page through results. Also accepts an RFC3339 timestamp as a time filter (rows strictly older than it). |
 | `since`   | `string`                             | RFC3339 — rows at or newer than this.                                                                                                                                       |
 | `verdict` | `"allowed" \| "blocked" \| "failed"` | Filter to connections with this verdict (excludes request rows).                                                                                                            |
 
-`NetworkLogPage` has `events` ([`NetworkEvent[]`](/sandbox/network-log#two-kinds-of-rows)), `nextCursor` / `next_cursor`, and `hasMore` / `has_more`.
+`NetworkLogPage` has `events` ([`NetworkEvent[]`](#networkevent)), `nextCursor` / `next_cursor`, and `hasMore` / `has_more`.
 
 ## Properties on `sandbox`
 
-`id`, `name`, `status`, `metadata`, `previewAccess` / `preview_access`, and `secrets` are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data.
+`id`, `name`, `status`, `metadata`, `previewAccess` / `preview_access`, and `secrets` are read-only snapshots taken at construction. Call `getInfo()` / `get_info()` for fresh data. `attachSecret` / `detachSecret` do not update `secrets`, and sandboxes returned by `create` and `connect` have no `secrets` value. Read bindings from `getInfo()` / `get_info()`.
 
 | Property                           | Type                                       | Description                                                                                  |
 | ---------------------------------- | ------------------------------------------ | -------------------------------------------------------------------------------------------- |
@@ -442,7 +442,7 @@ for e in page.events:
 | `status`                           | `SandboxStatus`                            | Status at construction time.                                                                 |
 | `metadata`                         | `Record<string, string>`                   | Tags at construction time.                                                                   |
 | `previewAccess` / `preview_access` | `"legacy_public" \| "public" \| "private"` | Preview compatibility mode or default access for newly published ports at construction time. |
-| `secrets`                          | `SandboxSecretBinding[] \| undefined`      | Bound secrets (`envKey` → `secretName`, with a `revoked` flag) at construction time.         |
+| `secrets`                          | `SandboxSecretBinding[] \| undefined`      | Bound secrets (`envKey` → `secretName`, with a `revoked` flag) at construction time. Use `getInfo()` / `get_info()` for current bindings. |
 | `commands`                         | `Commands`                                 | See [Commands](/sdk-reference/commands).                                                     |
 | `files`                            | `Files`                                    | See [Files](/sdk-reference/files). Rebuilt after `resume()`.                                 |
 | `desktop`                          | `Desktop`                                  | See [Desktop methods](#desktop-methods). Requires a desktop-enabled template.                |
@@ -506,6 +506,7 @@ interface SandboxInfo {
   metadata: Record<string, string>
   previewAccess: "legacy_public" | "public" | "private"
   sourceSnapshotId?: string // set when the sandbox was created from a snapshot
+  secrets?: SandboxSecretBinding[] // { envKey, secretName, revoked? }
 }
 ```
 
@@ -529,6 +530,8 @@ class SandboxInfo(BaseModel):
     preview_access: PreviewAccess
     # Set when the sandbox was created from a snapshot.
     source_snapshot_id: str | None = None
+    # Each binding has env_key, secret_name, and revoked.
+    secrets: list[SandboxSecretBinding] | None = None
 ```
 
 </CodeGroup>
@@ -552,6 +555,70 @@ class NetworkConfig(BaseModel):
 ```
 
 </CodeGroup>
+
+### `NetworkEvent`
+
+One row of the [network log](/sandbox/network-log). `kind` selects which fields are present; fields that don't apply to a row are absent.
+
+<CodeGroup>
+```typescript TypeScript
+interface NetworkEvent {
+  kind: "connection" | "request"
+  id: number
+  ts: Date
+  host?: string
+
+  // connection rows
+  dstIp?: string
+  dstPort?: number
+  verdict?: "allowed" | "blocked" | "failed"
+  matchRule?: string
+  bytesSent?: number
+  bytesRecv?: number
+
+  // request rows
+  method?: string
+  path?: string
+  status?: number         // status returned to the sandbox
+  upstreamStatus?: number // absent when the proxy answered the request itself
+  latencyMs?: number
+  secretId?: string       // present only when a secret was attached
+  errorCode?: string      // for example "host_not_allowed" or "credential_revoked"
+}
+```
+
+```python Python
+from datetime import datetime
+from pydantic import BaseModel
+from superserve import NetworkVerdict
+
+class NetworkEvent(BaseModel):
+    kind: str  # "connection" or "request"
+    id: int
+    ts: datetime
+    host: str | None = None
+
+    # connection rows
+    dst_ip: str | None = None
+    dst_port: int | None = None
+    verdict: NetworkVerdict | None = None  # str enum: "allowed", "blocked", "failed"
+    match_rule: str | None = None
+    bytes_sent: int | None = None
+    bytes_recv: int | None = None
+
+    # request rows
+    method: str | None = None
+    path: str | None = None
+    status: int | None = None           # status returned to the sandbox
+    upstream_status: int | None = None  # absent when the proxy answered the request itself
+    latency_ms: int | None = None
+    secret_id: str | None = None        # present only when a secret was attached
+    error_code: str | None = None       # for example "host_not_allowed" or "credential_revoked"
+```
+
+</CodeGroup>
+
+See [Two kinds of rows](/sandbox/network-log#two-kinds-of-rows) for what each field means.
 
 ## Retries
 
