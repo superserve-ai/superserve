@@ -165,7 +165,7 @@ Don't want to run anything locally? The hosted endpoint at `https://mcp.superser
     ```
   </Tab>
   <Tab title="Messages API">
-    Pass it as a connector in an [Anthropic Messages API](https://docs.anthropic.com/en/docs/agents-and-tools/mcp-connector) request:
+    Pass it as a connector in an [Anthropic Messages API](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector) request. The connector is in beta: send the `anthropic-beta: mcp-client-2025-11-20` header, and reference the server from an `mcp_toolset` entry in `tools`:
     ```json
     {
       "mcp_servers": [
@@ -175,7 +175,8 @@ Don't want to run anything locally? The hosted endpoint at `https://mcp.superser
           "url": "https://mcp.superserve.ai",
           "authorization_token": "ss_live_xxxxxxxxxxxxxxxx"
         }
-      ]
+      ],
+      "tools": [{ "type": "mcp_toolset", "mcp_server_name": "superserve" }]
     }
     ```
   </Tab>
