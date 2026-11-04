@@ -14,7 +14,7 @@ By default, a sandbox can reach any public IP on the internet. The platform alwa
 
 ## Allow specific destinations
 
-`allowOut` / `allow_out` accepts a mix of CIDRs and domain patterns. Combine it with `denyOut: ["0.0.0.0/0"]` to build a strict allowlist - deny everything, then add exceptions.
+`allowOut` / `allow_out` accepts a mix of CIDRs and domain patterns. Combine it with `denyOut: ["0.0.0.0/0"]` to build a strict allowlist - deny everything, then add exceptions. Do not rely on `allowOut` without `denyOut` to keep other egress open: it can also block destinations that are not on the list, so list every host the workload needs.
 
 <CodeGroup>
 ```typescript TypeScript
