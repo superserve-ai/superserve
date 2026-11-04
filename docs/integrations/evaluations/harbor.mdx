@@ -88,7 +88,7 @@ harbor run -t hello-world/hello-world -e superserve \
 
 ## Resources
 
-The task's `cpus`, `memory_mb`, and `storage_mb` set the sandbox's vCPUs, memory, and disk. Each sandbox is sized exactly to the task, so these values are both the reservation and the limit. GPUs are not supported.
+The task's `cpus`, `memory_mb`, and `storage_mb` set the sandbox's vCPUs, memory, and disk. Each sandbox is sized exactly to the task, so these values are both the reservation and the limit. GPUs are not supported. The task's values must fit your plan's [resource limits](/templates/build-spec#resource-limits).
 
 ## Network policies
 
