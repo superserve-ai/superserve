@@ -8,7 +8,7 @@ description: Send input to a running command, signal it, and stream its output b
 
 <CodeGroup>
 ```typescript TypeScript
-const session = await sandbox.commands.spawn("python -i", {
+const session = await sandbox.commands.spawn("python3 -i", {
   onStdout: (data) => process.stdout.write(data),
 })
 
@@ -22,7 +22,7 @@ console.log(`exited ${result.exitCode}`)
 ```python Python
 # spawn is async only, so use AsyncSandbox.
 async with await sandbox.commands.spawn(
-    "python -i",
+    "python3 -i",
     on_stdout=lambda data: print(data, end=""),
 ) as session:
     await session.stdin.write("print(2 + 2)\n")
