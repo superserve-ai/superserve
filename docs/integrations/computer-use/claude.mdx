@@ -209,6 +209,9 @@ class Computer {
         await new Promise((resolve) =>
           setTimeout(resolve, block.input.duration * 1000),
         )
+        // Replace the frame from before the pause.
+        if (this.frame)
+          this.frame = await desktop.screenshot({ format: "jpeg" })
         return "OK"
       default: {
         const step = await desktop.step(
@@ -265,7 +268,12 @@ async function edit(sandbox: Sandbox, input: EditorInput): Promise<string> {
         .map((line, i) => `${start + i}\t${line}`)
         .join("\n")
     }
-    case "create":
+    case "create": {
+      const exists = await commands.run('test -e "$P"', {
+        env: { P: path },
+        timeoutMs: TIMEOUT_MS,
+      })
+      if (exists.exitCode === 0) throw new Error(`${path} already exists`)
       await files.write(path, input.file_text ?? "")
       // The files API writes as root; give the file to the user that runs bash.
       await commands.run('chown desktop: "$P"', {
@@ -274,6 +282,7 @@ async function edit(sandbox: Sandbox, input: EditorInput): Promise<string> {
         timeoutMs: TIMEOUT_MS,
       })
       return `Created ${path}`
+    }
     case "str_replace": {
       const parts = (await files.readText(path)).split(input.old_str ?? "")
       if (parts.length !== 2) {
@@ -571,6 +580,9 @@ class Computer:
                 return f"X={at['x']}, Y={at['y']}"
             case "wait":
                 time.sleep(cast(ComputerInput, block.input)["duration"])
+                # Replace the frame from before the pause.
+                if self.frame:
+                    self.frame = desktop.screenshot(format="jpeg")
                 return "OK"
             case _:
                 step = desktop.step(
@@ -617,6 +629,11 @@ def edit(sandbox: Sandbox, args: EditorInput) -> str:
             shown = lines[start - 1 : None if end == -1 else end]
             return "\n".join(f"{start + i}\t{line}" for i, line in enumerate(shown))
         case "create":
+            exists = sandbox.commands.run(
+                'test -e "$P"', env={"P": path}, timeout_seconds=TIMEOUT_SECONDS
+            )
+            if exists.exit_code == 0:
+                raise RuntimeError(f"{path} already exists")
             files.write(path, args.get("file_text", ""))
             # The files API writes as root; give the file to the user that runs bash.
             sandbox.commands.run(
@@ -725,7 +742,7 @@ finally:
 ```
 </CodeGroup>
 
-The display starts at 1280x800, which is within the image size that current Claude models read without downscaling, so Claude's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` returns the first frame after the screen repainted and then stayed still for 300 ms. When a response does not end with a screenshot, the loop attaches that frame to the last tool result, so Claude sees the result of its actions without another turn. Set `MODEL` to any Claude model that supports the `computer_toolset_20260801` tool.
+The display starts at 1280x800, which is within the image size that current Claude models read without downscaling, so Claude's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` waits for the screen to repaint and then stay still for 300 ms, for at most the step's settle timeout, so check the frame for what you expect. When a response does not end with a screenshot, the loop attaches the latest frame to the last tool result, so Claude sees the result of its actions without another turn. A `wait` takes a new frame, and an error result carries only text, so the loop skips the frame there. Set `MODEL` to any Claude model that supports the `computer_toolset_20260801` tool.
 
 ## How tool calls map to the sandbox
 
@@ -750,7 +767,7 @@ Clicks without a `coordinate` act at the cursor. Claude spells keys as X keysyms
 
 Claude can send several tool calls in one response, and it plans the later ones on the earlier ones succeeding. So after a computer action fails, `runTools` / `run_tools` skips the rest of the computer actions in that response and answers each with `Not executed: an earlier computer action in this turn failed.` Every computer result echoes `toolset_name: "computer"`, which the API requires.
 
-Each `bash` call runs in a new shell as the `desktop` user, with `/home/desktop` as its home directory, so `cd` and exported variables do not carry over to the next call. The files API creates files as `root`, so the `create` command gives the new file to `desktop` for the bash calls that follow.
+Each `bash` call runs in a new shell as the `desktop` user, with `/home/desktop` as its home directory, so `cd` and exported variables do not carry over to the next call. The `create` command refuses a path that already exists. The files API creates files as `root`, so `create` gives the new file to `desktop` for the bash calls that follow.
 
 ## Watch it live
 
