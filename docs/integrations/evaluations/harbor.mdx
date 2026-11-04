@@ -7,22 +7,16 @@ icon: "flask"
 
 [Harbor](https://github.com/harbor-framework/harbor) is a framework for evaluating agents on containerized tasks. Its `superserve` environment runs each trial in its own Superserve sandbox, so you can run many trials in parallel without a local Docker daemon.
 
-<Note>
-  The `superserve` environment is on Harbor's `main` branch but is not in a Harbor release yet. Until a release includes the `superserve` extra, install Harbor from the `main` commit that added the environment, as shown below.
-</Note>
-
 ## Setup
 
-Install Harbor with the `superserve` extra from Harbor's `main` branch:
+Install Harbor with the `superserve` extra:
 
 ```bash
-uv tool install --python 3.13 "harbor[superserve] @ git+https://github.com/harbor-framework/harbor@466bcc7e234c4ede10e9e2c5df0132b718a8a45d"
+uv tool install --python 3.13 --prerelease allow "harbor[superserve]>=0.25.1.dev202611040613"
 export SUPERSERVE_API_KEY=ss_live_...
 ```
 
-`--python 3.13` pins a Python version that all of Harbor's dependencies support. Without it, uv can select a newer Python for which some dependencies have no prebuilt wheels, and the install fails.
-
-The commit hash pins the `main` commit that added the environment, so the install does not change when `main` moves. When a Harbor release includes the `superserve` extra, install that release instead, for example `uv tool install --python 3.13 "harbor[superserve]>=<version>"`.
+`--prerelease allow` installs Harbor's nightly build, which includes the `superserve` environment until the next stable release. `--python 3.13` pins a Python version that all of Harbor's dependencies support. Without it, uv can select a newer Python for which some dependencies have no prebuilt wheels, and the install fails.
 
 See [API keys](/api-key) to create a Superserve API key. Also export the key for the agent you evaluate, for example `ANTHROPIC_API_KEY` for Claude Code.
 
