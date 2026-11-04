@@ -281,7 +281,10 @@
           },
           {
             "group": "Computer Use",
-            "pages": ["integrations/computer-use/openai"]
+            "pages": [
+              "integrations/computer-use/openai",
+              "integrations/computer-use/claude"
+            ]
           }
         ]
       }
