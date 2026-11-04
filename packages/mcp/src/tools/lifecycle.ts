@@ -174,8 +174,9 @@ export function registerLifecycleTools(
           .optional()
           .describe(
             "Egress allow rules — domain patterns (e.g. 'api.github.com', '*.github.com'), IPs, or CIDRs to permit. " +
-              "This ADDS allowed destinations; on its own it does NOT block anything else. For a strict allowlist " +
-              "(deny everything except these), also pass deny_out: ['0.0.0.0/0']. If the allowlist has domain rules or " +
+              "For a strict allowlist (deny everything except these), always also pass deny_out: ['0.0.0.0/0']. " +
+              "Do not use allow_out alone to keep other egress open: it can also block destinations that are not " +
+              "listed, so list every host the workload needs. If the allowlist has domain rules or " +
               "the workload resolves hostnames, also include the sandbox DNS resolvers '1.1.1.1/32' and '8.8.8.8/32', " +
               "or no hostname will resolve; leave them out of an IP-only allowlist.",
           ),
@@ -590,9 +591,10 @@ export function registerLifecycleTools(
         allow_out: stringArray()
           .optional()
           .describe(
-            "Egress allow rules — domain patterns, IPs, or CIDRs to permit. Adds allowed destinations; does NOT by " +
-              "itself block other egress. For a strict allowlist, also pass deny_out: ['0.0.0.0/0']; if it has domain " +
-              "rules or the workload resolves hostnames, include the sandbox DNS resolvers '1.1.1.1/32' and '8.8.8.8/32'.",
+            "Egress allow rules — domain patterns, IPs, or CIDRs to permit. For a strict allowlist, always also pass " +
+              "deny_out: ['0.0.0.0/0']. allow_out alone can also block destinations that are not listed, so list every " +
+              "host the workload needs; if it has domain rules or the workload resolves hostnames, include the sandbox " +
+              "DNS resolvers '1.1.1.1/32' and '8.8.8.8/32'.",
           ),
         deny_out: stringArray()
           .optional()

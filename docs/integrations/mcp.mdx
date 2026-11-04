@@ -165,7 +165,7 @@ Don't want to run anything locally? The hosted endpoint at `https://mcp.superser
     ```
   </Tab>
   <Tab title="Messages API">
-    Pass it as a connector in an [Anthropic Messages API](https://docs.anthropic.com/en/docs/agents-and-tools/mcp-connector) request:
+    Pass it as a connector in an [Anthropic Messages API](https://platform.claude.com/docs/en/agents-and-tools/mcp-connector) request. The connector is in beta: send the `anthropic-beta: mcp-client-2025-11-20` header, and reference the server from an `mcp_toolset` entry in `tools`:
     ```json
     {
       "mcp_servers": [
@@ -175,7 +175,8 @@ Don't want to run anything locally? The hosted endpoint at `https://mcp.superser
           "url": "https://mcp.superserve.ai",
           "authorization_token": "ss_live_xxxxxxxxxxxxxxxx"
         }
-      ]
+      ],
+      "tools": [{ "type": "mcp_toolset", "mcp_server_name": "superserve" }]
     }
     ```
   </Tab>
@@ -237,9 +238,9 @@ When it's done, the agent can `sandbox_pause` (state preserved, cheaper to keep 
 ## Behavior and limits
 
 - **Auto-resume.** `sandbox_exec` and the file tools transparently resume a paused sandbox, so agents never need to call `sandbox_resume` first. `sandbox_resume` exists only to warm a sandbox explicitly.
-- **Output is capped for context.** `sandbox_exec` truncates stdout and stderr to 32 KiB each — a truncated result sets `truncated: true` and reports the original byte length. `sandbox_files_read` **rejects** files larger than 1 MiB (it does not return partial content); the error tells you to read a slice with `sandbox_exec` (e.g. `head -c`) or download the whole file with the SDK/CLI. `sandbox_files_write` inline content is capped at 8 MiB.
+- **Output is capped for context.** `sandbox_exec` truncates stdout and stderr to 32 KiB each — a truncated result sets `truncated: true` and reports the original byte length. `sandbox_files_read` **rejects** files larger than 1 MiB (it does not return partial content); the error tells you to read a slice with `sandbox_exec` (e.g. `head -c`) or download the whole file with the SDK/CLI. `sandbox_files_write` inline content is capped at 8 MiB on the local server. The hosted endpoint limits each request body to about 4.5 MB, so keep hosted inline writes under about 4 MiB of text or 3 MiB of binary data sent as base64; larger requests fail with HTTP `413 Request Entity Too Large`.
 - **Default command timeout is 60s**, capped at 10 minutes. Override it per call with `timeout_ms`.
-- **Egress is controllable.** `allow_out` (domain patterns, IPs, or CIDRs) adds allowed destinations; `deny_out` (IPs or CIDRs, no domains) blocks them. `allow_out` alone does **not** lock a sandbox down — for a strict allowlist, combine it with `deny_out: ["0.0.0.0/0"]` (deny all, then allow the listed destinations). If the allowlist has domain rules or the workload resolves hostnames, also allow the sandbox's DNS resolvers, `1.1.1.1/32` and `8.8.8.8/32`, since deny-all blocks DNS too; leave them out of an IP-only allowlist, where an allowed resolver is only an extra outbound channel. Set these on `sandbox_create` or `sandbox_update`, and audit what a sandbox actually reached with `sandbox_network_log`.
+- **Egress is controllable.** `allow_out` (domain patterns, IPs, or CIDRs) lists allowed destinations; `deny_out` (IPs or CIDRs, no domains) blocks them. For a strict allowlist, always combine `allow_out` with `deny_out: ["0.0.0.0/0"]` (deny all, then allow the listed destinations). Do not use `allow_out` alone to keep other destinations open: it can also block destinations that are not on the list, so list every host the workload needs. With the deny-all rule, if the allowlist has domain rules or the workload resolves hostnames, also allow the sandbox's DNS resolvers, `1.1.1.1/32` and `8.8.8.8/32`, since deny-all blocks DNS too; leave them out of an IP-only allowlist, where an allowed resolver is only an extra outbound channel. Set these on `sandbox_create` or `sandbox_update`, and audit what a sandbox actually reached with `sandbox_network_log`.
 - **Errors are actionable.** A failed tool call returns a short message telling the agent what to do next — e.g. _"Sandbox quota reached. Pause or kill a sandbox, or retry later."_ — rather than a raw stack trace, so the agent can self-correct.
 
 ## Secrets, templates, and ports
@@ -299,7 +300,7 @@ The MCP server covers the common agent loop; the table above is the complete v1 
 
 - **Secret creation** — `Secret.create()` (the MCP server only _binds_ existing secrets).
 - **Streaming and interactive commands** — streaming `run()` callbacks and `commands.spawn` (stdin, signals, long-running processes).
-- **Large or streaming transfers** — directory download is supported up to 10 MiB via `sandbox_files_download_dir`; beyond that (and for archive/streaming uploads or single files past the 1 MiB read / 8 MiB inline-write caps), use the SDK/CLI (`files.downloadDir`, streaming upload).
+- **Large or streaming transfers** — directory download is supported up to 10 MiB via `sandbox_files_download_dir`; beyond that (and for archive/streaming uploads or single files past the 1 MiB read cap or the inline-write cap (8 MiB local, about 4 MiB hosted)), use the SDK/CLI (`files.downloadDir`, streaming upload).
 - **Billing and provider discovery** — usage data and `Provider.list()` for secret-provider setup.
 
 These are tracked as follow-ups.
