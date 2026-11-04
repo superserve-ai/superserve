@@ -39,7 +39,7 @@ export function PlanOverviewSection({
   summary: BillingSummaryResponse
   details?: boolean
   // Payment action and billing problems for the plan card. They stay visible
-  // while the plan loads or fails, because the summary authorizes them.
+  // while the plan loads, settles or fails, because the summary authorizes them.
   billingControls?: ReactNode
 }) {
   const scope = useQueryScope()
@@ -104,7 +104,12 @@ export function PlanOverviewSection({
     (summary.plan.key !== plan.key || summary.plan.status === "pending") &&
     recentlyEffective(plan.effective_from)
   )
-    return <p className="text-sm text-muted">Loading your plan…</p>
+    return (
+      <div className="mx-auto w-full max-w-4xl space-y-3">
+        <p className="text-sm text-muted">Loading your plan…</p>
+        {billingControls}
+      </div>
+    )
   const includedCents =
     matchingIncluded?.status === "issued"
       ? toCents(matchingIncluded.amount_usd)

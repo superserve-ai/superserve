@@ -29,7 +29,7 @@ import {
 } from "@/components/billing/usage-breakdown"
 import {
   CustomerBillingSection,
-  PlanBillingControls,
+  usePlanBillingControls,
 } from "@/components/customer-billing-section"
 import { DateRangeFilter, type DateRange } from "@/components/date-range-filter"
 import { EmptyState } from "@/components/empty-state"
@@ -515,6 +515,12 @@ export function PlanUsagePageClient() {
     }
     return null
   }, [activeTeam, dashboardTeam])
+  // Free teams keep the separate billing account strip instead.
+  const billingControls = usePlanBillingControls({
+    team: billingTeam,
+    summary,
+    enabled: teamPlan?.kind !== "free",
+  })
   // Retain the viewed period on refresh errors without retaining billing claims.
   // This cached data belongs to the current team/region/impersonation query key.
   const billingPeriod = useMemo(
@@ -659,15 +665,7 @@ export function PlanUsagePageClient() {
               <>
                 <PlanOverviewSection
                   summary={summary}
-                  billingControls={
-                    billingTeam && teamPlan?.kind !== "free" ? (
-                      <PlanBillingControls
-                        teamId={billingTeam.teamId}
-                        teamRegion={billingTeam.region}
-                        summary={summary}
-                      />
-                    ) : null
-                  }
+                  billingControls={billingControls}
                 />
                 {showPayments ? <BillingSummary summary={summary} /> : null}
               </>

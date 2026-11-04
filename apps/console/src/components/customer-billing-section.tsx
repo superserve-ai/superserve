@@ -8,7 +8,7 @@ import {
 } from "@phosphor-icons/react"
 import { Alert, Button } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
-import { useEffect, useMemo, useState } from "react"
+import { type ReactNode, useEffect, useMemo, useState } from "react"
 
 import {
   EYEBROW,
@@ -119,8 +119,12 @@ export function billingProblem(
   return null
 }
 
-function useLatestBillingPeriod(teamId: string, teamKey: string) {
-  const periodsQuery = useCustomerBillingPeriods(teamId, teamKey)
+function useLatestBillingPeriod(
+  teamId: string | null,
+  teamKey: string | null,
+  enabled = true,
+) {
+  const periodsQuery = useCustomerBillingPeriods(teamId, teamKey, 8, enabled)
   const latestPeriod = useMemo(() => {
     return (
       periodsQuery.data?.periods?.toSorted((a, b) => {
@@ -138,10 +142,11 @@ function useLatestBillingPeriod(teamId: string, teamKey: string) {
 }
 
 function useBillingAction(
-  teamId: string,
-  teamKey: string,
+  teamId: string | null,
+  teamKey: string | null,
   summary: BillingSummaryResponse | null | undefined,
   cardless: boolean,
+  enabled = true,
 ) {
   const { submitting, available, openSession } = useBillingPayment(
     cardless && summary
@@ -149,7 +154,11 @@ function useBillingAction(
       : summary,
     teamKey,
   )
-  const { periodsQuery, latestPeriod } = useLatestBillingPeriod(teamId, teamKey)
+  const { periodsQuery, latestPeriod } = useLatestBillingPeriod(
+    teamId,
+    teamKey,
+    enabled,
+  )
   const canManageBilling = Boolean(summary?.permissions?.can_manage)
   const canOpenPortal = Boolean(summary?.portal_available)
   const canStartCheckout = !cardless && Boolean(summary?.checkout_available)
@@ -191,27 +200,29 @@ function useBillingAction(
   return { actionButton, canManageBilling, canOpenPortal, latestPeriod }
 }
 
-interface PlanBillingControlsProps {
-  teamId: string
-  teamRegion: string
-  summary: BillingSummaryResponse | null | undefined
-}
-
 // The payment action and any billing problem, shown inside the plan card.
-export function PlanBillingControls({
-  teamId,
-  teamRegion,
+// A hook, so the page owns the payment request while the plan card changes
+// layout; a null team or `enabled: false` renders nothing.
+export function usePlanBillingControls({
+  team,
   summary,
-}: PlanBillingControlsProps) {
+  enabled = true,
+}: {
+  team: { teamId: string; region: string } | null
+  summary: BillingSummaryResponse | null | undefined
+  enabled?: boolean
+}): ReactNode {
+  const active = enabled && !!team
   const { actionButton, canManageBilling, latestPeriod } = useBillingAction(
-    teamId,
-    `${teamRegion}:${teamId}`,
+    team?.teamId ?? null,
+    team ? `${team.region}:${team.teamId}` : null,
     summary,
     false,
+    active,
   )
   const problem = billingProblem(summary, latestPeriod)
   const viewOnly = !canManageBilling && Boolean(summary)
-  if (!actionButton && !viewOnly && !problem) return null
+  if (!active || (!actionButton && !viewOnly && !problem)) return null
 
   return (
     <div className="space-y-3" data-testid="plan-billing-controls">

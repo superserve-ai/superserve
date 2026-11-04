@@ -13,7 +13,14 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
   }),
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
@@ -37,6 +44,8 @@ const useDashboardTeamContext = vi.fn()
 const useCustomerBillingPeriods = vi.fn()
 const useCustomerBillingUsage = vi.fn()
 const useCustomerBillingExportPreview = vi.fn()
+const createStripeCustomerPortalSession = vi.fn()
+const addToast = vi.fn()
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({
@@ -66,6 +75,12 @@ vi.mock("@/hooks/use-customer-billing", () => ({
     useCustomerBillingExportPreview(...args),
 }))
 
+vi.mock("@/lib/api/billing-stripe", () => ({
+  createStripeCheckoutSession: vi.fn(),
+  createStripeCustomerPortalSession: (...args: unknown[]) =>
+    createStripeCustomerPortalSession(...args),
+}))
+
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: () => "legacy",
 }))
@@ -87,7 +102,7 @@ vi.mock("@superserve/ui", async () => {
     await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
   return {
     ...actual,
-    useToast: () => ({ addToast: vi.fn() }),
+    useToast: () => ({ addToast }),
   }
 })
 
@@ -431,6 +446,8 @@ describe("PlanUsagePage", () => {
       expect(useCustomerBillingPeriods).toHaveBeenCalledWith(
         "team-1",
         "use:team-1",
+        8,
+        true,
       )
       expect(screen.getByText("Cost so far")).toBeInTheDocument()
     },
@@ -1112,6 +1129,58 @@ describe("PlanUsagePage", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("keeps a started payment request when the plan finishes loading", async () => {
+    let reject!: (reason: Error) => void
+    createStripeCustomerPortalSession.mockReturnValueOnce(
+      new Promise((_resolve, rej) => {
+        reject = rej
+      }),
+    )
+    useTeamPlan.mockReturnValue({
+      data: undefined,
+      error: null,
+      isError: false,
+      isPending: true,
+    })
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    const page = () => (
+      <QueryClientProvider client={client}>
+        <PlanUsagePage />
+      </QueryClientProvider>
+    )
+    const { rerender } = render(page())
+    await act(async () => {
+      fireEvent.click(
+        screen.getByRole("button", { name: "Open Customer Portal" }),
+      )
+    })
+    expect(createStripeCustomerPortalSession).toHaveBeenCalledTimes(1)
+
+    // The plan card replaces its loading layout while Stripe responds.
+    useTeamPlan.mockReturnValue({ data: null })
+    rerender(page())
+    expect(
+      within(screen.getByTestId("current-plan")).getByRole("button", {
+        name: /loading/i,
+      }),
+    ).toBeDisabled()
+
+    addToast.mockClear()
+    await act(async () => {
+      reject(new Error("Stripe unavailable"))
+    })
+    await waitFor(() => {
+      expect(addToast).toHaveBeenCalledWith("Stripe unavailable", "error")
+      expect(
+        within(screen.getByTestId("current-plan")).getByRole("button", {
+          name: "Open Customer Portal",
+        }),
+      ).toBeEnabled()
+    })
+  })
+
   it("shows customer billing for impersonated teams outside the member directory", () => {
     useDashboardTeamContext.mockReturnValue({
       teamId: "impersonated-team",
@@ -1135,6 +1204,8 @@ describe("PlanUsagePage", () => {
     expect(useCustomerBillingPeriods).toHaveBeenCalledWith(
       "impersonated-team",
       "use:impersonated-team",
+      8,
+      true,
     )
   })
   describe("current plan and credits", () => {

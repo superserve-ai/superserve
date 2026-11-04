@@ -23,7 +23,7 @@ import type { BillingSummaryResponse } from "@/lib/api/billing"
 
 import {
   CustomerBillingSection,
-  PlanBillingControls,
+  usePlanBillingControls,
 } from "./customer-billing-section"
 
 const useCustomerBillingPeriods = vi.fn()
@@ -125,6 +125,17 @@ vi.mock("@superserve/ui", async () => {
   }
 })
 
+function PlanBillingControls({
+  summary,
+}: {
+  summary: BillingSummaryResponse | null
+}) {
+  return usePlanBillingControls({
+    team: { teamId: "team-1", region: "use" },
+    summary,
+  })
+}
+
 function renderControls(summary: BillingSummaryResponse | null = baseSummary) {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -134,7 +145,7 @@ function renderControls(summary: BillingSummaryResponse | null = baseSummary) {
 
   return render(
     <QueryClientProvider client={queryClient}>
-      <PlanBillingControls teamId="team-1" teamRegion="use" summary={summary} />
+      <PlanBillingControls summary={summary} />
     </QueryClientProvider>,
   )
 }
