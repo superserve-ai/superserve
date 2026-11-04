@@ -273,6 +273,52 @@ describe("middleware", () => {
   })
 })
 
+describe("middleware invite route", () => {
+  const invitePath = `/invite/ssinv_use_${"A".repeat(43)}`
+
+  beforeEach(() => {
+    vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
+    mockClient = {
+      supabase: {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+        },
+      },
+      response: buildResponse(),
+    }
+  })
+
+  it("lets a signed-out visitor read the invite page", async () => {
+    expect(await middleware(buildRequest(invitePath))).toBe(mockClient.response)
+  })
+
+  it("lets a signed-in account through the invite page", async () => {
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123", email: "u@e.com" } },
+      error: null,
+    })
+    expect(await middleware(buildRequest(invitePath))).toBe(mockClient.response)
+  })
+
+  it("still stops an account held for review on the invite page", async () => {
+    const signOut = vi.fn().mockResolvedValue({ error: null })
+    Object.assign(mockClient.supabase!.auth, { signOut })
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "u@e.com",
+          app_metadata: { signup_review: "pending" },
+        },
+      },
+      error: null,
+    })
+    const res = await middleware(buildRequest(invitePath))
+    expect(signOut).toHaveBeenCalled()
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/pending")
+  })
+})
+
 describe("middleware matcher", () => {
   it.each([
     "/ingest",

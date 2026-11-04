@@ -2,13 +2,13 @@
 
 import {
   ArrowSquareOutIcon,
-  PlusIcon,
   ShieldCheckIcon,
   UserMinusIcon,
   UsersIcon,
 } from "@phosphor-icons/react"
 import {
   Button,
+  ConfirmDialog,
   Field,
   Input,
   Table,
@@ -32,10 +32,19 @@ import { PageHeader } from "@/components/page-header"
 import { TableSkeleton } from "@/components/table-skeleton"
 import {
   useAssignTeamRole,
+  useRemoveTeamMember,
   useRevokeTeamRole,
   useTeamManagement,
 } from "@/hooks/use-team-management"
+import { useUser } from "@/hooks/use-user"
 import type { TeamMember, TeamRoleAssignment } from "@/lib/api/team-management"
+
+import {
+  InvitationsSection,
+  InviteMemberCard,
+  inviteControlState,
+  LeaveTeamSection,
+} from "./invitations-section"
 
 function roleLabel(role: string): string {
   return role
@@ -128,45 +137,6 @@ function SummaryCard({
   )
 }
 
-function InviteMemberCard() {
-  return (
-    <div className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
-      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div>
-          <p className="text-lg font-medium text-foreground">Invite member</p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            Invite new members to join your team.
-          </p>
-          <div className="mt-4 border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
-            Email invitations coming soon.
-          </div>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]">
-          <Field label="Email address">
-            <Input disabled placeholder="name@company.com" value="" />
-          </Field>
-          <Field label="Role">
-            <select
-              disabled
-              className="h-9 w-full border border-border bg-background px-3 text-sm text-muted outline-none"
-              value="member"
-            >
-              <option value="member">Member</option>
-            </select>
-          </Field>
-          <div className="flex items-end">
-            <Button type="button" size="sm" disabled>
-              <PlusIcon className="size-3.5" weight="light" />
-              Send invitation
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function AssignRoleForm({
   members,
   roles,
@@ -252,19 +222,33 @@ function AssignRoleForm({
 function MemberActions({
   member,
   onManageRoles,
+  showManageRoles,
+  onRemove,
 }: {
   member: TeamMember
   onManageRoles: (userId: string) => void
+  showManageRoles: boolean
+  onRemove?: (member: TeamMember) => void
 }) {
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={() => onManageRoles(member.user_id)}
-    >
-      <ShieldCheckIcon className="size-3.5" weight="light" />
-      Manage roles
-    </Button>
+    <div className="flex gap-2">
+      {showManageRoles && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onManageRoles(member.user_id)}
+        >
+          <ShieldCheckIcon className="size-3.5" weight="light" />
+          Manage roles
+        </Button>
+      )}
+      {onRemove && (
+        <Button size="sm" variant="outline" onClick={() => onRemove(member)}>
+          <UserMinusIcon className="size-3.5" weight="light" />
+          Remove member
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -272,13 +256,18 @@ function MemberTable({
   members,
   onManageRoles,
   showManageRoles,
+  onRemove,
+  currentUserId,
   emptyLabel,
 }: {
   members: TeamMember[]
   onManageRoles: (userId: string) => void
   showManageRoles: boolean
+  onRemove?: (member: TeamMember) => void
+  currentUserId?: string
   emptyLabel: string
 }) {
+  const showActions = showManageRoles || Boolean(onRemove)
   if (members.length === 0) {
     return (
       <div className="border border-border bg-background/60 px-4 py-6 text-sm text-muted">
@@ -296,7 +285,7 @@ function MemberTable({
             <TableHead>Status</TableHead>
             <TableHead>Active roles</TableHead>
             <TableHead>Updated</TableHead>
-            {showManageRoles && <TableHead className="w-40" />}
+            {showActions && <TableHead className="w-64" />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -325,11 +314,18 @@ function MemberTable({
               >
                 {new Date(member.updated_at).toLocaleDateString()}
               </TableCell>
-              {showManageRoles && (
+              {showActions && (
                 <TableCell>
                   <MemberActions
                     member={member}
                     onManageRoles={onManageRoles}
+                    showManageRoles={showManageRoles}
+                    onRemove={
+                      member.status === "active" &&
+                      member.user_id !== currentUserId
+                        ? onRemove
+                        : undefined
+                    }
                   />
                 </TableCell>
               )}
@@ -414,11 +410,15 @@ function MemberTabs({
   members,
   onManageRoles,
   showManageRoles,
+  onRemove,
+  currentUserId,
   search,
 }: {
   members: TeamMember[]
   onManageRoles: (userId: string) => void
   showManageRoles: boolean
+  onRemove?: (member: TeamMember) => void
+  currentUserId?: string
   search: string
 }) {
   const normalize = (value: string) => value.toLowerCase().trim()
@@ -484,6 +484,8 @@ function MemberTabs({
           members={filteredMembers.active}
           onManageRoles={onManageRoles}
           showManageRoles={showManageRoles}
+          onRemove={onRemove}
+          currentUserId={currentUserId}
           emptyLabel="No active members match this search."
         />
       </TabsPanel>
@@ -511,6 +513,9 @@ export function UserManagementClient() {
   const { data, isPending, error, refetch } = useTeamManagement()
   const [memberSearch, setMemberSearch] = useState("")
   const [selectedUserId, setSelectedUserId] = useState("")
+  const [removing, setRemoving] = useState<TeamMember | null>(null)
+  const removeMember = useRemoveTeamMember()
+  const { user } = useUser()
 
   const counts = useMemo(() => {
     const members = data?.members ?? []
@@ -613,7 +618,7 @@ export function UserManagementClient() {
             />
           </div>
 
-          {capabilities.can_invite_members && <InviteMemberCard />}
+          <InviteMemberCard state={inviteControlState(capabilities)} />
 
           <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -641,6 +646,12 @@ export function UserManagementClient() {
               members={data.members}
               onManageRoles={setSelectedUserId}
               showManageRoles={capabilities.can_view_role_assignments}
+              // Leaving goes through Leave team, which protects the user's
+              // only team, so the current user has no Remove button.
+              onRemove={
+                capabilities.can_deactivate_members ? setRemoving : undefined
+              }
+              currentUserId={user?.id}
               search={memberSearch}
             />
 
@@ -650,6 +661,10 @@ export function UserManagementClient() {
               </p>
             )}
           </section>
+
+          {inviteControlState(capabilities) !== "hidden" && (
+            <InvitationsSection canManage={capabilities.can_invite_members} />
+          )}
 
           {capabilities.can_view_role_assignments && (
             <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
@@ -689,8 +704,25 @@ export function UserManagementClient() {
               </div>
             </section>
           )}
+
+          <LeaveTeamSection />
         </div>
       </div>
+
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(null)
+        }}
+        title="Remove member"
+        description={`${removing?.email ?? "This member"} will lose access to this team.`}
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          if (removing) {
+            await removeMember.mutateAsync(removing.user_id).catch(() => {})
+          }
+        }}
+      />
     </div>
   )
 }

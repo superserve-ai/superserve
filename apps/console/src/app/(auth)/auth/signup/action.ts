@@ -15,6 +15,7 @@ import {
   claimGoogleSignupRecovery,
   issueGoogleSignupProof,
 } from "@/lib/auth/google-signup-proof"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
@@ -475,7 +476,8 @@ export const signUpWithEmail = async (
       proAuthReturnPath(ycNext ?? null) ??
       starterAuthReturnPath(ycNext ?? null) ??
       ycReturnPath(ycNext) ??
-      deviceReturnPath(ycNext)
+      deviceReturnPath(ycNext) ??
+      inviteReturnPath(ycNext)
     if (next) callbackUrl.searchParams.set("next", next)
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
     const offerIntent = rawSignupOffer ?? offer

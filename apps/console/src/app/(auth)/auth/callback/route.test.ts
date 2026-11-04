@@ -1119,6 +1119,43 @@ describe("auth callback", () => {
       })
     })
 
+    describe("invite return path", () => {
+      const token = `ssinv_use_${"A".repeat(43)}`
+
+      it.each([`/invite/${token}`, `/invite/${token}/`])(
+        "returns to the invite page after sign-in: %s",
+        async (next) => {
+          const response = await GET(
+            new Request(
+              `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+            ),
+          )
+          expect(response.headers.get("location")).toBe(
+            `https://console.superserve.ai/invite/${token}`,
+          )
+        },
+      )
+
+      it.each([
+        `/invite/${token}/extra`,
+        `/invite/${token}?next=https://outside.test`,
+        `/invite/${token}#x`,
+        `/invite/ssinv_eu_${"A".repeat(43)}`,
+        `/invite/${"A".repeat(43)}`,
+        `//outside.test/invite/${token}`,
+        `/invite/..%2F..%2Fadmin`,
+      ])("drops %s", async (next) => {
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+          ),
+        )
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
+        )
+      })
+    })
+
     it("keeps today's signup when the switch is off, whatever the offer", async () => {
       const response = await firstTimeGoogle("enterprise")
 

@@ -78,13 +78,95 @@ describe("api proxy /api/team-management", () => {
     )
   })
 
-  it("returns 404 when the user lacks platform team read access", async () => {
+  it("lets a non-staff team member read the management model", async () => {
     vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
 
     const res = await GET(req("GET"), params())
 
-    expect(res.status).toBe(404)
+    expect(res.status).toBe(200)
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "https://api.test.superserve.ai/teams/team-1/management",
+    )
+  })
+
+  it("returns 401 when signed out", async () => {
+    vi.mocked(createServerClient).mockResolvedValue({
+      auth: { getUser: async () => ({ data: { user: null } }) },
+    } as never)
+
+    const res = await GET(req("GET"), params())
+
+    expect(res.status).toBe(401)
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("proxies the invitation list read for non-staff members", async () => {
+    vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
+
+    const res = await GET(req("GET", ["invitations"]), params(["invitations"]))
+
+    expect(res.status).toBe(200)
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "https://api.test.superserve.ai/teams/team-1/invitations",
+    )
+  })
+
+  it.each([
+    ["POST", ["invitations"]],
+    ["POST", ["invitations", "inv-1", "resend"]],
+    ["POST", ["invitations", "inv-1", "delivery"]],
+    ["POST", ["leave"]],
+  ])(
+    "does not proxy %s /%s, so invite tokens never reach the browser",
+    async (method, segments) => {
+      for (const staff of [false, true]) {
+        vi.mocked(canViewOtherUsersAccount).mockReturnValue(staff)
+        const res = await POST(
+          req(method, segments, { body: JSON.stringify({ email: "a@b.co" }) }),
+          params(segments),
+        )
+        expect(res.status).toBe(404)
+      }
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
+
+  it("keeps direct member adds and role changes staff-only", async () => {
+    vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
+
+    const add = await POST(
+      req("POST", ["members"], { body: JSON.stringify({ user_id: "u2" }) }),
+      params(["members"]),
+    )
+    const role = await DELETE(
+      req("DELETE", ["roles", "a1"]),
+      params(["roles", "a1"]),
+    )
+
+    expect(add.status).toBe(404)
+    expect(role.status).toBe(404)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("lets a non-staff member remove someone else but not themself", async () => {
+    vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
+
+    const other = await DELETE(
+      req("DELETE", ["members", "u2"]),
+      params(["members", "u2"]),
+    )
+    const self = await DELETE(
+      req("DELETE", ["members", "u1"]),
+      params(["members", "u1"]),
+    )
+
+    expect(other.status).toBe(204)
+    expect(self.status).toBe(404)
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy.mock.calls[0][0]).toBe(
+      "https://api.test.superserve.ai/teams/team-1/members/u2",
+    )
   })
 
   it("proxies the current team's management read model", async () => {

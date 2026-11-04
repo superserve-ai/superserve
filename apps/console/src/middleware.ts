@@ -17,6 +17,7 @@ const PUBLIC_ROUTES = [
   "/auth/auth-code-error",
   "/auth/pending",
   "/device",
+  "/invite",
   "/yc/confirm",
   "/yc/claim",
 ]
@@ -31,6 +32,9 @@ export async function middleware(request: NextRequest) {
 
   const pathname = request.nextUrl.pathname
   const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
+  // The invite page is public so signed-out visitors can read it, but a
+  // signed-in account held for review must still be stopped before it can join.
+  const isInviteRoute = matchesRoute(pathname, ["/invite"])
 
   if (!user && !isPublicRoute) {
     const signinUrl = request.nextUrl.clone()
@@ -75,7 +79,11 @@ export async function middleware(request: NextRequest) {
 
   // Review state rides on the user getUser() already returned, so this adds
   // no Auth round trip for anyone else.
-  if (user && !isPublicRoute && isSignupReviewBlocked(user)) {
+  if (
+    user &&
+    (!isPublicRoute || isInviteRoute) &&
+    isSignupReviewBlocked(user)
+  ) {
     await client.supabase.auth.signOut().catch(() => {})
     const pendingUrl = request.nextUrl.clone()
     pendingUrl.pathname = "/auth/pending"

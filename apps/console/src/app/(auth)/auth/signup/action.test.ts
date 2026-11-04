@@ -459,6 +459,35 @@ describe("signUpWithEmail", () => {
       ).toBeNull()
     })
 
+    it.each([
+      `/invite/ssinv_use_${"A".repeat(43)}`,
+      `/invite/ssinv_usw_${"a1_-".repeat(10)}abc`,
+    ])(
+      "keeps an invite link through the emailed confirmation: %s",
+      async (next) => {
+        await signUp(undefined, next)
+        const redirect = new URL(
+          mockGenerateLink.mock.lastCall![0].options.redirectTo,
+        )
+        expect(redirect.searchParams.get("next")).toBe(next)
+      },
+    )
+    it.each([
+      `/invite/ssinv_use_${"A".repeat(42)}`,
+      `/invite/ssinv_eu_${"A".repeat(43)}`,
+      `/invite/ssinv_use_${"A".repeat(43)}/extra`,
+      `/invite/ssinv_use_${"A".repeat(43)}?next=https%3A%2F%2Foutside.test`,
+      `//invite/ssinv_use_${"A".repeat(43)}`,
+      "/invite/",
+    ])("rejects an invalid invite return: %s", async (next) => {
+      await signUp(undefined, next)
+      expect(
+        new URL(
+          mockGenerateLink.mock.lastCall![0].options.redirectTo,
+        ).searchParams.get("next"),
+      ).toBeNull()
+    })
+
     it("does not ask for the switch without an offer", async () => {
       await signUp(undefined)
       expect(mockPricingVersion).not.toHaveBeenCalled()

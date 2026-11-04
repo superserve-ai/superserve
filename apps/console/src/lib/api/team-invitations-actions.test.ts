@@ -1,0 +1,400 @@
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+const mocks = vi.hoisted(() => ({
+  getUser: vi.fn(),
+  getKeyAndTeam: vi.fn(),
+  listTeams: vi.fn(),
+  listMemberships: vi.fn(),
+  invalidate: vi.fn(),
+  completed: vi.fn(),
+  writeSelection: vi.fn(),
+  sendEmail: vi.fn(),
+}))
+
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: async () => ({ auth: { getUser: mocks.getUser } }),
+}))
+vi.mock("@/lib/api/proxy-auth", () => ({
+  getAuthApiKeyAndTeamForUser: mocks.getKeyAndTeam,
+}))
+vi.mock("@/lib/api/team-directory", () => ({
+  listTeamsForUser: mocks.listTeams,
+  listTeamMembershipsForUserDetailed: mocks.listMemberships,
+  invalidateMembershipDirectory: mocks.invalidate,
+}))
+vi.mock("@/lib/api/team-provisioning", () => ({
+  completedMemberships: mocks.completed,
+}))
+vi.mock("@/lib/api/active-team", async () => ({
+  pickActiveTeam: (memberships: { teamId: string; region: string }[]) =>
+    memberships[0] ?? null,
+  writeTeamSelection: mocks.writeSelection,
+}))
+vi.mock("@/lib/cells", () => ({
+  cellFor: (region: string) => ({
+    apiBaseUrl: `https://api.${region}.test`,
+  }),
+}))
+vi.mock("@/lib/email/send", () => ({ sendEmail: mocks.sendEmail }))
+
+const fetchSpy = vi.fn()
+vi.stubGlobal("fetch", fetchSpy)
+
+import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
+
+import {
+  createInvitationAction,
+  leaveTeamAction,
+  resendInvitationAction,
+  revokeInvitationAction,
+} from "./team-invitations-actions"
+
+const token = `ssinv_use_${"T".repeat(43)}`
+const invitation = {
+  id: "inv-1",
+  email: "new@example.com",
+  status: "pending",
+  invited_by: "user-1",
+  created_at: "2026-11-04T00:00:00Z",
+  expires_at: "2026-11-11T00:00:00Z",
+  last_sent_at: "2026-11-04T00:00:00Z",
+  delivery_status: "pending",
+  token_hash: "must-not-leak",
+}
+
+function json(body: unknown, status = 200): Response {
+  return new Response(JSON.stringify(body), {
+    status,
+    headers: { "content-type": "application/json" },
+  })
+}
+
+function calls(): { url: string; init: RequestInit }[] {
+  return fetchSpy.mock.calls.map(([url, init]) => ({ url, init }))
+}
+
+beforeEach(() => {
+  vi.resetAllMocks()
+  mocks.getUser.mockResolvedValue({
+    data: {
+      user: {
+        id: "user-1",
+        email: "owner@example.com",
+        user_metadata: { full_name: "Olivia Owner" },
+      },
+    },
+  })
+  mocks.getKeyAndTeam.mockResolvedValue({
+    apiKey: "ss_live_key",
+    team: { teamId: "team-1", region: "use" },
+  })
+  mocks.listTeams.mockResolvedValue([
+    { id: "team-1", name: "Acme", region: "use" },
+  ])
+  mocks.sendEmail.mockResolvedValue({ success: true })
+  fetchSpy.mockImplementation(async (url: string) =>
+    url.endsWith("/delivery")
+      ? new Response(null, { status: 204 })
+      : json({ invitation, token }, 201),
+  )
+})
+
+describe("createInvitationAction", () => {
+  it("never returns the token or anything beyond the invitation summary", async () => {
+    const result = await createInvitationAction("New@Example.com")
+
+    expect(result.ok).toBe(true)
+    const serialized = JSON.stringify(result)
+    expect(serialized).not.toContain(token)
+    expect(serialized).not.toContain("token")
+    expect(serialized).not.toContain("must-not-leak")
+    expect(result).toEqual({
+      ok: true,
+      delivery: "sent",
+      invitation: {
+        id: "inv-1",
+        email: "new@example.com",
+        status: "pending",
+        invited_by: "user-1",
+        created_at: "2026-11-04T00:00:00Z",
+        expires_at: "2026-11-11T00:00:00Z",
+        last_sent_at: "2026-11-04T00:00:00Z",
+        delivery_status: "sent",
+      },
+    })
+  })
+
+  it("calls the team's cell with the caller's team API key", async () => {
+    await createInvitationAction("  new@example.com ")
+
+    const [create] = calls()
+    expect(create.url).toBe("https://api.use.test/teams/team-1/invitations")
+    expect(new Headers(create.init.headers).get("x-api-key")).toBe(
+      "ss_live_key",
+    )
+    expect(JSON.parse(create.init.body as string)).toEqual({
+      email: "new@example.com",
+    })
+  })
+
+  it("puts the token only in the emailed link and reports delivery", async () => {
+    await createInvitationAction("new@example.com")
+
+    expect(mocks.sendEmail).toHaveBeenCalledTimes(1)
+    const email = mocks.sendEmail.mock.calls[0][0]
+    expect(email.to).toBe("new@example.com")
+    expect(email.subject).toContain("Acme")
+    expect(JSON.stringify(email.react)).toContain(`/invite/${token}/`)
+
+    const delivery = calls()[1]
+    expect(delivery.url).toBe(
+      "https://api.use.test/teams/team-1/invitations/inv-1/delivery",
+    )
+    expect(JSON.parse(delivery.init.body as string)).toEqual({ status: "sent" })
+    expect(delivery.init.body as string).not.toContain(token)
+  })
+
+  it("reports a failed email as failed without exposing the token", async () => {
+    mocks.sendEmail.mockResolvedValue({ success: false })
+
+    const result = await createInvitationAction("new@example.com")
+
+    expect(result).toMatchObject({
+      ok: true,
+      delivery: "failed",
+      invitation: { delivery_status: "failed" },
+    })
+    expect(JSON.stringify(result)).not.toContain(token)
+    expect(JSON.parse(calls()[1].init.body as string)).toEqual({
+      status: "failed",
+    })
+  })
+
+  it("does not email a token for a different cell", async () => {
+    fetchSpy.mockImplementation(async (url: string) =>
+      url.endsWith("/delivery")
+        ? new Response(null, { status: 204 })
+        : json({ invitation, token: `ssinv_usw_${"T".repeat(43)}` }, 201),
+    )
+
+    const result = await createInvitationAction("new@example.com")
+
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ ok: true, delivery: "failed" })
+  })
+
+  it("treats a malformed token as undeliverable", async () => {
+    fetchSpy.mockImplementation(async (url: string) =>
+      url.endsWith("/delivery")
+        ? new Response(null, { status: 204 })
+        : json({ invitation, token: "javascript:alert(1)" }, 201),
+    )
+
+    const result = await createInvitationAction("new@example.com")
+
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
+    expect(result).toMatchObject({ ok: true, delivery: "failed" })
+  })
+
+  it("still succeeds when the delivery report cannot be recorded", async () => {
+    fetchSpy.mockImplementation(async (url: string) => {
+      if (url.endsWith("/delivery")) throw new Error("network")
+      return json({ invitation, token }, 201)
+    })
+
+    expect(await createInvitationAction("new@example.com")).toMatchObject({
+      ok: true,
+      delivery: "sent",
+    })
+  })
+
+  it.each([
+    ["free_plan", 409],
+    ["already_member", 409],
+    ["invitation_pending", 409],
+    ["pending_limit", 409],
+    ["rate_limited", 429],
+    ["bad_request", 400],
+  ])("maps the backend's %s refusal", async (code, status) => {
+    fetchSpy.mockResolvedValue(json({ error: { code, message: "x" } }, status))
+
+    const result = await createInvitationAction("new@example.com")
+
+    expect(result).toMatchObject({ ok: false, code })
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("explains the Free plan reason in the shared wording", async () => {
+    fetchSpy.mockResolvedValue(
+      json({ error: { code: "free_plan", message: "x" } }, 409),
+    )
+
+    expect(await createInvitationAction("new@example.com")).toMatchObject({
+      message: "Upgrade to invite owners",
+    })
+  })
+
+  it("rejects an obviously invalid email before calling the backend", async () => {
+    expect(await createInvitationAction("not-an-email")).toMatchObject({
+      ok: false,
+      code: "bad_request",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("requires a signed-in user", async () => {
+    mocks.getUser.mockResolvedValue({ data: { user: null } })
+
+    expect(await createInvitationAction("new@example.com")).toMatchObject({
+      ok: false,
+      code: "unauthorized",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("keeps signup restrictions in force", async () => {
+    mocks.getKeyAndTeam.mockRejectedValue(new SignupRestrictedError())
+
+    expect(await createInvitationAction("new@example.com")).toMatchObject({
+      ok: false,
+      code: "signup_blocked",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe("resendInvitationAction", () => {
+  it("returns no token and sends the email with the new link", async () => {
+    const result = await resendInvitationAction("inv-1")
+
+    expect(calls()[0].url).toBe(
+      "https://api.use.test/teams/team-1/invitations/inv-1/resend",
+    )
+    expect(JSON.stringify(result)).not.toContain(token)
+    expect(result).toMatchObject({ ok: true, delivery: "sent" })
+    expect(JSON.stringify(mocks.sendEmail.mock.calls[0][0].react)).toContain(
+      token,
+    )
+  })
+
+  it("maps a closed invitation", async () => {
+    fetchSpy.mockResolvedValue(
+      json({ error: { code: "invitation_closed", message: "x" } }, 409),
+    )
+
+    expect(await resendInvitationAction("inv-1")).toMatchObject({
+      ok: false,
+      code: "invitation_closed",
+    })
+  })
+
+  it("does not let an id escape the invitation route", async () => {
+    expect(await resendInvitationAction("../../members")).toMatchObject({
+      ok: false,
+      code: "bad_request",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+})
+
+describe("revokeInvitationAction", () => {
+  it("only calls the backend", async () => {
+    fetchSpy.mockResolvedValue(json({}, 200))
+
+    expect(await revokeInvitationAction("inv-1")).toEqual({ ok: true })
+    expect(calls()).toHaveLength(1)
+    expect(calls()[0].url).toBe(
+      "https://api.use.test/teams/team-1/invitations/inv-1/revoke",
+    )
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("maps a permission failure", async () => {
+    fetchSpy.mockResolvedValue(json({}, 403))
+
+    expect(await revokeInvitationAction("inv-1")).toMatchObject({
+      ok: false,
+      code: "forbidden",
+    })
+  })
+})
+
+describe("leaveTeamAction", () => {
+  const here = { teamId: "team-1", region: "use" }
+  const other = { teamId: "team-2", region: "usw" }
+
+  function memberships(
+    all: { teamId: string; region: string }[],
+    degraded: string[] = [],
+  ) {
+    mocks.listMemberships.mockResolvedValue({
+      memberships: all,
+      degradedRegions: degraded,
+    })
+    mocks.completed.mockResolvedValue({
+      memberships: all,
+      degradedRegions: [],
+    })
+  }
+
+  it("blocks leaving the only team without calling the backend", async () => {
+    memberships([here])
+
+    expect(await leaveTeamAction()).toMatchObject({
+      ok: false,
+      code: "only_team",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when another region cannot be read", async () => {
+    memberships([here], ["usw"])
+
+    expect(await leaveTeamAction()).toMatchObject({
+      ok: false,
+      code: "only_team",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("fails closed when the directory lookup throws", async () => {
+    mocks.listMemberships.mockRejectedValue(new Error("down"))
+
+    expect(await leaveTeamAction()).toMatchObject({
+      ok: false,
+      code: "only_team",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("leaves, then switches to another team", async () => {
+    memberships([here, other])
+    fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
+
+    const result = await leaveTeamAction()
+
+    expect(result).toEqual({
+      ok: true,
+      next: { teamId: "team-2", region: "usw" },
+    })
+    expect(calls()[0].url).toBe("https://api.use.test/teams/team-1/leave")
+    expect(mocks.invalidate).toHaveBeenCalledWith("user-1")
+    expect(mocks.writeSelection).toHaveBeenCalledWith({
+      region: "usw",
+      teamId: "team-2",
+    })
+  })
+
+  it("keeps the selection when the last owner cannot leave", async () => {
+    memberships([here, other])
+    fetchSpy.mockResolvedValue(
+      json({ error: { code: "last_owner", message: "x" } }, 409),
+    )
+
+    expect(await leaveTeamAction()).toMatchObject({
+      ok: false,
+      code: "last_owner",
+    })
+    expect(mocks.writeSelection).not.toHaveBeenCalled()
+  })
+})

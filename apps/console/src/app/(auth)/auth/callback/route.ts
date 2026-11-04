@@ -29,6 +29,7 @@ import {
   retainOriginalGoogleSignup,
   revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
@@ -716,6 +717,7 @@ export async function GET(request: Request) {
 
         const proNext = proAuthReturnPath(next) ?? starterAuthReturnPath(next)
         const preparationNext = signupPreparationReturnPath(next)
+        const inviteNext = inviteReturnPath(next)
         const ycNext =
           ycReturnPath(next) ??
           (process.env.YC_STAFF_UI_ENABLED === "true"
@@ -730,10 +732,12 @@ export async function GET(request: Request) {
           !isPlanPickerPath(next) &&
           !ycNext &&
           !proNext &&
-          !preparationNext
+          !preparationNext &&
+          !inviteNext
         ) {
           next = "/sandboxes"
         }
+        if (inviteNext) next = inviteNext
         if (ycNext) next = ycNext
         if (proNext) next = proNext
         if (preparationNext) next = preparationNext

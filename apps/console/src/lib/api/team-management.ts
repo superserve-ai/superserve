@@ -8,6 +8,33 @@ export interface TeamManagementCapabilities {
   can_deactivate_members: boolean
   can_assign_roles: boolean
   can_revoke_roles: boolean
+  // Newer backends only; absent means the action is not offered.
+  can_invite_owners?: boolean
+  invite_blocked_reason?: "free_plan" | null
+  can_rename_team?: boolean
+}
+
+export type TeamInvitationStatus =
+  | "pending"
+  | "accepted"
+  | "revoked"
+  | "expired"
+
+export type TeamInvitationDelivery = "pending" | "sent" | "failed"
+
+export interface TeamInvitation {
+  id: string
+  email: string
+  status: TeamInvitationStatus
+  invited_by?: string | null
+  created_at: string
+  expires_at: string
+  last_sent_at?: string | null
+  delivery_status: TeamInvitationDelivery
+}
+
+export interface TeamInvitationsResponse {
+  invitations: TeamInvitation[]
 }
 
 export interface TeamMember {
@@ -59,6 +86,10 @@ export interface AssignTeamRoleRequest {
 
 export async function getTeamManagement(): Promise<TeamManagementResponse> {
   return apiClient<TeamManagementResponse>("/team-management")
+}
+
+export async function getTeamInvitations(): Promise<TeamInvitationsResponse> {
+  return apiClient<TeamInvitationsResponse>("/team-management/invitations")
 }
 
 export async function addTeamMember(data: AddTeamMemberRequest): Promise<void> {
