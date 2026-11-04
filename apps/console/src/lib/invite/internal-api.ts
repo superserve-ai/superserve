@@ -149,11 +149,7 @@ export async function acceptInvitation(
   }
   // 404 and 410 both mean the invitation is gone; anything unrecognised is
   // reported the same way so the page never explains why a link stopped working.
-  const error = data?.error
-  const code =
-    typeof error === "object" && error
-      ? (error as { code?: unknown }).code
-      : (data?.code ?? error)
+  const code = (data?.error as { code?: unknown } | undefined)?.code
   if (
     code === "email_mismatch" ||
     code === "email_unverified" ||

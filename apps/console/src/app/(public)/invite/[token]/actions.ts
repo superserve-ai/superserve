@@ -1,27 +1,30 @@
 "use server"
 
+import { redirect } from "next/navigation"
+
 import { invitePath, isInviteToken } from "@/lib/auth/invite-return-path"
-import { acceptInviteAndSelectTeam } from "@/lib/invite/accept"
+import { acceptInviteAndSelectTeam, loadInviteView } from "@/lib/invite/accept"
 import { failureForAcceptError } from "@/lib/invite/decision"
+import { clearInviteIntent, setInviteIntent } from "@/lib/invite/intent"
 import { createServerClient } from "@/lib/supabase/server"
 
 export type InviteActionResult =
   | { status: "redirect"; to: string }
   | {
       status: "error"
-      code: "unavailable" | "already_member" | "email_mismatch" | "failed"
+      code:
+        | "unavailable"
+        | "already_member"
+        | "email_mismatch"
+        | "not_eligible"
+        | "failed"
     }
 
-/**
- * Explicit "Join team" from the confirm screen. Success hands back where to go
- * next; a definitive refusal is sent to the invite page, which explains it.
- */
-export async function joinInviteAction(
+async function acceptForSignedInUser(
   token: string,
+  path: string,
+  { auto }: { auto: boolean },
 ): Promise<InviteActionResult> {
-  const path = isInviteToken(token) ? invitePath(token) : null
-  if (!path) return { status: "error", code: "unavailable" }
-
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -31,19 +34,65 @@ export async function joinInviteAction(
     return { status: "error", code: "unavailable" }
   }
 
+  // The silent path re-decides here, with a fresh team read and the intent
+  // cookie, rather than trusting whatever the page rendered. Anything else
+  // goes back to the page, which shows the confirm screen.
+  if (auto) {
+    const { view } = await loadInviteView(token)
+    if (view.kind !== "auto_accept")
+      return { status: "redirect", to: `${path}/` }
+  }
+
   let result: Awaited<ReturnType<typeof acceptInviteAndSelectTeam>>
   try {
-    result = await acceptInviteAndSelectTeam(token, {
-      id: user.id,
-      email: user.email,
-    })
+    result = await acceptInviteAndSelectTeam(token, user)
   } catch {
     return { status: "error", code: "failed" }
   }
   if (!result.ok) {
     return { status: "error", code: failureForAcceptError(result.error) }
   }
+  await clearInviteIntent()
   return { status: "redirect", to: "/sandboxes" }
+}
+
+/**
+ * Explicit "Join team" from the confirm screen. Success hands back where to go
+ * next; a definitive refusal is sent to the invite page, which explains it.
+ * Server actions are same-origin only, so a link on another site cannot post it.
+ */
+export async function joinInviteAction(
+  token: string,
+): Promise<InviteActionResult> {
+  const path = invitePath(token)
+  if (!path) return { status: "error", code: "unavailable" }
+  return acceptForSignedInUser(token, path, { auto: false })
+}
+
+/**
+ * Join without a click for a new account that started signup or sign-in from
+ * this invite page. It only proceeds while the intent cookie for this token is
+ * present and the account still has no team.
+ */
+export async function autoJoinInviteAction(
+  token: string,
+): Promise<InviteActionResult> {
+  const path = invitePath(token)
+  if (!path) return { status: "error", code: "unavailable" }
+  return acceptForSignedInUser(token, path, { auto: true })
+}
+
+/** Records that signup or sign-in began here, then continues to that screen. */
+export async function beginInviteAuthAction(
+  token: string,
+  mode: "signup" | "signin",
+): Promise<void> {
+  const path = invitePath(token)
+  if (!path) redirect("/")
+  await setInviteIntent(token)
+  redirect(
+    `/auth/${mode === "signup" ? "signup" : "signin"}?next=${encodeURIComponent(path)}`,
+  )
 }
 
 /** Mismatch screen: end this session and return to the invite signed out. */
@@ -55,6 +104,7 @@ export async function signOutForInviteAction(
   try {
     const supabase = await createServerClient()
     await supabase.auth.signOut()
+    await setInviteIntent(token)
   } catch {
     return { status: "error" }
   }

@@ -23,10 +23,23 @@ const FORWARD_REQUEST_HEADERS = new Set([
   "user-agent",
 ])
 
+// Path IDs are forwarded and compared verbatim, so only the canonical form is
+// accepted. Hyphenless, braced, URN and uppercase spellings all parse as the
+// same UUID upstream and would slip past the self-removal check below.
+const CANONICAL_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
 type RouteContext = { params: Promise<{ path?: string[] }> }
 
 function notFound(): NextResponse {
   return NextResponse.json({ error: "Not found" }, { status: 404 })
+}
+
+function invalidId(): NextResponse {
+  return NextResponse.json(
+    { error: { code: "invalid_id", message: "Invalid identifier" } },
+    { status: 400 },
+  )
 }
 
 function signupDenied(): NextResponse {
@@ -68,7 +81,7 @@ function upstreamPath(
   // Customers can remove other members. Removing yourself goes through the
   // leave-team action, which enforces the only-team rule.
   if (method === "DELETE" && path.length === 2 && path[0] === "members") {
-    if (!staff && path[1].toLowerCase() === userId.toLowerCase()) return null
+    if (!staff && path[1] === userId.toLowerCase()) return null
     return `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(path[1])}`
   }
 
@@ -116,6 +129,14 @@ async function proxyTeamManagementRequest(
     throw error
   }
   const { path = [] } = await params
+  if (
+    request.method === "DELETE" &&
+    path.length === 2 &&
+    (path[0] === "members" || path[0] === "roles") &&
+    !CANONICAL_UUID.test(path[1])
+  ) {
+    return invalidId()
+  }
   const targetPath = upstreamPath(request.method, teamId, path, {
     staff: canViewOtherUsersAccount(user),
     userId: user.id,

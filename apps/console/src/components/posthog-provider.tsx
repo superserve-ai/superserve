@@ -4,7 +4,12 @@ import posthog from "posthog-js"
 import { PostHogProvider as PHProvider } from "posthog-js/react"
 import type React from "react"
 
-import { redactPreviewToken } from "@/lib/preview-token-redaction"
+import {
+  redactCapturedRequest,
+  redactInviteTokens,
+  redactInviteTokensFromEvent,
+  syncRecordingWithAddress,
+} from "@/lib/invite-token-redaction"
 
 if (typeof window !== "undefined") {
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
@@ -18,12 +23,16 @@ if (typeof window !== "undefined") {
         capture_pageview: false,
         capture_pageleave: true,
         cross_subdomain_cookie: true,
+        // Invitation tokens never leave the browser: this is the final scrub
+        // of every event, whatever put the token there.
+        before_send: redactInviteTokensFromEvent,
+        loaded: (ph) => syncRecordingWithAddress(ph, window.location.href),
         session_recording: {
           maskAllInputs: true,
           maskTextSelector: "[data-mask]",
           recordHeaders: false,
           recordBody: false,
-          maskCapturedNetworkRequestFn: redactPreviewToken,
+          maskCapturedNetworkRequestFn: redactCapturedRequest,
         },
       })
       // First-touch attribution: if the user landed directly on the console
@@ -43,8 +52,8 @@ if (typeof window !== "undefined") {
         if (value) utm[`first_${key}`] = value
       }
       posthog.register_once({
-        first_landing_path: url.pathname,
-        first_referrer: document.referrer || "(direct)",
+        first_landing_path: redactInviteTokens(url.pathname),
+        first_referrer: redactInviteTokens(document.referrer) || "(direct)",
         ...utm,
       })
     } catch (error) {

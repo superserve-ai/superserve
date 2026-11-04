@@ -28,11 +28,3 @@ export function inviteReturnPath(raw: string | null | undefined) {
   const token = raw.slice(INVITE_PATH_PREFIX.length).replace(/\/$/, "")
   return invitePath(token)
 }
-
-// Token carried by an invite return path, or null for any other path.
-export function inviteTokenFromReturnPath(
-  raw: string | null | undefined,
-): string | null {
-  const path = inviteReturnPath(raw)
-  return path ? path.slice(INVITE_PATH_PREFIX.length) : null
-}

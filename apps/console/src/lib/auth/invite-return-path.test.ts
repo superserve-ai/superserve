@@ -2,7 +2,6 @@ import { describe, expect, it } from "vitest"
 
 import {
   inviteReturnPath,
-  inviteTokenFromReturnPath,
   inviteTokenRegion,
   invitePath,
   isInviteToken,
@@ -89,16 +88,5 @@ describe("inviteReturnPath", () => {
     `/Invite/${useToken}`,
   ])("rejects %j", (raw) => {
     expect(inviteReturnPath(raw)).toBeNull()
-  })
-})
-
-describe("inviteTokenFromReturnPath", () => {
-  it("extracts the token from an invite return path", () => {
-    expect(inviteTokenFromReturnPath(`/invite/${uswToken}/`)).toBe(uswToken)
-  })
-
-  it("returns null for anything else", () => {
-    expect(inviteTokenFromReturnPath("/sandboxes")).toBeNull()
-    expect(inviteTokenFromReturnPath(null)).toBeNull()
   })
 })

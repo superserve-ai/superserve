@@ -32,8 +32,12 @@ import { DELETE, GET, POST } from "./route"
 
 type AnyParams = { params: Promise<{ path?: string[] }> }
 
+const SELF_ID = "3f2c1d4e-5a6b-4c7d-8e9f-0a1b2c3d4e5f"
+const OTHER_ID = "9b8a7c6d-5e4f-4a3b-8c2d-1e0f9a8b7c6d"
+const ASSIGNMENT_ID = "11111111-2222-4333-8444-555555555555"
+
 const mockUser = {
-  id: "u1",
+  id: SELF_ID,
   email: "user@test.com",
   app_metadata: { permissions: ["users:read"] },
 }
@@ -135,12 +139,12 @@ describe("api proxy /api/team-management", () => {
     vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
 
     const add = await POST(
-      req("POST", ["members"], { body: JSON.stringify({ user_id: "u2" }) }),
+      req("POST", ["members"], { body: JSON.stringify({ user_id: OTHER_ID }) }),
       params(["members"]),
     )
     const role = await DELETE(
-      req("DELETE", ["roles", "a1"]),
-      params(["roles", "a1"]),
+      req("DELETE", ["roles", ASSIGNMENT_ID]),
+      params(["roles", ASSIGNMENT_ID]),
     )
 
     expect(add.status).toBe(404)
@@ -153,20 +157,78 @@ describe("api proxy /api/team-management", () => {
     fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
 
     const other = await DELETE(
-      req("DELETE", ["members", "u2"]),
-      params(["members", "u2"]),
+      req("DELETE", ["members", OTHER_ID]),
+      params(["members", OTHER_ID]),
     )
     const self = await DELETE(
-      req("DELETE", ["members", "u1"]),
-      params(["members", "u1"]),
+      req("DELETE", ["members", SELF_ID]),
+      params(["members", SELF_ID]),
     )
 
     expect(other.status).toBe(204)
     expect(self.status).toBe(404)
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     expect(fetchSpy.mock.calls[0][0]).toBe(
-      "https://api.test.superserve.ai/teams/team-1/members/u2",
+      `https://api.test.superserve.ai/teams/team-1/members/${OTHER_ID}`,
     )
+  })
+
+  describe("non-canonical path ids", () => {
+    const compact = SELF_ID.replaceAll("-", "")
+    const variants: Array<[string, string]> = [
+      ["hyphenless", compact],
+      ["braced", `{${SELF_ID}}`],
+      ["URN", `urn:uuid:${SELF_ID}`],
+      ["uppercase", SELF_ID.toUpperCase()],
+    ]
+
+    it.each(variants)(
+      "rejects a %s id for self-removal before forwarding",
+      async (_label, id) => {
+        vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
+
+        const res = await DELETE(
+          req("DELETE", ["members", id]),
+          params(["members", id]),
+        )
+
+        expect(res.status).toBe(400)
+        expect(fetchSpy).not.toHaveBeenCalled()
+      },
+    )
+
+    it.each(variants)(
+      "rejects a %s id for members and roles even for staff",
+      async (_label, id) => {
+        vi.mocked(canViewOtherUsersAccount).mockReturnValue(true)
+
+        for (const kind of ["members", "roles"]) {
+          const res = await DELETE(
+            req("DELETE", [kind, id]),
+            params([kind, id]),
+          )
+          expect(res.status).toBe(400)
+        }
+        expect(fetchSpy).not.toHaveBeenCalled()
+      },
+    )
+
+    it("still blocks a canonical self id and forwards a canonical one", async () => {
+      vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
+      fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
+
+      const self = await DELETE(
+        req("DELETE", ["members", SELF_ID]),
+        params(["members", SELF_ID]),
+      )
+      const other = await DELETE(
+        req("DELETE", ["members", OTHER_ID]),
+        params(["members", OTHER_ID]),
+      )
+
+      expect(self.status).toBe(404)
+      expect(other.status).toBe(204)
+    })
   })
 
   it("proxies the current team's management read model", async () => {
@@ -222,7 +284,7 @@ describe("api proxy /api/team-management", () => {
     await POST(
       new NextRequest(
         new URL("https://console.test/api/team-management/members?ignored=1"),
-        { method: "POST", body: JSON.stringify({ user_id: "u2" }) },
+        { method: "POST", body: JSON.stringify({ user_id: OTHER_ID }) },
       ),
       params(["members"]),
     )
@@ -259,14 +321,14 @@ describe("api proxy /api/team-management", () => {
     fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))
 
     const res = await DELETE(
-      req("DELETE", ["roles", "assignment-1"]),
-      params(["roles", "assignment-1"]),
+      req("DELETE", ["roles", ASSIGNMENT_ID]),
+      params(["roles", ASSIGNMENT_ID]),
     )
 
     expect(res.status).toBe(204)
     const [url] = fetchSpy.mock.calls[0]
     expect(url).toBe(
-      "https://api.test.superserve.ai/teams/team-1/roles/assignment-1",
+      `https://api.test.superserve.ai/teams/team-1/roles/${ASSIGNMENT_ID}`,
     )
   })
 })

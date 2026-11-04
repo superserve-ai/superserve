@@ -1,15 +1,14 @@
 import { Button } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
-import { redirect } from "next/navigation"
 
-import { invitePath } from "@/lib/auth/invite-return-path"
 import { regionLabel } from "@/lib/format"
 import { loadInviteView } from "@/lib/invite/accept"
 import { INVITE_COPY } from "@/lib/invite/copy"
 import { parseInviteFailure, type InviteView } from "@/lib/invite/decision"
 
-import { ConfirmControls, MismatchControls } from "./invite-controls"
+import { beginInviteAuthAction } from "./actions"
+import { AutoJoin, ConfirmControls, MismatchControls } from "./invite-controls"
 
 function InviteCard({ children }: { children: React.ReactNode }) {
   return (
@@ -60,9 +59,6 @@ function Small({ children }: { children: React.ReactNode }) {
 }
 
 function InviteBody({ view, token }: { view: InviteView; token: string }) {
-  const path = `/invite/${token}`
-  const next = encodeURIComponent(path)
-
   switch (view.kind) {
     case "signed_out": {
       const { preview } = view
@@ -72,19 +68,16 @@ function InviteBody({ view, token }: { view: InviteView; token: string }) {
           <Body>{INVITE_COPY.signedOut.body}</Body>
           <p className="mb-6 text-xs text-muted">{INVITE_COPY.ownerNotice}</p>
           <div className="space-y-3">
-            <Button
-              className="w-full"
-              render={<Link href={`/auth/signup?next=${next}`} />}
-            >
-              {INVITE_COPY.signedOut.createAccount}
-            </Button>
-            <Button
-              className="w-full"
-              variant="outline"
-              render={<Link href={`/auth/signin?next=${next}`} />}
-            >
-              {INVITE_COPY.signedOut.signIn}
-            </Button>
+            <form action={beginInviteAuthAction.bind(null, token, "signup")}>
+              <Button type="submit" className="w-full">
+                {INVITE_COPY.signedOut.createAccount}
+              </Button>
+            </form>
+            <form action={beginInviteAuthAction.bind(null, token, "signin")}>
+              <Button type="submit" className="w-full" variant="outline">
+                {INVITE_COPY.signedOut.signIn}
+              </Button>
+            </form>
           </div>
           <Small>
             {regionLabel(preview.region)} ·{" "}
@@ -98,7 +91,11 @@ function InviteBody({ view, token }: { view: InviteView; token: string }) {
       return (
         <>
           <Title>{INVITE_COPY.confirm.title(preview.teamName)}</Title>
-          <Body>{INVITE_COPY.confirm.body}</Body>
+          <Body>
+            {view.teamless
+              ? INVITE_COPY.confirm.bodyNoTeam
+              : INVITE_COPY.confirm.body}
+          </Body>
           <ConfirmControls token={token} />
           <Small>{regionLabel(preview.region)}</Small>
           <Small>{INVITE_COPY.confirm.signedInAs(view.signedInEmail)}</Small>
@@ -118,6 +115,23 @@ function InviteBody({ view, token }: { view: InviteView; token: string }) {
             {INVITE_COPY.mismatch.body(view.preview.email, view.signedInEmail)}
           </Body>
           <MismatchControls token={token} />
+        </>
+      )
+    case "auto_accept":
+      return (
+        <>
+          <Title>{INVITE_COPY.confirm.title(view.preview.teamName)}</Title>
+          <AutoJoin token={token} />
+        </>
+      )
+    case "not_eligible":
+      return (
+        <>
+          <Title>{INVITE_COPY.notEligible.title}</Title>
+          <Body>{INVITE_COPY.notEligible.body}</Body>
+          <Button className="w-full" render={<Link href="/sandboxes" />}>
+            {INVITE_COPY.notEligible.action}
+          </Button>
         </>
       )
     case "already_member":
@@ -168,14 +182,12 @@ export default async function InvitePage({
   searchParams: Promise<{ failed?: string | string[] }>
 }) {
   const [{ token }, { failed }] = await Promise.all([params, searchParams])
-  const path = invitePath(token)
   const failure = parseInviteFailure(Array.isArray(failed) ? failed[0] : failed)
 
-  // Rendering is read-only. An account with no team yet is handed to the join
-  // route, which can set the active-team cookie; nothing here provisions a
-  // personal team.
+  // Rendering is read-only. An account that began signup here is joined by a
+  // server action, which can set the active-team cookie; nothing here
+  // provisions a personal team.
   const { view } = await loadInviteView(token, failure)
-  if (path && view.kind === "auto_accept") redirect(`${path}/join/`)
 
   return (
     <InviteCard>

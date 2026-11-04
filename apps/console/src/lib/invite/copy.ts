@@ -15,6 +15,7 @@ export const INVITE_COPY = {
   confirm: {
     title: (team: string) => `You're invited to ${team}`,
     body: "Join as an Owner with full access. You keep your current team and data, and you can switch teams any time from the team menu in the sidebar.",
+    bodyNoTeam: "Join as an Owner with full access.",
     join: "Join team",
     joining: "Joining...",
     notNow: "Not now",
@@ -36,6 +37,12 @@ export const INVITE_COPY = {
   alreadyMember: {
     title: (team: string) => `You're already part of ${team}`,
     body: "Your access to this team is unchanged. You can switch teams any time from the team menu in the sidebar.",
+    action: "Continue",
+  },
+
+  notEligible: {
+    title: "We can't add you to this team",
+    body: "This account can't join a team from an invitation right now. Contact support if you think this is a mistake.",
     action: "Continue",
   },
 

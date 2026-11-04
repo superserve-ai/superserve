@@ -3,13 +3,21 @@
 import { Button } from "@superserve/ui"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { INVITE_COPY } from "@/lib/invite/copy"
 
-import { joinInviteAction, signOutForInviteAction } from "./actions"
+import {
+  autoJoinInviteAction,
+  joinInviteAction,
+  signOutForInviteAction,
+  type InviteActionResult,
+} from "./actions"
 
-export function ConfirmControls({ token }: { token: string }) {
+function useJoin(
+  token: string,
+  action: (token: string) => Promise<InviteActionResult>,
+) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const router = useRouter()
@@ -18,7 +26,7 @@ export function ConfirmControls({ token }: { token: string }) {
     setBusy(true)
     setError(false)
     try {
-      const result = await joinInviteAction(token)
+      const result = await action(token)
       if (result.status === "redirect") {
         router.replace(result.to)
         return
@@ -33,6 +41,11 @@ export function ConfirmControls({ token }: { token: string }) {
     }
     setBusy(false)
   }
+  return { busy, error, join }
+}
+
+export function ConfirmControls({ token }: { token: string }) {
+  const { busy, error, join } = useJoin(token, joinInviteAction)
 
   return (
     <div className="space-y-3">
@@ -52,6 +65,38 @@ export function ConfirmControls({ token }: { token: string }) {
       >
         {INVITE_COPY.confirm.notNow}
       </Button>
+    </div>
+  )
+}
+
+// An account that started signup from this invite joins without a click. The
+// server action re-checks the intent cookie and the team state itself.
+export function AutoJoin({ token }: { token: string }) {
+  const { busy, error, join } = useJoin(token, autoJoinInviteAction)
+  const started = useRef(false)
+
+  useEffect(() => {
+    if (started.current) return
+    started.current = true
+    void join()
+    // join is recreated each render; the ref makes this run once.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [])
+
+  return (
+    <div className="space-y-3" aria-live="polite">
+      {error && (
+        <p role="alert" className="text-xs text-destructive">
+          {INVITE_COPY.confirm.failed}
+        </p>
+      )}
+      {error ? (
+        <Button className="w-full" onClick={join} disabled={busy}>
+          {INVITE_COPY.confirm.join}
+        </Button>
+      ) : (
+        <p className="text-sm text-muted">{INVITE_COPY.confirm.joining}</p>
+      )}
     </div>
   )
 }

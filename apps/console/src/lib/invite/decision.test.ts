@@ -74,6 +74,7 @@ describe("decideInviteView", () => {
         preview,
         viewer: { email: "  INVITEE@example.COM ", emailVerified: true },
         teamState: "none",
+        intent: true,
       }).kind,
     ).toBe("auto_accept")
     expect(
@@ -92,11 +93,41 @@ describe("decideInviteView", () => {
     ).toBe("mismatch")
   })
 
-  it("joins a brand-new account directly", () => {
+  it("joins a brand-new account directly only with signup intent", () => {
     expect(
-      decideInviteView({ preview, viewer: matching, teamState: "none" }),
+      decideInviteView({
+        preview,
+        viewer: matching,
+        teamState: "none",
+        intent: true,
+      }),
     ).toEqual({ kind: "auto_accept", preview })
   })
+
+  it("confirms a teamless account that did not start from the invite", () => {
+    expect(
+      decideInviteView({ preview, viewer: matching, teamState: "none" }),
+    ).toEqual({
+      kind: "confirm",
+      preview,
+      signedInEmail: "invitee@example.com",
+      teamless: true,
+    })
+  })
+
+  it.each(["has_teams", "unknown"] as const)(
+    "never auto-joins when the team state is %s, even with intent",
+    (teamState) => {
+      expect(
+        decideInviteView({
+          preview,
+          viewer: matching,
+          teamState,
+          intent: true,
+        }).kind,
+      ).toBe("confirm")
+    },
+  )
 
   it.each(["has_teams", "unknown"] as const)(
     "confirms first when the team state is %s",
@@ -107,6 +138,7 @@ describe("decideInviteView", () => {
         kind: "confirm",
         preview,
         signedInEmail: "invitee@example.com",
+        teamless: false,
       })
     },
   )
@@ -117,6 +149,7 @@ describe("decideInviteView", () => {
         preview,
         viewer: matching,
         teamState: "none",
+        intent: true,
         failure: "unavailable",
       }),
     ).toEqual({ kind: "unavailable", signedIn: true })
@@ -125,9 +158,19 @@ describe("decideInviteView", () => {
         preview,
         viewer: matching,
         teamState: "none",
+        intent: true,
         failure: "already_member",
       }),
     ).toEqual({ kind: "already_member", preview })
+    expect(
+      decideInviteView({
+        preview,
+        viewer: matching,
+        teamState: "none",
+        intent: true,
+        failure: "not_eligible",
+      }),
+    ).toEqual({ kind: "not_eligible", preview })
     expect(
       decideInviteView({
         preview,
@@ -171,6 +214,7 @@ describe("failureForAcceptError", () => {
   it("maps refusals to a page failure, defaulting to unavailable", () => {
     expect(failureForAcceptError("already_member")).toBe("already_member")
     expect(failureForAcceptError("email_mismatch")).toBe("email_mismatch")
+    expect(failureForAcceptError("not_eligible")).toBe("not_eligible")
     expect(failureForAcceptError("email_unverified")).toBe("unavailable")
     expect(failureForAcceptError("unavailable")).toBe("unavailable")
   })
