@@ -40,8 +40,8 @@ export interface TeamDirectoryResponse {
   regions: string[]
   activeTeamId: string | null
   activeRegion: string | null
-  // The active team when it is the user's own account team, which a team
-  // creation converts in place instead of creating another team.
+  // The user's own account team, which a team creation converts in place
+  // instead of creating another team while that team is active.
   convertibleTeam?: TeamSummary | null
 }
 
@@ -74,11 +74,18 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   if (!user) throw new Error("Not authenticated")
 
   const { teams, activeTeam } = await readTeamDirectory(user.id)
+  // Eligibility does not depend on the active team, so a cached directory
+  // still offers the conversion after the user switches to the account.
+  const candidates = teams
+    .filter((t) => isPersonalTeam(t, user.email))
+    .toSorted((a, b) => Number(b === activeTeam) - Number(a === activeTeam))
   let convertibleTeam: TeamSummary | null = null
-  if (activeTeam && isPersonalTeam(activeTeam, user.email)) {
+  for (const team of candidates) {
     try {
-      if (await ownsTeam(activeTeam.region, user.id, activeTeam.id))
-        convertibleTeam = activeTeam
+      if (await ownsTeam(team.region, user.id, team.id)) {
+        convertibleTeam = team
+        break
+      }
     } catch (error) {
       // The create form falls back to a new team; the action rechecks anyway.
       console.error("team directory: owner lookup failed:", error)

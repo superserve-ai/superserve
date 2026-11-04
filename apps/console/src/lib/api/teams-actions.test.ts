@@ -723,10 +723,14 @@ describe("active team", () => {
     expect((await listTeamsAction()).convertibleTeam).toBeNull()
     rbacMemberTeamIds = []
 
-    // Any other active team is not the account.
+    // The offer does not depend on the active team, so a cached directory
+    // still converts after the user switches to the account.
     legacyOwnerTeamIds = ["team-me", "team-w"]
     cookieValue = "usw:team-w"
-    expect((await listTeamsAction()).convertibleTeam).toBeNull()
+    expect(await listTeamsAction()).toMatchObject({
+      activeTeamId: "team-w",
+      convertibleTeam: { id: "team-me" },
+    })
   })
 
   it("directory serves without a conversion when the owner lookup fails", async () => {

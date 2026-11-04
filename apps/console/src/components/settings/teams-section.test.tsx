@@ -87,4 +87,26 @@ describe("TeamsSection", () => {
       "success",
     )
   })
+
+  it("offers the conversion as soon as the user switches to the account", () => {
+    teamsData = {
+      teams: [account, { id: "team-a", name: "alpha", region: "use" }],
+      regions: ["use", "usw"],
+      activeTeamId: "team-a",
+      activeRegion: "use",
+      convertibleTeam: account,
+    }
+    const { rerender } = render(<TeamsSection />)
+    expect(screen.queryByText(/becomes this team/)).not.toBeInTheDocument()
+
+    // A switch changes only the active selection in the cached directory.
+    teamsData = {
+      ...(teamsData as object),
+      activeTeamId: "team-me",
+      activeRegion: "usw",
+    }
+    rerender(<TeamsSection />)
+
+    expect(screen.getByText(/becomes this team in US West/)).toBeInTheDocument()
+  })
 })
