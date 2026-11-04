@@ -99,29 +99,52 @@ export async function addTeamMember(data: AddTeamMemberRequest): Promise<void> {
   })
 }
 
-export async function deactivateTeamMember(userId: string): Promise<void> {
+/**
+ * The active team is a cookie another tab can move, so every mutation names
+ * the team the page was showing and the proxy refuses a mismatch.
+ */
+export interface TeamScope {
+  teamId: string
+  region: string
+}
+
+function scopeHeaders(scope: TeamScope): HeadersInit {
+  return { "X-Superserve-Team-Scope": `${scope.region}:${scope.teamId}` }
+}
+
+export async function deactivateTeamMember(
+  scope: TeamScope,
+  userId: string,
+): Promise<void> {
   await apiClient<void>(
     `/team-management/members/${encodeURIComponent(userId)}`,
     {
       method: "DELETE",
+      headers: scopeHeaders(scope),
     },
   )
 }
 
 export async function assignTeamRole(
+  scope: TeamScope,
   data: AssignTeamRoleRequest,
 ): Promise<void> {
   await apiClient<void>("/team-management/roles", {
     method: "POST",
+    headers: scopeHeaders(scope),
     body: JSON.stringify(data),
   })
 }
 
-export async function revokeTeamRole(assignmentId: string): Promise<void> {
+export async function revokeTeamRole(
+  scope: TeamScope,
+  assignmentId: string,
+): Promise<void> {
   await apiClient<void>(
     `/team-management/roles/${encodeURIComponent(assignmentId)}`,
     {
       method: "DELETE",
+      headers: scopeHeaders(scope),
     },
   )
 }

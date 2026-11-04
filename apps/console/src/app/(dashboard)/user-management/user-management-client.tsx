@@ -37,6 +37,7 @@ import {
   useTeamManagement,
 } from "@/hooks/use-team-management"
 import { useUser } from "@/hooks/use-user"
+import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import type { TeamMember, TeamRoleAssignment } from "@/lib/api/team-management"
 
 import {
@@ -562,9 +563,13 @@ export function UserManagementClient() {
   }
 
   const capabilities = data.capabilities
+  // Role changes are platform-staff tools: the proxy refuses them for
+  // everyone else, so customers see assignments read-only.
+  const isStaff = canViewOtherUsersAccount(user)
+  const canAssignRoles = isStaff && capabilities.can_assign_roles
+  const canRevokeRoles = isStaff && capabilities.can_revoke_roles
   const assignableRoles = data.mutation_options?.assignable_roles ?? []
-  const canMutateRoles =
-    capabilities.can_assign_roles || capabilities.can_revoke_roles
+  const canMutateRoles = canAssignRoles || canRevokeRoles
   const activeMembers = data.members.filter(
     (member) => member.status === "active",
   )
@@ -645,7 +650,7 @@ export function UserManagementClient() {
             <MemberTabs
               members={data.members}
               onManageRoles={setSelectedUserId}
-              showManageRoles={capabilities.can_view_role_assignments}
+              showManageRoles={canAssignRoles}
               // Leaving goes through Leave team, which protects the user's
               // only team, so the current user has no Remove button.
               onRemove={
@@ -662,9 +667,9 @@ export function UserManagementClient() {
             )}
           </section>
 
-          {inviteControlState(capabilities) !== "hidden" && (
-            <InvitationsSection canManage={capabilities.can_invite_members} />
-          )}
+          <InvitationsSection
+            canManage={capabilities.can_invite_owners === true}
+          />
 
           {capabilities.can_view_role_assignments && (
             <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
@@ -688,7 +693,7 @@ export function UserManagementClient() {
                 </div>
 
                 <div className="space-y-5">
-                  {capabilities.can_assign_roles && (
+                  {canAssignRoles && (
                     <AssignRoleForm
                       members={data.members}
                       roles={assignableRoles}
@@ -698,7 +703,7 @@ export function UserManagementClient() {
                   )}
                   <ActiveAssignmentRows
                     assignments={data.assignments}
-                    canRevoke={capabilities.can_revoke_roles}
+                    canRevoke={canRevokeRoles}
                   />
                 </div>
               </div>

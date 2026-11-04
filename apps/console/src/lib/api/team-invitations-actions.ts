@@ -13,6 +13,7 @@ import {
 import type {
   TeamInvitation,
   TeamInvitationDelivery,
+  TeamScope,
 } from "@/lib/api/team-management"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
@@ -45,11 +46,21 @@ export type InvitationErrorCode =
   | "last_owner"
   | "conflict"
   | "only_team"
+  | "team_changed"
   | "forbidden"
   | "unauthorized"
   | "signup_blocked"
   | "google_signup_recovery_required"
   | "unavailable"
+
+function isTeamScope(value: unknown): value is TeamScope {
+  return (
+    typeof value === "object" &&
+    value !== null &&
+    typeof (value as TeamScope).teamId === "string" &&
+    typeof (value as TeamScope).region === "string"
+  )
+}
 
 export type InvitationActionError = {
   ok: false
@@ -79,6 +90,7 @@ const MESSAGES: Record<InvitationErrorCode, string> = {
     "A team needs at least one owner. Make someone else an owner first.",
   conflict: "You are no longer an active member of this team.",
   only_team: "You can't leave your only team.",
+  team_changed: "Your active team changed. Reload the page and try again.",
   forbidden: "You don't have permission to do that.",
   unauthorized: "Your session has expired. Sign in again.",
   signup_blocked: SIGNUP_RESTRICTED_MESSAGE,
@@ -106,13 +118,9 @@ async function errorFromResponse(
   response: Response,
 ): Promise<InvitationActionError> {
   const body = (await response.json().catch(() => null)) as {
-    error?: { code?: unknown } | string
-    code?: unknown
+    error?: { code?: unknown }
   } | null
-  const code =
-    typeof body?.error === "object"
-      ? body.error?.code
-      : (body?.code ?? body?.error)
+  const code = body?.error?.code
   const known = BACKEND_CODES.find((candidate) => candidate === code)
   if (known) return failure(known)
   if (response.status === 401) return failure("unauthorized")
@@ -129,7 +137,14 @@ interface Context {
   baseUrl: string
 }
 
-async function loadContext(): Promise<Context | InvitationActionError> {
+/**
+ * `expected` is the team the page was showing. The active team comes from a
+ * cookie that another tab can move, so a mismatch is refused rather than
+ * letting the action land on a team the user is not looking at.
+ */
+async function loadContext(
+  expected: TeamScope,
+): Promise<Context | InvitationActionError> {
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -140,6 +155,13 @@ async function loadContext(): Promise<Context | InvitationActionError> {
       user,
       new Date().toISOString(),
     )
+    if (
+      !isTeamScope(expected) ||
+      team.teamId !== expected.teamId ||
+      team.region !== expected.region
+    ) {
+      return failure("team_changed")
+    }
     return {
       userId: user.id,
       userLabel:
@@ -272,10 +294,11 @@ async function reportDelivery(
 }
 
 async function createOrResend(
+  expected: TeamScope,
   suffix: string,
   body: unknown,
 ): Promise<SendInvitationResult> {
-  const context = await loadContext()
+  const context = await loadContext(expected)
   if (isFailure(context)) return context
 
   const response = await backend(context, suffix, body)
@@ -320,34 +343,38 @@ async function createOrResend(
 }
 
 export async function createInvitationAction(
+  expected: TeamScope,
   email: string,
 ): Promise<SendInvitationResult> {
   const normalized = typeof email === "string" ? email.trim() : ""
   if (!normalized || normalized.length > 320 || !normalized.includes("@")) {
     return failure("bad_request")
   }
-  return createOrResend("/invitations", { email: normalized })
+  return createOrResend(expected, "/invitations", { email: normalized })
 }
 
 export async function resendInvitationAction(
+  expected: TeamScope,
   invitationId: string,
 ): Promise<SendInvitationResult> {
   if (typeof invitationId !== "string" || !/^[\w-]{1,64}$/.test(invitationId)) {
     return failure("bad_request")
   }
   return createOrResend(
+    expected,
     `/invitations/${encodeURIComponent(invitationId)}/resend`,
     undefined,
   )
 }
 
 export async function revokeInvitationAction(
+  expected: TeamScope,
   invitationId: string,
 ): Promise<{ ok: true } | InvitationActionError> {
   if (typeof invitationId !== "string" || !/^[\w-]{1,64}$/.test(invitationId)) {
     return failure("bad_request")
   }
-  const context = await loadContext()
+  const context = await loadContext(expected)
   if (isFailure(context)) return context
   const response = await backend(
     context,
@@ -363,10 +390,10 @@ export async function revokeInvitationAction(
  * backend, because this server owns the cross-region membership directory.
  * An ambiguous directory read fails closed.
  */
-export async function leaveTeamAction(): Promise<
-  { ok: true; next: { teamId: string; region: string } } | InvitationActionError
-> {
-  const context = await loadContext()
+export async function leaveTeamAction(
+  expected: TeamScope,
+): Promise<{ ok: true } | InvitationActionError> {
+  const context = await loadContext(expected)
   if (isFailure(context)) return context
 
   let remaining: TeamMembership[]
@@ -395,7 +422,9 @@ export async function leaveTeamAction(): Promise<
   if (!response.ok) return errorFromResponse(response)
 
   invalidateMembershipDirectory(context.userId)
-  const next = pickActiveTeam(remaining, null) ?? remaining[0]
-  await writeTeamSelection({ region: next.region, teamId: next.teamId })
-  return { ok: true, next: { teamId: next.teamId, region: next.region } }
+  const next = pickActiveTeam(remaining, null)
+  if (next) {
+    await writeTeamSelection({ region: next.region, teamId: next.teamId })
+  }
+  return { ok: true }
 }

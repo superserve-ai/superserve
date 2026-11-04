@@ -4,6 +4,7 @@ import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
+  getRegionForUser,
   getTeamIdForUser,
 } from "@/lib/api/proxy-auth"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
@@ -29,6 +30,10 @@ const FORWARD_REQUEST_HEADERS = new Set([
 const CANONICAL_UUID =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
 
+// Mutations carry the team the page was showing as "<region>:<teamId>"; the
+// active team is a cookie another tab can move.
+const TEAM_SCOPE_HEADER = "x-superserve-team-scope"
+
 type RouteContext = { params: Promise<{ path?: string[] }> }
 
 function notFound(): NextResponse {
@@ -39,6 +44,18 @@ function invalidId(): NextResponse {
   return NextResponse.json(
     { error: { code: "invalid_id", message: "Invalid identifier" } },
     { status: 400 },
+  )
+}
+
+function teamChanged(): NextResponse {
+  return NextResponse.json(
+    {
+      error: {
+        code: "team_changed",
+        message: "Your active team changed. Reload the page and try again.",
+      },
+    },
+    { status: 409 },
   )
 }
 
@@ -143,6 +160,20 @@ async function proxyTeamManagementRequest(
   })
   if (!targetPath) {
     return notFound()
+  }
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    let region: string
+    try {
+      region = await getRegionForUser(user)
+    } catch (error) {
+      if (error instanceof GoogleSignupRecoveryRequiredError)
+        return googleRecovery()
+      if (error instanceof SignupRestrictedError) return signupDenied()
+      throw error
+    }
+    if (request.headers.get(TEAM_SCOPE_HEADER) !== `${region}:${teamId}`) {
+      return teamChanged()
+    }
   }
 
   let apiKey: string | null

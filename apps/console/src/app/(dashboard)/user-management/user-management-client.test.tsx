@@ -14,6 +14,7 @@ const {
   mockResend,
   mockRevokeInvitation,
   mockRouterReplace,
+  mockUser,
 } = vi.hoisted(() => ({
   mockUseTeamManagement: vi.fn(),
   mockUseTeamInvitations: vi.fn(),
@@ -23,6 +24,7 @@ const {
   mockResend: vi.fn(),
   mockRevokeInvitation: vi.fn(),
   mockRouterReplace: vi.fn(),
+  mockUser: vi.fn(),
 }))
 
 const render = (ui: ReactElement) =>
@@ -48,13 +50,29 @@ vi.mock("@/hooks/use-team-management", () => ({
 }))
 vi.mock("@/hooks/use-teams", () => ({ useTeams: () => mockUseTeams() }))
 vi.mock("@/hooks/use-user", () => ({
-  useUser: () => ({ user: { id: "user-1" }, loading: false, error: null }),
+  useUser: () => ({ user: mockUser(), loading: false, error: null }),
 }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockRouterReplace }),
 }))
 
 import { UserManagementClient } from "./user-management-client"
+
+const customer = { id: "user-1", app_metadata: {} }
+const staff = {
+  id: "user-1",
+  email: "ops@superserve.ai",
+  app_metadata: { provider: "google", permissions: ["platform:teams:read"] },
+}
+
+const pendingInvitation = {
+  id: "inv-1",
+  email: "pending@example.com",
+  status: "pending",
+  created_at: "2026-11-04T00:00:00Z",
+  expires_at: "2026-11-11T00:00:00Z",
+  delivery_status: "sent",
+}
 
 const baseManagement: TeamManagementResponse = {
   team_id: "team-1",
@@ -102,6 +120,7 @@ const baseManagement: TeamManagementResponse = {
 describe("UserManagementClient", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockUser.mockReturnValue(customer)
     mockUseTeamManagement.mockReturnValue({
       data: baseManagement,
       isPending: false,
@@ -157,7 +176,8 @@ describe("UserManagementClient", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("shows backend-advertised controls for capable users", () => {
+  it("shows backend-advertised controls for capable staff", () => {
+    mockUser.mockReturnValue(staff)
     mockUseTeamManagement.mockReturnValue({
       data: {
         ...baseManagement,
@@ -202,6 +222,160 @@ describe("UserManagementClient", () => {
     fireEvent.click(screen.getByRole("tab", { name: /^invitations\s+1$/i }))
     expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /revoke/i })).toBeInTheDocument()
+  })
+
+  describe("invitations list visibility", () => {
+    beforeEach(() => {
+      mockUseTeamInvitations.mockReturnValue({
+        data: { invitations: [pendingInvitation] },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+    })
+
+    it("shows the list to a viewer without Resend or Revoke", () => {
+      // baseManagement is a viewer: no invite capabilities at all.
+      render(<UserManagementClient />)
+
+      expect(screen.getByText("pending@example.com")).toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: /^resend$/i }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: /revoke invitation/i }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("hides Resend and Revoke on a Free plan team but keeps the list", () => {
+      mockUseTeamManagement.mockReturnValue({
+        data: {
+          ...baseManagement,
+          capabilities: {
+            ...baseManagement.capabilities,
+            can_invite_members: true,
+            can_invite_owners: false,
+            invite_blocked_reason: "free_plan",
+          },
+        },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+
+      render(<UserManagementClient />)
+
+      expect(screen.getByText("pending@example.com")).toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: /^resend$/i }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("offers Resend and Revoke when owner invites are allowed", () => {
+      mockUseTeamManagement.mockReturnValue({
+        data: {
+          ...baseManagement,
+          capabilities: {
+            ...baseManagement.capabilities,
+            can_invite_members: true,
+            can_invite_owners: true,
+          },
+        },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+
+      render(<UserManagementClient />)
+
+      expect(
+        screen.getByRole("button", { name: /^resend$/i }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: /revoke invitation/i }),
+      ).toBeInTheDocument()
+    })
+  })
+
+  describe("role controls", () => {
+    const withRoleCapabilities = {
+      ...baseManagement,
+      capabilities: {
+        ...baseManagement.capabilities,
+        can_view_role_assignments: true,
+        can_assign_roles: true,
+        can_revoke_roles: true,
+      },
+      mutation_options: { assignable_roles: ["team_owner", "viewer"] },
+    }
+
+    beforeEach(() => {
+      mockUseTeamManagement.mockReturnValue({
+        data: withRoleCapabilities,
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+    })
+
+    it("shows roles read-only to a customer whose capabilities allow changes", () => {
+      mockUser.mockReturnValue(customer)
+
+      render(<UserManagementClient />)
+
+      expect(screen.getByText("Role assignments")).toBeInTheDocument()
+      expect(
+        screen.getByText(/you can view role assignments, but cannot change/i),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: /update role/i }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: /^revoke$/i }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: /manage roles/i }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("offers Update role and Revoke to staff", () => {
+      mockUser.mockReturnValue(staff)
+
+      render(<UserManagementClient />)
+
+      expect(
+        screen.getByRole("button", { name: /update role/i }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: /^revoke$/i }),
+      ).toBeInTheDocument()
+    })
+
+    it("keeps staff read-only when the backend withholds the capability", () => {
+      mockUser.mockReturnValue(staff)
+      mockUseTeamManagement.mockReturnValue({
+        data: {
+          ...withRoleCapabilities,
+          capabilities: {
+            ...withRoleCapabilities.capabilities,
+            can_assign_roles: false,
+            can_revoke_roles: false,
+          },
+        },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+
+      render(<UserManagementClient />)
+
+      expect(
+        screen.queryByRole("button", { name: /update role/i }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: /^revoke$/i }),
+      ).not.toBeInTheDocument()
+    })
   })
 
   describe("customer capabilities", () => {

@@ -34,6 +34,7 @@ import {
   useTeamInvitations,
 } from "@/hooks/use-team-management"
 import { useTeams } from "@/hooks/use-teams"
+import { ApiError } from "@/lib/api/client"
 import type {
   TeamInvitation,
   TeamManagementCapabilities,
@@ -166,7 +167,7 @@ export function InviteMemberCard({ state }: { state: InviteControlState }) {
   const blocked = state === "blocked_free_plan"
 
   return (
-    <div className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+    <div className="border border-dashed border-border/80 bg-background/75 p-6 backdrop-blur-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-lg font-medium text-foreground">Invite member</p>
@@ -207,11 +208,19 @@ function invitationStatusLabel(invitation: TeamInvitation): string {
   return invitation.status.charAt(0).toUpperCase() + invitation.status.slice(1)
 }
 
+/**
+ * Anyone the backend lets read invitations sees the list; `canManage` (the
+ * backend's owner-invite capability) separately gates Resend and Revoke.
+ */
 export function InvitationsSection({ canManage }: { canManage: boolean }) {
   const { data, isPending, error, refetch } = useTeamInvitations()
   const resend = useResendInvitation()
   const revoke = useRevokeInvitation()
   const [revoking, setRevoking] = useState<TeamInvitation | null>(null)
+
+  // The backend is the authority on who may read the list: a refusal means
+  // this user has no invitations view, not that something broke.
+  if (error instanceof ApiError && error.status === 403) return null
 
   const invitations = (data?.invitations ?? []).filter(
     (invitation) =>
@@ -219,29 +228,29 @@ export function InvitationsSection({ canManage }: { canManage: boolean }) {
   )
 
   return (
-    <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+    <section className="border border-dashed border-border/80 bg-background/75 p-6 backdrop-blur-sm">
       <p className="text-lg font-medium text-foreground">Email invitations</p>
       <p className="mt-1 mb-4 text-sm text-muted">
         Invitations that have not been accepted yet.
       </p>
 
       {isPending ? (
-        <div className="border border-border bg-background/60 px-4 py-6 text-sm text-muted">
+        <div className="border border-dashed border-border bg-background/60 px-4 py-6 text-sm text-muted">
           Loading invitations...
         </div>
       ) : error ? (
-        <div className="flex items-center justify-between gap-4 border border-border bg-background/60 px-4 py-6 text-sm text-muted">
+        <div className="flex items-center justify-between gap-4 border border-dashed border-border bg-background/60 px-4 py-6 text-sm text-muted">
           <span>Invitations could not be loaded.</span>
           <Button size="sm" variant="outline" onClick={() => refetch()}>
             Retry
           </Button>
         </div>
       ) : invitations.length === 0 ? (
-        <div className="border border-border bg-background/60 px-4 py-6 text-sm text-muted">
+        <div className="border border-dashed border-border bg-background/60 px-4 py-6 text-sm text-muted">
           No pending invitations.
         </div>
       ) : (
-        <div className="overflow-hidden border border-border bg-background/60">
+        <div className="overflow-hidden border border-dashed border-border bg-background/60">
           <Table>
             <TableHeader>
               <TableRow>
@@ -327,7 +336,7 @@ export function LeaveTeamSection() {
   const blockedKnown = teamCount !== undefined && teamCount <= 1
 
   return (
-    <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
+    <section className="border border-dashed border-border/80 bg-background/75 p-6 backdrop-blur-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-lg font-medium text-foreground">Leave team</p>

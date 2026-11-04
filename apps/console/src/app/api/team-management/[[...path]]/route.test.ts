@@ -10,6 +10,7 @@ vi.mock("@/lib/admin/permissions", () => ({
 vi.mock("@/lib/api/proxy-auth", () => ({
   getApiBaseUrlForUser: vi.fn(),
   getAuthApiKeyForUser: vi.fn(),
+  getRegionForUser: vi.fn(),
   getTeamIdForUser: vi.fn(),
 }))
 
@@ -20,6 +21,7 @@ import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
+  getRegionForUser,
   getTeamIdForUser,
 } from "@/lib/api/proxy-auth"
 import {
@@ -49,9 +51,12 @@ function req(
 ): NextRequest {
   const suffix = pathSegments.length > 0 ? `/${pathSegments.join("/")}` : ""
   const url = new URL(`https://console.test/api/team-management${suffix}`)
+  // Mutations name the team the page was showing; tests override or drop it.
+  const scope: Record<string, string> =
+    method === "GET" ? {} : { "x-superserve-team-scope": "use:team-1" }
   return new NextRequest(url, {
     method,
-    headers: init.headers,
+    headers: { ...scope, ...init.headers },
     body: init.body,
   })
 }
@@ -68,6 +73,7 @@ describe("api proxy /api/team-management", () => {
     } as never)
     vi.mocked(canViewOtherUsersAccount).mockReturnValue(true)
     vi.mocked(getTeamIdForUser).mockResolvedValue("team-1")
+    vi.mocked(getRegionForUser).mockResolvedValue("use")
     vi.mocked(getAuthApiKeyForUser).mockResolvedValue("ss_live_test_key")
     vi.mocked(getApiBaseUrlForUser).mockResolvedValue(
       "https://api.test.superserve.ai",
@@ -171,6 +177,51 @@ describe("api proxy /api/team-management", () => {
     expect(fetchSpy.mock.calls[0][0]).toBe(
       `https://api.test.superserve.ai/teams/team-1/members/${OTHER_ID}`,
     )
+  })
+
+  describe("displayed team scope", () => {
+    const remove = () => ["members", OTHER_ID]
+
+    it.each([
+      ["a different team", { "x-superserve-team-scope": "use:team-9" }],
+      ["a different region", { "x-superserve-team-scope": "usw:team-1" }],
+      ["a malformed scope", { "x-superserve-team-scope": "team-1" }],
+    ])("refuses a mutation scoped to %s", async (_label, headers) => {
+      vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
+      const path = remove()
+
+      const res = await DELETE(
+        new NextRequest(
+          new URL(`https://console.test/api/team-management/${path.join("/")}`),
+          { method: "DELETE", headers },
+        ),
+        params(path),
+      )
+
+      expect(res.status).toBe(409)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("refuses a mutation that names no team", async () => {
+      vi.mocked(canViewOtherUsersAccount).mockReturnValue(false)
+      const path = remove()
+
+      const res = await DELETE(
+        new NextRequest(
+          new URL(`https://console.test/api/team-management/${path.join("/")}`),
+          { method: "DELETE" },
+        ),
+        params(path),
+      )
+
+      expect(res.status).toBe(409)
+      expect(fetchSpy).not.toHaveBeenCalled()
+    })
+
+    it("does not require a scope for reads", async () => {
+      const res = await GET(req("GET"), params())
+      expect(res.status).toBe(200)
+    })
   })
 
   describe("non-canonical path ids", () => {
@@ -284,7 +335,11 @@ describe("api proxy /api/team-management", () => {
     await POST(
       new NextRequest(
         new URL("https://console.test/api/team-management/members?ignored=1"),
-        { method: "POST", body: JSON.stringify({ user_id: OTHER_ID }) },
+        {
+          method: "POST",
+          headers: { "x-superserve-team-scope": "use:team 1" },
+          body: JSON.stringify({ user_id: OTHER_ID }),
+        },
       ),
       params(["members"]),
     )
