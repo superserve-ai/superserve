@@ -1,3 +1,5 @@
+import { createHash } from "node:crypto"
+
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -50,6 +52,10 @@ import {
 } from "./team-invitations-actions"
 
 const token = `ssinv_use_${"T".repeat(43)}`
+const tokenPrefix = createHash("sha256")
+  .update(token)
+  .digest("hex")
+  .slice(0, 16)
 const invitation = {
   id: "inv-1",
   email: "new@example.com",
@@ -150,7 +156,10 @@ describe("createInvitationAction", () => {
     expect(delivery.url).toBe(
       "https://api.use.test/teams/team-1/invitations/inv-1/delivery",
     )
-    expect(JSON.parse(delivery.init.body as string)).toEqual({ status: "sent" })
+    expect(JSON.parse(delivery.init.body as string)).toEqual({
+      status: "sent",
+      token_hash_prefix: tokenPrefix,
+    })
     expect(delivery.init.body as string).not.toContain(token)
   })
 
@@ -167,6 +176,7 @@ describe("createInvitationAction", () => {
     expect(JSON.stringify(result)).not.toContain(token)
     expect(JSON.parse(calls()[1].init.body as string)).toEqual({
       status: "failed",
+      token_hash_prefix: tokenPrefix,
     })
   })
 
@@ -222,6 +232,19 @@ describe("createInvitationAction", () => {
 
     expect(result).toMatchObject({ ok: false, code })
     expect(mocks.sendEmail).not.toHaveBeenCalled()
+  })
+
+  it("points an expired pending invitation to Resend or Revoke", async () => {
+    fetchSpy.mockResolvedValue(
+      json({ error: { code: "invitation_pending", message: "x" } }, 409),
+    )
+
+    const result = await createInvitationAction("new@example.com")
+
+    expect(result).toMatchObject({ ok: false, code: "invitation_pending" })
+    expect((result as { message: string }).message).toMatch(
+      /expired.*resend or revoke/i,
+    )
   })
 
   it("explains the Free plan reason in the shared wording", async () => {
@@ -383,6 +406,19 @@ describe("leaveTeamAction", () => {
       region: "usw",
       teamId: "team-2",
     })
+  })
+
+  it("keeps the selection when the membership is not active", async () => {
+    memberships([here, other])
+    fetchSpy.mockResolvedValue(
+      json({ error: { code: "conflict", message: "x" } }, 409),
+    )
+
+    expect(await leaveTeamAction()).toMatchObject({
+      ok: false,
+      code: "conflict",
+    })
+    expect(mocks.writeSelection).not.toHaveBeenCalled()
   })
 
   it("keeps the selection when the last owner cannot leave", async () => {

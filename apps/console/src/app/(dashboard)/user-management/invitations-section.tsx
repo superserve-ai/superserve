@@ -104,7 +104,16 @@ function InviteDialog({
         }
         handleOpenChange(false)
       },
-      onError: (failure) => setError(failure.message),
+      onError: (failure) => {
+        // An unaccepted invitation (even an expired one) blocks a new one for
+        // the same email; the list behind the dialog has Resend and Revoke.
+        if ((failure as { code?: string }).code === "invitation_pending") {
+          addToast(failure.message, "error")
+          handleOpenChange(false)
+          return
+        }
+        setError(failure.message)
+      },
     })
   }
 

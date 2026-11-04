@@ -147,7 +147,13 @@ export async function acceptInvitation(
     }
     return { ok: true, result, teamId, teamName, region }
   }
-  const code = (data?.error as { code?: unknown } | undefined)?.code
+  // 404 and 410 both mean the invitation is gone; anything unrecognised is
+  // reported the same way so the page never explains why a link stopped working.
+  const error = data?.error
+  const code =
+    typeof error === "object" && error
+      ? (error as { code?: unknown }).code
+      : (data?.code ?? error)
   if (
     code === "email_mismatch" ||
     code === "email_unverified" ||

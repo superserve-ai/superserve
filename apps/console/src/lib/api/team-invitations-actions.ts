@@ -1,5 +1,7 @@
 "use server"
 
+import { createHash } from "node:crypto"
+
 import { pickActiveTeam, writeTeamSelection } from "@/lib/api/active-team"
 import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
 import {
@@ -41,6 +43,7 @@ export type InvitationErrorCode =
   | "bad_request"
   | "invitation_closed"
   | "last_owner"
+  | "conflict"
   | "only_team"
   | "forbidden"
   | "unauthorized"
@@ -66,7 +69,7 @@ const MESSAGES: Record<InvitationErrorCode, string> = {
   free_plan: "Upgrade to invite owners",
   already_member: "That person is already a member of this team.",
   invitation_pending:
-    "An invitation to that email is already pending. Resend it instead.",
+    "That email already has an invitation that hasn't been accepted, including expired ones. Resend or revoke it in the list below.",
   pending_limit:
     "This team has the maximum number of pending invitations. Revoke one to send another.",
   rate_limited: "Too many invitations were sent recently. Try again later.",
@@ -74,6 +77,7 @@ const MESSAGES: Record<InvitationErrorCode, string> = {
   invitation_closed: "That invitation is no longer pending.",
   last_owner:
     "A team needs at least one owner. Make someone else an owner first.",
+  conflict: "You are no longer an active member of this team.",
   only_team: "You can't leave your only team.",
   forbidden: "You don't have permission to do that.",
   unauthorized: "Your session has expired. Sign in again.",
@@ -95,15 +99,20 @@ const BACKEND_CODES: readonly InvitationErrorCode[] = [
   "bad_request",
   "invitation_closed",
   "last_owner",
+  "conflict",
 ]
 
 async function errorFromResponse(
   response: Response,
 ): Promise<InvitationActionError> {
   const body = (await response.json().catch(() => null)) as {
-    error?: { code?: unknown }
+    error?: { code?: unknown } | string
+    code?: unknown
   } | null
-  const code = body?.error?.code
+  const code =
+    typeof body?.error === "object"
+      ? body.error?.code
+      : (body?.code ?? body?.error)
   const known = BACKEND_CODES.find((candidate) => candidate === code)
   if (known) return failure(known)
   if (response.status === 401) return failure("unauthorized")
@@ -238,15 +247,24 @@ async function teamName(context: Context): Promise<string> {
   return "a team"
 }
 
+// First 16 hex chars of the SHA-256 of the full token. The backend ignores a
+// report whose prefix no longer matches, so a slow report from an earlier send
+// cannot overwrite the status of a newer resend.
+function tokenHashPrefix(token: unknown): string | undefined {
+  if (typeof token !== "string" || !token) return undefined
+  return createHash("sha256").update(token).digest("hex").slice(0, 16)
+}
+
 async function reportDelivery(
   context: Context,
   invitationId: string,
   status: Exclude<TeamInvitationDelivery, "pending">,
+  token: unknown,
 ): Promise<void> {
   const response = await backend(
     context,
     `/invitations/${encodeURIComponent(invitationId)}/delivery`,
-    { status },
+    { status, token_hash_prefix: tokenHashPrefix(token) },
   )
   if (!response || !response.ok) {
     console.warn("Invitation delivery status was not recorded")
@@ -292,7 +310,7 @@ async function createOrResend(
     })
     if (sent.success) delivery = "sent"
   }
-  await reportDelivery(context, invitation.id, delivery)
+  await reportDelivery(context, invitation.id, delivery, token)
 
   return {
     ok: true,
