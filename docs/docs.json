@@ -280,6 +280,10 @@
             ]
           },
           {
+            "group": "Evaluations",
+            "pages": ["integrations/evaluations/harbor"]
+          },
+          {
             "group": "MCP & Tools",
             "pages": ["integrations/mcp"]
           }
