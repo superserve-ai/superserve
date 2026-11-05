@@ -22,13 +22,13 @@ export function parseSignupOffer(value: unknown): SignupOffer {
   return "pro_monthly"
 }
 
-// Where a new account lands after signup under pricing v2. A new team waiting
-// for payment goes to its plan's Stripe Checkout instead; Developer is sold
-// only that way.
+// Where a new account lands after signup under pricing v2. Every self-serve
+// signup starts on Free in the console, a paid plan's link included; the
+// offer only picks the plan its upgrade banner shows first.
 export const SIGNUP_OFFER_DESTINATIONS: Record<SignupOffer, string> = {
   free: "/sandboxes",
   developer: "/sandboxes",
-  pro_monthly: "/billing/pro/",
+  pro_monthly: "/sandboxes",
   enterprise: "/auth/pending",
 }
 
@@ -49,9 +49,9 @@ export function isSelfServeSignupOffer(raw: unknown): raw is string {
 
 // Navigation intent never assigns a plan or grants payment authority. Existing
 // accounts must not enter the new-account Enterprise hold through a sign-in URL.
+// An existing account that follows a Pro link opens its upgrade page.
 export function signInOfferDestination(raw: unknown): string {
-  const offer = parseSignupOffer(raw)
-  return offer === "enterprise"
-    ? "/sandboxes"
-    : SIGNUP_OFFER_DESTINATIONS[offer]
+  return parseSignupOffer(raw) === "pro_monthly"
+    ? "/billing/pro/"
+    : "/sandboxes"
 }

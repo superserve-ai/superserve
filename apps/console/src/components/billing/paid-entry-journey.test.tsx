@@ -8,7 +8,6 @@ import { BuyCreditRoute } from "@/app/(dashboard)/plan-usage/buy-credit/route-cl
 import { GET as prepare } from "@/app/api/onboarding/prepare/route"
 import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { ApiError } from "@/lib/api/client"
-import { SIGNUP_OFFER_DESTINATIONS } from "@/lib/auth/signup-offer"
 import { signupPreparationReturnPath } from "@/lib/billing/pro-auth-return"
 
 const id = "11111111-1111-4111-8111-111111111111"
@@ -211,10 +210,8 @@ beforeEach(() => {
   })
 })
 describe("actual signup preparation to paid page journey", () => {
-  it("allows a fresh ordinary Pro offer produced by signup", async () => {
-    const target = await preparedDestination(
-      SIGNUP_OFFER_DESTINATIONS.pro_monthly,
-    )
+  it("allows a fresh ordinary Pro return path produced by signup", async () => {
+    const target = await preparedDestination("/billing/pro/")
     const page = await ProPage({
       searchParams: Promise.resolve(Object.fromEntries(target.searchParams)),
     })

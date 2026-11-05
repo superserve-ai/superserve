@@ -58,9 +58,9 @@ async function readEntryState(
   return isAwaitingPlanState(body.entry_state) ? body.entry_state : null
 }
 
-// Where a new signup lands: the console while its trial lasts, the plan picker
-// once it is used up. Null keeps the caller's destination, so a team that has
-// a plan, or a backend without trials, follows today's flow.
+// Where a new signup lands: the console on Free or while a trial lasts, the
+// plan picker once a trial is used up. Null keeps the caller's destination,
+// so a team on Free, or any other plan, stays in the console.
 export async function signupEntryDestination(
   user: User,
   offer: SignupCheckoutOffer | undefined,

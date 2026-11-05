@@ -1,6 +1,7 @@
 "use client"
 
 import { Button } from "@superserve/ui"
+import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 
 import { useQueryScope } from "@/components/query-provider"
@@ -23,25 +24,35 @@ import {
   type TeamPlan,
   upgradePath,
 } from "@/lib/api/billing-v2"
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
+import { trialPlanOffer } from "@/lib/billing/signup-checkout-paths"
 
 import { PlanAwareBanner, type UpgradeChoice } from "./plan-aware-banner"
 
 // The monthly plans this team can buy from the upgrade page right now, by
-// the same per-plan check the upgrade page makes.
+// the same per-plan check the upgrade page makes. The plan whose link the
+// account signed up from comes first; signup itself always starts on Free.
 function upgradeChoices(
   capabilities: BillingCapabilities | undefined,
+  requestedOffer: string | undefined,
 ): UpgradeChoice[] {
-  return (capabilities?.catalog?.cards ?? []).flatMap((card) => {
-    const href = card.kind === "subscription" ? upgradePath(card.family) : null
-    return href &&
-      card.monthly?.available &&
-      canStartPlan(capabilities, {
-        key: card.monthly.offer_key,
-        kind: card.kind,
-      })
-      ? [{ name: card.name, href }]
-      : []
-  })
+  const offer = trialPlanOffer(requestedOffer)
+  const requested = offer === "pro_monthly" ? "pro" : offer
+  return (capabilities?.catalog?.cards ?? [])
+    .flatMap((card) => {
+      const href =
+        card.kind === "subscription" ? upgradePath(card.family) : null
+      return href &&
+        card.monthly?.available &&
+        canStartPlan(capabilities, {
+          key: card.monthly.offer_key,
+          kind: card.kind,
+        })
+        ? [{ name: card.name, href, requested: card.family === requested }]
+        : []
+    })
+    .toSorted((a, b) => Number(b.requested) - Number(a.requested))
+    .map(({ name, href }) => ({ name, href }))
 }
 
 function PricingV2Banner({ plan }: { plan: TeamPlan }) {
@@ -53,6 +64,10 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
   const prepaid = usePrepaidBalance(fundedByCredit(plan, offers)).data
   const { teamKey } = useBillingContext()
   const payment = useBillingPayment(summary, teamKey)
+  const signup = useQueryClient().getQueryData<SignupPlanContext>([
+    "signup-plan",
+    teamKey,
+  ])
   if (!summary?.permissions?.can_view) return null
   // Without a way to add credit here, the customer fixes the card instead.
   const manageBilling = payment.available ? (
@@ -72,7 +87,7 @@ function PricingV2Banner({ plan }: { plan: TeamPlan }) {
     <PlanAwareBanner
       plan={plan}
       offers={offers}
-      upgradeChoices={upgradeChoices(capabilities)}
+      upgradeChoices={upgradeChoices(capabilities, signup?.requestedOffer)}
       fundingState={summary.trial?.state}
       prepaid={prepaid ?? null}
       canManage={scope === "self" && summary.permissions.can_manage}

@@ -41,6 +41,7 @@ import {
   parseSignupOffer,
   isSelfServeSignupOffer,
   SIGNUP_OFFER_DESTINATIONS,
+  signInOfferDestination,
   SIGNUP_OFFER_PARAM,
 } from "@/lib/auth/signup-offer"
 import {
@@ -320,14 +321,9 @@ export async function GET(request: Request) {
           : null
         const directPaidNext =
           proAuthReturnPath(next) ?? starterAuthReturnPath(next)
-        const defaultPaidNext =
-          (!searchParams.get("next") || searchParams.get("next") === "/") &&
-          !(await cookies()).get("yc_claim_confirmation") &&
-          signupOffer === "pro_monthly"
-            ? SIGNUP_OFFER_DESTINATIONS[signupOffer]
-            : null
-        let retryPaidNext =
-          preparationIntent?.get("next") ?? directPaidNext ?? defaultPaidNext
+        // A paid plan's link alone starts on Free, so it has no paid page to
+        // resume; only an explicit paid return path does.
+        let retryPaidNext = preparationIntent?.get("next") ?? directPaidNext
         // A preparation return can pin its team outside the nested paid URL.
         // Carry that locator into the retry rather than falling back to the
         // browser's newly selected team after the directory recovers.
@@ -749,7 +745,9 @@ export async function GET(request: Request) {
           (!searchParams.get("next") || searchParams.get("next") === "/") &&
           (newSignup || signupOffer !== "enterprise")
         )
-          next = SIGNUP_OFFER_DESTINATIONS[signupOffer]
+          next = newSignup
+            ? SIGNUP_OFFER_DESTINATIONS[signupOffer]
+            : signInOfferDestination(signupOffer)
         if (
           newSignup &&
           (proAuthReturnPath(next) || starterAuthReturnPath(next))

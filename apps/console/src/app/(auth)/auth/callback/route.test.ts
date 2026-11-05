@@ -830,9 +830,7 @@ describe("auth callback", () => {
           `https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1&offer=${offer}`,
         ),
       )
-      expect(response.headers.get("location")).toContain(
-        offer === "pro_annual" ? "/billing/pro/" : "/sandboxes",
-      )
+      expect(response.headers.get("location")).toContain("/sandboxes")
       const offerCookie = response.cookies.get("ss-plan-offer")
       if (expected)
         expect(JSON.parse(offerCookie!.value)).toEqual({
@@ -1013,6 +1011,15 @@ describe("auth callback", () => {
             `https://console.superserve.ai/auth/callback?token_hash=official&type=signup${query}`,
           ),
         )
+      const googleSignup = (query: string) => {
+        googleMembershipState = { kind: "first_time" }
+        mockHasValidGoogleSignupProof.mockResolvedValue(true)
+        return GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1${query}`,
+          ),
+        )
+      }
 
       it.each([
         ["&signup_offer=developer", "developer"],
@@ -1074,6 +1081,48 @@ describe("auth callback", () => {
         async (query) => {
           await emailSignup(query)
           expect(mockSignupEntryDestination).not.toHaveBeenCalled()
+        },
+      )
+
+      // A team on Free has no awaiting entry state, so the entry check keeps
+      // the caller's destination: the console, never a paid plan's page.
+      it.each([
+        "",
+        "&signup_offer=free",
+        "&signup_offer=developer",
+        "&signup_offer=starter",
+        "&signup_offer=pro_monthly",
+        "&signup_offer=pro_annual",
+        "&offer=pro_monthly",
+      ])("lands a new signup from %s on Free in the console", async (query) => {
+        mockPricingVersion.mockResolvedValue("v2")
+        for (const response of [
+          await emailSignup(query),
+          await googleSignup(query),
+        ]) {
+          const location = new URL(response.headers.get("location")!)
+          expect(location.pathname + location.search).toBe("/sandboxes")
+        }
+        expect(mockSignupEntryDestination).toHaveBeenCalledTimes(2)
+        expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
+      })
+
+      it.each([
+        ["pro_monthly", "pro_monthly"],
+        ["developer", "developer"],
+      ])(
+        "keeps a paid-plan signup's %s offer only to highlight that plan",
+        async (offer, saved) => {
+          mockPricingVersion.mockResolvedValue("v2")
+          const response = await emailSignup(
+            `&offer=${offer}&signup_offer=${offer}`,
+          )
+          expect(new URL(response.headers.get("location")!).pathname).toBe(
+            "/sandboxes",
+          )
+          expect(
+            JSON.parse(response.cookies.get("ss-plan-offer")!.value),
+          ).toEqual({ userId: "u1", offer: saved })
         },
       )
 
@@ -1523,10 +1572,10 @@ describe("auth callback", () => {
     it.each([
       ["free", "/sandboxes"],
       ["starter", "/sandboxes"],
-      ["pro", "/billing/pro/"],
-      ["pro_monthly", "/billing/pro/"],
-      ["pro_annual", "/billing/pro/"],
-      ["retired_offer", "/billing/pro/"],
+      ["pro", "/sandboxes"],
+      ["pro_monthly", "/sandboxes"],
+      ["pro_annual", "/sandboxes"],
+      ["retired_offer", "/sandboxes"],
     ])("routes a new %s signup to %s", async (offer, destination) => {
       mockPricingVersion.mockResolvedValue("v2")
 
@@ -1542,11 +1591,16 @@ describe("auth callback", () => {
       "keeps recognized aliases through OAuth and email confirmation under %s entry",
       async (version) => {
         mockPricingVersion.mockResolvedValue(version)
-        for (const [offer, destination] of [
-          ["starter_monthly", "/sandboxes"],
-          ["pro_annual", "/billing/pro/"],
+        // The Google proof signs in an existing account, which keeps its Pro
+        // link; the confirmed email signup starts on Free.
+        for (const [offer, existing, signup] of [
+          ["starter_monthly", "/sandboxes", "/sandboxes"],
+          ["pro_annual", "/billing/pro/", "/sandboxes"],
         ]) {
-          for (const proof of ["code=abc", "token_hash=token&type=signup"]) {
+          for (const [proof, destination] of [
+            ["code=abc", existing],
+            ["token_hash=token&type=signup", signup],
+          ]) {
             const response = await GET(
               new Request(
                 `https://console.superserve.ai/auth/callback?${proof}&signup_offer=${offer}`,
@@ -1766,7 +1820,7 @@ describe("auth callback", () => {
     )
 
     it.each(["pro_monthly"])(
-      "preserves default %s offer intent when the email directory read throws",
+      "resumes no paid page for a default %s signup when the email directory read throws",
       async (offer) => {
         currentUser!.app_metadata = { provider: "email" }
         mockListTeamMembershipsForUserDetailed.mockRejectedValueOnce(
@@ -1778,9 +1832,10 @@ describe("auth callback", () => {
           ),
         )
         const failure = new URL(response.headers.get("location")!)
-        expect(failure.searchParams.get("reason")).toBe("account_setup")
-        expect(failure.searchParams.get("account")).toBe("u1")
-        expect(failure.searchParams.get("next")).toBe("/billing/pro/")
+        expect(failure.searchParams.get("reason")).toBe(
+          "membership_lookup_degraded",
+        )
+        expect(failure.searchParams.get("next")).toBeNull()
         expect(mockGetSignupPlanAction).not.toHaveBeenCalled()
       },
     )
@@ -1961,8 +2016,11 @@ describe("auth callback", () => {
         ),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/billing/pro/",
+        "/sandboxes",
       )
+      expect(
+        JSON.parse(response.cookies.get("ss-plan-offer")!.value).offer,
+      ).toBe("pro_monthly")
     })
 
     it("routes an existing customer's Starter link like Developer", async () => {
@@ -2762,7 +2820,9 @@ describe("auth callback", () => {
       mockNotifySlackOfNewUser.mockClear()
       const response = await GET(new Request(confirmationUrl))
       expect(mockNotifySlackOfNewUser.mock.lastCall![4]).toBe("pro_monthly")
-      expect(response.headers.get("location")).toContain("/billing/pro/")
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/sandboxes",
+      )
       expect(mockEvaluateSignupRestriction).toHaveBeenCalledExactlyOnceWith(
         "use",
         "u1",

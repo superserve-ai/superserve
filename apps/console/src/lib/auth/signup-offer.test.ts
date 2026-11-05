@@ -1,6 +1,11 @@
 import { describe, expect, it } from "vitest"
 
-import { isSelfServeSignupOffer, parseSignupOffer } from "./signup-offer"
+import {
+  isSelfServeSignupOffer,
+  parseSignupOffer,
+  signInOfferDestination,
+  SIGNUP_OFFER_DESTINATIONS,
+} from "./signup-offer"
 
 describe("parseSignupOffer", () => {
   it.each([
@@ -39,3 +44,20 @@ it.each([undefined, "", "unknown_offer", "enterprise", "yc_2026"])(
     expect(isSelfServeSignupOffer(raw)).toBe(false)
   },
 )
+
+describe("signup destinations", () => {
+  it.each(["free", "developer", "pro_monthly"] as const)(
+    "starts a new %s signup on Free in the console",
+    (offer) => {
+      expect(SIGNUP_OFFER_DESTINATIONS[offer]).toBe("/sandboxes")
+    },
+  )
+
+  it.each([
+    ["pro_monthly", "/billing/pro/"],
+    ["developer", "/sandboxes"],
+    ["enterprise", "/sandboxes"],
+  ])("signs an existing account in from a %s link to %s", (raw, path) => {
+    expect(signInOfferDestination(raw)).toBe(path)
+  })
+})

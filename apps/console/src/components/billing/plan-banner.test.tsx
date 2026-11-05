@@ -91,9 +91,12 @@ function plan(kind: TeamPlan["kind"]): TeamPlan {
     pending_change: null,
   }
 }
-function mount() {
+function mount(requestedOffer?: string) {
+  const client = new QueryClient()
+  if (requestedOffer)
+    client.setQueryData(["signup-plan", "use:t"], { requestedOffer })
   return render(
-    <QueryClientProvider client={new QueryClient()}>
+    <QueryClientProvider client={client}>
       <PlanBanner />
     </QueryClientProvider>,
   )
@@ -325,6 +328,36 @@ describe("PlanBanner with pricing v2 on", () => {
     expect(
       screen.getByRole("link", { name: "Get Team" }).getAttribute("href"),
     ).toMatch(/\/billing\/pro\/?$/)
+  })
+
+  it("puts the paid plan a signup came from first on its Free banner", () => {
+    mocks.cards = [card("developer", "Builder"), card("pro", "Team")]
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mount("pro_monthly")
+    expect(
+      screen.getByRole("region", { name: "Free plan" }).textContent,
+    ).toMatch(/Upgrade to Team or Builder/)
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
+      ["Get Team", "Get Builder"],
+    )
+  })
+
+  it("puts Developer first for a signup from its link", () => {
+    mocks.cards = [card("pro", "Team"), card("developer", "Builder")]
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mount("developer")
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
+      ["Get Builder", "Get Team"],
+    )
+  })
+
+  it("doesn't name a signup's plan the team can't buy", () => {
+    mocks.cards = [card("developer", "Builder"), card("pro", "Team", false)]
+    mocks.plan.mockReturnValue({ data: plan("free") })
+    mount("pro_monthly")
+    expect(screen.getAllByRole("link").map((link) => link.textContent)).toEqual(
+      ["Get Builder"],
+    )
   })
 
   it("falls back to the upgrade page when no plan passes the purchase check", () => {
