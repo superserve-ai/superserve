@@ -275,9 +275,10 @@ describe("PlanPickerOptions", () => {
     expect(
       screen.getByRole("link", { name: "support@superserve.ai" }),
     ).toHaveAttribute("href", "mailto:support@superserve.ai")
-    expect(screen.queryByRole("region", { name: /plan$/ })).toBeNull()
+    expect(screen.queryByRole("form")).toBeNull()
+    mocks.signOut.mockClear()
     fireEvent.click(screen.getByRole("button", { name: "Sign out" }))
-    expect(mocks.signOut).toHaveBeenCalled()
+    expect(mocks.signOut).toHaveBeenCalledTimes(1)
   })
 
   it("keeps the Enterprise card when no plan is sellable", async () => {
@@ -298,6 +299,18 @@ describe("PlanPickerOptions", () => {
       screen.getByRole("link", { name: "Book a meeting" }),
     ).toHaveAttribute("href", ENTERPRISE_MEETING_URL)
     expect(screen.queryByRole("form", { name: "Team plan" })).toBeNull()
+  })
+
+  it("still asks a member without billing access to ask an administrator when no plan is sellable", async () => {
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.cards = [card("enterprise", { kind: "custom", name: "Bespoke" })]
+    mocks.canManage = false
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByText(/Only your team's billing administrators/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/No plans are available/)).toBeNull()
+    expect(screen.queryByRole("region", { name: "Bespoke plan" })).toBeNull()
   })
 })
 
