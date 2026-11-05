@@ -277,7 +277,9 @@
           },
           {
             "group": "Evaluations",
-            "pages": ["integrations/evaluations/harbor"]
+            "pages": [
+              "integrations/evaluations/harbor"
+            ]
           },
           {
             "group": "MCP Sandboxes",
