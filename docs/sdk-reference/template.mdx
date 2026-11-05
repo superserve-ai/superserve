@@ -154,7 +154,7 @@ print(info.status.value)  # "pending" | "building" | "ready" | "failed"
 
 ### `waitUntilReady` / `wait_until_ready`
 
-Block until the current build reaches a terminal status. The SDK polls `GET /templates/{id}/builds/{buildId}` for the authoritative build status — SSE is used only for live log delivery when `onLog` / `on_log` is provided, never to detect termination. Returns a refreshed [`TemplateInfo`](#templateinfo) with `status = "ready"`.
+Block until the template's current build reaches a terminal status. The build is `latestBuildId` / `latest_build_id` when the object has one (set by `Template.create`), otherwise the most recent build. After [`rebuild`](#rebuild), wait on the returned build ID instead. The SDK polls `GET /templates/{id}/builds/{buildId}` for the authoritative build status — SSE is used only for live log delivery when `onLog` / `on_log` is provided, never to detect termination. Returns a refreshed [`TemplateInfo`](#templateinfo) with `status = "ready"`.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -199,7 +199,7 @@ await template.streamBuildLogs({
   onEvent: (ev) => {
     console.log(`[${ev.stream}] ${ev.text}`)
   },
-  // buildId defaults to template.latestBuildId
+  // buildId defaults to template.latestBuildId, otherwise the most recent build
 })
 ```
 
@@ -208,7 +208,7 @@ def on_event(ev):
     print(f"[{ev.stream.value}] {ev.text}")
 
 template.stream_build_logs(on_event=on_event)
-# build_id defaults to template.latest_build_id
+# build_id defaults to template.latest_build_id, otherwise the most recent build
 ```
 </CodeGroup>
 
@@ -217,24 +217,38 @@ template.stream_build_logs(on_event=on_event)
 | Option | Type | Description |
 |---|---|---|
 | `onEvent` / `on_event` | `(ev: BuildLogEvent) => void` | **Required.** Called for every event. |
-| `buildId` / `build_id` | `string` | Target build. Defaults to `latestBuildId` / `latest_build_id`. |
+| `buildId` / `build_id` | `string` | Target build. Defaults to `latestBuildId` / `latest_build_id`, otherwise the most recent build. |
 | `signal` | `AbortSignal` | TypeScript only - aborts the stream. |
 
-Throws `SandboxError` if no `buildId` is supplied and the template has no `latestBuildId`.
+Throws `SandboxError` if no `buildId` is supplied and the template has no builds.
 
 ### `rebuild`
 
 Queue a new build for this template. Returns the new [`TemplateBuildInfo`](#templatebuildinfo). Idempotent: if an in-flight build already matches the same configuration, the existing build is returned.
 
+`rebuild()` does not update `latestBuildId` / `latest_build_id`. On a template returned by `Template.create`, `waitUntilReady()` / `wait_until_ready()` keeps waiting on the first build. To wait for the new build, poll the returned build ID with [`getBuild`](#getbuild-get-build):
+
 <CodeGroup>
 ```typescript TypeScript
 const build = await template.rebuild()
-console.log(build.id, build.status)
+
+let current = build
+while (!["ready", "failed", "cancelled"].includes(current.status)) {
+  await new Promise((resolve) => setTimeout(resolve, 2000))
+  current = await template.getBuild(build.id)
+}
+console.log(current.status, current.errorMessage ?? "")
 ```
 
 ```python Python
+import time
+
 build = template.rebuild()
-print(build.id, build.status.value)
+
+while build.status.value not in ("ready", "failed", "cancelled"):
+    time.sleep(2)
+    build = template.get_build(build.id)
+print(build.status.value, build.error_message or "")
 ```
 </CodeGroup>
 
