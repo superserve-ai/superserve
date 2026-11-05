@@ -234,6 +234,46 @@ describe("billing access notice", () => {
     expect(screen.queryByText(/billing administrator/)).toBeNull()
     expect(screen.queryByText(/manage billing/)).toBeNull()
   })
+  it("explains Auto Reload when it is the only gated control", () => {
+    mocks.canManage = false
+    mocks.plan = { key: "free", kind: "free" }
+    render(page())
+    expect(screen.queryByRole("button", { name: /Buy.*credit/ })).toBeNull()
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled()
+    expect(screen.getByText(/billing administrator/)).toBeTruthy()
+  })
+  it("explains a retained purchase when it is the only gated control", () => {
+    mocks.canManage = false
+    mocks.plan = { key: "free", kind: "free" }
+    mocks.data = {
+      ...initial,
+      auto_recharge: { ...initial.auto_recharge, enabled: false },
+    }
+    mocks.operations = [
+      {
+        id: "11111111-1111-4111-8111-111111111111",
+        amount: 1500,
+        team: mocks.teamKey,
+        actor: "actor",
+        success: "https://console.test/s",
+        cancel: "https://console.test/c",
+      },
+    ]
+    render(page())
+    expect(screen.getByText("Resume a previous purchase")).toBeTruthy()
+    expect(screen.queryByRole("switch")).toBeNull()
+    expect(screen.getByText(/billing administrator/)).toBeTruthy()
+  })
+  it("shows no notice during impersonation, even without billing access", () => {
+    mocks.scope = "team-other"
+    mocks.canManage = false
+    const { unmount } = render(page())
+    expect(screen.queryByText(/billing administrator/)).toBeNull()
+    unmount()
+    mocks.summaryError = true
+    render(page())
+    expect(screen.queryByText(/manage billing/)).toBeNull()
+  })
   it("shows no notice when no purchase or Auto Reload control renders", () => {
     mocks.canManage = false
     mocks.entryOpen = false
