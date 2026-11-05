@@ -366,9 +366,16 @@ export async function GET(request: Request) {
               ),
             )
           }
-          // An invitee retries through sign-in, so keep the invitation as the
-          // destination instead of falling back to first-team setup.
+          // An invitee retries toward the invitation instead of first-team
+          // setup; an unproven Google invitee needs signup's proof gate first.
           const invite = inviteReturnPath(next)
+          if (googleProofRecovery && invite && !paidSetupRecovery)
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                `/auth/signup?${new URLSearchParams({ complete_google: "1", next: invite })}`,
+              ),
+            )
           return NextResponse.redirect(
             buildRedirectUrl(
               origin,

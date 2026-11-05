@@ -94,6 +94,7 @@ describe("displayed team scope", () => {
       activeTeamId: team.teamId,
       activeRegion: team.region,
     })
+    client.setQueryData(["secrets"], ["previous-team-secret"])
     mocks.management.mockResolvedValue({
       team_id: switched.teamId,
       region: switched.region,
@@ -111,6 +112,7 @@ describe("displayed team scope", () => {
     await waitFor(() => expect(result.current).toEqual(switched))
     expect(mocks.directory).toHaveBeenCalledTimes(1)
     expect(mocks.management).toHaveBeenCalledTimes(1)
+    expect(client.getQueryData(["secrets"])).toBeUndefined()
   })
 })
 

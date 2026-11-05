@@ -1824,6 +1824,24 @@ describe("auth callback", () => {
       },
     )
 
+    it("sends a Google invitee back through the signup proof gate on a degraded lookup", async () => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?code=abc",
+      )
+      url.searchParams.set("next", invite)
+      const response = await GET(new Request(url))
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.pathname).toBe("/auth/signup")
+      expect(failure.searchParams.get("complete_google")).toBe("1")
+      expect(failure.searchParams.get("next")).toBe(invite)
+      expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+    })
+
     it("retains the existing preparation account and pinned team on a degraded Google lookup", async () => {
       googleMembershipState = {
         kind: "indeterminate",
