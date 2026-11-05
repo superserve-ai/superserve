@@ -241,6 +241,9 @@ vi.mock("@/lib/cells", () => ({
 }))
 
 let directoryTeams: Array<{ id: string; name: string; region: string }> = []
+// Teams in a cell that the directory could not read and omitted.
+let omittedTeams: Array<{ id: string; region: string }> = []
+let cellLookupFails = false
 vi.mock("@/lib/api/team-directory", () => ({
   listTeamsForUser: async () => directoryTeams,
   listTeamMembershipsForUserDetailed: (
@@ -250,7 +253,12 @@ vi.mock("@/lib/api/team-directory", () => ({
     region: string,
     _userId: string,
     teamId: string,
-  ) => directoryTeams.some((t) => t.id === teamId && t.region === region),
+  ) => {
+    if (cellLookupFails) throw new Error("cell unavailable")
+    return [...directoryTeams, ...omittedTeams].some(
+      (t) => t.id === teamId && t.region === region,
+    )
+  },
   invalidateMembershipDirectory: () => {},
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
@@ -327,6 +335,8 @@ describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
     directoryTeams = []
+    omittedTeams = []
+    cellLookupFails = false
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
     mockPublishPromotionIdentity.mockClear()
     googleUser = false
@@ -605,6 +615,43 @@ describe("createTeamAction", () => {
       expectUnavailable(await createTeamAction("acme", "use", "team-other"))
     })
 
+    it("keeps the conversion open when the account's cell was not read", async () => {
+      directoryTeams = []
+      omittedTeams = [{ id: "team-me", region: "use" }]
+
+      await expect(createTeamAction("acme", "use", "team-me")).rejects.toThrow(
+        "Could not read your account team",
+      )
+      expect(cellClients.use.writes).toEqual({})
+      expect(cookieSets).toEqual([])
+    })
+
+    it("keeps the conversion open when the account's cell fails", async () => {
+      directoryTeams = []
+      cellLookupFails = true
+
+      await expect(createTeamAction("acme", "use", "team-me")).rejects.toThrow(
+        "cell unavailable",
+      )
+      expect(cookieSets).toEqual([])
+    })
+
+    it("keeps the conversion open when its membership check fails", async () => {
+      directoryTeams = []
+      omittedTeams = [{ id: "team-me", region: "usw" }]
+      cellClients.usw = {
+        from: () => {
+          throw new Error("cell unavailable")
+        },
+      } as unknown as typeof cellClients.usw
+      vi.spyOn(console, "error").mockImplementationOnce(() => {})
+
+      await expect(createTeamAction("acme", "usw", "team-me")).rejects.toThrow(
+        "Could not read your account team",
+      )
+      expect(cookieSets).toEqual([])
+    })
+
     it("refuses a region other than the account's", async () => {
       expectUnavailable(await createTeamAction("acme", "usw", "team-me"))
       expect(cellClients.usw.writes).toEqual({})
@@ -776,7 +823,7 @@ describe("active team", () => {
     expect((await listTeamsAction()).convertibleTeams).toEqual(directoryTeams)
   })
 
-  it("directory serves without a conversion when the owner lookup fails", async () => {
+  it("directory still offers the conversion when the owner lookup fails", async () => {
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
     directoryTeams = [
       { id: "team-me", name: "pavitra@superserve.ai", region: "use" },
@@ -787,7 +834,7 @@ describe("active team", () => {
 
     expect(await listTeamsAction()).toMatchObject({
       activeTeamId: "team-me",
-      convertibleTeams: [],
+      convertibleTeams: directoryTeams,
     })
     expect(error).toHaveBeenCalled()
     error.mockRestore()

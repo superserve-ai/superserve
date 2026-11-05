@@ -463,3 +463,35 @@ it("converts another account team after a rejected name", async () => {
   expect(second[2]).not.toBe(first[2])
   expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
 })
+
+it("keeps a conversion whose same-name retry got no response", async () => {
+  mocks.create
+    .mockResolvedValueOnce({
+      code: "team_name_conflict",
+      message: "That team name is already taken.",
+    })
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({ ...teamA, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await act(async () => {
+      await result.current.create
+        .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+        .catch(() => {})
+    })
+  }
+  const stored = JSON.parse(
+    sessionStorage.getItem("superserve:team-conversion:u1") ?? "{}",
+  )
+  expect(stored.nameRejected).toBeUndefined()
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "acme", region: "usw" })
+  })
+
+  const [first, second, third] = mocks.create.mock.calls
+  expect(second).toEqual(first)
+  expect(third).toEqual(first)
+  expect(third).toEqual(["acme", "use", expect.any(String), "a"])
+})

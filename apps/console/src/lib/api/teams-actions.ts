@@ -83,9 +83,10 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
         try {
           return (await ownsTeam(team.region, user.id, team.id)) ? team : null
         } catch (error) {
-          // The create form falls back to a new team; the action rechecks.
+          // Offer the conversion: the action checks the owner again and
+          // refuses a non-owner. Without it, the form creates a new team.
           console.error("team directory: owner lookup failed:", error)
-          return null
+          return team
         }
       }),
   )
@@ -179,7 +180,16 @@ export async function createTeamAction(
     const target = teams.find(
       (t) => t.id === convertTeamId && t.region === targetRegion,
     )
-    if (!target || !(await ownsTeam(targetRegion, user.id, target.id)))
+    if (!target) {
+      // The client drops its pending conversion on a refusal, so refuse only
+      // what the account's cell confirms.
+      if (
+        await conversionTargetUnconfirmed(targetRegion, user.id, convertTeamId)
+      )
+        throw new Error("Could not read your account team. Try again.")
+      return teamConversionUnavailable()
+    }
+    if (!(await ownsTeam(targetRegion, user.id, target.id)))
       return teamConversionUnavailable()
     // A retry after the converted response was lost finds the new name.
     if (target.name !== trimmed) {
@@ -226,6 +236,21 @@ export async function createTeamAction(
   await storeTeamSelection({ region: targetRegion, teamId: team.id })
 
   return { id: team.id, name: team.name, region: targetRegion }
+}
+
+// The directory omits a cell it could not read. A membership that its cell
+// still reports, or a cell that fails again, leaves the conversion open.
+async function conversionTargetUnconfirmed(
+  region: string,
+  userId: string,
+  teamId: string,
+): Promise<boolean> {
+  if (!(await membershipExistsInCell(region, userId, teamId))) return false
+  const { memberships, degradedRegions } = await completedMemberships(userId, {
+    memberships: [{ region, teamId }],
+    degradedRegions: [],
+  })
+  return memberships.length > 0 || degradedRegions.length > 0
 }
 
 function teamNameConflict() {

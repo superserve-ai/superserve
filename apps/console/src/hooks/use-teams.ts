@@ -139,6 +139,9 @@ export function useCreateTeam() {
         throw new Error(
           "Retry the pending team creation using its original name",
         )
+      // This attempt can commit even if its response is lost, so only its own
+      // conflict marks the name rejected again.
+      delete intent.nameRejected
       sessionStorage.setItem(key, JSON.stringify(intent))
       const result = await (intent.convertTeamId
         ? createTeamAction(
