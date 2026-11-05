@@ -42,11 +42,17 @@ async function currentUser() {
  * authority (`settings:write`); a failed read is reported as "cannot rename"
  * so the UI falls back to read-only rather than offering a doomed edit.
  */
-export async function getTeamRenameAccessAction(): Promise<boolean> {
+export async function getTeamRenameAccessAction(expected: {
+  teamId: string
+  region: string
+}): Promise<boolean> {
   try {
     const user = await currentUser()
     if (!user) return false
     const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
+    if (team.teamId !== expected.teamId || team.region !== expected.region) {
+      return false
+    }
     const response = await fetch(
       new URL(
         `/teams/${encodeURIComponent(team.teamId)}/management`,

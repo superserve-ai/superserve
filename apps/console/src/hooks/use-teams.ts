@@ -34,8 +34,12 @@ export function useTeams() {
 function resetTeamScopedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
 ) {
+  // The directory spans every team; everything else, rename access included,
+  // was read for the previous cookie team.
   void queryClient.resetQueries({
-    predicate: (query) => query.queryKey[0] !== teamKeys.all[0],
+    predicate: (query) =>
+      query.queryKey[0] !== teamKeys.all[0] ||
+      query.queryKey[1] !== teamKeys.directory()[1],
   })
 }
 
@@ -208,7 +212,10 @@ export function useCreateTeam() {
 export function useCanRenameTeam(team: { id: string; region: string } | null) {
   return useQuery({
     queryKey: teamKeys.renameAccess(team?.region ?? "", team?.id ?? ""),
-    queryFn: getTeamRenameAccessAction,
+    queryFn: () =>
+      team
+        ? getTeamRenameAccessAction({ teamId: team.id, region: team.region })
+        : false,
     enabled: !!team,
     staleTime: 60_000,
   })

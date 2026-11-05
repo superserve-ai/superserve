@@ -120,18 +120,31 @@ describe("getTeamRenameAccessAction", () => {
     fetchSpy.mockResolvedValue(
       json(200, { capabilities: { can_rename_team: true } }),
     )
-    expect(await getTeamRenameAccessAction()).toBe(true)
+    expect(await getTeamRenameAccessAction(expected)).toBe(true)
     expect(String(fetchSpy.mock.calls[0][0])).toBe(
       "https://api.test.superserve.ai/teams/team-1/management",
     )
   })
 
+  it.each([
+    { teamId: "team-2", region: "use" },
+    { teamId: "team-1", region: "usw" },
+  ])("refuses to fetch when the active team differs: %j", async (team) => {
+    vi.mocked(getAuthApiKeyAndTeamForUser).mockResolvedValue({
+      apiKey: "ss_live_test_key",
+      team,
+    })
+
+    expect(await getTeamRenameAccessAction(expected)).toBe(false)
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
   it("falls back to read-only when the capability is absent or the read fails", async () => {
     fetchSpy.mockResolvedValueOnce(json(200, { capabilities: {} }))
-    expect(await getTeamRenameAccessAction()).toBe(false)
+    expect(await getTeamRenameAccessAction(expected)).toBe(false)
     fetchSpy.mockResolvedValueOnce(json(403, { error: { code: "forbidden" } }))
-    expect(await getTeamRenameAccessAction()).toBe(false)
+    expect(await getTeamRenameAccessAction(expected)).toBe(false)
     fetchSpy.mockRejectedValueOnce(new Error("network"))
-    expect(await getTeamRenameAccessAction()).toBe(false)
+    expect(await getTeamRenameAccessAction(expected)).toBe(false)
   })
 })
