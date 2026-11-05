@@ -158,9 +158,9 @@ Key behaviors:
 - **`timeoutSeconds` / `timeout_seconds` caps active lifetime, then auto-_pauses_** —
   state is preserved, it is **not** deleted. (Bounded by an API-side upper limit.)
   It counts active time, so work still running when it elapses is paused mid-run.
-- **`idleTimeoutSeconds` / `idle_timeout_seconds` auto-_pauses_ once nothing has used the
-  box for that long** (60s to 7d; off by default). Running commands, open terminals and
-  command streams, file operations and preview traffic count as use; outbound traffic and
+- **`idleTimeoutSeconds` / `idle_timeout_seconds` auto-_pauses_ after that long with no
+  activity** (60s to 7d; off by default). Running commands, open terminals and command
+  streams, file operations and preview traffic count as activity; outbound traffic and
   background processes launched with `nohup`/`&` do not. Prefer it over `timeoutSeconds`
   for interactive boxes: it never pauses one that is in use.
 - **`autoDeleteSeconds` / `auto_delete_seconds` garbage-collects paused sandboxes** — the box

@@ -133,7 +133,7 @@ export interface CreateInput {
   fromTemplate?: string
   fromSnapshot?: string
   timeoutSeconds?: number
-  /** Pause the sandbox once nothing has used it for this many seconds. */
+  /** Pause the sandbox after this many seconds with no activity. */
   idleTimeoutSeconds?: number
   /** Delete the sandbox once continuously paused for this many seconds. */
   autoDeleteSeconds?: number

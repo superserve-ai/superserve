@@ -159,7 +159,7 @@ sandbox.update(timeout_seconds=None)  # disable auto-pause
 
 ## Idle timeout
 
-Set `idleTimeoutSeconds` to auto-pause a sandbox once nothing has used it for that long. Unlike `timeoutSeconds`, it never pauses a sandbox that is still in use, so it suits sandboxes that should stay up while someone works in them and stop billing once they go quiet.
+Set `idleTimeoutSeconds` to auto-pause a sandbox after this many seconds with no activity. Unlike `timeoutSeconds`, it never pauses a sandbox that is still in use, so it suits sandboxes that should stay up while someone works in them and stop billing once they go quiet.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -167,7 +167,7 @@ import { Sandbox } from "@superserve/sdk"
 
 const sandbox = await Sandbox.create({
   name: "dev-box",
-  idleTimeoutSeconds: 600, // auto-pause after 10m unused
+  idleTimeoutSeconds: 600, // auto-pause after 10m with no activity
 })
 ```
 
@@ -176,12 +176,12 @@ from superserve import Sandbox
 
 sandbox = Sandbox.create(
     name="dev-box",
-    idle_timeout_seconds=600,  # auto-pause after 10m unused
+    idle_timeout_seconds=600,  # auto-pause after 10m with no activity
 )
 ```
 </CodeGroup>
 
-These count as use and keep the sandbox up:
+These count as activity and keep the sandbox up:
 
 - A command still running, including one started with `commands.run()` that streams for a long time.
 - An open terminal or command stream, even with nothing typed.
@@ -204,12 +204,12 @@ Set or clear it on an existing sandbox:
 
 <CodeGroup>
 ```typescript TypeScript
-await sandbox.update({ idleTimeoutSeconds: 900 }) // auto-pause after 15m unused
+await sandbox.update({ idleTimeoutSeconds: 900 }) // auto-pause after 15m with no activity
 await sandbox.update({ idleTimeoutSeconds: null }) // turn idle pausing off
 ```
 
 ```python Python
-sandbox.update(idle_timeout_seconds=900)  # auto-pause after 15m unused
+sandbox.update(idle_timeout_seconds=900)  # auto-pause after 15m with no activity
 sandbox.update(idle_timeout_seconds=None)  # turn idle pausing off
 ```
 </CodeGroup>

@@ -801,7 +801,7 @@ export function CreateSandboxDialog({
 
                       <Field
                         label="Idle timeout"
-                        description="Auto-pause once nothing has used the sandbox for this many seconds. Running commands, open terminals, file operations and preview traffic count as use. 60 to 604800 (7 days)."
+                        description="Auto-pause after this many seconds with no activity. Running commands, open terminals, file operations and preview traffic count as activity. 60 to 604800 (7 days)."
                       >
                         <Input
                           type="number"
