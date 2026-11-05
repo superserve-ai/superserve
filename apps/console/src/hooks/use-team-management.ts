@@ -72,7 +72,8 @@ export function useDisplayedTeam(): TeamScope | null {
   // A switch in another tab reaches the management data on refocus while the
   // directory stays cached, which would leave every action disabled. Reload
   // both once per disagreement, and drop the other team-scoped caches as a
-  // switch here does; a lasting disagreement does not loop.
+  // switch here does. Management is refetched, not reset: a reset empties it,
+  // which clears and then restores a lasting disagreement and loops.
   const disagreement =
     management && directory && !scope
       ? [
@@ -85,7 +86,11 @@ export function useDisplayedTeam(): TeamScope | null {
   useEffect(() => {
     if (!disagreement) return
     void queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
-    refreshTeamScopedQueries(queryClient)
+    void queryClient.invalidateQueries({
+      queryKey: teamManagementKeys.all,
+      exact: true,
+    })
+    refreshTeamScopedQueries(queryClient, teamManagementKeys.all[0])
   }, [disagreement, queryClient])
   return scope
 }

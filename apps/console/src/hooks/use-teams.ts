@@ -26,13 +26,16 @@ export function useTeams() {
  * invalidate) so stale rows can never flash while the new team's data loads;
  * active queries refetch immediately, inactive ones on next mount. The team
  * directory is exempt — it is team-agnostic and already carries the new
- * selection.
+ * selection. A caller may also exempt one top-level key it refetches itself.
  */
 function resetTeamScopedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
+  keep?: string,
 ) {
   void queryClient.resetQueries({
-    predicate: (query) => query.queryKey[0] !== teamKeys.all[0],
+    predicate: (query) =>
+      query.queryKey[0] !== teamKeys.all[0] &&
+      !(keep && query.queryKey.length === 1 && query.queryKey[0] === keep),
   })
 }
 
@@ -44,9 +47,10 @@ function invalidateBillingSummary(
 
 export function refreshTeamScopedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
+  keep?: string,
 ) {
   invalidateBillingSummary(queryClient)
-  resetTeamScopedQueries(queryClient)
+  resetTeamScopedQueries(queryClient, keep)
 }
 
 // A team creation the user started. A conversion also records the account

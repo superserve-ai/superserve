@@ -114,6 +114,32 @@ describe("displayed team scope", () => {
     expect(mocks.management).toHaveBeenCalledTimes(1)
     expect(client.getQueryData(["secrets"])).toBeUndefined()
   })
+
+  it("reloads once when the sources keep disagreeing", async () => {
+    vi.clearAllMocks()
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    })
+    const management = { team_id: "switched-team", region: "usw" }
+    const directory = { activeTeamId: team.teamId, activeRegion: team.region }
+    client.setQueryData(["team-management"], management)
+    client.setQueryData(teamKeys.directory(), directory)
+    // A real round trip, so an emptied cache renders before the refetch lands.
+    const later = <T,>(value: T) =>
+      new Promise<T>((resolve) => setTimeout(() => resolve(value), 10))
+    mocks.management.mockImplementation(() => later(management))
+    mocks.directory.mockImplementation(() => later(directory))
+    const { result } = renderHook(() => useDisplayedTeam(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+    await waitFor(() => expect(mocks.management).toHaveBeenCalledTimes(1))
+    await act(() => new Promise((resolve) => setTimeout(resolve, 100)))
+    expect(result.current).toBeNull()
+    expect(mocks.management).toHaveBeenCalledTimes(1)
+    expect(mocks.directory).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe("team mutation variables", () => {
