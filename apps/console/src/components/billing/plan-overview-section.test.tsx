@@ -20,10 +20,15 @@ import { render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
-import type { FreeAllowance, TeamPlan } from "@/lib/api/billing-v2"
+import {
+  BUY_CREDIT_PATH,
+  type FreeAllowance,
+  type TeamPlan,
+} from "@/lib/api/billing-v2"
 
 const mocks = vi.hoisted(() => ({
   capabilitiesUnavailable: false,
+  savedCard: true,
   offers: undefined as unknown[] | undefined,
   version: vi.fn(),
   plan: vi.fn(),
@@ -36,7 +41,7 @@ vi.mock("@/hooks/use-prepaid-credit", () => ({
     data: {
       checkout_idempotency_supported: true,
       balance_cents: 900,
-      has_saved_card: true,
+      has_saved_card: mocks.savedCard,
       purchases: [],
       auto_recharge: {
         enabled: false,
@@ -134,6 +139,7 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
 
 beforeEach(() => {
   mocks.capabilitiesUnavailable = false
+  mocks.savedCard = true
   mocks.offers = undefined
   mocks.plan.mockReturnValue({ data: null, isError: false })
   mocks.allowance.mockReturnValue({ data: undefined })
@@ -955,4 +961,81 @@ it("doesn't promise postpaid overages for a credit-funded plan", () => {
     screen.queryByText(/beyond the included usage, billed at usage rates/),
   ).toBeNull()
   expect(screen.queryByText(/at the end of the period/)).toBeNull()
+})
+
+describe("buying credit on a credit-funded plan", () => {
+  const developer = plan({
+    key: "developer_monthly",
+    name: "Developer",
+    funding_policy: "prepaid",
+    topoff: {
+      amount_cents: 2500,
+      threshold_cents: 1000,
+      default_enabled: false,
+    },
+  })
+  const developerSummary = {
+    ...summary,
+    plan: { ...summary.plan!, key: "developer_monthly" },
+  } as BillingSummaryResponse
+  const viewer = {
+    ...developerSummary,
+    permissions: { can_view: true, can_manage: false },
+  } as BillingSummaryResponse
+
+  beforeEach(() => {
+    mocks.plan.mockReturnValue({ data: developer, isError: false })
+  })
+
+  it("links managers to Buy credit from the plan card", () => {
+    render(<PlanOverviewSection summary={developerSummary} />)
+    expect(
+      screen.getByRole("link", { name: "Buy credit" }).getAttribute("href"),
+    ).toBe(BUY_CREDIT_PATH)
+    expect(
+      screen.getByRole("link", { name: "Manage Auto Reload" }),
+    ).toBeTruthy()
+  })
+
+  it("hides Buy credit when credit can't be bought now or the member can't manage billing", () => {
+    mocks.capabilitiesUnavailable = true
+    const { unmount } = render(
+      <PlanOverviewSection summary={developerSummary} />,
+    )
+    expect(screen.queryByRole("link", { name: "Buy credit" })).toBeNull()
+    expect(
+      screen.getByRole("link", { name: "Manage Auto Reload" }),
+    ).toBeTruthy()
+    unmount()
+    mocks.capabilitiesUnavailable = false
+    render(<PlanOverviewSection summary={viewer} />)
+    expect(screen.queryByRole("link", { name: "Buy credit" })).toBeNull()
+    expect(
+      screen.queryByRole("link", { name: "Manage Auto Reload" }),
+    ).toBeNull()
+  })
+
+  it("links the Auto Reload card in Settings to Buy credit until a card is saved", () => {
+    mocks.savedCard = false
+    const { unmount } = render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={developerSummary} details />
+      </QueryClientProvider>,
+    )
+    expect(
+      screen.getByText(/once to save a card, then you can turn on Auto Reload/)
+        .textContent,
+    ).toBe("Buy credit once to save a card, then you can turn on Auto Reload.")
+    expect(
+      screen.getByRole("link", { name: "Buy credit" }).getAttribute("href"),
+    ).toBe(BUY_CREDIT_PATH)
+    unmount()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={viewer} details />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByText(/once to save a card/)).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "Buy credit" })).toBeNull()
+  })
 })
