@@ -191,6 +191,49 @@ describe("Sandbox statics", () => {
     expect(JSON.parse(init.body as string)).toEqual({ timeout_seconds: null })
   })
 
+  it("Sandbox.create sends idle_timeout_seconds when set", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      idleTimeoutSeconds: 300,
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      name: "my-sandbox",
+      idle_timeout_seconds: 300,
+    })
+  })
+
+  it("sandbox.update sets and clears idle_timeout_seconds", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => jsonResponse(baseSandbox)),
+    )
+    const sandbox = await Sandbox.create({ ...commonOpts, name: "my-sandbox" })
+
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(null, { status: 204 })),
+    )
+    const patchMock = globalThis.fetch as ReturnType<typeof vi.fn>
+
+    await sandbox.update({ idleTimeoutSeconds: 600 })
+    let [, init] = patchMock.mock.calls[0] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      idle_timeout_seconds: 600,
+    })
+
+    await sandbox.update({ idleTimeoutSeconds: null })
+    ;[, init] = patchMock.mock.calls[1] as [string, RequestInit]
+    expect(JSON.parse(init.body as string)).toEqual({
+      idle_timeout_seconds: null,
+    })
+  })
+
   it("sandbox.update changes preview_access", async () => {
     vi.stubGlobal(
       "fetch",

@@ -39,9 +39,9 @@ Even while streaming, the returned `result` still holds the complete `stdout` an
 `AsyncSandbox` takes the same callbacks with an awaitable `run()`. See the [Sandbox reference](/sdk-reference/sandbox).
 </Note>
 
-## Timeouts
+## Command timeout
 
-Streaming doesn't change the timeout. It's still a hard limit on how long the command runs, and output doesn't reset it. When the limit is reached, the command stops and `run()` returns with exit code `124`. If you leave the timeout off, the limit is 30 seconds, so set `timeoutMs` / `timeout_seconds` for anything longer. See [Timeouts](/commands/overview#timeouts) for the defaults.
+`timeoutMs` / `timeout_seconds` is a wall-clock limit on the whole command. Output does not reset it. A command that keeps printing output still stops at the limit, and `run()` returns exit code `124`. If you leave the timeout off, the limit is 30 seconds, so set a timeout that is longer than your longest expected run. See [Timeouts](/commands/overview#timeouts) for the defaults.
 
 ## If the connection drops
 
@@ -52,6 +52,8 @@ For a job that has to outlive the connection, start it in the background with it
 ```bash
 nohup ./job.sh > /home/user/job.log 2>&1 &
 ```
+
+A background job doesn't count as activity, so a sandbox with an [idle timeout](/sandbox/lifecycle#idle-timeout) can pause while the job runs.
 
 ## Capture and stream together
 

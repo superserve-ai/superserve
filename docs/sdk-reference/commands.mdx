@@ -52,7 +52,7 @@ result = sandbox.commands.run(
 </CodeGroup>
 
 <Note>
-Streaming uses the same timeout as a sync run: a hard limit on how long the command runs. Output doesn't reset it. At the limit, the command stops and `run()` returns exit code `124`. See [Timeouts](/commands/overview#timeouts) for the defaults.
+The timeout is a wall-clock limit, also for streamed commands. Output does not reset it. At the limit, the command stops and `run()` returns exit code `124`. See [Timeouts](/commands/overview#timeouts) for the defaults.
 </Note>
 
 ## `spawn` (interactive session)

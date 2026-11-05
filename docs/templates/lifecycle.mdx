@@ -23,6 +23,34 @@ print(f"Build queued: {build.id}")
 
 Rebuild is **idempotent**: if an in-flight build already exists with the same configuration, you get back the existing build instead of a duplicate.
 
+To wait for the new build to finish, poll it by the ID that `rebuild()` returns. Continuing from the `build` above:
+
+<CodeGroup>
+
+```typescript TypeScript
+let current = build
+while (!["ready", "failed", "cancelled"].includes(current.status)) {
+  await new Promise((resolve) => setTimeout(resolve, 2000))
+  current = await template.getBuild(build.id)
+}
+console.log(current.status, current.errorMessage ?? "")
+```
+
+```python Python
+import time
+
+while build.status.value not in ("ready", "failed", "cancelled"):
+    time.sleep(2)
+    build = template.get_build(build.id)
+print(build.status.value, build.error_message or "")
+```
+
+</CodeGroup>
+
+<Note>
+`rebuild()` does not update `latestBuildId` / `latest_build_id`. On a template returned by `Template.create`, `waitUntilReady()` / `wait_until_ready()` and `streamBuildLogs()` / `stream_build_logs()` keep following the first build. A template returned by `Template.connect` has no `latestBuildId`, so they follow the most recent build. Polling `getBuild()` / `get_build()` with the ID that `rebuild()` returns works in both cases.
+</Note>
+
 ## List and inspect builds
 
 <CodeGroup>

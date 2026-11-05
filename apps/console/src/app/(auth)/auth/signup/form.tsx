@@ -7,7 +7,7 @@ import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
@@ -24,6 +24,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 
 import {
   beginGoogleSignup,
+  claimGoogleRecoveryContinuation,
   isCloudflareSignupObservationEnabled,
   signUpWithEmail,
 } from "./action"
@@ -117,6 +118,25 @@ const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
 
 const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
+// Copy for each reason the callback reports a first-time Google signup unchecked.
+const GOOGLE_RECOVERY_MESSAGES: Record<string, string> = {
+  started_from_signin:
+    "Looks like you're new here. One quick check to finish creating your account.",
+  expired:
+    "Your signup check timed out. One quick check to finish creating your account.",
+  no_proof:
+    "We couldn't confirm your signup check. One quick check to finish creating your account.",
+  attempt_mismatch:
+    "We couldn't confirm your signup check. One quick check to finish creating your account.",
+  invalid_proof:
+    "We couldn't confirm your signup check. One quick check to finish creating your account.",
+}
+
+// The recovery page continues to Google on its own once per tab within this
+// window, so a check that keeps failing falls back to the button.
+const GOOGLE_RECOVERY_AUTO_KEY = "superserve-google-signup-auto-continue"
+const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
+
 const getRecaptchaToken = async (
   action: string,
 ): Promise<string | undefined> => {
@@ -182,6 +202,15 @@ export default function SignUpContent() {
   if (nextUrl !== "/") signInParams.set("next", nextUrl)
   const signInHref = `/auth/signin${signInParams.size ? `?${signInParams}` : ""}`
   const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
+  const googleRecoveryReason = searchParams.get("reason") ?? ""
+  // The reason comes from the URL; an inherited key like __proto__ is not one.
+  const googleRecoveryMessage = Object.hasOwn(
+    GOOGLE_RECOVERY_MESSAGES,
+    googleRecoveryReason,
+  )
+    ? GOOGLE_RECOVERY_MESSAGES[googleRecoveryReason]
+    : undefined
+  const autoContinued = useRef(false)
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -313,6 +342,33 @@ export default function SignUpContent() {
     }
   }
 
+  const googleSignIn = useRef(handleGoogleSignIn)
+  useEffect(() => {
+    googleSignIn.current = handleGoogleSignIn
+  })
+
+  // When this browser's own callback just failed the check, run the check and
+  // go back to Google without asking for another click. A link alone only
+  // shows the button.
+  useEffect(() => {
+    if (!isCompleteGoogleSignup || !googleRecoveryMessage) return
+    if (autoContinued.current) return
+    autoContinued.current = true
+    try {
+      const last = Number(sessionStorage.getItem(GOOGLE_RECOVERY_AUTO_KEY))
+      if (last && Date.now() - last < GOOGLE_RECOVERY_AUTO_WINDOW_MS) return
+    } catch {
+      return
+    }
+    void claimGoogleRecoveryContinuation(googleRecoveryReason)
+      .then((claimed) => {
+        if (!claimed) return
+        sessionStorage.setItem(GOOGLE_RECOVERY_AUTO_KEY, String(Date.now()))
+        return googleSignIn.current()
+      })
+      .catch(() => undefined)
+  }, [isCompleteGoogleSignup, googleRecoveryMessage, googleRecoveryReason])
+
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       {RECAPTCHA_SITE_KEY && (
@@ -367,8 +423,8 @@ export default function SignUpContent() {
               Complete signup
             </h1>
             <p className="mb-6 text-center text-xs leading-relaxed text-muted">
-              Google sign-in succeeded. Complete signup to finish verification
-              and provision your Superserve account.
+              {googleRecoveryMessage ??
+                "Google sign-in succeeded. Complete signup to finish verification and provision your Superserve account."}
             </p>
             {errors.form && (
               <p className="mb-4 text-xs text-destructive">{errors.form}</p>

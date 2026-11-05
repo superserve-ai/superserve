@@ -252,6 +252,7 @@ vi.mock("@/lib/api/promotion-identity", () => ({
 }))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
+  configuredRegions: () => ["use"],
   cellFor: (region: string) => ({
     region,
     createAdminClient: () => clients[region],
