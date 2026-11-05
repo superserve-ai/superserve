@@ -221,11 +221,11 @@ The SDK and CLI support for the idle timeout ships in the next SDK and CLI relea
 Set it with the REST API when you create the sandbox, then change or clear it with `PATCH`. Send `null` to turn idle pausing off:
 
 ```bash
-# Create with a 10-minute idle timeout
-curl -X POST https://api.superserve.ai/sandboxes \
+# Create with a 10-minute idle timeout and keep the new sandbox's ID
+SANDBOX_ID=$(curl -s -X POST https://api.superserve.ai/sandboxes \
   -H "X-API-Key: $SUPERSERVE_API_KEY" \
   -H "Content-Type: application/json" \
-  -d '{"name": "dev-box", "idle_timeout_seconds": 600}'
+  -d '{"name": "dev-box", "idle_timeout_seconds": 600}' | jq -r .id)
 
 # Change it to 15 minutes
 curl -X PATCH https://api.superserve.ai/sandboxes/$SANDBOX_ID \
