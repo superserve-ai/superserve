@@ -808,6 +808,40 @@ describe("SignUpPage", () => {
       expect(screen.getByRole("button", { name: "Start over" })).toBeEnabled()
     })
 
+    it("keeps the submitted email if the field changes during signup", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      let finishSignup: (value: typeof notSent) => void = () => {}
+      mockSignUpWithEmail.mockReturnValue(
+        new Promise((resolve) => {
+          finishSignup = resolve
+        }),
+      )
+      mockResendSignupConfirmation.mockResolvedValue({ success: true })
+      render(<SignUpPage />)
+      await submit()
+      await waitFor(() => expect(mockSignUpWithEmail).toHaveBeenCalled())
+
+      const emailInput = screen.getByPlaceholderText("Email")
+      await user.clear(emailInput)
+      await user.type(emailInput, "changed@test.com")
+      await act(async () => {
+        finishSignup(notSent)
+      })
+
+      expect(await screen.findByText("test@test.com")).toBeInTheDocument()
+      expect(screen.queryByText("changed@test.com")).toBeNull()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+      expect(mockResendSignupConfirmation).toHaveBeenCalledWith(
+        undefined,
+        "test@test.com",
+      )
+    })
+
     it("lets the user start over with the entered details", async () => {
       mockSignUpWithEmail.mockResolvedValue(notSent)
       render(<SignUpPage />)

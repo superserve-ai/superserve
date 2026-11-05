@@ -190,6 +190,9 @@ export default function SignUpContent() {
     setFormValues((current) => ({ ...current, [key]: value }))
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
+  // The address the account was created with. The field stays editable while
+  // signup is pending, so the confirmation views and resend use this copy.
+  const [submittedEmail, setSubmittedEmail] = useState("")
   // Only "sent" means a confirmation email actually went out.
   const [emailStatus, setEmailStatus] = useState<"sent" | "not_sent" | null>(
     null,
@@ -292,6 +295,7 @@ export default function SignUpContent() {
         if ("errorCode" in result && result.errorCode === "email_not_sent") {
           setResendNotice(null)
           startResendCooldown(RESEND_COOLDOWN_SECONDS)
+          setSubmittedEmail(email)
           setEmailStatus("not_sent")
           return
         }
@@ -305,6 +309,7 @@ export default function SignUpContent() {
       clearFingerprintSignupCapture()
       setResendNotice(null)
       startResendCooldown(RESEND_COOLDOWN_SECONDS)
+      setSubmittedEmail(email)
       setEmailStatus("sent")
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
@@ -338,7 +343,10 @@ export default function SignUpContent() {
         setResendNotice({ text: BOT_CHECK_UNAVAILABLE, error: true })
         return
       }
-      const result = await resendSignupConfirmation(recaptchaToken, email)
+      const result = await resendSignupConfirmation(
+        recaptchaToken,
+        submittedEmail,
+      )
       if (result.success) {
         setEmailStatus("sent")
         startResendCooldown(RESEND_COOLDOWN_SECONDS)
@@ -535,8 +543,8 @@ export default function SignUpContent() {
             </h1>
             <p className="mt-2 text-center text-xs leading-relaxed text-muted">
               We&apos;ve sent a verification link to{" "}
-              <strong className="text-foreground">{email}</strong>. Check your
-              inbox and click the link to verify your account.
+              <strong className="text-foreground">{submittedEmail}</strong>.
+              Check your inbox and click the link to verify your account.
             </p>
             {resendControls}
           </>
@@ -547,9 +555,9 @@ export default function SignUpContent() {
             </h1>
             <p className="mt-2 text-center text-xs leading-relaxed text-muted">
               Your account for{" "}
-              <strong className="text-foreground">{email}</strong> was created,
-              but the confirmation email did not go out. Send it again below. If
-              it still fails, contact{" "}
+              <strong className="text-foreground">{submittedEmail}</strong> was
+              created, but the confirmation email did not go out. Send it again
+              below. If it still fails, contact{" "}
               <a
                 href="mailto:support@superserve.ai"
                 className="font-medium text-foreground hover:underline"
