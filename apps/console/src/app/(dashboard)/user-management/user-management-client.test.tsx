@@ -261,13 +261,14 @@ describe("UserManagementClient", () => {
       ).not.toBeInTheDocument()
     })
 
-    it("hides Resend and Revoke on a Free plan team but keeps the list", () => {
+    it("hides Resend but keeps Revoke on a Free plan team", () => {
       mockUseTeamManagement.mockReturnValue({
         data: {
           ...baseManagement,
           capabilities: {
             ...baseManagement.capabilities,
             can_invite_members: true,
+            can_assign_roles: true,
             can_invite_owners: false,
             invite_blocked_reason: "free_plan",
           },
@@ -283,6 +284,9 @@ describe("UserManagementClient", () => {
       expect(
         screen.queryByRole("button", { name: /^resend$/i }),
       ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: /revoke invitation/i }),
+      ).toBeInTheDocument()
     })
 
     it("offers Resend and Revoke when owner invites are allowed", () => {
@@ -292,6 +296,7 @@ describe("UserManagementClient", () => {
           capabilities: {
             ...baseManagement.capabilities,
             can_invite_members: true,
+            can_assign_roles: true,
             can_invite_owners: true,
           },
         },
@@ -410,6 +415,7 @@ describe("UserManagementClient", () => {
         ...baseManagement.capabilities,
         can_invite_members: true,
         can_deactivate_members: true,
+        can_assign_roles: true,
         can_invite_owners: true,
         invite_blocked_reason: null,
       },

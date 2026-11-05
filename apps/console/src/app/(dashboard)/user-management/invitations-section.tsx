@@ -237,10 +237,18 @@ function invitationStatusLabel(invitation: TeamInvitation): string {
 }
 
 /**
- * Anyone the backend lets read invitations sees the list; `canManage` (the
- * backend's owner-invite capability) separately gates Resend and Revoke.
+ * Anyone the backend lets read invitations sees the list. Resend follows the
+ * owner-invite capability, which a Free plan withholds; Revoke needs only the
+ * permissions, so a downgraded team can still withdraw a pending invitation.
  */
-export function InvitationsSection({ canManage }: { canManage: boolean }) {
+export function InvitationsSection({
+  canResend,
+  canRevoke,
+}: {
+  canResend: boolean
+  canRevoke: boolean
+}) {
+  const canManage = canResend || canRevoke
   const { data, isPending, error, refetch } = useTeamInvitations()
   const resend = useResendInvitation()
   const revoke = useRevokeInvitation()
@@ -315,26 +323,33 @@ export function InvitationsSection({ canManage }: { canManage: boolean }) {
                   {canManage && (
                     <TableCell>
                       <div className="flex gap-2">
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={resend.isPending}
-                          onClick={() =>
-                            resend.mutate({ team, invitationId: invitation.id })
-                          }
-                        >
-                          Resend
-                        </Button>
-                        <Button
-                          size="sm"
-                          variant="outline"
-                          disabled={revoke.isPending}
-                          onClick={() => {
-                            if (team) setRevoking({ ...invitation, team })
-                          }}
-                        >
-                          Revoke invitation
-                        </Button>
+                        {canResend && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={resend.isPending}
+                            onClick={() =>
+                              resend.mutate({
+                                team,
+                                invitationId: invitation.id,
+                              })
+                            }
+                          >
+                            Resend
+                          </Button>
+                        )}
+                        {canRevoke && (
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            disabled={revoke.isPending}
+                            onClick={() => {
+                              if (team) setRevoking({ ...invitation, team })
+                            }}
+                          >
+                            Revoke invitation
+                          </Button>
+                        )}
                       </div>
                     </TableCell>
                   )}

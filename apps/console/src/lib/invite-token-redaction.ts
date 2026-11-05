@@ -112,6 +112,13 @@ export function carriesInviteToken(address: string): boolean {
   return redactInviteTokens(address) !== address
 }
 
+// The recorder serialises a link's href as soon as it renders, before the
+// asynchronous pause below can take effect, so a token link opts out with the
+// recorder's block class.
+export function inviteLinkReplayClass(href: string): string | undefined {
+  return carriesInviteToken(href) ? "ph-no-capture" : undefined
+}
+
 interface RecordingControls {
   startSessionRecording(): void
   stopSessionRecording(): void

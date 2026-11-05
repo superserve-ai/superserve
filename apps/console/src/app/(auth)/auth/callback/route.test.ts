@@ -40,6 +40,8 @@ vi.mock("@/app/(auth)/auth/signin/google-action", () => ({
   beginGoogleSignIn: async () => "retry-origin",
 }))
 vi.mock("@superserve/ui", () => ({
+  cn: (...classes: Array<string | undefined | false>) =>
+    classes.filter(Boolean).join(" "),
   Button: ({
     render: element,
     children,

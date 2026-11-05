@@ -117,10 +117,16 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    className,
   }: {
     children: React.ReactNode
     href: string
-  }) => <a href={href}>{children}</a>,
+    className?: string
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }))
 
 const mockCapture = vi.fn()
@@ -265,6 +271,22 @@ describe("SignUpPage", () => {
     )
     expect(url.searchParams.get("next")).toBe("/yc/claim")
     expect(url.searchParams.get("offer")).toBe("yc_2026")
+    expect(link).not.toHaveClass("ph-no-capture")
+  })
+
+  it("keeps an invite destination in the sign-in link out of session replay", async () => {
+    mockSearchParams = new URLSearchParams({
+      next: "/invite/ssinv_exampletoken",
+    })
+    render(<SignUpPage />)
+    const link = await screen.findByRole("link", { name: "Sign in" })
+    expect(
+      new URL(
+        link.getAttribute("href")!,
+        "https://console.example.test",
+      ).searchParams.get("next"),
+    ).toBe("/invite/ssinv_exampletoken")
+    expect(link).toHaveClass("ph-no-capture")
   })
 
   it("submits diagnostics and the YC return path together before showing email-sent state", async () => {

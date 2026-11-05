@@ -699,7 +699,10 @@ export function UserManagementClient() {
           </section>
 
           <InvitationsSection
-            canManage={capabilities.can_invite_owners === true}
+            canResend={capabilities.can_invite_owners === true}
+            canRevoke={
+              capabilities.can_invite_members && capabilities.can_assign_roles
+            }
           />
 
           {capabilities.can_view_role_assignments && (

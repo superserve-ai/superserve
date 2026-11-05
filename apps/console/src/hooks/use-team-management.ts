@@ -2,6 +2,7 @@
 
 import { useToast } from "@superserve/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
+import { useEffect } from "react"
 
 import { refreshTeamScopedQueries, useTeams } from "@/hooks/use-teams"
 import { ApiError } from "@/lib/api/client"
@@ -57,18 +58,35 @@ const TEAM_NOT_READY_MESSAGE =
  * agrees, so a mutation never targets a team the user is not looking at.
  */
 export function useDisplayedTeam(): TeamScope | null {
+  const queryClient = useQueryClient()
   const { data: management } = useTeamManagement()
   const { data: directory } = useTeams()
   const teamId = management?.team_id
-  if (
-    !teamId ||
-    !management.region ||
-    directory?.activeTeamId !== teamId ||
-    directory.activeRegion !== management.region
-  ) {
-    return null
-  }
-  return { teamId, region: management.region }
+  const scope: TeamScope | null =
+    teamId &&
+    management.region &&
+    directory?.activeTeamId === teamId &&
+    directory.activeRegion === management.region
+      ? { teamId, region: management.region }
+      : null
+  // A switch in another tab reaches the management data on refocus while the
+  // directory stays cached, which would leave every action disabled. Reload
+  // both once per disagreement; a lasting one does not loop.
+  const disagreement =
+    management && directory && !scope
+      ? [
+          teamId,
+          management.region,
+          directory.activeTeamId,
+          directory.activeRegion,
+        ].join("|")
+      : null
+  useEffect(() => {
+    if (!disagreement) return
+    void queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
+    void queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })
+  }, [disagreement, queryClient])
+  return scope
 }
 
 export const TEAM_CHANGED_MESSAGE =

@@ -1,6 +1,6 @@
 import { ToastProvider } from "@superserve/ui"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, renderHook } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -14,14 +14,19 @@ const mocks = vi.hoisted(() => ({
   resend: vi.fn(),
   revoke: vi.fn(),
   leave: vi.fn(),
+  management: vi.fn(),
+  directory: vi.fn(),
 }))
 
 vi.mock("@/lib/api/team-management", () => ({
   deactivateTeamMember: mocks.remove,
   assignTeamRole: mocks.assign,
   revokeTeamRole: mocks.revokeRole,
-  getTeamManagement: vi.fn(),
+  getTeamManagement: mocks.management,
   getTeamInvitations: vi.fn(),
+}))
+vi.mock("@/lib/api/teams-actions", () => ({
+  listTeamsAction: mocks.directory,
 }))
 vi.mock("@/lib/api/team-invitations-actions", () => ({
   createInvitationAction: mocks.create,
@@ -74,6 +79,39 @@ describe("displayed team scope", () => {
       expect(result.current).toEqual(region === "use" ? team : null)
     },
   )
+
+  it("reloads both sources when another tab switched the active team", async () => {
+    vi.clearAllMocks()
+    const switched = { teamId: "switched-team", region: "usw" }
+    const client = new QueryClient({
+      defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+    })
+    client.setQueryData(["team-management"], {
+      team_id: switched.teamId,
+      region: switched.region,
+    })
+    client.setQueryData(teamKeys.directory(), {
+      activeTeamId: team.teamId,
+      activeRegion: team.region,
+    })
+    mocks.management.mockResolvedValue({
+      team_id: switched.teamId,
+      region: switched.region,
+    })
+    mocks.directory.mockResolvedValue({
+      activeTeamId: switched.teamId,
+      activeRegion: switched.region,
+    })
+    const { result } = renderHook(() => useDisplayedTeam(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+    expect(result.current).toBeNull()
+    await waitFor(() => expect(result.current).toEqual(switched))
+    expect(mocks.directory).toHaveBeenCalledTimes(1)
+    expect(mocks.management).toHaveBeenCalledTimes(1)
+  })
 })
 
 describe("team mutation variables", () => {
