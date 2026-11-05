@@ -3,8 +3,10 @@
 import { Button } from "@superserve/ui"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
+import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef, useState } from "react"
 
+import { clearAccountBrowserState } from "@/hooks/use-sign-out"
 import { INVITE_COPY } from "@/lib/invite/copy"
 
 import {
@@ -112,6 +114,7 @@ export function MismatchControls({ token }: { token: string }) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const router = useRouter()
+  const posthog = usePostHog()
 
   const signOut = async () => {
     setBusy(true)
@@ -119,6 +122,9 @@ export function MismatchControls({ token }: { token: string }) {
     try {
       const result = await signOutForInviteAction(token)
       if (result.status === "redirect") {
+        // The next account signs in from this browser, so it must not inherit
+        // the previous account's saved tabs or analytics identity.
+        clearAccountBrowserState(posthog)
         router.replace(result.to)
         return
       }

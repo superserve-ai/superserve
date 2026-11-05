@@ -6,10 +6,14 @@ const mocks = vi.hoisted(() => ({
   autoJoin: vi.fn(),
   join: vi.fn(),
   signOut: vi.fn(),
+  reset: vi.fn(),
 }))
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
+}))
+vi.mock("posthog-js/react", () => ({
+  usePostHog: () => ({ reset: mocks.reset }),
 }))
 vi.mock("./actions", () => ({
   autoJoinInviteAction: mocks.autoJoin,
@@ -17,7 +21,7 @@ vi.mock("./actions", () => ({
   signOutForInviteAction: mocks.signOut,
 }))
 
-import { AutoJoin } from "./invite-controls"
+import { AutoJoin, MismatchControls } from "./invite-controls"
 
 beforeEach(() => {
   vi.resetAllMocks()
@@ -40,5 +44,25 @@ describe("AutoJoin", () => {
     expect(mocks.join).toHaveBeenCalledWith(token)
     expect(mocks.autoJoin).toHaveBeenCalledTimes(1)
     expect(mocks.autoJoin).toHaveBeenCalledWith(token)
+  })
+})
+
+describe("MismatchControls", () => {
+  it("clears the previous account's browser state after signing out", async () => {
+    const token = `ssinv_use_${"T".repeat(43)}`
+    localStorage.setItem(
+      "superserve.terminal-tabs",
+      JSON.stringify([{ id: "tab-1", name: "previous" }]),
+    )
+    mocks.signOut.mockResolvedValue({ status: "redirect", to: "/auth/signin" })
+
+    render(<MismatchControls token={token} />)
+    fireEvent.click(screen.getByRole("button"))
+
+    await waitFor(() =>
+      expect(mocks.replace).toHaveBeenCalledWith("/auth/signin"),
+    )
+    expect(mocks.reset).toHaveBeenCalledTimes(1)
+    expect(localStorage.getItem("superserve.terminal-tabs")).toBeNull()
   })
 })
