@@ -246,10 +246,10 @@
             "pages": [
               "integrations/coding-agents/claude",
               "integrations/coding-agents/codex",
+              "integrations/coding-agents/droid",
               "integrations/coding-agents/opencode",
               "integrations/coding-agents/kilocode",
-              "integrations/coding-agents/pi",
-              "integrations/coding-agents/droid"
+              "integrations/coding-agents/pi"
             ]
           },
           {
