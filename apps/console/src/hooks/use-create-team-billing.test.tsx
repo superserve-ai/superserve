@@ -134,7 +134,9 @@ it.each(["a".repeat(257), "é".repeat(129), "   "])(
     expect(mocks.create).not.toHaveBeenCalled()
     expect(sessionStorage.getItem("superserve:team-creation:u1:usw")).toBeNull()
     await act(async () => {
-      await result.current.create.mutateAsync({ name: "B", region: "usw" })
+      await expect(
+        result.current.create.mutateAsync({ name: "B", region: "usw" }),
+      ).resolves.toEqual({ team: teamB, converted: false })
     })
     expect(mocks.create).toHaveBeenCalledWith("B", "usw", expect.any(String))
   },
@@ -275,4 +277,221 @@ it("restores billing readiness on creation failure and ignores payment completio
   })
   expect(result.current.summary.data).toEqual(summaryA)
   expect(mocks.summary).not.toHaveBeenCalled()
+})
+
+it("converts the account and retries the conversion with its original intent", async () => {
+  mocks.create
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({ ...teamA, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+  // The retry comes from a form that no longer offers the conversion.
+  await act(async () => {
+    await expect(
+      result.current.create.mutateAsync({ name: "acme", region: "use" }),
+    ).resolves.toEqual({ team: { ...teamA, name: "acme" }, converted: true })
+  })
+
+  const [first, second] = mocks.create.mock.calls
+  expect(first).toEqual(["acme", "use", expect.any(String), "a"])
+  expect(second).toEqual(first)
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("drops a conversion the server refuses so the form can start over", async () => {
+  mocks.create.mockResolvedValue({
+    code: "team_conversion_unavailable",
+    message: "Your account can no longer be converted.",
+  })
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+
+  await waitFor(() =>
+    expect(result.current.create.error?.message).toBe(
+      "Your account can no longer be converted.",
+    ),
+  )
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("finishes a lost conversion in its region after the form stops offering it", async () => {
+  mocks.create
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({ ...teamB, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "usw", convertTeamId: "b" })
+      .catch(() => {})
+  })
+  // The rename committed, so the refreshed form offers a new team in its
+  // default region.
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "acme", region: "use" })
+  })
+
+  const [first, second] = mocks.create.mock.calls
+  expect(first).toEqual(["acme", "usw", expect.any(String), "b"])
+  expect(second).toEqual(first)
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("keeps the account convertible after creating an unrelated team", async () => {
+  const account = { id: "me", region: "use", name: "user@example.com" }
+  client.setQueryData<TeamDirectoryResponse>(teamKeys.directory(), {
+    ...directory,
+    teams: [teamA, account],
+    convertibleTeams: [account],
+  })
+  mocks.create.mockResolvedValue(teamB)
+  mocks.directory.mockRejectedValue(new Error("offline"))
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "B", region: "usw" })
+  })
+
+  expect(
+    client.getQueryData<TeamDirectoryResponse>(teamKeys.directory())
+      ?.convertibleTeams,
+  ).toEqual([account])
+})
+
+it("finishes a lost new-team creation before a conversion starts", async () => {
+  mocks.create
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce(teamB)
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "B", region: "usw" })
+      .catch(() => {})
+  })
+  // The form now offers the conversion, but the first creation may have
+  // committed.
+  await act(async () => {
+    await expect(
+      result.current.create.mutateAsync({
+        name: "acme",
+        region: "use",
+        convertTeamId: "a",
+      }),
+    ).rejects.toThrow("original name")
+  })
+  await act(async () => {
+    await result.current.create.mutateAsync({
+      name: "B",
+      region: "use",
+      convertTeamId: "a",
+    })
+  })
+
+  const calls = mocks.create.mock.calls
+  expect(calls).toHaveLength(2)
+  expect(calls[1]).toEqual(calls[0])
+  expect(calls[1]).toEqual(["B", "usw", expect.any(String)])
+  expect(sessionStorage.getItem("superserve:team-creation:u1:usw")).toBeNull()
+})
+
+it("releases a conversion whose name was rejected for a new-team request", async () => {
+  mocks.create
+    .mockResolvedValueOnce({
+      code: "team_name_conflict",
+      message: "That team name is already taken.",
+    })
+    .mockResolvedValueOnce({ ...teamB, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "acme", region: "usw" })
+  })
+
+  expect(mocks.create.mock.calls[1]).toEqual([
+    "acme",
+    "usw",
+    expect.any(String),
+  ])
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("converts another account team after a rejected name", async () => {
+  mocks.create
+    .mockResolvedValueOnce({
+      code: "team_name_conflict",
+      message: "That team name is already taken.",
+    })
+    .mockResolvedValueOnce({ ...teamB, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+  await act(async () => {
+    await result.current.create.mutateAsync({
+      name: "acme",
+      region: "usw",
+      convertTeamId: "b",
+    })
+  })
+
+  const [first, second] = mocks.create.mock.calls
+  expect(second).toEqual(["acme", "usw", expect.any(String), "b"])
+  expect(second[2]).not.toBe(first[2])
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("keeps a conversion whose same-name retry got no response", async () => {
+  mocks.create
+    .mockResolvedValueOnce({
+      code: "team_name_conflict",
+      message: "That team name is already taken.",
+    })
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({ ...teamA, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  for (let attempt = 0; attempt < 2; attempt++) {
+    await act(async () => {
+      await result.current.create
+        .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+        .catch(() => {})
+    })
+  }
+  const stored = JSON.parse(
+    sessionStorage.getItem("superserve:team-conversion:u1") ?? "{}",
+  )
+  expect(stored.nameRejected).toBeUndefined()
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "acme", region: "usw" })
+  })
+
+  const [first, second, third] = mocks.create.mock.calls
+  expect(second).toEqual(first)
+  expect(third).toEqual(first)
+  expect(third).toEqual(["acme", "use", expect.any(String), "a"])
 })

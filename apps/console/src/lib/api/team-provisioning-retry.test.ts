@@ -30,6 +30,7 @@ vi.mock("@/lib/auth/signup-restrictions", () => ({
 }))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
+  configuredRegions: () => ["use", "usw"],
   cellFor: () => ({ createAdminClient: () => ({ from }) }),
 }))
 import { provisionTeam } from "./team-provisioning"
@@ -41,6 +42,7 @@ const teamId = "22222222-2222-4222-8222-222222222222"
 const operationId = "33333333-3333-4333-8333-333333333333"
 const rows = new Map<string, Record<string, unknown>[]>()
 let failTable: string | undefined
+let missingTable: string | undefined
 let prepared: Record<string, unknown> | null
 function from(table: string) {
   let filters: [string, unknown][] = []
@@ -54,12 +56,15 @@ function from(table: string) {
       filters.push([field, value])
       return query
     },
-    limit: async () => ({
-      data: (rows.get(table) ?? []).filter((row) =>
-        filters.every(([key, value]) => (row[key] ?? null) === value),
-      ),
-      error: null,
-    }),
+    limit: async () =>
+      table === missingTable
+        ? { data: null, error: { code: "42P01", message: "missing" } }
+        : {
+            data: (rows.get(table) ?? []).filter((row) =>
+              filters.every(([key, value]) => (row[key] ?? null) === value),
+            ),
+            error: null,
+          },
     single: async () => ({ data: { id: "owner-role" }, error: null }),
     upsert: async () => ({ error: null }),
     insert: async (input: Record<string, unknown>) => {
@@ -91,6 +96,7 @@ function create(name = "original", op: string | undefined = operationId) {
   )
 }
 beforeEach(() => {
+  missingTable = undefined
   vi.resetAllMocks()
   rows.clear()
   failTable = undefined
@@ -189,4 +195,34 @@ it("does not prepare after a failed recovery or recreate a deleted team", async 
   mocks.complete.mockResolvedValueOnce(prepared)
   await expect(create()).rejects.toThrow("already been deleted")
   expect(rows.size).toBe(0)
+})
+it("treats a team the user owns in a cell without Free claims as their Free one", async () => {
+  missingTable = "billing_account_free_team"
+  await create()
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: false }),
+  )
+  rows.set("team_member", [
+    { profile_id: user.id, role: "owner", team_id: "elsewhere" },
+  ])
+  prepared = null
+  await create("second", "55555555-5555-4555-8555-555555555555")
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: true }),
+  )
+})
+
+it("marks a team additional when another cell holds the user's Free team", async () => {
+  await create()
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: false }),
+  )
+  rows.set("billing_account_free_team", [
+    { user_id: user.id, team_id: "elsewhere" },
+  ])
+  prepared = null
+  await create("second", "55555555-5555-4555-8555-555555555555")
+  expect(mocks.prepare).toHaveBeenLastCalledWith(
+    expect.objectContaining({ additionalTeam: true }),
+  )
 })

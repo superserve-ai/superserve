@@ -1,5 +1,6 @@
 import { redirect } from "next/navigation"
 
+import { AccountDeviceRecorder } from "@/components/account-device-recorder"
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { PlanBanner } from "@/components/billing/plan-banner"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
@@ -46,6 +47,7 @@ export default async function DashboardLayout({
       }
     >
       <SessionExpiryRedirect />
+      {!impersonationContext && <AccountDeviceRecorder />}
       <SignupPlanGate>
         <DashboardShell
           globalBanner={<PlanBanner />}

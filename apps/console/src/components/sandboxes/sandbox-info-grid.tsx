@@ -351,7 +351,7 @@ export function MetadataSection({ sandbox }: { sandbox: SandboxResponse }) {
 export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
   return (
     <div className="border-b border-border">
-      <div className="grid grid-cols-5">
+      <div className="grid grid-cols-6">
         <div className="border-r border-border px-4 py-4">
           <p className="text-xs text-muted">Resources</p>
           <p className="mt-2 text-sm text-foreground/80 tabular-nums">
@@ -363,6 +363,14 @@ export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
           <p className="mt-2 font-mono text-sm text-foreground/80">
             {sandbox.timeout_seconds
               ? formatTimeout(sandbox.timeout_seconds)
+              : "None"}
+          </p>
+        </div>
+        <div className="border-r border-border px-4 py-4">
+          <p className="text-xs text-muted">Idle timeout</p>
+          <p className="mt-2 font-mono text-sm text-foreground/80">
+            {sandbox.idle_timeout_seconds
+              ? formatTimeout(sandbox.idle_timeout_seconds)
               : "None"}
           </p>
         </div>
