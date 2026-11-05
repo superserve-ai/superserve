@@ -105,7 +105,8 @@ export async function signOutForInviteAction(
   if (!path) return { status: "error" }
   try {
     const supabase = await createServerClient()
-    await supabase.auth.signOut()
+    const { error } = await supabase.auth.signOut()
+    if (error) return { status: "error" }
     await setInviteIntent(token)
   } catch {
     return { status: "error" }

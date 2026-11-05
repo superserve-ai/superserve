@@ -43,6 +43,7 @@ const verified = {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.signOut.mockResolvedValue({ error: null })
   mocks.redirect.mockImplementation((to: string) => {
     throw new Error(`NEXT_REDIRECT:${to}`)
   })
@@ -158,6 +159,13 @@ describe("signOutForInviteAction", () => {
     })
     expect(mocks.signOut).toHaveBeenCalled()
     expect(mocks.setInviteIntent).toHaveBeenCalledWith(token)
+  })
+
+  it("returns an error without recording intent when sign-out fails", async () => {
+    mocks.signOut.mockResolvedValue({ error: new Error("Sign-out failed") })
+    expect(await signOutForInviteAction(token)).toEqual({ status: "error" })
+    expect(mocks.setInviteIntent).not.toHaveBeenCalled()
+    expect(mocks.redirect).not.toHaveBeenCalled()
   })
 
   it("does nothing for a malformed token", async () => {
