@@ -278,7 +278,8 @@
           {
             "group": "Evaluations",
             "pages": [
-              "integrations/evaluations/harbor"
+              "integrations/evaluations/harbor",
+              "integrations/evaluations/openenv"
             ]
           },
           {
