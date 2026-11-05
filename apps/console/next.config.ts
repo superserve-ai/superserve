@@ -1,5 +1,6 @@
 import type { NextConfig } from "next"
 
+import { legacyRedirects } from "./src/lib/legacy-redirects"
 import { defaultSandboxOrigin } from "./src/lib/sandbox-url"
 
 // Fail the build, not the first sandbox page load, on an invalid
@@ -25,6 +26,9 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   trailingSlash: true,
   reactStrictMode: true,
+  async redirects() {
+    return legacyRedirects
+  },
   async headers() {
     return [
       {

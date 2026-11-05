@@ -1,6 +1,7 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
+import { isBuyCreditPath } from "@/lib/billing/buy-credit-path"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
@@ -40,7 +41,7 @@ export async function middleware(request: NextRequest) {
     const retainedBilling =
       proAuthReturnPath(billingPath) ?? starterAuthReturnPath(billingPath)
     const invalidBillingReturn =
-      /^\/(?:billing\/pro|plan-usage\/buy-credit)\/?$/.test(pathname) &&
+      (/^\/billing\/pro\/?$/.test(pathname) || isBuyCreditPath(pathname)) &&
       (request.nextUrl.searchParams.has("billing_flow") ||
         request.nextUrl.searchParams.has("billing") ||
         request.nextUrl.searchParams.has("purchase") ||

@@ -1563,7 +1563,7 @@ describe("auth callback", () => {
 
     it.each([
       "/billing/pro/?team=use%3Ateam&return=%2Fsandboxes",
-      "/plan-usage/buy-credit?amount=500",
+      "/billing-usage/buy-credit?amount=500",
     ])(
       "keeps direct no-offer email confirmation destination %s",
       async (next) => {
@@ -1579,7 +1579,7 @@ describe("auth callback", () => {
     )
 
     it.each([
-      ["starter", "/plan-usage/buy-credit/"],
+      ["starter", "/billing-usage/buy-credit/"],
       ["pro_monthly", "/billing/pro/"],
     ])(
       "finishes first-team preparation before the fresh %s confirmation destination",
@@ -1675,13 +1675,15 @@ describe("auth callback", () => {
       mockGetSignupPlanAction.mockRejectedValueOnce(new Error("Response lost"))
       const response = await GET(
         new Request(
-          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
         ),
       )
       const location = new URL(response.headers.get("location")!)
       expect(location.pathname).toBe("/auth/auth-code-error")
       expect(location.searchParams.get("reason")).toBe("account_setup")
-      expect(location.searchParams.get("next")).toBe("/plan-usage/buy-credit/")
+      expect(location.searchParams.get("next")).toBe(
+        "/billing-usage/buy-credit/",
+      )
       expect(location.searchParams.get("account")).toBe("u1")
     })
 
@@ -1699,7 +1701,7 @@ describe("auth callback", () => {
       )
       const response = await GET(
         new Request(
-          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
         ),
       )
       const recovery = new URL(response.headers.get("location")!)
@@ -1715,7 +1717,7 @@ describe("auth callback", () => {
       expect(signin.pathname).toBe("/auth/signin")
       const authenticatedNext = signin.searchParams.get("next")!
       expect(new URL(authenticatedNext, signin).searchParams.get("next")).toBe(
-        "/plan-usage/buy-credit/",
+        "/billing-usage/buy-credit/",
       )
       currentUser = owner
       const callback = new URL(
@@ -1727,7 +1729,7 @@ describe("auth callback", () => {
         new Request(authenticated.headers.get("location")!),
       ).catch((error) => new URL(error.message, retry))
       if (!prepared) throw new Error("Expected paid destination")
-      expect(prepared.pathname).toBe("/plan-usage/buy-credit/")
+      expect(prepared.pathname).toBe("/billing-usage/buy-credit/")
       expect(directoryState.memberships).toEqual([
         { teamId: "created-team", region: "use" },
       ])
@@ -1739,7 +1741,7 @@ describe("auth callback", () => {
         currentUser!.app_metadata = { provider: "email" }
         directoryState = { memberships: [], degradedRegions: ["use"] }
         const next =
-          offer === "starter" ? "/plan-usage/buy-credit/" : "/billing/pro/"
+          offer === "starter" ? "/billing-usage/buy-credit/" : "/billing/pro/"
         const url = new URL(
           "https://console.superserve.ai/auth/callback?token_hash=official&type=signup",
         )
@@ -1826,7 +1828,7 @@ describe("auth callback", () => {
       }
       const response = await GET(
         new Request(
-          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=early-unbound-attempt&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=early-unbound-attempt&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
         ),
       )
       const recovery = new URL(response.headers.get("location")!)
@@ -1835,7 +1837,7 @@ describe("auth callback", () => {
       const preparation = new URL(recovery.searchParams.get("next")!, recovery)
       expect(preparation.searchParams.get("account")).toBe("u1")
       expect(preparation.searchParams.get("next")).toBe(
-        "/plan-usage/buy-credit/",
+        "/billing-usage/buy-credit/",
       )
       expect([...evidenceJar]).toEqual(before)
       expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
@@ -1986,8 +1988,8 @@ describe("auth callback", () => {
         "/billing/pro",
       ],
       [
-        "signup_offer=pro_monthly&next=%2Fplan-usage%2Fbuy-credit%3Fpurchase%3Dsuccess%26team%3Duse%253Aoriginal",
-        "/plan-usage/buy-credit",
+        "signup_offer=pro_monthly&next=%2Fbilling-usage%2Fbuy-credit%3Fpurchase%3Dsuccess%26team%3Duse%253Aoriginal",
+        "/billing-usage/buy-credit",
       ],
     ])(
       "preserves existing account intent or explicit payment return: %s",

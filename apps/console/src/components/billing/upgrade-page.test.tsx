@@ -220,7 +220,7 @@ describe("UpgradePage with pricing v2 off", () => {
     mocks.plan.mockReturnValue({ data: null, isError: false })
     const { container } = mount()
     expect(container.textContent).toBe("")
-    expect(mocks.replace).toHaveBeenCalledWith("/plan-usage")
+    expect(mocks.replace).toHaveBeenCalledWith("/billing-usage")
     expect(mocks.plan).toHaveBeenCalledWith(true)
   })
 })

@@ -88,7 +88,7 @@ describe("auth-code-error page", () => {
   })
 
   it.each([
-    "/plan-usage/buy-credit/",
+    "/billing-usage/buy-credit/",
     "/billing/pro/?team=use%3Aoriginal&billing=success",
   ])(
     "retries account setup with the bound paid destination %s",
@@ -149,7 +149,7 @@ describe("auth-code-error page", () => {
   it("does not navigate or lose the saved destination when local sign-out fails", async () => {
     reason = "account_changed"
     account = "original-owner"
-    next = "/plan-usage/buy-credit/"
+    next = "/billing-usage/buy-credit/"
     signOut.mockResolvedValue({ error: new Error("unavailable") })
     const assign = vi
       .spyOn(window.location, "assign")

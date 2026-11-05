@@ -60,7 +60,7 @@ describe("template creation entitlement", () => {
     render(<CreateTemplateDialog />)
     expect(
       screen.getByRole("link", { name: "Upgrade to create templates" }),
-    ).toHaveAttribute("href", "/plan-usage/upgrade")
+    ).toHaveAttribute("href", "/billing-usage/upgrade")
     expect(screen.queryByRole("button", { name: "New template" })).toBeNull()
     expect(mocks.create).not.toHaveBeenCalled()
   })
