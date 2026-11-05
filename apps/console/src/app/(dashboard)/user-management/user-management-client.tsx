@@ -36,6 +36,7 @@ import {
   TEAM_CHANGED_MESSAGE,
   useAssignTeamRole,
   useDisplayedTeam,
+  useLeaveScope,
   useRemoveTeamMember,
   useRevokeTeamRole,
   useTeamInvitations,
@@ -541,6 +542,7 @@ export function UserManagementClient() {
   const removeMember = useRemoveTeamMember()
   const { data: emailInvitations } = useTeamInvitations()
   const team = useDisplayedTeam()
+  const leaveScope = useLeaveScope()
   const { addToast } = useToast()
 
   useEffect(() => {
@@ -585,7 +587,7 @@ export function UserManagementClient() {
         {error instanceof ApiError && error.status === 403 && (
           <div className="px-6 pb-8">
             <div className="mx-auto w-full max-w-7xl">
-              <LeaveTeamSection />
+              <LeaveTeamSection team={leaveScope} />
             </div>
           </div>
         )}
@@ -761,7 +763,7 @@ export function UserManagementClient() {
             </section>
           )}
 
-          <LeaveTeamSection />
+          <LeaveTeamSection team={leaveScope} />
         </div>
       </div>
 

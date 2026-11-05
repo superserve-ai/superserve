@@ -31,7 +31,6 @@ import {
   TEAM_CHANGED_MESSAGE,
   useCreateInvitation,
   useDisplayedTeam,
-  useLeaveScope,
   useLeaveTeam,
   useResendInvitation,
   useRevokeInvitation,
@@ -388,13 +387,14 @@ export function InvitationsSection({
 export const LEAVE_BLOCKED_REASON =
   "This is your only team, so you can't leave it. Create or join another team first."
 
-export function LeaveTeamSection() {
+// The scope comes from the page: an extra observer of a failed management
+// query would refetch it on mount, sending the page back to its loading state.
+export function LeaveTeamSection({ team }: { team: TeamScope | null }) {
   const router = useRouter()
   const teams = useTeams()
   const leave = useLeaveTeam()
   const { addToast } = useToast()
   const [confirming, setConfirming] = useState<TeamScope | null>(null)
-  const team = useLeaveScope()
 
   useEffect(() => {
     if (confirming && !sameTeam(confirming, team)) setConfirming(null)
