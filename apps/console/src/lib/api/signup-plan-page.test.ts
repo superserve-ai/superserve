@@ -231,7 +231,12 @@ it("sends an expired session to sign-in instead of the setup error", async () =>
 
 it("tells a plan that stayed unreadable apart from a blocked answer", async () => {
   m.read.mockRejectedValue(new Error("Unable to check your plan."))
-  expect(await getSignupPlanPageState()).toEqual({ status: "unavailable" })
+  const state = await getSignupPlanPageState()
+  expect(state.status).toBe("unavailable")
+  // The team is confirmed even though its plan isn't.
+  expect(state.status === "unavailable" && state.directory.activeTeamId).toBe(
+    "team",
+  )
   expect(m.read).toHaveBeenCalledTimes(2)
   m.read.mockRejectedValue(new SignupSetupBlockedError("team_changed"))
   expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
@@ -249,4 +254,13 @@ it("reports a plan read that a retry recovered as ready", async () => {
   expect(state.status === "ready" && state.page.context.teamKey).toBe(
     "use:team",
   )
+})
+it("keeps the console closed when the team can't be confirmed", async () => {
+  m.read.mockRejectedValue(new Error("Unable to check your plan."))
+  m.teams.mockResolvedValue({ teams: [], regions: ["use"] })
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
+  m.teams.mockRejectedValue(new Error("Directory unavailable"))
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
+  m.memberships.mockResolvedValue({ memberships: [], degradedRegions: ["use"] })
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
 })

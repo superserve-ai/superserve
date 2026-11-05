@@ -10,6 +10,17 @@ import { needsPlanSelection } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
 
+// Every observer of this query shares these options: an observer without them
+// would replace the query function under a read the gate still retries.
+export function signupPlanQuery(teamKey: string | null) {
+  return {
+    queryKey: ["signup-plan", teamKey],
+    queryFn: () => getSignupPlanAction(teamKey ?? undefined),
+    staleTime: Number.POSITIVE_INFINITY,
+    retry: 2,
+  }
+}
+
 export function SignupPlanGate({ children }: { children: ReactNode }) {
   const scope = useQueryScope()
   if (scope !== "self") return children
@@ -24,13 +35,7 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
   const { ready, teamKey } = useBillingContext()
   const router = useRouter()
   const searchParams = useSearchParams()
-  const query = useQuery({
-    queryKey: ["signup-plan", teamKey],
-    queryFn: () => getSignupPlanAction(teamKey ?? undefined),
-    enabled: ready,
-    staleTime: Number.POSITIVE_INFINITY,
-    retry: 2,
-  })
+  const query = useQuery({ ...signupPlanQuery(teamKey), enabled: ready })
   const required = query.data && needsPlanSelection(query.data)
   const picker = query.data ? awaitingPlanRedirect(query.data) : null
   useEffect(() => {
@@ -41,7 +46,10 @@ function SelfSignupPlanGate({ children }: { children: ReactNode }) {
     <>
       {searchParams.get("contact_sales") === "1" && (
         <aside className="border-b p-4">
-          Your Free account is ready.{" "}
+          {/* Name the plan only once it has been read. */}
+          {query.data
+            ? "Your Free account is ready."
+            : "Your account is ready."}{" "}
           <a
             className="underline"
             href="https://www.superserve.ai/meet/"

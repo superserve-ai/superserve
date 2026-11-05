@@ -5,8 +5,8 @@ import { useQuery } from "@tanstack/react-query"
 import { useRouter } from "next/navigation"
 import { useTransition } from "react"
 
+import { signupPlanQuery } from "@/components/onboarding/signup-plan-gate"
 import { useBillingContext } from "@/hooks/use-billing-context"
-import type { SignupPlanContext } from "@/lib/api/signup-plan"
 
 import { BannerShell } from "./plan-aware-banner"
 import { PlanBanner } from "./plan-banner"
@@ -21,10 +21,7 @@ export function PlanUnavailableBanner() {
   const router = useRouter()
   const [retrying, startRetry] = useTransition()
   // Observes the gate's query without fetching it a second time.
-  const checked = useQuery<SignupPlanContext>({
-    queryKey: ["signup-plan", teamKey],
-    enabled: false,
-  }).data
+  const checked = useQuery({ ...signupPlanQuery(teamKey), enabled: false }).data
   if (checked) return <PlanBanner />
   return (
     <BannerShell

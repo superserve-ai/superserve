@@ -28,10 +28,12 @@ export default async function DashboardLayout({
   const state = impersonationContext ? null : await getSignupPlanPageState()
   if (state?.status === "blocked")
     return <PlanSelectionLoader initialContext={null} />
-  // A plan read that failed twice leaves the console usable without its plan.
-  // The client gate re-checks it, and nothing is unlocked by the failure.
+  // A plan read that failed twice for a confirmed team leaves the console
+  // usable without its plan. The client gate re-checks it, and nothing is
+  // unlocked by the failure.
   const unavailable = state?.status === "unavailable"
   const signup = state?.status === "ready" ? state.page : null
+  const seed = unavailable ? { directory: state.directory } : signup
   if (signup && needsPlanSelection(signup.context)) redirect("/onboarding/plan")
   const picker = signup ? awaitingPlanRedirect(signup.context) : null
   if (picker) redirect(picker)
@@ -40,7 +42,7 @@ export default async function DashboardLayout({
   return (
     <QueryProvider
       cacheScope={queryScope}
-      initialSignup={signup ?? undefined}
+      initialSignup={seed ?? undefined}
       teamContext={
         impersonationContext
           ? {

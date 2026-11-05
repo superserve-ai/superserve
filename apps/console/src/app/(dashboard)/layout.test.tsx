@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const m = vi.hoisted(() => ({
   read: vi.fn(),
+  teams: vi.fn(),
   refresh: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({
@@ -37,14 +38,7 @@ vi.mock("@/lib/api/active-team", () => ({
   readTeamSelection: async () => null,
   pickActiveTeam: (teams: unknown[]) => teams[0],
 }))
-vi.mock("@/lib/api/teams-actions", () => ({
-  listTeamsAction: async () => ({
-    teams: [{ id: "team", region: "use", name: "Team" }],
-    activeTeamId: "team",
-    activeRegion: "use",
-    regions: ["use"],
-  }),
-}))
+vi.mock("@/lib/api/teams-actions", () => ({ listTeamsAction: m.teams }))
 vi.mock("@/lib/api/signup-plan-read", () => ({ readSignupPlan: m.read }))
 vi.mock("@/lib/supabase/fresh-fetch", () => ({
   readFresh: <T,>(read: () => Promise<T>) => read(),
@@ -61,6 +55,10 @@ vi.mock("@/components/onboarding/plan-selection-loader", () => ({
 }))
 vi.mock("@/components/onboarding/signup-plan-gate", () => ({
   SignupPlanGate: ({ children }: { children: ReactNode }) => children,
+  signupPlanQuery: (teamKey: string | null) => ({
+    queryKey: ["signup-plan", teamKey],
+    queryFn: () => new Promise(() => {}),
+  }),
 }))
 vi.mock("@/components/layout/dashboard-shell", () => ({
   DashboardShell: (props: { globalBanner: ReactNode; children: ReactNode }) => (
@@ -100,6 +98,12 @@ async function renderLayout() {
 beforeEach(() => {
   vi.clearAllMocks()
   m.read.mockResolvedValue(ACTIVE)
+  m.teams.mockResolvedValue({
+    teams: [{ id: "team", region: "use", name: "Team" }],
+    activeTeamId: "team",
+    activeRegion: "use",
+    regions: ["use"],
+  })
 })
 
 describe("dashboard layout when the plan read fails", () => {
@@ -125,6 +129,16 @@ describe("dashboard layout when the plan read fails", () => {
     ).toBeVisible()
     expect(screen.queryByText("Sandboxes")).toBeNull()
     expect(screen.queryByText(/We couldn’t load your plan details/)).toBeNull()
+  })
+
+  it("keeps the setup gate when the team directory doesn't match", async () => {
+    m.read.mockRejectedValue(new Error("Unable to check your plan."))
+    m.teams.mockResolvedValue({ teams: [], regions: ["use"] })
+    await renderLayout()
+    expect(
+      screen.getByText("We couldn’t confirm your account setup"),
+    ).toBeVisible()
+    expect(screen.queryByText("Sandboxes")).toBeNull()
   })
 
   it("shows no notice when the retry succeeds", async () => {
