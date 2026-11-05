@@ -2,6 +2,7 @@ import { type NextRequest, NextResponse } from "next/server"
 
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { isBuyCreditPath } from "@/lib/billing/buy-credit-path"
+import { legacyBillingUsagePath } from "@/lib/billing/legacy-billing-usage-path"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
@@ -23,6 +24,15 @@ const PUBLIC_ROUTES = [
 ]
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  const legacyPath = legacyBillingUsagePath(pathname)
+  // Old bookmarks, emails and in-flight Stripe sessions still use /plan-usage.
+  if (legacyPath) {
+    const url = request.nextUrl.clone()
+    url.pathname = legacyPath
+    return NextResponse.redirect(url, 308)
+  }
+
   const client = createMiddlewareClient(request)
   if (!client.supabase) return client.response
 
@@ -30,7 +40,6 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await client.supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
   const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
 
   if (!user && !isPublicRoute) {
@@ -93,7 +102,8 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip Next internals and common static assets so getUser() isn't called
+    "/plan-usage/:path*",
+    // Skip Next internals and other static assets so getUser() isn't called
     // on every font/css/js request. /api is skipped too: every API route
     // authenticates its own request (and answers JSON, not a redirect to the
     // signin page), so the middleware getUser() was a second Supabase auth
