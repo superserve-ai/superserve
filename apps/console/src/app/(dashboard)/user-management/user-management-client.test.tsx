@@ -16,6 +16,7 @@ const {
   mockUseTeamManagement,
   mockUseTeamInvitations,
   mockUseTeams,
+  mockCreateInvitation,
   mockLeave,
   mockRemove,
   mockResend,
@@ -27,6 +28,7 @@ const {
   mockUseTeamManagement: vi.fn(),
   mockUseTeamInvitations: vi.fn(),
   mockUseTeams: vi.fn(),
+  mockCreateInvitation: vi.fn(),
   mockLeave: vi.fn(),
   mockRemove: vi.fn(),
   mockResend: vi.fn(),
@@ -52,7 +54,7 @@ vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
   useTeamInvitations: () => mockUseTeamInvitations(),
   useAssignTeamRole: () => mutation(),
   useRevokeTeamRole: () => mutation(),
-  useCreateInvitation: () => mutation(),
+  useCreateInvitation: () => mutation(mockCreateInvitation),
   useResendInvitation: () => mutation(mockResend),
   useRevokeInvitation: () => mutation(mockRevokeInvitation),
   useRemoveTeamMember: () => mutation(mockRemove),
@@ -522,6 +524,73 @@ describe("UserManagementClient", () => {
       expect(
         screen.getByRole("button", { name: /send invitation/i }),
       ).toBeInTheDocument()
+    })
+
+    it.each([
+      { teamId: "team-2", region: "use" },
+      { teamId: "team-1", region: "usw" },
+      null,
+    ])(
+      "closes and resets the invite when the scope becomes %j",
+      async (next) => {
+        const view = render(<UserManagementClient />)
+        fireEvent.click(
+          screen.getByRole("button", { name: /^invite member$/i }),
+        )
+        fireEvent.change(screen.getByLabelText(/email address/i), {
+          target: { value: "new-owner@example.com" },
+        })
+
+        mockDisplayedTeam.mockReturnValue(next)
+        view.rerender(
+          <ToastProvider>
+            <UserManagementClient />
+          </ToastProvider>,
+        )
+
+        await waitFor(() =>
+          expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        )
+        expect(mockCreateInvitation).not.toHaveBeenCalled()
+
+        mockDisplayedTeam.mockReturnValue({ teamId: "team-2", region: "usw" })
+        view.rerender(
+          <ToastProvider>
+            <UserManagementClient />
+          </ToastProvider>,
+        )
+        fireEvent.click(
+          screen.getByRole("button", { name: /^invite member$/i }),
+        )
+        expect(screen.getByLabelText(/email address/i)).toHaveValue("")
+        expect(
+          screen.getByRole("button", { name: /send invitation/i }),
+        ).toBeDisabled()
+      },
+    )
+
+    it("sends the invitation with the scope captured when opened", () => {
+      const captured = { teamId: "team-1", region: "use" }
+      mockDisplayedTeam.mockReturnValue(captured)
+      const view = render(<UserManagementClient />)
+      fireEvent.click(screen.getByRole("button", { name: /^invite member$/i }))
+
+      mockDisplayedTeam.mockReturnValue({ ...captured })
+      view.rerender(
+        <ToastProvider>
+          <UserManagementClient />
+        </ToastProvider>,
+      )
+      fireEvent.change(screen.getByLabelText(/email address/i), {
+        target: { value: "new-owner@example.com" },
+      })
+      fireEvent.click(screen.getByRole("button", { name: /send invitation/i }))
+
+      expect(mockCreateInvitation).toHaveBeenCalledWith(
+        { team: captured, email: "new-owner@example.com" },
+        expect.any(Object),
+      )
+      expect(mockCreateInvitation.mock.calls[0][0].team).toBe(captured)
     })
 
     it("grays out Invite with the upgrade reason on a Free plan team", () => {

@@ -67,16 +67,16 @@ export const UPGRADE_REASON = "Upgrade to invite owners"
 const EMAIL_PATTERN = /^[^\s@]+@[^\s@]+\.[^\s@]+$/
 
 function InviteDialog({
-  open,
+  team,
   onOpenChange,
 }: {
-  open: boolean
+  team: TeamScope
   onOpenChange: (open: boolean) => void
 }) {
   const [email, setEmail] = useState("")
   const [error, setError] = useState<string | null>(null)
   const createInvitation = useCreateInvitation()
-  const team = useDisplayedTeam()
+  const displayedTeam = useDisplayedTeam()
   const { addToast } = useToast()
 
   const reset = () => {
@@ -92,6 +92,11 @@ function InviteDialog({
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
+    if (!sameTeam(team, displayedTeam)) {
+      handleOpenChange(false)
+      addToast(TEAM_CHANGED_MESSAGE, "error")
+      return
+    }
     const value = email.trim()
     if (!EMAIL_PATTERN.test(value)) {
       setError("Enter a valid email address.")
@@ -127,7 +132,7 @@ function InviteDialog({
   }
 
   return (
-    <Dialog open={open} onOpenChange={handleOpenChange}>
+    <Dialog open onOpenChange={handleOpenChange}>
       <DialogPopup>
         <form onSubmit={onSubmit} className="p-6">
           <DialogTitle>Invite an owner</DialogTitle>
@@ -170,7 +175,13 @@ function InviteDialog({
 }
 
 export function InviteMemberCard({ state }: { state: InviteControlState }) {
-  const [open, setOpen] = useState(false)
+  const [inviting, setInviting] = useState<TeamScope | null>(null)
+  const team = useDisplayedTeam()
+
+  useEffect(() => {
+    if (inviting && !sameTeam(inviting, team)) setInviting(null)
+  }, [inviting, team])
+
   if (state === "hidden") return null
   const blocked = state === "blocked_free_plan"
 
@@ -192,13 +203,22 @@ export function InviteMemberCard({ state }: { state: InviteControlState }) {
           size="sm"
           disabled={blocked}
           title={blocked ? UPGRADE_REASON : undefined}
-          onClick={() => setOpen(true)}
+          onClick={() => {
+            if (team) setInviting(team)
+          }}
         >
           <EnvelopeSimpleIcon className="size-3.5" weight="light" />
           Invite member
         </Button>
       </div>
-      {!blocked && <InviteDialog open={open} onOpenChange={setOpen} />}
+      {!blocked && inviting && (
+        <InviteDialog
+          team={inviting}
+          onOpenChange={(open) => {
+            if (!open) setInviting(null)
+          }}
+        />
+      )}
     </div>
   )
 }
