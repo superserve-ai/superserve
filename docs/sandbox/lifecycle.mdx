@@ -208,10 +208,10 @@ These don't count as activity:
 Background jobs and outbound-only workloads, such as an agent loop that only calls external APIs, do not keep the sandbox active. The idle timeout can pause the sandbox while this work runs. For this kind of work, use `timeoutSeconds` or leave the idle timeout unset.
 </Warning>
 
-The sandbox pauses shortly after the idle timeout expires. As with any pause, Superserve checkpoints the memory and filesystem, and the next request resumes the sandbox where it stopped. Each resume restarts the idle count. The value can be 60 to 604800 seconds (7 days). By default, the idle timeout is unset, and the sandbox never pauses for being idle.
+The sandbox pauses shortly after the idle timeout expires. As with any pause, Superserve checkpoints the memory and filesystem, and the next SDK request resumes the sandbox where it stopped. Each resume restarts the idle count. The value can be 60 to 604800 seconds (7 days). By default, the idle timeout is unset, and the sandbox never pauses for being idle.
 
 <Note>
-A request in the first few seconds after an idle pause can fail with a `503` error (`sandbox is pausing`). The sandbox still resumes. Retry the request after about 10 seconds.
+A raw HTTP request that uses `X-Access-Token` does not resume a paused sandbox. It fails with a `503` error (`sandbox_unavailable`). Call `POST /sandboxes/{sandbox_id}/activate` first, then send the request with the returned access token.
 </Note>
 
 `idleTimeoutSeconds` and `timeoutSeconds` are independent. Whichever expires first pauses the sandbox. Use both to pause an inactive sandbox and also cap a session that never goes quiet.
