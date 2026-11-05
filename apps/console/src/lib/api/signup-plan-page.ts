@@ -5,6 +5,7 @@ import { redirect, unstable_rethrow } from "next/navigation"
 import { getImpersonationContext } from "@/lib/admin/impersonation"
 import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import { readSignupPlan } from "@/lib/api/signup-plan-read"
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { listTeamsAction } from "@/lib/api/teams-actions"
@@ -28,57 +29,63 @@ export function signupPlanPath(params: SignupPlanPageParams) {
 
 // Read before sending the destination page, so navigation keeps the previous
 // document visible. Provisioning stays in a handler where cookies are writable.
+// A failed read is retried once before the caller shows the setup error; a
+// second failure, or one that a retry can't change, still returns null.
 export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
-  try {
-    const supabase = await createServerClient()
-    const {
-      data: { user },
-      error,
-    } = await supabase.auth.getUser()
-    // A missing session is a sign-in, not a failed account check.
-    if (error && !isAuthSessionMissingError(error)) throw error
-    if (!user)
-      redirect(
-        `/auth/signin?next=${encodeURIComponent(signupPlanPath(params))}`,
-      )
-    if (params.account && params.account !== user.id)
-      throw new Error("Your account changed")
-    if (await getImpersonationContext(user))
-      throw new Error("Plan setup is unavailable during impersonation")
-    const [memberships, selection] = await Promise.all([
-      listTeamMembershipsForUserDetailed(user.id, { maxAgeMs: 0 }).then(
-        (directory) => completedMemberships(user.id, directory),
-      ),
-      readTeamSelection(),
-    ])
-    const team = pickActiveTeam(memberships.memberships, selection)
-    if (!team) {
-      if (memberships.degradedRegions.length)
-        throw new Error("Membership lookup incomplete")
-      if (params.setup_error || params.setup_attempted) return null
-      const query = new URLSearchParams(signupPlanPath(params).split("?")[1])
-      redirect(`/api/onboarding/prepare/?${query}`)
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await readSignupPlanPage(params)
+    } catch (error) {
+      unstable_rethrow(error)
+      if (attempt > 1 || error instanceof SignupSetupBlockedError) return null
     }
-    const [context, directory] = await Promise.all([
-      readSignupPlan(user.id, team, params.team),
-      listTeamsAction(),
-    ])
-    if (
-      !directory.teams.some(
-        (entry) => entry.id === team.teamId && entry.region === team.region,
-      )
+  }
+}
+
+async function readSignupPlanPage(params: SignupPlanPageParams) {
+  const supabase = await createServerClient()
+  const {
+    data: { user },
+    error,
+  } = await supabase.auth.getUser()
+  // A missing session is a sign-in, not a failed account check.
+  if (error && !isAuthSessionMissingError(error)) throw error
+  if (!user)
+    redirect(`/auth/signin?next=${encodeURIComponent(signupPlanPath(params))}`)
+  if (params.account && params.account !== user.id)
+    throw new SignupSetupBlockedError("account_changed")
+  if (await getImpersonationContext(user))
+    throw new SignupSetupBlockedError("impersonation")
+  const [memberships, selection] = await Promise.all([
+    listTeamMembershipsForUserDetailed(user.id, { maxAgeMs: 0 }).then(
+      (directory) => completedMemberships(user.id, directory),
+    ),
+    readTeamSelection(),
+  ])
+  const team = pickActiveTeam(memberships.memberships, selection)
+  if (!team) {
+    if (memberships.degradedRegions.length)
+      throw new Error("Membership lookup incomplete")
+    if (params.setup_error || params.setup_attempted) return null
+    const query = new URLSearchParams(signupPlanPath(params).split("?")[1])
+    redirect(`/api/onboarding/prepare/?${query}`)
+  }
+  const [context, directory] = await Promise.all([
+    readSignupPlan(user.id, team, params.team),
+    listTeamsAction(),
+  ])
+  if (
+    !directory.teams.some(
+      (entry) => entry.id === team.teamId && entry.region === team.region,
     )
-      throw new Error("Team directory changed")
-    return {
-      context,
-      directory: {
-        ...directory,
-        activeTeamId: team.teamId,
-        activeRegion: team.region,
-      },
-    }
-  } catch (error) {
-    unstable_rethrow(error)
-    return null
+  )
+    throw new Error("Team directory changed")
+  return {
+    context,
+    directory: {
+      ...directory,
+      activeTeamId: team.teamId,
+      activeRegion: team.region,
+    },
   }
 }
