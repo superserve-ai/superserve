@@ -327,6 +327,31 @@ describe("startSignupCheckout", () => {
     },
   )
 
+  // The payment wait page tells customers that checking again never starts a
+  // new payment; settling must only look up the checkout they already opened.
+  it.each([
+    [200, { outcome: "retryable" }],
+    [202, { outcome: "payment_confirmation_pending" }],
+    [500, {}],
+  ])(
+    "checks a paid checkout without starting a new one (%s %j)",
+    async (status, body) => {
+      recovered = { status, body }
+      await settleSignupCheckout(user, "u1", "use:team-1")
+      const urls = fetchMock.mock.calls.map(([url]) => String(url))
+      expect(urls.some((url) => url.endsWith("/stripe/checkout-session"))).toBe(
+        false,
+      )
+      const recovers = fetchMock.mock.calls.filter(([url]) =>
+        String(url).endsWith("/stripe/pro-checkout/recover"),
+      ) as unknown as [string, RequestInit][]
+      expect(recovers).toHaveLength(1)
+      expect(JSON.parse(recovers[0][1].body as string)).toEqual({
+        restart: false,
+      })
+    },
+  )
+
   it.each([
     [
       200,
