@@ -10,7 +10,7 @@ import { spawnCommand } from "./commandSession.js"
  * Accessed as `sandbox.commands.run(...)`.
  */
 import { dataPlaneTarget } from "./config.js"
-import { SandboxError } from "./errors.js"
+import { SandboxError, ValidationError } from "./errors.js"
 import { request, streamSSE } from "./http.js"
 import { routingHintHeaders } from "./routingHint.js"
 import { withTokenRetry } from "./tokenRetry.js"
@@ -44,6 +44,40 @@ export interface CommandsDeps {
  * genuinely need large output should stream via `onStdout`/`onStderr` instead.
  */
 export const MAX_EXEC_RESPONSE_BYTES = 10 * 1024 * 1024 // 10 MiB
+
+// How long the client waits past the server's command deadline, so the server
+// can kill the command and return its result before the client aborts.
+const SERVER_DEADLINE_MARGIN_MS = 5_000
+
+/**
+ * Largest accepted `timeoutMs`: the client deadline (rounded up to whole
+ * seconds, plus the margin) must fit a timer, which fires at once for delays
+ * over 2^31 - 1 ms.
+ */
+export const MAX_COMMAND_TIMEOUT_MS =
+  Math.floor((2 ** 31 - 1 - SERVER_DEADLINE_MARGIN_MS) / 1000) * 1000
+
+// The server's `timeout_s` for a `timeoutMs`; undefined when it is omitted or 0,
+// so neither sends one and both keep the HTTP layer's default deadline.
+function commandTimeoutSeconds(timeoutMs: number | undefined) {
+  if (timeoutMs === undefined || timeoutMs === 0) return undefined
+  if (
+    !Number.isFinite(timeoutMs) ||
+    timeoutMs < 0 ||
+    timeoutMs > MAX_COMMAND_TIMEOUT_MS
+  ) {
+    throw new ValidationError(
+      `timeoutMs must be between 0 and ${MAX_COMMAND_TIMEOUT_MS}, got ${timeoutMs}`,
+    )
+  }
+  return Math.ceil(timeoutMs / 1000)
+}
+
+function clientDeadlineMs(timeoutS: number | undefined) {
+  return timeoutS === undefined
+    ? undefined
+    : timeoutS * 1000 + SERVER_DEADLINE_MARGIN_MS
+}
 
 export class Commands {
   private readonly _dataPlaneBaseUrl: string
@@ -84,18 +118,19 @@ export class Commands {
   ): Promise<CommandResult> {
     const { cwd, user, env, timeoutMs, onStdout, onStderr } = options
     const isStreaming = onStdout !== undefined || onStderr !== undefined
+    // API expects seconds; convert from ms
+    const timeoutS = commandTimeoutSeconds(timeoutMs)
 
     const body: Record<string, unknown> = { command }
     if (cwd !== undefined) body.working_dir = cwd
     if (user !== undefined) body.user = user
     if (env !== undefined) body.env = env
-    // API expects seconds; convert from ms
-    if (timeoutMs !== undefined) body.timeout_s = Math.ceil(timeoutMs / 1000)
+    if (timeoutS !== undefined) body.timeout_s = timeoutS
 
     if (isStreaming) {
-      return this._runStreaming(body, options)
+      return this._runStreaming(body, timeoutS, options)
     }
-    return this._runSync(body, options)
+    return this._runSync(body, timeoutS, options)
   }
 
   /**
@@ -126,6 +161,7 @@ export class Commands {
 
   private async _runSync(
     body: Record<string, unknown>,
+    timeoutS: number | undefined,
     options: CommandOptions,
   ): Promise<CommandResult> {
     const send = (token: string) =>
@@ -140,10 +176,7 @@ export class Commands {
         body,
         // Add a 5s buffer so the server-side command timeout fires first
         // and returns its proper response before the client aborts.
-        timeoutMs:
-          options.timeoutMs !== undefined
-            ? options.timeoutMs + 5_000
-            : undefined,
+        timeoutMs: clientDeadlineMs(timeoutS),
         signal: options.signal,
         // The data plane is untrusted — bound the buffered response so a
         // command's runaway stdout/stderr can't exhaust the caller's memory.
@@ -161,6 +194,7 @@ export class Commands {
 
   private async _runStreaming(
     body: Record<string, unknown>,
+    timeoutS: number | undefined,
     options: CommandOptions,
   ): Promise<CommandResult> {
     const send = async (token: string) =>
@@ -172,6 +206,7 @@ export class Commands {
           "X-Access-Token": token,
         },
         body,
+        timeoutS,
         options,
       )
     // Safe for streaming: the resumable status (401/503) is returned before any
@@ -183,6 +218,7 @@ export class Commands {
     url: string,
     headers: Record<string, string>,
     body: Record<string, unknown>,
+    timeoutS: number | undefined,
     options: CommandOptions,
   ): Promise<CommandResult> {
     let stdout = ""
@@ -195,8 +231,7 @@ export class Commands {
       url,
       headers,
       body,
-      timeoutMs:
-        options.timeoutMs !== undefined ? options.timeoutMs + 5_000 : undefined,
+      timeoutMs: clientDeadlineMs(timeoutS),
       signal: options.signal,
       onEvent: (event: ApiExecStreamEvent) => {
         if (event.stdout) {

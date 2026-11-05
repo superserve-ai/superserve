@@ -145,7 +145,8 @@ export function registerFileTools(
       title: "Write a file to a sandbox",
       description:
         "Write a file to a sandbox, creating or overwriting it. Parent directories are created automatically. " +
-        "Set encoding to base64 to write binary content. Inline content is limited to 8 MiB; upload larger files with the SDK/CLI.",
+        "Set encoding to base64 to write binary content. Inline content is limited to 8 MiB; on the hosted endpoint, keep it " +
+        "under about 4 MiB of text or 3 MiB of binary (base64), or the request fails with HTTP 413. Upload larger files with the SDK/CLI.",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),
         path: absolutePath,

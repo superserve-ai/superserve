@@ -1,6 +1,6 @@
 "use client"
 
-import { Button, cn } from "@superserve/ui"
+import { Button, cn, Spinner } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
 import Link from "next/link"
 import { useCallback, useSyncExternalStore } from "react"
@@ -16,6 +16,7 @@ import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamEntry } from "@/hooks/use-billing-v2"
+import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { useUser } from "@/hooks/use-user"
 import type {
   BillingSummaryResponse,
@@ -88,14 +89,14 @@ function formatUsd(amount: number | null | undefined): string | null {
     : null
 }
 
-export type TrialStage = "trial" | "ended" | "payment_failed"
+export type TrialStage = "trial" | "ended" | "payment_failed" | "plan_required"
 
 // The trial's stage from its entry state and balance.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
 ): TrialStage {
-  if (entry === "payment_failed") return "payment_failed"
+  if (entry === "payment_failed" || entry === "plan_required") return entry
   const remaining = trial?.remaining_usd
   if (
     entry === "trial_ended" ||
@@ -133,15 +134,21 @@ function TrialEntryBanner({
   const plan = selected ? pickerPlanLabel(offers, selected) : null
   const upgrade = plan ? `Upgrade to ${plan}` : "Upgrade"
   const canManage = scope === "self" && summary.permissions.can_manage
+  const { submitting, onSubmit } = useSubmitOnce<true>()
   return (
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
-      label="Free trial"
+      label={stage === "plan_required" ? "No plan" : "Free trial"}
       action={
         <ManageAction canManage={canManage}>
           {selected && locator ? (
-            <form method="post" action={signupCheckoutPath(selected, locator)}>
-              <Button type="submit" size="sm">
+            <form
+              method="post"
+              action={signupCheckoutPath(selected, locator)}
+              onSubmit={onSubmit(true)}
+            >
+              <Button type="submit" size="sm" disabled={submitting !== null}>
+                {submitting ? <Spinner size="sm" /> : null}
                 {upgrade}
               </Button>
             </form>
@@ -166,7 +173,12 @@ function TrialEntryBanner({
         </ManageAction>
       }
     >
-      {stage === "payment_failed" ? (
+      {stage === "plan_required" ? (
+        <>
+          Free covers your first team. Choose a plan to run sandboxes in this
+          one.
+        </>
+      ) : stage === "payment_failed" ? (
         <>
           We couldn&apos;t confirm a card for your plan. Your sandboxes are
           paused and nothing is deleted. Upgrade to resume.
@@ -201,6 +213,8 @@ export function TrialBillingBanner() {
   if (entryQuery.isPending || entryQuery.isError) return null
   const entry = entryQuery.data
   if (!summary?.permissions?.can_view) return null
+  // A paid plan is activating: the trial is over, so no banner asks for a card.
+  if (entry === "activating") return null
   if (entry) return <TrialEntryBanner entry={entry} summary={summary} />
   return <LegacyTrialBanner summary={summary} />
 }

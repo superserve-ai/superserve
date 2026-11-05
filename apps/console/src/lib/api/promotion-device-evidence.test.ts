@@ -655,6 +655,60 @@ describe("promotion evidence producer contract", () => {
     },
   )
 
+  it("signs the additional-team flag only when set and echoes the stored value", async () => {
+    const additional = { ...prepared, additional_team: true }
+    const fetcher = vi
+      .fn()
+      .mockResolvedValueOnce(response(prepared))
+      .mockResolvedValueOnce(response(additional))
+      .mockResolvedValueOnce(
+        response({
+          ...additional,
+          state: "completed",
+          outcome: "promotion_ineligible",
+          reason: "additional_team",
+        }),
+      )
+    vi.stubGlobal("fetch", fetcher)
+    const first = await preparePromotionTeam({
+      ...locator,
+      name: creation.name,
+      authorityUnavailable: true,
+      additionalTeam: false,
+    })
+    expect(first.additionalTeam).toBe(false)
+    const later = await preparePromotionTeam({
+      ...locator,
+      name: creation.name,
+      authorityUnavailable: true,
+      additionalTeam: true,
+    })
+    expect(later.additionalTeam).toBe(true)
+    await completePromotionTeam(later)
+    const sent = fetcher.mock.calls.map(([, options]) => ({
+      body: JSON.parse(options.body),
+      claims: verifyAssertion(options.headers["X-Promotion-Account-Assertion"]),
+    }))
+    expect(sent[0].body).not.toHaveProperty("additional_team")
+    expect(sent[0].claims).not.toHaveProperty("additional_team")
+    for (const { body, claims } of sent.slice(1)) {
+      expect(body.additional_team).toBe(true)
+      expect(claims.additional_team).toBe(true)
+    }
+  })
+
+  it("rejects a response whose stored flag differs from the request", async () => {
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(response(prepared)))
+    await expect(
+      preparePromotionTeam({
+        ...locator,
+        name: creation.name,
+        authorityUnavailable: true,
+        additionalTeam: true,
+      }),
+    ).rejects.toMatchObject({ code: "authority_unavailable" })
+  })
+
   it("completes and replays one prepared binding, including after deletion", async () => {
     const completed = {
       ...prepared,
