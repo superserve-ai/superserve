@@ -282,8 +282,8 @@
           {
             "group": "Computer Use",
             "pages": [
-              "integrations/computer-use/openai",
-              "integrations/computer-use/claude"
+              "integrations/computer-use/claude",
+              "integrations/computer-use/openai"
             ]
           }
         ]
