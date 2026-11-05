@@ -58,6 +58,42 @@ interface CreationIntent {
   convertTeamId?: string
 }
 
+const creationKeyPrefix = (userId: string) =>
+  `superserve:team-creation:${userId}:`
+const conversionKey = (userId: string) => `superserve:team-conversion:${userId}`
+
+function readIntent(key: string): CreationIntent | null {
+  const stored = sessionStorage.getItem(key)
+  return stored ? JSON.parse(stored) : null
+}
+
+// Chooses the stored intent a request continues. An unresolved creation may
+// already have committed, so it finishes first even when the form changed
+// mode: a conversion in its own region (the form stops offering it once the
+// rename commits), or a new team before a conversion starts. A rejected name
+// releases its intent.
+function pickIntentKey(
+  userId: string,
+  region: string,
+  convertTeamId: string | undefined,
+): { key: string; region: string } {
+  const conversion = conversionKey(userId)
+  const pendingConversion = readIntent(conversion)
+  if (pendingConversion && !pendingConversion.nameRejected)
+    return { key: conversion, region: pendingConversion.region ?? region }
+  if (convertTeamId) {
+    const prefix = creationKeyPrefix(userId)
+    for (let i = 0; i < sessionStorage.length; i++) {
+      const key = sessionStorage.key(i)
+      if (key?.startsWith(prefix) && !readIntent(key)?.nameRejected)
+        return { key, region: key.slice(prefix.length) }
+    }
+    return { key: conversion, region }
+  }
+  if (pendingConversion) sessionStorage.removeItem(conversion)
+  return { key: creationKeyPrefix(userId) + region, region }
+}
+
 export function useCreateTeam() {
   const { user } = useUser()
   const queryClient = useQueryClient()
@@ -77,36 +113,21 @@ export function useCreateTeam() {
       if (!user) throw new Error("Not authenticated")
       if (!name.trim() || new TextEncoder().encode(name).length > 256)
         throw new Error("Enter a team name between 1 and 256 bytes")
-      // A pending conversion finishes before anything else, in its own
-      // region: once its rename commits, the form stops offering it even if
-      // the response was lost.
-      const conversionKey = `superserve:team-conversion:${user.id}`
-      const storedConversion = sessionStorage.getItem(conversionKey)
-      let pending: CreationIntent | null = storedConversion
-        ? JSON.parse(storedConversion)
-        : null
-      if (pending?.nameRejected && pending.name !== name) {
-        sessionStorage.removeItem(conversionKey)
-        pending = null
-      }
-      const conversion = pending
-        ? {
-            region: pending.region ?? region,
-            convertTeamId: pending.convertTeamId,
-          }
-        : convertTeamId
-          ? { region, convertTeamId }
-          : null
-      const key = conversion
-        ? conversionKey
-        : `superserve:team-creation:${user.id}:${region}`
-      const targetRegion = conversion?.region ?? region
-      const stored = sessionStorage.getItem(key)
-      let intent: CreationIntent = stored
-        ? JSON.parse(stored)
-        : { operationId: crypto.randomUUID(), name, ...conversion }
-      if (intent.nameRejected && intent.name !== name)
-        intent = { operationId: crypto.randomUUID(), name, ...conversion }
+      const { key, region: targetRegion } = pickIntentKey(
+        user.id,
+        region,
+        convertTeamId,
+      )
+      const stored = readIntent(key)
+      const fresh = (): CreationIntent => ({
+        operationId: crypto.randomUUID(),
+        name,
+        ...(key === conversionKey(user.id)
+          ? { region: targetRegion, convertTeamId }
+          : {}),
+      })
+      let intent = stored ?? fresh()
+      if (intent.nameRejected && intent.name !== name) intent = fresh()
       if (intent.name !== name)
         throw new Error(
           "Retry the pending team creation using its original name",
@@ -115,7 +136,7 @@ export function useCreateTeam() {
       const result = await (intent.convertTeamId
         ? createTeamAction(
             intent.name,
-            targetRegion,
+            intent.region ?? targetRegion,
             intent.operationId,
             intent.convertTeamId,
           )

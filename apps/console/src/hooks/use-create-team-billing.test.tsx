@@ -365,3 +365,68 @@ it("keeps the account convertible after creating an unrelated team", async () =>
       ?.convertibleTeam,
   ).toEqual(account)
 })
+
+it("finishes a lost new-team creation before a conversion starts", async () => {
+  mocks.create
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce(teamB)
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "B", region: "usw" })
+      .catch(() => {})
+  })
+  // The form now offers the conversion, but the first creation may have
+  // committed.
+  await act(async () => {
+    await expect(
+      result.current.create.mutateAsync({
+        name: "acme",
+        region: "use",
+        convertTeamId: "a",
+      }),
+    ).rejects.toThrow("original name")
+  })
+  await act(async () => {
+    await result.current.create.mutateAsync({
+      name: "B",
+      region: "use",
+      convertTeamId: "a",
+    })
+  })
+
+  const calls = mocks.create.mock.calls
+  expect(calls).toHaveLength(2)
+  expect(calls[1]).toEqual(calls[0])
+  expect(calls[1]).toEqual(["B", "usw", expect.any(String)])
+  expect(sessionStorage.getItem("superserve:team-creation:u1:usw")).toBeNull()
+})
+
+it("releases a conversion whose name was rejected for a new-team request", async () => {
+  mocks.create
+    .mockResolvedValueOnce({
+      code: "team_name_conflict",
+      message: "That team name is already taken.",
+    })
+    .mockResolvedValueOnce({ ...teamB, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "acme", region: "usw" })
+  })
+
+  expect(mocks.create.mock.calls[1]).toEqual([
+    "acme",
+    "usw",
+    expect.any(String),
+  ])
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
