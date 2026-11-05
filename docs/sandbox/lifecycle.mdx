@@ -159,7 +159,7 @@ sandbox.update(timeout_seconds=None)  # disable auto-pause
 
 ## Idle timeout
 
-Set `idleTimeoutSeconds` to auto-pause a sandbox after this many seconds with no activity. Unlike `timeoutSeconds`, it never pauses a sandbox that is still in use, so it suits sandboxes that should stay up while someone works in them and stop billing once they go quiet.
+Set `idleTimeoutSeconds` to auto-pause a sandbox after this many seconds with no activity. Unlike `timeoutSeconds`, the idle timeout never pauses a sandbox while a request or connection to it is open. Use it for a sandbox that must stay active while someone works in it and stop billing when it goes quiet.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -179,42 +179,70 @@ sandbox = Sandbox.create(
     idle_timeout_seconds=600,  # auto-pause after 10m with no activity
 )
 ```
+
+```bash CLI
+superserve sandbox create --name dev-box --idle-timeout 10m  # 1m to 7d
+```
 </CodeGroup>
 
-These count as activity and keep the sandbox up:
+<Note>
+Requires SDK 0.11.6+ (`@superserve/sdk` and `superserve`), CLI 2.1.2+, and MCP 0.3.4+ (`@superserve/mcp`). Older TypeScript SDK versions ignore `idleTimeoutSeconds` and show no error. With an older version, use the [REST API](#set-it-with-the-rest-api).
+</Note>
 
-- A command still running, including one started with `commands.run()` that streams for a long time.
-- An open terminal or command stream, even with nothing typed.
+These count as activity and keep the sandbox active:
+
+- A running command, including a `commands.run()` call that streams output for a long time.
+- An open terminal or command stream, even when nothing is typed.
 - File reads, writes, and directory listings, and saved-snapshot captures.
 - Desktop actions, such as screenshots, clicks, and typing.
 - Traffic to the sandbox's preview URLs.
 
-These don't count:
+These don't count as activity:
 
-- Traffic the sandbox sends out, such as downloads or calls to other APIs.
-- A process you start in the background with `nohup` or `&`: once the command that launched it returns, it no longer holds the sandbox up.
+- Outbound traffic from the sandbox, such as downloads or calls to other APIs.
+- A background process started with `nohup` or `&`. After the command that started it returns, the process does not keep the sandbox active.
 - CPU or disk activity on its own.
 - Changes to the sandbox's settings, such as metadata or egress rules.
 
-The sandbox is paused shortly after the timeout. Like any pause, it checkpoints memory and filesystem, and the next request resumes the sandbox where it left off. The value can be from 60 to 604800 seconds (7 days); leave it unset (the default) and the sandbox is never paused for being idle.
+<Warning>
+Background jobs and outbound-only workloads, such as an agent loop that only calls external APIs, do not keep the sandbox active. The idle timeout can pause the sandbox while this work runs. For this kind of work, use `timeoutSeconds` or leave the idle timeout unset.
+</Warning>
 
-`idleTimeoutSeconds` and `timeoutSeconds` are independent, and whichever fires first pauses the sandbox. Use both to pause on inactivity while still capping a session that never goes quiet.
+The sandbox pauses shortly after the idle timeout expires. As with any pause, Superserve checkpoints the memory and filesystem, and the next `commands.run()`, file operation, or `connect()` resumes the sandbox where it stopped. Each resume restarts the idle count. The value can be 60 to 604800 seconds (7 days). By default, the idle timeout is unset, and the sandbox never pauses for being idle.
 
-Set or clear it on an existing sandbox:
+<Note>
+A raw HTTP request that uses `X-Access-Token` does not resume a paused sandbox. It fails with a `503` error (`sandbox_unavailable`). Call `POST /sandboxes/{sandbox_id}/activate` first, then send the request with the returned access token.
+</Note>
+
+`idleTimeoutSeconds` and `timeoutSeconds` are independent. Whichever expires first pauses the sandbox. Use both to pause an inactive sandbox and also cap a session that never goes quiet.
+
+Set, clear, or read the idle timeout on an existing sandbox. When the idle timeout is off, the current value is `undefined` (TypeScript) or `None` (Python):
 
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.update({ idleTimeoutSeconds: 900 }) // auto-pause after 15m with no activity
 await sandbox.update({ idleTimeoutSeconds: null }) // turn idle pausing off
+const { idleTimeoutSeconds } = await sandbox.getInfo() // current value
 ```
 
 ```python Python
 sandbox.update(idle_timeout_seconds=900)  # auto-pause after 15m with no activity
 sandbox.update(idle_timeout_seconds=None)  # turn idle pausing off
+idle_timeout = sandbox.get_info().idle_timeout_seconds  # current value
+```
+
+```bash CLI
+superserve sandbox update dev-box --idle-timeout 15m   # auto-pause after 15m with no activity
+superserve sandbox update dev-box --idle-timeout none  # turn idle pausing off
+superserve sandbox get dev-box                         # shows "Idle timeout: 15m" or "none"
 ```
 </CodeGroup>
 
-Over the REST API, set it when you create the sandbox, then change or clear it with `PATCH`. Send `null` to turn idle pausing off:
+A new value takes effect immediately. If the new value is shorter than the time the sandbox has already been idle, the sandbox pauses shortly after the change.
+
+### Set it with the REST API
+
+Set the idle timeout when you create the sandbox. Then change or clear it with `PATCH`. Send `null` to turn the idle timeout off:
 
 ```bash
 # Create with a 10-minute idle timeout and keep the new sandbox's ID
@@ -234,14 +262,6 @@ curl -X PATCH https://api.superserve.ai/sandboxes/$SANDBOX_ID \
   -H "X-API-Key: $SUPERSERVE_API_KEY" \
   -H "Content-Type: application/json" \
   -d '{"idle_timeout_seconds": null}'
-```
-
-From the CLI, pass a duration, or `none` to turn idle pausing off:
-
-```bash
-superserve sandbox create --name dev-box --idle-timeout 10m
-superserve sandbox update dev-box --idle-timeout 15m
-superserve sandbox update dev-box --idle-timeout none
 ```
 
 ## Auto-delete
