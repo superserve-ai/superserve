@@ -4,31 +4,21 @@ import {
   ArrowSquareOutIcon,
   CreditCardIcon,
   SpinnerGapIcon,
-  WalletIcon,
+  WarningIcon,
 } from "@phosphor-icons/react"
-import {
-  Alert,
-  Badge,
-  Button,
-  Card,
-  CardContent,
-  Skeleton,
-  cn,
-} from "@superserve/ui"
+import { Alert, Button } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
-import { useEffect, useMemo, useState } from "react"
+import { type ReactNode, useEffect, useMemo, useState } from "react"
 
 import {
+  EYEBROW,
   billingCredits,
   formatCurrency,
-  formatPeriodDate,
 } from "@/components/billing-summary"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useCustomerBillingPeriods } from "@/hooks/use-customer-billing"
-import type {
-  BillingSummaryResponse,
-  BillingSummaryResource,
-} from "@/lib/api/billing"
+import type { BillingSummaryResponse } from "@/lib/api/billing"
+import type { CustomerBillingPeriodResponse } from "@/lib/api/billing-stripe"
 import { billingKeys } from "@/lib/api/query-keys"
 
 interface CustomerBillingSectionProps {
@@ -39,67 +29,15 @@ interface CustomerBillingSectionProps {
   cardless?: boolean
 }
 
-function formatPeriodRange(start: string, end: string): string {
-  return `${formatPeriodDate(start)} - ${formatPeriodDate(end)}`
-}
-
-function formatMetric(value: number, suffix: string): string {
-  return `${new Intl.NumberFormat("en-US", {
-    maximumFractionDigits: value >= 100 ? 0 : 2,
-  }).format(value)} ${suffix}`
-}
-
-function statusTone(
-  status: string,
-): "default" | "success" | "warning" | "muted" {
-  if (status === "active" || status === "exported" || status === "paid") {
-    return "success"
-  }
-  if (status === "pending" || status === "processing") {
-    return "warning"
-  }
-  return "muted"
-}
-
-function friendlyPeriodStatus(status: string): string {
-  if (status === "active" || status === "exported" || status === "approved") {
-    return "Live"
-  }
-  if (status === "validating") {
-    return "Under review"
-  }
-  if (status === "pending" || status === "processing") {
-    return "Pending"
-  }
-  return status
-    .split(/[-_]/g)
-    .filter(Boolean)
-    .map((part) => part[0].toUpperCase() + part.slice(1))
-    .join(" ")
-}
-
 function billingModeCopy(
   mode: BillingSummaryResponse["billing_mode"] | null | undefined,
 ) {
   if (mode === "shadow") {
     return {
-      title: "Usage is being tracked but you are not being charged",
+      title: "Tracking only",
       message:
-        "Billing is in shadow mode. Stripe is not invoicing this team yet.",
+        "Usage is tracked at standard rates, but this team is not charged yet.",
       variant: "warning" as const,
-    }
-  }
-
-  return null
-}
-
-function billingModeBadge(
-  mode: BillingSummaryResponse["billing_mode"] | null | undefined,
-) {
-  if (mode === "shadow") {
-    return {
-      label: "Tracking only",
-      variant: "muted" as const,
     }
   }
 
@@ -133,123 +71,176 @@ function noticeFromQuery(value: string | null) {
   return null
 }
 
-function paymentSummary(
+// The plan card shows a payment status line only when billing needs
+// attention. A connected team in its normal state shows no line. Shadow mode
+// is explained by its own notice, so it adds no line either.
+export function billingProblem(
   summary:
-    | {
-        billing_mode?: "shadow" | "live"
-        payment_setup_required?: boolean
-        portal_available?: boolean
-      }
+    | Pick<
+        BillingSummaryResponse,
+        "billing_mode" | "payment_setup_required" | "portal_available"
+      >
     | null
     | undefined,
   period:
-    | {
-        stripe_subscription_id?: string
-        stripe_subscription_status?: string
-        stripe_invoice_status?: string
-        cancel_at_period_end?: boolean
-      }
+    | Pick<
+        CustomerBillingPeriodResponse,
+        | "status"
+        | "cancel_at_period_end"
+        | "stripe_subscription_status"
+        | "stripe_invoice_status"
+      >
     | null
     | undefined,
-): {
-  headline: string
-  detail: string
-} {
-  if (summary?.payment_setup_required) {
-    return {
-      headline: "Payment setup required",
-      detail: "Start checkout to connect Stripe for this team.",
-    }
-  }
-
-  if (summary?.billing_mode === "shadow") {
-    return {
-      headline: "Tracked only",
-      detail: "Usage is being tracked, but this team is not being charged yet.",
-    }
-  }
-
-  if (summary?.portal_available) {
-    if (period?.cancel_at_period_end) {
-      return {
-        headline: "Connected",
-        detail:
-          "Billing is scheduled to end at the close of the current period.",
-      }
-    }
-
-    if (period?.stripe_invoice_status === "open") {
-      return {
-        headline: "Connected",
-        detail: "Stripe is ready to invoice this team.",
-      }
-    }
-
-    return {
-      headline: "Connected",
-      detail: period?.stripe_invoice_status
-        ? `Invoice status: ${friendlyPeriodStatus(period.stripe_invoice_status)}`
-        : "Stripe subscription details are available for this team.",
-    }
-  }
-
-  if (!summary) {
-    return {
-      headline: "Unavailable",
-      detail: "Billing data is unavailable for this team right now.",
-    }
-  }
-
-  return summary.billing_mode === "live"
-    ? {
-        headline: "Billing unavailable",
-        detail:
-          "Billing is live, but no customer portal is currently available.",
-      }
-    : {
-        headline: "Tracking only",
-        detail: "Usage is tracked, but billing actions are not available yet.",
-      }
+): string | null {
+  if (!summary) return null
+  if (summary.payment_setup_required)
+    return "Payment setup required. Start checkout to connect Stripe for this team."
+  if (summary.billing_mode === "shadow") return null
+  if (!summary.portal_available)
+    return summary.billing_mode === "live"
+      ? "Billing is live, but no customer portal is currently available."
+      : "Usage is tracked, but billing actions are not available yet."
+  if (!period) return null
+  if (period.cancel_at_period_end)
+    return "Billing is scheduled to end at the close of the current period."
+  const subscription = period.stripe_subscription_status
+  if (subscription === "past_due" || subscription === "unpaid")
+    return "The last payment failed. Update your payment method in the customer portal."
+  if (subscription === "incomplete" || subscription === "incomplete_expired")
+    return "The subscription is waiting for payment confirmation."
+  if (subscription === "canceled") return "The subscription is canceled."
+  if (period.stripe_invoice_status === "uncollectible")
+    return "The latest invoice could not be collected. Update your payment method in the customer portal."
+  if (period.status === "failed")
+    return "Billing for the current period failed."
+  if (["pending", "processing", "validating"].includes(period.status))
+    return "Billing for the current period is still processing."
+  return null
 }
 
-function creditsRemainingLabel(summary: BillingSummaryResponse): string {
-  const remaining = billingCredits(summary).remaining
-  return remaining == null ? "Unavailable" : formatCurrency(remaining)
+function useLatestBillingPeriod(
+  teamId: string | null,
+  teamKey: string | null,
+  enabled = true,
+) {
+  const periodsQuery = useCustomerBillingPeriods(teamId, teamKey, 8, enabled)
+  const latestPeriod = useMemo(() => {
+    return (
+      periodsQuery.data?.periods?.toSorted((a, b) => {
+        const endDiff =
+          new Date(b.period_end).getTime() - new Date(a.period_end).getTime()
+        if (endDiff !== 0) return endDiff
+        return (
+          new Date(b.period_start).getTime() -
+          new Date(a.period_start).getTime()
+        )
+      })[0] ?? null
+    )
+  }, [periodsQuery.data?.periods])
+  return { periodsQuery, latestPeriod }
 }
 
-function ResourceCard({ resource }: { resource: BillingSummaryResource }) {
-  const billingLabel = resource.billable ? "Billed" : "Tracked only"
-  const usageHours =
-    resource.usage == null
-      ? null
-      : resource.unit === "second"
-        ? resource.resource === "memory" || resource.resource === "storage"
-          ? resource.usage / 1024 / 3600
-          : resource.usage / 3600
-        : resource.usage
+function useBillingAction(
+  teamId: string | null,
+  teamKey: string | null,
+  summary: BillingSummaryResponse | null | undefined,
+  cardless: boolean,
+  enabled = true,
+) {
+  const { submitting, available, openSession } = useBillingPayment(
+    cardless && summary
+      ? { ...summary, checkout_available: false, payment_setup_required: false }
+      : summary,
+    teamKey,
+  )
+  const { periodsQuery, latestPeriod } = useLatestBillingPeriod(
+    teamId,
+    teamKey,
+    enabled,
+  )
+  const canManageBilling = Boolean(summary?.permissions?.can_manage)
+  const canOpenPortal = Boolean(summary?.portal_available)
+  const canStartCheckout = !cardless && Boolean(summary?.checkout_available)
+
+  const manageLabel = canOpenPortal
+    ? "Open Customer Portal"
+    : canStartCheckout
+      ? "Set Up Billing"
+      : null
+
+  const isActionDisabled =
+    submitting !== null ||
+    periodsQuery.isPending ||
+    periodsQuery.isFetching ||
+    !canManageBilling ||
+    !(canOpenPortal || canStartCheckout) ||
+    !available
+
+  const actionButton =
+    canManageBilling && manageLabel ? (
+      <Button
+        size="sm"
+        onClick={() => void openSession()}
+        disabled={isActionDisabled}
+      >
+        {submitting ? (
+          <SpinnerGapIcon className="size-3.5 animate-spin" weight="light" />
+        ) : canOpenPortal ? (
+          <ArrowSquareOutIcon className="size-3.5" weight="light" />
+        ) : (
+          <CreditCardIcon className="size-3.5" weight="light" />
+        )}
+        {submitting || periodsQuery.isPending || periodsQuery.isFetching
+          ? "Loading..."
+          : manageLabel}
+      </Button>
+    ) : null
+
+  return { actionButton, canManageBilling, canOpenPortal, latestPeriod }
+}
+
+// The payment action and any billing problem, shown inside the plan card.
+// A hook, so the page owns the payment request while the plan card changes
+// layout; a null team or `enabled: false` renders nothing.
+export function usePlanBillingControls({
+  team,
+  summary,
+  enabled = true,
+}: {
+  team: { teamId: string; region: string } | null
+  summary: BillingSummaryResponse | null | undefined
+  enabled?: boolean
+}): ReactNode {
+  const active = enabled && !!team
+  const { actionButton, canManageBilling, latestPeriod } = useBillingAction(
+    team?.teamId ?? null,
+    team ? `${team.region}:${team.teamId}` : null,
+    summary,
+    false,
+    active,
+  )
+  const problem = billingProblem(summary, latestPeriod)
+  const viewOnly = !canManageBilling && Boolean(summary)
+  if (!active || (!actionButton && !viewOnly && !problem)) return null
 
   return (
-    <div className="border border-dashed border-border/70 bg-surface/40 px-3 py-3">
-      <div className="flex items-start justify-between gap-2">
-        <div className="min-w-0">
-          <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-            {resource.display_name}
+    <div className="space-y-3" data-testid="plan-billing-controls">
+      {problem ? (
+        <p
+          className="flex items-start gap-2 text-xs text-warning"
+          data-testid="plan-billing-problem"
+        >
+          <WarningIcon className="mt-px size-3.5 shrink-0" weight="light" />
+          <span>{problem}</span>
+        </p>
+      ) : null}
+      {actionButton ??
+        (viewOnly ? (
+          <p className="text-xs text-muted">
+            Billing is view-only for your role.
           </p>
-          <p className="mt-2 text-sm font-medium text-foreground">
-            {usageHours == null
-              ? "Usage unavailable"
-              : formatMetric(usageHours, resource.display_unit)}
-          </p>
-          <p className="mt-1 text-xs text-muted">
-            {resource.billable
-              ? `Charge: ${formatCurrency(resource.charge_usd)}`
-              : "Tracked but not billed"}
-          </p>
-        </div>
-        <Badge variant={billingLabel === "Tracked only" ? "muted" : "default"}>
-          {billingLabel}
-        </Badge>
-      </div>
+        ) : null)}
     </div>
   )
 }
@@ -264,40 +255,8 @@ export function CustomerBillingSection({
   const queryClient = useQueryClient()
   const [notice, setNotice] = useState<ReturnType<typeof noticeFromQuery>>()
 
-  const teamKey = `${teamRegion}:${teamId}`
-  const { submitting, available, openSession } = useBillingPayment(
-    cardless && summary
-      ? { ...summary, checkout_available: false, payment_setup_required: false }
-      : summary,
-    teamKey,
-  )
-  const periodsQuery = useCustomerBillingPeriods(teamId, teamKey)
-  const latestPeriod = useMemo(() => {
-    return (
-      periodsQuery.data?.periods?.toSorted((a, b) => {
-        const endDiff =
-          new Date(b.period_end).getTime() - new Date(a.period_end).getTime()
-        if (endDiff !== 0) return endDiff
-        return (
-          new Date(b.period_start).getTime() -
-          new Date(a.period_start).getTime()
-        )
-      })[0] ?? null
-    )
-  }, [periodsQuery.data?.periods])
-
-  const selectedPeriod = useMemo(() => {
-    if (summary?.billing_period) {
-      return summary.billing_period
-    }
-    if (latestPeriod) {
-      return {
-        start: latestPeriod.period_start,
-        end: latestPeriod.period_end,
-      }
-    }
-    return null
-  }, [latestPeriod, summary?.billing_period])
+  const { actionButton, canManageBilling, canOpenPortal, latestPeriod } =
+    useBillingAction(teamId, `${teamRegion}:${teamId}`, summary, cardless)
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search)
@@ -314,151 +273,49 @@ export function CustomerBillingSection({
     }
   }, [queryClient])
 
-  const payment = paymentSummary(summary, latestPeriod)
-  const successfulPayment =
-    payment.headline === "Connected" &&
-    !periodsQuery.error &&
-    latestPeriod !== null &&
-    ["active", "exported", "approved"].includes(latestPeriod.status) &&
-    !latestPeriod.blocked_reason &&
-    !latestPeriod.cancel_at_period_end &&
-    (!latestPeriod?.stripe_invoice_status ||
-      latestPeriod.stripe_invoice_status === "paid") &&
-    latestPeriod.stripe_subscription_status === "active"
   const modeCopy = billingModeCopy(summary?.billing_mode)
-  const canManageBilling = Boolean(summary?.permissions?.can_manage)
-  const canOpenPortal = Boolean(summary?.portal_available)
-  const canStartCheckout = Boolean(summary?.checkout_available)
-  const billingActionAvailable = canOpenPortal || canStartCheckout
-
-  const modeBadge = billingModeBadge(summary?.billing_mode)
-  const manageLabel = canOpenPortal
-    ? "Open Customer Portal"
-    : canStartCheckout
-      ? "Set Up Billing"
-      : "Tracking only"
-
-  const isActionDisabled =
-    submitting !== null ||
-    periodsQuery.isPending ||
-    periodsQuery.isFetching ||
-    !canManageBilling ||
-    !billingActionAvailable ||
-    !available
 
   if (cardless) {
-    const periods = periodsQuery.isError
-      ? []
-      : (periodsQuery.data?.periods ?? [])
     const credits = summary ? billingCredits(summary) : null
-    const hasAccount =
-      canOpenPortal ||
-      periods.length > 0 ||
-      (credits?.remaining != null && credits.remaining !== 0) ||
-      (credits?.payable != null && credits.payable !== 0)
-    if (!hasAccount && !periodsQuery.error) return null
+    const showCredits = credits?.remaining != null && credits.remaining !== 0
+    const showEstimate = credits?.payable != null && credits.payable !== 0
+    const showPortal = canOpenPortal && canManageBilling
+    if (!showPortal && !showCredits && !showEstimate) return null
     return (
       <section
-        className="space-y-3 border border-border/70 p-4"
+        className="mx-auto flex w-full max-w-4xl flex-wrap items-center justify-between gap-3 border border-dashed border-border bg-surface/40 px-5 py-3.5"
+        aria-label="Billing account"
         data-testid="customer-billing-section"
       >
-        <h3 className="text-base font-semibold">Billing history</h3>
-        {canOpenPortal && canManageBilling ? (
-          <Button
-            size="sm"
-            onClick={() => void openSession()}
-            disabled={isActionDisabled}
-          >
-            Open Customer Portal
-          </Button>
-        ) : null}
-        {credits?.remaining != null && credits.remaining !== 0 ? (
-          <p className="text-sm">
-            Credits remaining: {formatCurrency(credits.remaining)}
-          </p>
-        ) : null}
-        {credits?.payable != null && credits.payable !== 0 ? (
-          <p className="text-sm">
-            Current billing period estimate: {formatCurrency(credits.payable)}
-          </p>
-        ) : null}
-        {periodsQuery.error ? (
-          <p role="alert" className="text-sm text-muted">
-            Billing history is unavailable. Please try again later.
-          </p>
-        ) : null}
-        {periods.map((period) => (
-          <div
-            key={period.period_id}
-            className="flex items-center justify-between gap-3 border border-dashed border-border/70 p-3 text-sm"
-          >
-            <span>
-              {formatPeriodRange(period.period_start, period.period_end)}
-            </span>
-            <Badge variant={statusTone(period.status)}>
-              {friendlyPeriodStatus(period.status)}
-            </Badge>
-          </div>
-        ))}
+        <div className="min-w-0 space-y-1">
+          <p className={EYEBROW}>Billing account</p>
+          {showCredits ? (
+            <p className="text-sm text-foreground">
+              Credits remaining: {formatCurrency(credits.remaining ?? 0)}
+            </p>
+          ) : null}
+          {showEstimate ? (
+            <p className="text-sm text-foreground">
+              Current billing period estimate:{" "}
+              {formatCurrency(credits.payable ?? 0)}
+            </p>
+          ) : null}
+        </div>
+        {showPortal ? actionButton : null}
       </section>
     )
   }
 
+  // The payment status and action live in the plan card. This section keeps
+  // only the notices that need the full width.
+  if (!modeCopy && !notice && !latestPeriod?.blocked_reason) return null
+
   return (
     <section
-      className="space-y-4 border border-border/70 bg-surface/40 p-4 shadow-sm shadow-black/5"
+      className="mx-auto w-full max-w-4xl space-y-3"
+      aria-label={`Payments for ${teamName}`}
       data-testid="customer-billing-section"
     >
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="space-y-2">
-          <div className="flex flex-wrap items-center gap-2">
-            <h3 className="text-base font-semibold text-foreground">
-              Billing & Payments
-            </h3>
-            {modeBadge ? (
-              <Badge variant={modeBadge.variant}>{modeBadge.label}</Badge>
-            ) : null}
-          </div>
-          <p className="max-w-2xl text-sm text-muted">
-            Manage payment details, see the current billing period, and review
-            the team&apos;s charges for {teamName}.
-          </p>
-          <p className="text-xs text-muted">
-            Billing period status:{" "}
-            {latestPeriod?.status
-              ? friendlyPeriodStatus(latestPeriod.status)
-              : "Pending"}
-          </p>
-        </div>
-
-        <div className="flex flex-wrap gap-2">
-          {canManageBilling ? (
-            <Button
-              size="sm"
-              onClick={() => void openSession()}
-              disabled={isActionDisabled}
-            >
-              {submitting ? (
-                <SpinnerGapIcon className="size-3.5 animate-spin" />
-              ) : canOpenPortal ? (
-                <ArrowSquareOutIcon className="size-3.5" />
-              ) : (
-                <CreditCardIcon className="size-3.5" />
-              )}
-              {submitting
-                ? "Loading..."
-                : periodsQuery.isPending || periodsQuery.isFetching
-                  ? "Loading..."
-                  : manageLabel}
-            </Button>
-          ) : summary ? (
-            <p className="self-center text-xs text-muted">
-              Billing is view-only for your role.
-            </p>
-          ) : null}
-        </div>
-      </div>
-
       {modeCopy && (
         <Alert variant={modeCopy.variant} title={modeCopy.title}>
           {modeCopy.message}
@@ -476,160 +333,6 @@ export function CustomerBillingSection({
           {latestPeriod.blocked_reason}
         </Alert>
       )}
-
-      <div
-        className={cn(
-          "grid gap-3",
-          successfulPayment ? "lg:grid-cols-2" : "lg:grid-cols-3",
-        )}
-      >
-        <Card className="border-border/70 bg-background/60">
-          <CardContent className="space-y-2 p-4">
-            <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-              Billing Period
-            </p>
-            <p className="text-sm font-medium text-foreground">
-              {selectedPeriod
-                ? formatPeriodRange(selectedPeriod.start, selectedPeriod.end)
-                : "Waiting for billing data"}
-            </p>
-            <p className="text-xs text-muted">
-              {latestPeriod?.status
-                ? `Billing period status: ${latestPeriod.status}`
-                : "Stripe has not created a billing period yet."}
-            </p>
-          </CardContent>
-        </Card>
-
-        {!successfulPayment ? (
-          <Card className="border-border/70 bg-background/60">
-            <CardContent className="space-y-2 p-4">
-              <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-                Payment Status
-              </p>
-              <p className="text-sm font-medium text-foreground">
-                {payment.headline}
-              </p>
-              <p className="text-xs text-muted">{payment.detail}</p>
-              {latestPeriod?.cancel_at_period_end && (
-                <p className="text-xs text-muted">Cancel at period end: yes</p>
-              )}
-            </CardContent>
-          </Card>
-        ) : null}
-
-        <Card className="border-border/70 bg-background/60">
-          <CardContent className="space-y-2 p-4">
-            <p className="font-mono text-[10px] font-semibold tracking-wide text-muted uppercase">
-              Billing Charges
-            </p>
-            <p className="text-sm font-medium text-foreground">
-              {summary
-                ? formatCurrency(summary.current_charges_usd)
-                : "Unavailable"}
-            </p>
-            <p className="text-xs text-muted">
-              {summary
-                ? `Credits remaining: ${creditsRemainingLabel(summary)}`
-                : "The current statement will appear once billing data loads."}
-            </p>
-          </CardContent>
-        </Card>
-      </div>
-
-      <div className="grid gap-4 xl:grid-cols-[1.2fr_0.8fr]">
-        <Card className="border-border/70 bg-background/60">
-          <CardContent className="space-y-4 p-4">
-            <div className="flex items-center gap-2">
-              <WalletIcon className="size-4 text-muted" />
-              <div>
-                <h4 className="text-sm font-semibold text-foreground">
-                  Resources
-                </h4>
-                <p className="text-xs text-muted">
-                  Backend-driven resource rows for this billing period.
-                </p>
-              </div>
-            </div>
-
-            {summary?.resources?.length ? (
-              <div className="grid gap-3 sm:grid-cols-3">
-                {summary.resources
-                  .toSorted((a, b) => {
-                    const sortDiff = a.sort_order - b.sort_order
-                    if (sortDiff !== 0) return sortDiff
-                    return a.resource_key.localeCompare(b.resource_key)
-                  })
-                  .map((resource) => (
-                    <ResourceCard
-                      key={resource.resource_key}
-                      resource={resource}
-                    />
-                  ))}
-              </div>
-            ) : (
-              <p className="text-sm text-muted">
-                Resource metadata will appear after billing data is available.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-
-        <Card className="border-border/70 bg-background/60">
-          <CardContent className="space-y-4 p-4">
-            <div className="space-y-1">
-              <h4 className="text-sm font-semibold text-foreground">
-                Billing Periods
-              </h4>
-              <p className="text-xs text-muted">
-                Recent customer billing periods for this team.
-              </p>
-            </div>
-
-            <div className="space-y-2">
-              {periodsQuery.isPending ? (
-                Array.from({ length: 3 }).map((_, index) => (
-                  <Skeleton key={index} className="h-12" />
-                ))
-              ) : periodsQuery.data?.periods.length ? (
-                periodsQuery.data.periods.map((period) => (
-                  <div
-                    key={period.period_id}
-                    className={cn(
-                      "flex items-center justify-between gap-3 border border-dashed border-border/70 px-3 py-2.5",
-                      latestPeriod?.period_id === period.period_id &&
-                        "bg-brand/5",
-                    )}
-                  >
-                    <div className="min-w-0 space-y-1">
-                      <p className="truncate text-sm text-foreground">
-                        {formatPeriodRange(
-                          period.period_start,
-                          period.period_end,
-                        )}
-                      </p>
-                      <p className="text-xs text-muted">
-                        {period.stripe_subscription_status
-                          ? `Subscription ${friendlyPeriodStatus(
-                              period.stripe_subscription_status,
-                            )}`
-                          : "Subscription status pending"}
-                      </p>
-                    </div>
-                    <Badge variant={statusTone(period.status)}>
-                      {friendlyPeriodStatus(period.status)}
-                    </Badge>
-                  </div>
-                ))
-              ) : (
-                <p className="text-sm text-muted">
-                  No billing periods have been recorded yet.
-                </p>
-              )}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
     </section>
   )
 }

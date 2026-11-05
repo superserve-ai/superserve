@@ -67,6 +67,26 @@ describe("network rules + sandbox_update (in-memory, fake client)", () => {
     info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
     expect(info.structured.auto_delete_seconds).toBeUndefined()
   })
+
+  it("sandbox_update sets and clears the idle timeout", async () => {
+    const created = await callTool(conn.client, "sandbox_create", {
+      name: "idle",
+      idle_timeout_seconds: 600,
+    })
+    const id = created.structured.id as string
+
+    let info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.idle_timeout_seconds).toBe(600)
+
+    const upd = await callTool(conn.client, "sandbox_update", {
+      sandbox_id: id,
+      idle_timeout_seconds: null,
+    })
+    expect(upd.isError).toBe(false)
+
+    info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.idle_timeout_seconds).toBeUndefined()
+  })
 })
 
 describe("secrets (in-memory, fake client)", () => {

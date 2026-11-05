@@ -91,6 +91,7 @@ sandbox = Sandbox.create(
 | `fromTemplate` / `from_template`            | `string \| Template`     | Template name, UUID, or `Template` instance to boot from. Defaults to `superserve/base`.                                                                                                                                                           |
 | `fromSnapshot` / `from_snapshot`            | `string \| Snapshot`     | Snapshot ID or `Snapshot` to create the sandbox from. It starts with the snapshot's files and running processes. See [Snapshots and forks](/sandbox/snapshots).                                                                                        |
 | `timeoutSeconds` / `timeout_seconds`        | `number`                 | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause).                                                                                                               |
+| `idleTimeoutSeconds` / `idle_timeout_seconds` | `number`                 | Auto-pause after this many seconds with no activity (60 to 604800).                                                                                                                                                                              |
 | `autoDeleteSeconds` / `auto_delete_seconds` | `number`                 | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete).                                                                                           |
 | `metadata`                                  | `Record<string, string>` | String tags.                                                                                                                                                                                                                                       |
 | `envVars` / `env_vars`                      | `Record<string, string>` | Env vars injected into every process.                                                                                                                                                                                                              |
@@ -304,6 +305,10 @@ await sandbox.update({ autoDeleteSeconds: null })
 await sandbox.update({ timeoutSeconds: 900 })
 await sandbox.update({ timeoutSeconds: null })
 
+// Idle timeout: same set/clear contract.
+await sandbox.update({ idleTimeoutSeconds: 600 })
+await sandbox.update({ idleTimeoutSeconds: null })
+
 await sandbox.update({ previewAccess: "private" })
 
 ````
@@ -321,6 +326,10 @@ sandbox.update(auto_delete_seconds=None)
 # Auto-pause timeout: same set/clear contract.
 sandbox.update(timeout_seconds=900)
 sandbox.update(timeout_seconds=None)
+
+# Idle timeout: same set/clear contract.
+sandbox.update(idle_timeout_seconds=600)
+sandbox.update(idle_timeout_seconds=None)
 
 sandbox.update(preview_access="private")
 ````
@@ -500,6 +509,7 @@ interface SandboxInfo {
   memoryMib: number
   createdAt: Date
   timeoutSeconds?: number
+  idleTimeoutSeconds?: number
   autoDeleteSeconds?: number
   autoDeleteAt?: Date // present only while paused with autoDeleteSeconds set
   network?: NetworkConfig
@@ -522,6 +532,7 @@ class SandboxInfo(BaseModel):
     memory_mib: int
     created_at: datetime
     timeout_seconds: int | None = None
+    idle_timeout_seconds: int | None = None
     auto_delete_seconds: int | None = None
     # Set only while paused with auto_delete_seconds configured.
     auto_delete_at: datetime | None = None

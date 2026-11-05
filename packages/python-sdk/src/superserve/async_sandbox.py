@@ -177,6 +177,7 @@ class AsyncSandbox:
         from_template: "str | Template | AsyncTemplate | None" = None,
         from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
         timeout_seconds: int | None = None,
+        idle_timeout_seconds: int | None = None,
         auto_delete_seconds: int | None = None,
         metadata: dict[str, str] | None = None,
         env_vars: dict[str, str] | None = None,
@@ -191,6 +192,11 @@ class AsyncSandbox:
         ``secrets`` binds team-stored secrets to environment variables as
         ``{ENV_VAR: secret_name}``: the agent sees a proxy token under each env
         var; the in-host daemon swaps it for the real credential at egress.
+
+        ``idle_timeout_seconds`` (60 to 604800) pauses the sandbox after that
+        many seconds with no activity: running commands, open terminals and
+        command streams, file operations and preview traffic all count as
+        activity. Off when omitted.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
@@ -209,6 +215,8 @@ class AsyncSandbox:
             )
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
+        if idle_timeout_seconds is not None:
+            body["idle_timeout_seconds"] = idle_timeout_seconds
         if auto_delete_seconds is not None:
             body["auto_delete_seconds"] = auto_delete_seconds
         if metadata is not None:
@@ -337,6 +345,7 @@ class AsyncSandbox:
         network: NetworkConfig | None = None,
         auto_delete_seconds: int | None = UNSET,
         timeout_seconds: int | None = UNSET,
+        idle_timeout_seconds: int | None = UNSET,
         preview_access: PreviewAccessPolicy | None = None,
         api_key: str | None = None,
         base_url: str | None = None,
@@ -344,8 +353,9 @@ class AsyncSandbox:
         """Update a sandbox by ID without holding a live instance.
 
         Unlike ``connect(id).update(...)`` this does not activate the sandbox —
-        a paused sandbox stays paused. Pass ``None`` for ``auto_delete_seconds``
-        / ``timeout_seconds`` to clear them; omit to leave unchanged.
+        a paused sandbox stays paused. Pass ``None`` for ``auto_delete_seconds``,
+        ``timeout_seconds`` or ``idle_timeout_seconds`` to clear them; omit to
+        leave unchanged.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
         await async_api_request(
@@ -357,6 +367,7 @@ class AsyncSandbox:
                 network=network,
                 auto_delete_seconds=auto_delete_seconds,
                 timeout_seconds=timeout_seconds,
+                idle_timeout_seconds=idle_timeout_seconds,
                 preview_access=preview_access,
             ),
         )
@@ -692,6 +703,7 @@ class AsyncSandbox:
         network: NetworkConfig | None = None,
         auto_delete_seconds: int | None = UNSET,
         timeout_seconds: int | None = UNSET,
+        idle_timeout_seconds: int | None = UNSET,
         preview_access: PreviewAccessPolicy | None = None,
     ) -> None:
         """Partially update this sandbox.
@@ -699,7 +711,9 @@ class AsyncSandbox:
         ``auto_delete_seconds`` sets the auto-delete window (counting from now
         when the sandbox is already paused); pass ``None`` to disable
         auto-delete. ``timeout_seconds`` sets the auto-pause timeout; pass
-        ``None`` to disable auto-pause. Omit either to leave it unchanged.
+        ``None`` to disable auto-pause. ``idle_timeout_seconds`` pauses the
+        sandbox after that many seconds with no activity; pass ``None`` to turn
+        it off. Omit any of them to leave it unchanged.
         """
         self._require_not_deleted()
         body = build_update_body(
@@ -707,6 +721,7 @@ class AsyncSandbox:
             network=network,
             auto_delete_seconds=auto_delete_seconds,
             timeout_seconds=timeout_seconds,
+            idle_timeout_seconds=idle_timeout_seconds,
             preview_access=preview_access,
         )
 
