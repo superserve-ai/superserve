@@ -36,6 +36,11 @@ The compatibility mode cannot be selected through create or update APIs.
 
 ## Choose the sandbox default
 
+The Python samples on this page use `AsyncSandbox`, because `commands.spawn` is
+available only on the async client. Run them inside an `async` function, for
+example one started with `asyncio.run()`. Await every `AsyncSandbox` method
+except `get_preview_url`, which only builds a string.
+
 <CodeGroup>
 ```typescript TypeScript
 const sandbox = await Sandbox.create({
@@ -45,7 +50,9 @@ const sandbox = await Sandbox.create({
 ```
 
 ```python Python
-sandbox = Sandbox.create(
+from superserve import AsyncSandbox
+
+sandbox = await AsyncSandbox.create(
     name="web-app",
     preview_access="private",
 )
@@ -63,7 +70,7 @@ await sandbox.update({ previewAccess: "private" })
 ```
 
 ```python Python
-sandbox.update(preview_access="private")
+await sandbox.update(preview_access="private")
 ```
 
 </CodeGroup>
@@ -84,11 +91,10 @@ const url = sandbox.getPreviewUrl(3000)
 ````
 
 ```python Python
-# AsyncSandbox shown because spawn is an async session API.
 await sandbox.commands.spawn("npm run dev -- --host 0.0.0.0")
 await sandbox.publish_preview_port(3000, access="private")
 
-url = sandbox.get_preview_url(3000)
+url = sandbox.get_preview_url(3000)  # not awaited
 ````
 
 </CodeGroup>
@@ -122,12 +128,15 @@ headers: { [credential.header]: credential.token },
 ````
 
 ```python Python
-credential = sandbox.get_preview_token(3000)
+import httpx
 
-response = httpx.get(
-    sandbox.get_preview_url(3000),
-    headers={credential.header: credential.token},
-)
+credential = await sandbox.get_preview_token(3000)
+
+async with httpx.AsyncClient() as client:
+    response = await client.get(
+        sandbox.get_preview_url(3000),
+        headers={credential.header: credential.token},
+    )
 ````
 
 </CodeGroup>
@@ -149,7 +158,7 @@ const url = await sandbox.getSignedPreviewUrl(3000, {
 ```
 
 ```python Python
-url = sandbox.get_signed_preview_url(3000, expires_in_seconds=300)
+url = await sandbox.get_signed_preview_url(3000, expires_in_seconds=300)
 ```
 
 </CodeGroup>
@@ -175,7 +184,7 @@ const fresh = await sandbox.rotatePreviewToken(3000)
 ```
 
 ```python Python
-fresh = sandbox.rotate_preview_token(3000)
+fresh = await sandbox.rotate_preview_token(3000)
 ```
 
 </CodeGroup>
@@ -188,7 +197,7 @@ await sandbox.unpublishPreviewPort(3000)
 ```
 
 ```python Python
-sandbox.unpublish_preview_port(3000)
+await sandbox.unpublish_preview_port(3000)
 ```
 
 </CodeGroup>

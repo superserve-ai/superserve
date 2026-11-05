@@ -36,6 +36,12 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
         ? formatTimeout(sandbox.timeout_seconds)
         : "None",
     },
+    {
+      label: "Idle timeout",
+      value: sandbox.idle_timeout_seconds
+        ? formatTimeout(sandbox.idle_timeout_seconds)
+        : "None",
+    },
     ...(sandbox.source_snapshot_id
       ? [
           {
