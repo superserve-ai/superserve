@@ -48,6 +48,16 @@ export function refreshTeamScopedQueries(
   resetTeamScopedQueries(queryClient)
 }
 
+// A team creation the user started. A conversion also records the account
+// team and its region.
+interface CreationIntent {
+  operationId: string
+  name: string
+  nameRejected?: boolean
+  region?: string
+  convertTeamId?: string
+}
+
 export function useCreateTeam() {
   const { user } = useUser()
   const queryClient = useQueryClient()
@@ -67,20 +77,36 @@ export function useCreateTeam() {
       if (!user) throw new Error("Not authenticated")
       if (!name.trim() || new TextEncoder().encode(name).length > 256)
         throw new Error("Enter a team name between 1 and 256 bytes")
-      const key = `superserve:team-creation:${user.id}:${region}`
+      // A pending conversion finishes before anything else, in its own
+      // region: once its rename commits, the form stops offering it even if
+      // the response was lost.
+      const conversionKey = `superserve:team-conversion:${user.id}`
+      const storedConversion = sessionStorage.getItem(conversionKey)
+      let pending: CreationIntent | null = storedConversion
+        ? JSON.parse(storedConversion)
+        : null
+      if (pending?.nameRejected && pending.name !== name) {
+        sessionStorage.removeItem(conversionKey)
+        pending = null
+      }
+      const conversion = pending
+        ? {
+            region: pending.region ?? region,
+            convertTeamId: pending.convertTeamId,
+          }
+        : convertTeamId
+          ? { region, convertTeamId }
+          : null
+      const key = conversion
+        ? conversionKey
+        : `superserve:team-creation:${user.id}:${region}`
+      const targetRegion = conversion?.region ?? region
       const stored = sessionStorage.getItem(key)
-      // A pending intent finishes the way it started, as a conversion or as a
-      // new team.
-      let intent: {
-        operationId: string
-        name: string
-        nameRejected?: boolean
-        convertTeamId?: string
-      } = stored
+      let intent: CreationIntent = stored
         ? JSON.parse(stored)
-        : { operationId: crypto.randomUUID(), name, convertTeamId }
+        : { operationId: crypto.randomUUID(), name, ...conversion }
       if (intent.nameRejected && intent.name !== name)
-        intent = { operationId: crypto.randomUUID(), name, convertTeamId }
+        intent = { operationId: crypto.randomUUID(), name, ...conversion }
       if (intent.name !== name)
         throw new Error(
           "Retry the pending team creation using its original name",
@@ -89,11 +115,11 @@ export function useCreateTeam() {
       const result = await (intent.convertTeamId
         ? createTeamAction(
             intent.name,
-            region,
+            targetRegion,
             intent.operationId,
             intent.convertTeamId,
           )
-        : createTeamAction(intent.name, region, intent.operationId))
+        : createTeamAction(intent.name, targetRegion, intent.operationId))
       if ("code" in result) {
         if (result.code === "team_name_conflict") {
           intent.nameRejected = true
@@ -127,6 +153,15 @@ export function useCreateTeam() {
           regions: old?.regions ?? [team.region],
           activeTeamId: team.id,
           activeRegion: team.region,
+          // The account stays convertible unless this creation converted it.
+          convertibleTeam:
+            old?.convertibleTeam &&
+            !(
+              old.convertibleTeam.id === team.id &&
+              old.convertibleTeam.region === team.region
+            )
+              ? old.convertibleTeam
+              : null,
         }),
       )
       // Clear the previous team's data as soon as the selection changes.

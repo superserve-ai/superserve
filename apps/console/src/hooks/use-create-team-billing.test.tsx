@@ -297,7 +297,7 @@ it("converts the account and retries the conversion with its original intent", a
   const [first, second] = mocks.create.mock.calls
   expect(first).toEqual(["acme", "use", expect.any(String), "a"])
   expect(second).toEqual(first)
-  expect(sessionStorage.getItem("superserve:team-creation:u1:use")).toBeNull()
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
 })
 
 it("drops a conversion the server refuses so the form can start over", async () => {
@@ -318,5 +318,50 @@ it("drops a conversion the server refuses so the form can start over", async () 
       "Your account can no longer be converted.",
     ),
   )
-  expect(sessionStorage.getItem("superserve:team-creation:u1:use")).toBeNull()
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("finishes a lost conversion in its region after the form stops offering it", async () => {
+  mocks.create
+    .mockRejectedValueOnce(new Error("network"))
+    .mockResolvedValueOnce({ ...teamB, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "usw", convertTeamId: "b" })
+      .catch(() => {})
+  })
+  // The rename committed, so the refreshed form offers a new team in its
+  // default region.
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "acme", region: "use" })
+  })
+
+  const [first, second] = mocks.create.mock.calls
+  expect(first).toEqual(["acme", "usw", expect.any(String), "b"])
+  expect(second).toEqual(first)
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("keeps the account convertible after creating an unrelated team", async () => {
+  const account = { id: "me", region: "use", name: "user@example.com" }
+  client.setQueryData<TeamDirectoryResponse>(teamKeys.directory(), {
+    ...directory,
+    teams: [teamA, account],
+    convertibleTeam: account,
+  })
+  mocks.create.mockResolvedValue(teamB)
+  mocks.directory.mockRejectedValue(new Error("offline"))
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create.mutateAsync({ name: "B", region: "usw" })
+  })
+
+  expect(
+    client.getQueryData<TeamDirectoryResponse>(teamKeys.directory())
+      ?.convertibleTeam,
+  ).toEqual(account)
 })

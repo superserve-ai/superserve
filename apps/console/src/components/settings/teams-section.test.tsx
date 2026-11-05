@@ -109,4 +109,26 @@ describe("TeamsSection", () => {
 
     expect(screen.getByText(/becomes this team in US West/)).toBeInTheDocument()
   })
+
+  it("reports a retried conversion the form no longer offers", async () => {
+    const renamed = { ...account, name: "acme" }
+    teamsData = {
+      teams: [renamed],
+      regions: ["use", "usw"],
+      activeTeamId: "team-me",
+      activeRegion: "usw",
+      convertibleTeam: null,
+    }
+    const user = userEvent.setup()
+    render(<TeamsSection />)
+
+    await user.type(screen.getByPlaceholderText("my-team"), "acme")
+    await user.click(screen.getByRole("button", { name: "Create Team" }))
+    mutate.mock.calls[0][1].onSuccess(renamed)
+
+    expect(addToast).toHaveBeenCalledWith(
+      "Your account is now the team acme",
+      "success",
+    )
+  })
 })
