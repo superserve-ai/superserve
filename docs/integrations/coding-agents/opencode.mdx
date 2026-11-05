@@ -76,3 +76,270 @@ Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&
 await sandbox.pause()
 await sandbox.resume()
 ```
+
+## Run workspaces in sandboxes
+
+OpenCode workspaces run a session in another environment while you keep using OpenCode on your machine. Add a workspace plugin that gives each workspace its own Superserve sandbox. The agent's shell commands, file edits, and model calls then run in the sandbox, and the sessions still show in your local OpenCode.
+
+<Note>
+  Workspaces are experimental in OpenCode. Set `OPENCODE_EXPERIMENTAL_WORKSPACES=true` to turn them on.
+</Note>
+
+The plugin binds the `anthropic-key` secret from [Via the SDK](#via-the-sdk), so the sandbox gets a stand-in token and never your real key.
+
+1. Add the Superserve SDK to `~/.config/opencode/package.json`. OpenCode installs it when it starts.
+
+   ```json
+   {
+     "dependencies": {
+       "@superserve/sdk": "^0.11.6"
+     }
+   }
+   ```
+
+2. Save the plugin as `~/.config/opencode/plugins/superserve.ts`. Keep it in your global config, so the copy of the project in the sandbox does not load it.
+
+   ```typescript
+   import { execFileSync } from "node:child_process"
+
+   import type { Plugin } from "@opencode-ai/plugin"
+   import { Sandbox, type CommandOptions } from "@superserve/sdk"
+
+   const PORT = 4096
+   const OPENCODE = "/home/user/.opencode/bin/opencode"
+
+   type Target = { url: string; headers: Record<string, string> }
+
+   // OpenCode derives the project ID from the origin host and path. Copy only those.
+   const originUrl = (cwd: string) => {
+     let remote: string
+     try {
+       remote = execFileSync("git", ["remote", "get-url", "origin"], {
+         cwd,
+         encoding: "utf8",
+         stdio: ["ignore", "pipe", "ignore"],
+       }).trim()
+     } catch {
+       return undefined
+     }
+     try {
+       const url = new URL(remote)
+       return `${url.protocol}//${url.host}${url.pathname}`
+     } catch {
+       // SCP-like remotes, such as git@github.com:org/repo.git
+       const match = remote.match(/^(?:[^@/:]+@)?([^/:]+):([^?#]+)/)
+       return match ? `ssh://${match[1]}/${match[2]}` : undefined
+     }
+   }
+
+   export const SuperserveWorkspaces: Plugin = async ({
+     experimental_workspace,
+     worktree,
+   }) => {
+     const targets = new Map<string, Target>()
+
+     const findSandbox = async (workspaceId: string) => {
+       const [info] = await Sandbox.list({
+         metadata: { opencode_workspace: workspaceId },
+       })
+       return info?.id
+     }
+
+     experimental_workspace.register("superserve", {
+       name: "Superserve",
+       description: "Run the workspace in a Superserve sandbox",
+       configure: (info) => info,
+
+       async create(info) {
+         const sandbox = await Sandbox.create({
+           name: `opencode-${info.name}`,
+           fromTemplate: "superserve/node-22",
+           secrets: { ANTHROPIC_API_KEY: "anthropic-key" },
+           previewAccess: "private",
+           metadata: { opencode_workspace: info.id },
+         })
+
+         const run = async (command: string, options?: CommandOptions) => {
+           const { exitCode, stderr } = await sandbox.commands.run(
+             command,
+             options,
+           )
+           if (exitCode !== 0) throw new Error(`${command} failed: ${stderr}`)
+         }
+
+         try {
+           // Clone the committed project to the same path inside the sandbox.
+           const bundle = execFileSync("git", ["bundle", "create", "-", "HEAD"], {
+             cwd: worktree,
+             maxBuffer: 512 * 1024 * 1024,
+           })
+           await sandbox.files.write("/home/user/project.bundle", bundle)
+           await run('git clone -q /home/user/project.bundle "$DEST"', {
+             env: { DEST: worktree },
+           })
+           const origin = originUrl(worktree)
+           if (origin) {
+             await run('git remote set-url origin "$ORIGIN"', {
+               cwd: worktree,
+               env: { ORIGIN: origin },
+             })
+           }
+
+           // Install the OpenCode version that runs on your machine.
+           const version = execFileSync(process.execPath, ["--version"], {
+             encoding: "utf8",
+           }).trim()
+           await run(
+             `curl -fsSL https://opencode.ai/install | bash -s -- --version ${version}`,
+             { timeoutMs: 300_000 },
+           )
+
+           // Start the OpenCode server in the background so it outlives this call.
+           await run(
+             `nohup ${OPENCODE} serve --hostname 0.0.0.0 --port ${PORT} > /home/user/opencode.log 2>&1 &`,
+             {
+               cwd: worktree,
+               env: {
+                 OPENCODE_EXPERIMENTAL_WORKSPACES: "true",
+                 OPENCODE_WORKSPACE_ID: info.id,
+               },
+             },
+           )
+           await run(
+             `until curl -sf localhost:${PORT}/global/health; do sleep 1; done`,
+             { timeoutMs: 60_000 },
+           )
+           await sandbox.publishPreviewPort(PORT, { access: "private" })
+         } catch (error) {
+           await sandbox.kill()
+           throw error
+         }
+       },
+
+       async target(info) {
+         let target = targets.get(info.id)
+         if (!target) {
+           const id = await findSandbox(info.id)
+           if (!id) throw new Error(`No sandbox for workspace ${info.id}`)
+           const sandbox = await Sandbox.connect(id)
+           const { header, token } = await sandbox.getPreviewToken(PORT)
+           target = {
+             url: sandbox.getPreviewUrl(PORT),
+             // Do not send the local server password to the sandbox.
+             headers: { [header]: token, Authorization: "" },
+           }
+           targets.set(info.id, target)
+         }
+         return { type: "remote", ...target }
+       },
+
+       async remove(info) {
+         targets.delete(info.id)
+         const id = await findSandbox(info.id)
+         if (id) await Sandbox.killById(id)
+       },
+     })
+
+     return {}
+   }
+   ```
+
+3. In a git project, start OpenCode with workspaces turned on:
+
+   ```bash
+   export SUPERSERVE_API_KEY=ss_live_...
+   OPENCODE_EXPERIMENTAL_WORKSPACES=true opencode
+   ```
+
+4. Run `/warp` and select **Superserve** under **New workspace**. Your next prompt runs in the new sandbox. Run `/workspaces` to see or delete workspaces. Deleting a workspace deletes its sandbox.
+
+To create workspaces from code, start the server with `OPENCODE_EXPERIMENTAL_WORKSPACES=true opencode serve` in the project. Then install a client and call the server API:
+
+```bash
+npm install @opencode-ai/sdk   # TypeScript
+pip install httpx              # Python
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { createOpencodeClient } from "@opencode-ai/sdk/v2"
+
+const opencode = createOpencodeClient({ baseUrl: "http://127.0.0.1:4096" })
+const throwOnError = true
+
+const { data: workspace } = await opencode.experimental.workspace.create(
+  { type: "superserve", branch: null },
+  { throwOnError },
+)
+const { data: session } = await opencode.session.create(
+  { workspace: workspace.id, title: "Sandboxed session" },
+  { throwOnError },
+)
+
+const { data: reply } = await opencode.session.prompt(
+  {
+    sessionID: session.id,
+    model: { providerID: "anthropic", modelID: "claude-sonnet-5-5" },
+    parts: [{ type: "text", text: "Add a hello.txt file to the project." }],
+  },
+  { throwOnError },
+)
+for (const part of reply.parts) {
+  if (part.type === "text") console.log(part.text)
+}
+
+// Removing the workspace deletes its sandbox.
+await opencode.experimental.workspace.remove(
+  { id: workspace.id },
+  { throwOnError },
+)
+```
+
+```python Python
+import httpx
+
+opencode = httpx.Client(base_url="http://127.0.0.1:4096", timeout=300)
+
+workspace = (
+    opencode.post(
+        "/experimental/workspace", json={"type": "superserve", "branch": None}
+    )
+    .raise_for_status()
+    .json()
+)
+session = (
+    opencode.post(
+        "/session",
+        params={"workspace": workspace["id"]},
+        json={"title": "Sandboxed session"},
+    )
+    .raise_for_status()
+    .json()
+)
+
+reply = (
+    opencode.post(
+        f"/session/{session['id']}/message",
+        json={
+            "model": {"providerID": "anthropic", "modelID": "claude-sonnet-5-5"},
+            "parts": [{"type": "text", "text": "Add a hello.txt file to the project."}],
+        },
+    )
+    .raise_for_status()
+    .json()
+)
+for part in reply["parts"]:
+    if part["type"] == "text":
+        print(part["text"])
+
+# Removing the workspace deletes its sandbox.
+opencode.delete(f"/experimental/workspace/{workspace['id']}").raise_for_status()
+```
+</CodeGroup>
+
+Keep these points in mind:
+
+- The plugin copies the committed files of your current branch into the sandbox, at the same path as on your machine. Commit your changes before you create a workspace. Run OpenCode on macOS or Linux, because the sandbox uses Linux paths.
+- Edits in a workspace stay in its sandbox. Your local files do not change.
+- The OpenCode server in the sandbox listens on a [private preview port](/sandbox/preview-urls). The plugin sends the preview token with each request.
+- Keep the sandbox running while you use the workspace. Requests through the preview URL do not resume a paused sandbox, so the workspace disconnects. Resume the sandbox, for example with `Sandbox.connect()`, then restart OpenCode to reconnect.
