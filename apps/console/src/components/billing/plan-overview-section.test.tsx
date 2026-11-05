@@ -1,13 +1,17 @@
+vi.mock("@/components/query-provider", async (original) => ({
+  ...(await original<typeof import("@/components/query-provider")>()),
+  useQueryScope: () => mocks.scope,
+}))
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
     data: mocks.capabilitiesUnavailable
       ? undefined
       : {
           pricing_version: "v2",
-          entry_open: true,
+          entry_open: mocks.entryOpen,
           fresh_entry: {
             starter: true,
-            pro: true,
+            pro: mocks.proEntry,
             auto_recharge: true,
             choose_free: true,
           },
@@ -28,6 +32,9 @@ import {
 
 const mocks = vi.hoisted(() => ({
   capabilitiesUnavailable: false,
+  entryOpen: true,
+  proEntry: true,
+  scope: "self",
   savedCard: true,
   offers: undefined as unknown[] | undefined,
   version: vi.fn(),
@@ -139,6 +146,9 @@ function plan(overrides: Partial<TeamPlan>): TeamPlan {
 
 beforeEach(() => {
   mocks.capabilitiesUnavailable = false
+  mocks.entryOpen = true
+  mocks.proEntry = true
+  mocks.scope = "self"
   mocks.savedCard = true
   mocks.offers = undefined
   mocks.plan.mockReturnValue({ data: null, isError: false })
@@ -1013,6 +1023,46 @@ describe("buying credit on a credit-funded plan", () => {
     expect(
       screen.queryByRole("link", { name: "Manage Auto Reload" }),
     ).toBeNull()
+  })
+
+  it("offers Buy credit while new Pro subscriptions are closed", () => {
+    mocks.proEntry = false
+    render(<PlanOverviewSection summary={developerSummary} />)
+    expect(
+      screen.getByRole("link", { name: "Buy credit" }).getAttribute("href"),
+    ).toBe(BUY_CREDIT_PATH)
+  })
+
+  it("hides both Buy credit links when entry is closed", () => {
+    mocks.entryOpen = false
+    mocks.savedCard = false
+    const { unmount } = render(
+      <PlanOverviewSection summary={developerSummary} />,
+    )
+    expect(screen.queryByRole("link", { name: "Buy credit" })).toBeNull()
+    unmount()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={developerSummary} details />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByRole("link", { name: "Buy credit" })).toBeNull()
+  })
+
+  it("hides both Buy credit links when viewing another team", () => {
+    mocks.scope = "admin:team"
+    mocks.savedCard = false
+    const { unmount } = render(
+      <PlanOverviewSection summary={developerSummary} />,
+    )
+    expect(screen.queryByRole("link", { name: "Buy credit" })).toBeNull()
+    unmount()
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <PlanOverviewSection summary={developerSummary} details />
+      </QueryClientProvider>,
+    )
+    expect(screen.queryByRole("link", { name: "Buy credit" })).toBeNull()
   })
 
   it("links the Auto Reload card in Settings to Buy credit until a card is saved", () => {
