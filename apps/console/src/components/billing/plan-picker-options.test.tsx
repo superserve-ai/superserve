@@ -268,10 +268,36 @@ describe("PlanPickerOptions", () => {
     ).toBeTruthy()
   })
 
-  it("says so when no plan is sellable", async () => {
+  it("offers support and Sign out when no plan is sellable", async () => {
     mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
     render(<PlanPickerOptions preselected={null} locator={locator} />)
     expect(await screen.findByText(/No plans are available/)).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "support@superserve.ai" }),
+    ).toHaveAttribute("href", "mailto:support@superserve.ai")
+    expect(screen.queryByRole("region", { name: /plan$/ })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }))
+    expect(mocks.signOut).toHaveBeenCalled()
+  })
+
+  it("keeps the Enterprise card when no plan is sellable", async () => {
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.cards = [
+      card("enterprise", {
+        kind: "custom",
+        name: "Bespoke",
+        price_label: "Talk to us",
+        display_only: true,
+      }),
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("region", { name: "Bespoke plan" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Book a meeting" }),
+    ).toHaveAttribute("href", ENTERPRISE_MEETING_URL)
+    expect(screen.queryByRole("form", { name: "Team plan" })).toBeNull()
   })
 })
 
