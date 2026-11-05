@@ -49,7 +49,10 @@ describe("TeamsSection", () => {
       { name: "acme", region: "usw", convertTeamId: "team-me" },
       expect.anything(),
     )
-    mutate.mock.calls[0][1].onSuccess({ ...account, name: "acme" })
+    mutate.mock.calls[0][1].onSuccess({
+      team: { ...account, name: "acme" },
+      converted: true,
+    })
     expect(addToast).toHaveBeenCalledWith(
       "Your account is now the team acme",
       "success",
@@ -78,9 +81,8 @@ describe("TeamsSection", () => {
       expect.anything(),
     )
     mutate.mock.calls[0][1].onSuccess({
-      id: "team-new",
-      name: "acme",
-      region: "use",
+      team: { id: "team-new", name: "acme", region: "use" },
+      converted: false,
     })
     expect(addToast).toHaveBeenCalledWith(
       "Team acme created in US East",
@@ -124,10 +126,32 @@ describe("TeamsSection", () => {
 
     await user.type(screen.getByPlaceholderText("my-team"), "acme")
     await user.click(screen.getByRole("button", { name: "Create Team" }))
-    mutate.mock.calls[0][1].onSuccess(renamed)
+    mutate.mock.calls[0][1].onSuccess({ team: renamed, converted: true })
 
     expect(addToast).toHaveBeenCalledWith(
       "Your account is now the team acme",
+      "success",
+    )
+  })
+
+  it("reports a retried creation of a known team as created", async () => {
+    const created = { id: "team-a", name: "acme", region: "use" }
+    teamsData = {
+      teams: [account, created],
+      regions: ["use", "usw"],
+      activeTeamId: "team-a",
+      activeRegion: "use",
+      convertibleTeam: account,
+    }
+    const user = userEvent.setup()
+    render(<TeamsSection />)
+
+    await user.type(screen.getByPlaceholderText("my-team"), "acme")
+    await user.click(screen.getByRole("button", { name: "Create Team" }))
+    mutate.mock.calls[0][1].onSuccess({ team: created, converted: false })
+
+    expect(addToast).toHaveBeenCalledWith(
+      "Team acme created in US East",
       "success",
     )
   })

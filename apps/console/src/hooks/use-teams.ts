@@ -153,9 +153,10 @@ export function useCreateTeam() {
         throw new ApiError(403, result.code, result.message)
       }
       sessionStorage.removeItem(key)
-      return result
+      // A retry may finish a conversion the form no longer offers.
+      return { team: result, converted: Boolean(intent.convertTeamId) }
     },
-    onSuccess: async (team) => {
+    onSuccess: async ({ team }) => {
       // Cancel any directory read that started before the cookie changed.
       await queryClient.cancelQueries({ queryKey: teamKeys.directory() })
       queryClient.setQueryData<TeamDirectoryResponse>(

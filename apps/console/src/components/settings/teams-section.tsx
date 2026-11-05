@@ -52,18 +52,15 @@ export function TeamsSection() {
       : null
 
   const handleCreate = () => {
-    // A converted account keeps its id; a retried conversion may no longer
-    // be offered here.
-    const known = data.teams
     createTeam.mutate(
       conversion
         ? { name, region: conversion.region, convertTeamId: conversion.id }
         : { name, region },
       {
-        onSuccess: (team) => {
+        onSuccess: ({ team, converted }) => {
           setName("")
           addToast(
-            known.some((t) => t.id === team.id && t.region === team.region)
+            converted
               ? `Your account is now the team ${team.name}`
               : `Team ${team.name} created in ${regionLabel(team.region)}`,
             "success",

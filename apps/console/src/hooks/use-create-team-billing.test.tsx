@@ -134,7 +134,9 @@ it.each(["a".repeat(257), "é".repeat(129), "   "])(
     expect(mocks.create).not.toHaveBeenCalled()
     expect(sessionStorage.getItem("superserve:team-creation:u1:usw")).toBeNull()
     await act(async () => {
-      await result.current.create.mutateAsync({ name: "B", region: "usw" })
+      await expect(
+        result.current.create.mutateAsync({ name: "B", region: "usw" }),
+      ).resolves.toEqual({ team: teamB, converted: false })
     })
     expect(mocks.create).toHaveBeenCalledWith("B", "usw", expect.any(String))
   },
@@ -291,7 +293,9 @@ it("converts the account and retries the conversion with its original intent", a
   })
   // The retry comes from a form that no longer offers the conversion.
   await act(async () => {
-    await result.current.create.mutateAsync({ name: "acme", region: "use" })
+    await expect(
+      result.current.create.mutateAsync({ name: "acme", region: "use" }),
+    ).resolves.toEqual({ team: { ...teamA, name: "acme" }, converted: true })
   })
 
   const [first, second] = mocks.create.mock.calls

@@ -164,6 +164,9 @@ export async function createTeamAction(
     throw new Error("A distinct team creation operation is required")
   const trimmed = name.trim()
   if (!trimmed) throw new Error("Team name is required")
+  // Team creation enforces this limit in provisioning; a conversion skips it.
+  if (Buffer.byteLength(trimmed, "utf8") > 256)
+    throw new Error("Enter a team name between 1 and 256 bytes")
 
   const targetRegion = region ?? DEFAULT_REGION
   if (!configuredRegions().includes(targetRegion)) {

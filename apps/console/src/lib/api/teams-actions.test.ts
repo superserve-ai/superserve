@@ -87,6 +87,8 @@ let renameResult: {
   error: { code: string; message: string } | null
 } = { data: [{ id: "renamed" }], error: null }
 let ownerRoleUnavailable = false
+// The team's name when a guarded rename matched no row.
+let nameAfterRace = "someone-else"
 
 // Records every write per table so tests can assert the full create chain
 // landed in one cell and nowhere else.
@@ -126,6 +128,15 @@ function recordingCellClient() {
               select: async () => renameResult,
             }
           },
+          select: () => ({
+            eq() {
+              return this
+            },
+            limit: async () => ({
+              data: [{ name: nameAfterRace }],
+              error: null,
+            }),
+          }),
         }
       case "team_member":
       case "team_memberships":
@@ -370,6 +381,7 @@ describe("createTeamAction", () => {
     rbacOwnerTeamIds = []
     rbacMemberTeamIds = []
     renameResult = { data: [{ id: "team-me" }], error: null }
+    nameAfterRace = "someone-else"
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -611,6 +623,27 @@ describe("createTeamAction", () => {
 
       expect(result).toMatchObject({ code: "team_conversion_unavailable" })
       expect(cookieSets).toEqual([])
+    })
+
+    it("accepts a concurrent conversion to the same name", async () => {
+      renameResult = { data: [], error: null }
+      nameAfterRace = "acme"
+
+      expect(await convertAccount("acme")).toEqual({
+        id: "team-me",
+        name: "acme",
+        region: "use",
+      })
+      expect(cookieSets).toEqual([
+        { name: "ss-active-team", value: "use:team-me" },
+      ])
+    })
+
+    it("rejects a name longer than 256 bytes before renaming", async () => {
+      await expect(
+        createTeamAction("é".repeat(129), "use", "team-me"),
+      ).rejects.toThrow("between 1 and 256 bytes")
+      expect(cellClients.use.writes).toEqual({})
     })
 
     it("returns the converted account when a retry finds it renamed", async () => {

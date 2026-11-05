@@ -66,7 +66,8 @@ export async function ownsTeam(
 
 /**
  * Renames the team only while it still has its expected name, so two
- * concurrent conversions cannot both apply.
+ * concurrent conversions cannot both apply. A concurrent conversion to the
+ * same name counts as renamed.
  */
 export async function renameTeam(
   region: string,
@@ -83,5 +84,12 @@ export async function renameTeam(
     .select("id")
   if (error?.code === "23505") return "name_taken"
   if (error) throw new Error(`Failed to rename team: ${error.message}`)
-  return data?.length ? "renamed" : "changed"
+  if (data?.length) return "renamed"
+  const { data: current, error: readError } = await admin
+    .from("team")
+    .select("name")
+    .eq("id", teamId)
+    .limit(1)
+  if (readError) throw new Error(`Failed to read team: ${readError.message}`)
+  return current?.[0]?.name === to ? "renamed" : "changed"
 }
