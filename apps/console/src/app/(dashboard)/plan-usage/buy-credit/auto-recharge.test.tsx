@@ -28,6 +28,9 @@ const mocks = vi.hoisted(() => ({
   planError: false,
   entryOpen: true,
   refetchPlan: vi.fn(),
+  canManage: true,
+  summaryError: false,
+  refetchSummary: vi.fn(),
   plan: { key: "funded_monthly", kind: "prepaid" } as
     | Record<string, unknown>
     | undefined,
@@ -88,7 +91,13 @@ vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "actor" } }),
 }))
 vi.mock("@/hooks/use-billing-summary", () => ({
-  useBillingSummary: () => ({ data: { permissions: { can_manage: true } } }),
+  useBillingSummary: () => ({
+    data: mocks.summaryError
+      ? undefined
+      : { permissions: { can_manage: mocks.canManage } },
+    isError: mocks.summaryError,
+    refetch: mocks.refetchSummary,
+  }),
 }))
 vi.mock("@/hooks/use-prepaid-credit", () => ({
   usePrepaidCredit: () => ({ data: mocks.data, isLoading: false, error: null }),
@@ -129,6 +138,9 @@ beforeEach(() => {
   mocks.plan = { key: "funded_monthly", kind: "prepaid" }
   mocks.planError = false
   mocks.refetchPlan.mockReset()
+  mocks.canManage = true
+  mocks.summaryError = false
+  mocks.refetchSummary.mockReset()
   mocks.params = new URLSearchParams()
   mocks.teamKey = "use:11111111-1111-4111-8111-111111111111"
   mocks.scope = "self"
@@ -182,6 +194,58 @@ it("keeps impersonation read only", () => {
   render(page())
   expect(screen.getByRole("button", { name: "Buy $25 credit" })).toBeDisabled()
   expect(screen.getByRole("button", { name: "Save" })).toBeDisabled()
+  expect(screen.queryByText(/billing administrator/)).toBeNull()
+})
+describe("billing access notice", () => {
+  it("tells a member without billing access why the controls are off", () => {
+    mocks.canManage = false
+    render(page())
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Save" })).toBeDisabled()
+    expect(
+      screen.getByText(
+        /Only your team's billing administrators can buy credit or change Auto Reload/,
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByRole("alert")).toBeNull()
+  })
+  it("offers a retry when billing access can't be checked", () => {
+    mocks.summaryError = true
+    render(page())
+    expect(
+      screen.getByRole("button", { name: "Buy $25 credit" }),
+    ).toBeDisabled()
+    expect(screen.getByRole("alert").textContent).toContain(
+      "We couldn't check whether you can manage billing for this team.",
+    )
+    expect(screen.queryByText(/billing administrator/)).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    expect(mocks.refetchSummary).toHaveBeenCalledTimes(1)
+  })
+  it("shows no notice to a billing administrator", async () => {
+    render(page())
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Buy $25 credit" }),
+      ).not.toBeDisabled(),
+    )
+    expect(screen.queryByText(/billing administrator/)).toBeNull()
+    expect(screen.queryByText(/manage billing/)).toBeNull()
+  })
+  it("shows no notice when no purchase or Auto Reload control renders", () => {
+    mocks.canManage = false
+    mocks.entryOpen = false
+    mocks.plan = { key: "pro_monthly", kind: "subscription" }
+    mocks.data = {
+      ...initial,
+      auto_recharge: { ...initial.auto_recharge, enabled: false },
+    }
+    render(page())
+    expect(screen.queryByRole("button", { name: /Buy.*credit/ })).toBeNull()
+    expect(screen.queryByText(/billing administrator/)).toBeNull()
+  })
 })
 it("recovers the retained purchase after a lost response and entry closes", async () => {
   mocks.checkout.mockRejectedValueOnce(new Error("lost response"))
