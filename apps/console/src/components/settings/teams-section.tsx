@@ -45,11 +45,9 @@ export function TeamsSection() {
   }
   const canCreate = data.regions.length > 1
   const conversion =
-    data.convertibleTeam &&
-    data.convertibleTeam.id === data.activeTeamId &&
-    data.convertibleTeam.region === data.activeRegion
-      ? data.convertibleTeam
-      : null
+    data.convertibleTeams?.find(
+      (t) => t.id === data.activeTeamId && t.region === data.activeRegion,
+    ) ?? null
 
   const handleCreate = () => {
     createTeam.mutate(

@@ -740,20 +740,18 @@ describe("active team", () => {
     cookieValue = "use:team-me"
 
     legacyOwnerTeamIds = ["team-me"]
-    expect((await listTeamsAction()).convertibleTeam).toEqual({
-      id: "team-me",
-      name: "pavitra@superserve.ai",
-      region: "use",
-    })
+    expect((await listTeamsAction()).convertibleTeams).toEqual([
+      { id: "team-me", name: "pavitra@superserve.ai", region: "use" },
+    ])
 
     // Only the owner can convert the account.
     legacyOwnerTeamIds = []
-    expect((await listTeamsAction()).convertibleTeam).toBeNull()
+    expect((await listTeamsAction()).convertibleTeams).toEqual([])
 
     // A revoked RBAC owner grant leaves the legacy owner row in place.
     legacyOwnerTeamIds = ["team-me"]
     rbacMemberTeamIds = ["team-me"]
-    expect((await listTeamsAction()).convertibleTeam).toBeNull()
+    expect((await listTeamsAction()).convertibleTeams).toEqual([])
     rbacMemberTeamIds = []
 
     // The offer does not depend on the active team, so a cached directory
@@ -762,8 +760,20 @@ describe("active team", () => {
     cookieValue = "usw:team-w"
     expect(await listTeamsAction()).toMatchObject({
       activeTeamId: "team-w",
-      convertibleTeam: { id: "team-me" },
+      convertibleTeams: [{ id: "team-me" }],
     })
+  })
+
+  it("directory offers every account team the user owns", async () => {
+    currentUser = { id: "u1", email: "pavitra@superserve.ai" }
+    directoryTeams = [
+      { id: "team-me", name: "pavitra@superserve.ai", region: "use" },
+      { id: "team-mw", name: "pavitra@superserve.ai", region: "usw" },
+    ]
+    cookieValue = "use:team-me"
+    legacyOwnerTeamIds = ["team-me", "team-mw"]
+
+    expect((await listTeamsAction()).convertibleTeams).toEqual(directoryTeams)
   })
 
   it("directory serves without a conversion when the owner lookup fails", async () => {
@@ -777,7 +787,7 @@ describe("active team", () => {
 
     expect(await listTeamsAction()).toMatchObject({
       activeTeamId: "team-me",
-      convertibleTeam: null,
+      convertibleTeams: [],
     })
     expect(error).toHaveBeenCalled()
     error.mockRestore()

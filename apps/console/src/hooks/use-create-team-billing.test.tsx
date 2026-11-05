@@ -354,7 +354,7 @@ it("keeps the account convertible after creating an unrelated team", async () =>
   client.setQueryData<TeamDirectoryResponse>(teamKeys.directory(), {
     ...directory,
     teams: [teamA, account],
-    convertibleTeam: account,
+    convertibleTeams: [account],
   })
   mocks.create.mockResolvedValue(teamB)
   mocks.directory.mockRejectedValue(new Error("offline"))
@@ -366,8 +366,8 @@ it("keeps the account convertible after creating an unrelated team", async () =>
 
   expect(
     client.getQueryData<TeamDirectoryResponse>(teamKeys.directory())
-      ?.convertibleTeam,
-  ).toEqual(account)
+      ?.convertibleTeams,
+  ).toEqual([account])
 })
 
 it("finishes a lost new-team creation before a conversion starts", async () => {
@@ -432,5 +432,34 @@ it("releases a conversion whose name was rejected for a new-team request", async
     "usw",
     expect.any(String),
   ])
+  expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
+})
+
+it("converts another account team after a rejected name", async () => {
+  mocks.create
+    .mockResolvedValueOnce({
+      code: "team_name_conflict",
+      message: "That team name is already taken.",
+    })
+    .mockResolvedValueOnce({ ...teamB, name: "acme" })
+  mocks.directory.mockResolvedValue(directory)
+  const { result } = setup()
+
+  await act(async () => {
+    await result.current.create
+      .mutateAsync({ name: "acme", region: "use", convertTeamId: "a" })
+      .catch(() => {})
+  })
+  await act(async () => {
+    await result.current.create.mutateAsync({
+      name: "acme",
+      region: "usw",
+      convertTeamId: "b",
+    })
+  })
+
+  const [first, second] = mocks.create.mock.calls
+  expect(second).toEqual(["acme", "usw", expect.any(String), "b"])
+  expect(second[2]).not.toBe(first[2])
   expect(sessionStorage.getItem("superserve:team-conversion:u1")).toBeNull()
 })

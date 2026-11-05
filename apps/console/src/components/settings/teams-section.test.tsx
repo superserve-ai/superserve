@@ -29,7 +29,7 @@ describe("TeamsSection", () => {
       regions: ["use", "usw"],
       activeTeamId: "team-me",
       activeRegion: "usw",
-      convertibleTeam: account,
+      convertibleTeams: [account],
     }
   })
 
@@ -65,7 +65,7 @@ describe("TeamsSection", () => {
       regions: ["use", "usw"],
       activeTeamId: "team-a",
       activeRegion: "use",
-      convertibleTeam: account,
+      convertibleTeams: [account],
     }
     const user = userEvent.setup()
     render(<TeamsSection />)
@@ -96,7 +96,7 @@ describe("TeamsSection", () => {
       regions: ["use", "usw"],
       activeTeamId: "team-a",
       activeRegion: "use",
-      convertibleTeam: account,
+      convertibleTeams: [account],
     }
     const { rerender } = render(<TeamsSection />)
     expect(screen.queryByText(/becomes this team/)).not.toBeInTheDocument()
@@ -112,6 +112,35 @@ describe("TeamsSection", () => {
     expect(screen.getByText(/becomes this team in US West/)).toBeInTheDocument()
   })
 
+  it("converts whichever account team is active", async () => {
+    const east = { id: "team-me-e", name: "user@example.com", region: "use" }
+    teamsData = {
+      teams: [account, east],
+      regions: ["use", "usw"],
+      activeTeamId: "team-me",
+      activeRegion: "usw",
+      convertibleTeams: [account, east],
+    }
+    const user = userEvent.setup()
+    const { rerender } = render(<TeamsSection />)
+    expect(screen.getByText(/becomes this team in US West/)).toBeInTheDocument()
+
+    teamsData = {
+      ...(teamsData as object),
+      activeTeamId: "team-me-e",
+      activeRegion: "use",
+    }
+    rerender(<TeamsSection />)
+    expect(screen.getByText(/becomes this team in US East/)).toBeInTheDocument()
+
+    await user.type(screen.getByPlaceholderText("my-team"), "acme")
+    await user.click(screen.getByRole("button", { name: "Create Team" }))
+    expect(mutate).toHaveBeenCalledWith(
+      { name: "acme", region: "use", convertTeamId: "team-me-e" },
+      expect.anything(),
+    )
+  })
+
   it("reports a retried conversion the form no longer offers", async () => {
     const renamed = { ...account, name: "acme" }
     teamsData = {
@@ -119,7 +148,7 @@ describe("TeamsSection", () => {
       regions: ["use", "usw"],
       activeTeamId: "team-me",
       activeRegion: "usw",
-      convertibleTeam: null,
+      convertibleTeams: [],
     }
     const user = userEvent.setup()
     render(<TeamsSection />)
@@ -141,7 +170,7 @@ describe("TeamsSection", () => {
       regions: ["use", "usw"],
       activeTeamId: "team-a",
       activeRegion: "use",
-      convertibleTeam: account,
+      convertibleTeams: [account],
     }
     const user = userEvent.setup()
     render(<TeamsSection />)

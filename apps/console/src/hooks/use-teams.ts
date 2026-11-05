@@ -127,7 +127,14 @@ export function useCreateTeam() {
           : {}),
       })
       let intent = stored ?? fresh()
-      if (intent.nameRejected && intent.name !== name) intent = fresh()
+      // A rejected name no longer binds the request to its name or target.
+      if (
+        intent.nameRejected &&
+        (intent.name !== name ||
+          intent.convertTeamId !== convertTeamId ||
+          (intent.convertTeamId && intent.region !== targetRegion))
+      )
+        intent = fresh()
       if (intent.name !== name)
         throw new Error(
           "Retry the pending team creation using its original name",
@@ -175,15 +182,10 @@ export function useCreateTeam() {
           regions: old?.regions ?? [team.region],
           activeTeamId: team.id,
           activeRegion: team.region,
-          // The account stays convertible unless this creation converted it.
-          convertibleTeam:
-            old?.convertibleTeam &&
-            !(
-              old.convertibleTeam.id === team.id &&
-              old.convertibleTeam.region === team.region
-            )
-              ? old.convertibleTeam
-              : null,
+          // Account teams stay convertible unless this creation converted one.
+          convertibleTeams: (old?.convertibleTeams ?? []).filter(
+            (item) => !(item.id === team.id && item.region === team.region),
+          ),
         }),
       )
       // Clear the previous team's data as soon as the selection changes.

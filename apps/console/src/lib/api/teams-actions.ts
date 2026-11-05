@@ -40,9 +40,9 @@ export interface TeamDirectoryResponse {
   regions: string[]
   activeTeamId: string | null
   activeRegion: string | null
-  // The user's own account team, which a team creation converts in place
-  // instead of creating another team while that team is active.
-  convertibleTeam?: TeamSummary | null
+  // The user's own account teams, which a team creation converts in place
+  // instead of creating another team while one of them is active.
+  convertibleTeams?: TeamSummary[]
 }
 
 async function readTeamDirectory(userId: string) {
@@ -75,28 +75,27 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
 
   const { teams, activeTeam } = await readTeamDirectory(user.id)
   // Eligibility does not depend on the active team, so a cached directory
-  // still offers the conversion after the user switches to the account.
-  const candidates = teams
-    .filter((t) => isPersonalTeam(t, user.email))
-    .toSorted((a, b) => Number(b === activeTeam) - Number(a === activeTeam))
-  let convertibleTeam: TeamSummary | null = null
-  for (const team of candidates) {
-    try {
-      if (await ownsTeam(team.region, user.id, team.id)) {
-        convertibleTeam = team
-        break
-      }
-    } catch (error) {
-      // The create form falls back to a new team; the action rechecks anyway.
-      console.error("team directory: owner lookup failed:", error)
-    }
-  }
+  // still offers the conversion after the user switches to an account team.
+  const owned = await Promise.all(
+    teams
+      .filter((t) => isPersonalTeam(t, user.email))
+      .map(async (team) => {
+        try {
+          return (await ownsTeam(team.region, user.id, team.id)) ? team : null
+        } catch (error) {
+          // The create form falls back to a new team; the action rechecks.
+          console.error("team directory: owner lookup failed:", error)
+          return null
+        }
+      }),
+  )
+  const convertibleTeams = owned.filter((t): t is TeamSummary => t !== null)
   return {
     teams,
     regions: configuredRegions(),
     activeTeamId: activeTeam?.id ?? null,
     activeRegion: activeTeam?.region ?? null,
-    convertibleTeam,
+    convertibleTeams,
   }
 }
 
