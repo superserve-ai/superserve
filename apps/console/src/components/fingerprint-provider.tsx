@@ -17,8 +17,13 @@ export function FingerprintProvider({
 }) {
   if (!apiKey) return <>{children}</>
 
+  // Invite tokens appear in paths and in the next query parameter.
   return (
-    <Provider apiKey={apiKey} region={region}>
+    <Provider
+      apiKey={apiKey}
+      region={region}
+      urlHashing={{ path: true, query: true, fragment: true }}
+    >
       {children}
     </Provider>
   )
