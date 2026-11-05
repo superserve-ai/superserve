@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   teams: vi.fn(),
   read: vi.fn(),
   prepare: vi.fn(),
+  fresh: false,
 }))
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
@@ -36,6 +37,16 @@ vi.mock("@/lib/api/active-team", () => ({
 }))
 vi.mock("@/lib/api/teams-actions", () => ({ listTeamsAction: m.teams }))
 vi.mock("@/lib/api/signup-plan-read", () => ({ readSignupPlan: m.read }))
+vi.mock("@/lib/supabase/fresh-fetch", () => ({
+  readFresh: async <T>(read: () => Promise<T>) => {
+    m.fresh = true
+    try {
+      return await read()
+    } finally {
+      m.fresh = false
+    }
+  },
+}))
 vi.mock("@/lib/api/signup-plan-actions", () => ({
   getSignupPlanAction: m.prepare,
 }))
@@ -166,9 +177,15 @@ it("fails closed on degraded membership, directory races, and plan read failures
   expect(await getSignupPlanPage()).toBeNull()
 })
 it("retries a failed plan read once and renders when the retry succeeds", async () => {
-  m.read.mockRejectedValueOnce(new Error("Unavailable"))
+  const fresh: boolean[] = []
+  m.read.mockImplementation(async () => {
+    fresh.push(m.fresh)
+    if (fresh.length === 1) throw new Error("Unavailable")
+    return { userId: "owner", teamKey: "use:team", state: "selecting" }
+  })
   expect((await getSignupPlanPage())?.context.teamKey).toBe("use:team")
-  expect(m.read).toHaveBeenCalledTimes(2)
+  // Only the retry skips the render's request memoization.
+  expect(fresh).toEqual([false, true])
 })
 it("retries a degraded membership lookup once before rendering", async () => {
   m.memberships.mockResolvedValueOnce({

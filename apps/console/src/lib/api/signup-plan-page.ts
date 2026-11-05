@@ -9,6 +9,7 @@ import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import { listTeamsAction } from "@/lib/api/teams-actions"
+import { readFresh } from "@/lib/supabase/fresh-fetch"
 import { createServerClient } from "@/lib/supabase/server"
 
 export interface SignupPlanPageParams {
@@ -29,12 +30,15 @@ export function signupPlanPath(params: SignupPlanPageParams) {
 
 // Read before sending the destination page, so navigation keeps the previous
 // document visible. Provisioning stays in a handler where cookies are writable.
-// A failed read is retried once before the caller shows the setup error; a
-// second failure, or one that a retry can't change, still returns null.
+// A failed read is retried once, past the render's request memoization, before
+// the caller shows the setup error. A second failure, or one that a retry
+// can't change, still returns null.
 export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
   for (let attempt = 1; ; attempt++) {
     try {
-      return await readSignupPlanPage(params)
+      return attempt > 1
+        ? await readFresh(() => readSignupPlanPage(params))
+        : await readSignupPlanPage(params)
     } catch (error) {
       unstable_rethrow(error)
       if (attempt > 1 || error instanceof SignupSetupBlockedError) return null
