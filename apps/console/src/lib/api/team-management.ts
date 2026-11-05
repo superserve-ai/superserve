@@ -1,4 +1,4 @@
-import { apiClient } from "./client"
+import { apiClient, apiClientWithHeaders } from "./client"
 
 export type TeamMemberStatus = "active" | "inactive" | "invited"
 
@@ -68,6 +68,7 @@ export interface TeamManagementMutationOptions {
 
 export interface TeamManagementResponse {
   team_id: string
+  region: string | null
   members: TeamMember[]
   assignments: TeamRoleAssignment[]
   capabilities: TeamManagementCapabilities
@@ -85,7 +86,17 @@ export interface AssignTeamRoleRequest {
 }
 
 export async function getTeamManagement(): Promise<TeamManagementResponse> {
-  return apiClient<TeamManagementResponse>("/team-management")
+  const { data, headers } =
+    await apiClientWithHeaders<Omit<TeamManagementResponse, "region">>(
+      "/team-management",
+    )
+  const scope = headers
+    .get("X-Superserve-Team-Scope")
+    ?.match(/^([^:]+):([^:]+)$/)
+  return {
+    ...data,
+    region: scope && scope[2] === data.team_id ? scope[1] : null,
+  }
 }
 
 export async function getTeamInvitations(): Promise<TeamInvitationsResponse> {

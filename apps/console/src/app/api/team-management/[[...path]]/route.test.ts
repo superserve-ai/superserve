@@ -286,6 +286,7 @@ describe("api proxy /api/team-management", () => {
     const res = await GET(req("GET"), params())
 
     expect(res.status).toBe(200)
+    expect(res.headers.get("X-Superserve-Team-Scope")).toBe("use:team-1")
     expect(fetchSpy).toHaveBeenCalledTimes(1)
     const [url, fetchInit] = fetchSpy.mock.calls[0]
     expect(url).toBe("https://api.test.superserve.ai/teams/team-1/management")
@@ -293,11 +294,15 @@ describe("api proxy /api/team-management", () => {
     expect(headers.get("x-api-key")).toBe("ss_live_test_key")
   })
 
-  it.each(["team", "key", "base"])(
+  it.each(["team", "region", "key", "base"])(
     "maps signup denial from the %s lookup to a generic 403",
     async (lookup) => {
       if (lookup === "team")
         vi.mocked(getTeamIdForUser).mockRejectedValueOnce(
+          new SignupRestrictedError(),
+        )
+      if (lookup === "region")
+        vi.mocked(getRegionForUser).mockRejectedValueOnce(
           new SignupRestrictedError(),
         )
       if (lookup === "key")

@@ -4,6 +4,8 @@ import { act, renderHook } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { teamKeys } from "@/lib/api/query-keys"
+
 const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
   assign: vi.fn(),
@@ -31,6 +33,7 @@ vi.mock("@/lib/api/team-invitations-actions", () => ({
 import {
   useAssignTeamRole,
   useCreateInvitation,
+  useDisplayedTeam,
   useLeaveTeam,
   useRemoveTeamMember,
   useResendInvitation,
@@ -47,6 +50,31 @@ function wrapper({ children }: { children: ReactNode }) {
     </QueryClientProvider>
   )
 }
+
+describe("displayed team scope", () => {
+  it.each(["use", "usw", null])(
+    "checks the management region (%s) against the directory",
+    (region) => {
+      const client = new QueryClient({
+        defaultOptions: { queries: { staleTime: Infinity } },
+      })
+      client.setQueryData(["team-management"], {
+        team_id: team.teamId,
+        region,
+      })
+      client.setQueryData(teamKeys.directory(), {
+        activeTeamId: team.teamId,
+        activeRegion: "use",
+      })
+      const { result } = renderHook(() => useDisplayedTeam(), {
+        wrapper: ({ children }) => (
+          <QueryClientProvider client={client}>{children}</QueryClientProvider>
+        ),
+      })
+      expect(result.current).toEqual(region === "use" ? team : null)
+    },
+  )
+})
 
 describe("team mutation variables", () => {
   beforeEach(() => {

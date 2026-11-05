@@ -53,8 +53,8 @@ const TEAM_NOT_READY_MESSAGE =
 
 /**
  * The team this page is showing: the one the loaded management data belongs
- * to, with its region from the team directory. Null until both agree, so a
- * mutation never targets a team the user is not looking at.
+ * to, with its region from the management response. Null until the directory
+ * agrees, so a mutation never targets a team the user is not looking at.
  */
 export function useDisplayedTeam(): TeamScope | null {
   const { data: management } = useTeamManagement()
@@ -62,12 +62,13 @@ export function useDisplayedTeam(): TeamScope | null {
   const teamId = management?.team_id
   if (
     !teamId ||
+    !management.region ||
     directory?.activeTeamId !== teamId ||
-    !directory.activeRegion
+    directory.activeRegion !== management.region
   ) {
     return null
   }
-  return { teamId, region: directory.activeRegion }
+  return { teamId, region: management.region }
 }
 
 export const TEAM_CHANGED_MESSAGE =

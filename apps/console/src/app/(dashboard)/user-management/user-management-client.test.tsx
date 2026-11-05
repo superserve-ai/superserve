@@ -88,6 +88,7 @@ const pendingInvitation = {
 
 const baseManagement: TeamManagementResponse = {
   team_id: "team-1",
+  region: "use",
   members: [
     {
       user_id: "user-1",

@@ -161,8 +161,12 @@ async function proxyTeamManagementRequest(
   if (!targetPath) {
     return notFound()
   }
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    let region: string
+  const isManagementRead = request.method === "GET" && path.length === 0
+  let region: string | null = null
+  if (
+    isManagementRead ||
+    (request.method !== "GET" && request.method !== "HEAD")
+  ) {
     try {
       region = await getRegionForUser(user)
     } catch (error) {
@@ -171,6 +175,8 @@ async function proxyTeamManagementRequest(
       if (error instanceof SignupRestrictedError) return signupDenied()
       throw error
     }
+  }
+  if (request.method !== "GET" && request.method !== "HEAD") {
     if (request.headers.get(TEAM_SCOPE_HEADER) !== `${region}:${teamId}`) {
       return teamChanged()
     }
@@ -232,6 +238,9 @@ async function proxyTeamManagementRequest(
       continue
     }
     responseHeaders.set(key, value)
+  }
+  if (isManagementRead) {
+    responseHeaders.set(TEAM_SCOPE_HEADER, `${region}:${teamId}`)
   }
 
   if (
