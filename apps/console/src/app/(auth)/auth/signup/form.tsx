@@ -338,7 +338,7 @@ export default function SignUpContent() {
         setResendNotice({ text: BOT_CHECK_UNAVAILABLE, error: true })
         return
       }
-      const result = await resendSignupConfirmation(recaptchaToken)
+      const result = await resendSignupConfirmation(recaptchaToken, email)
       if (result.success) {
         setEmailStatus("sent")
         startResendCooldown(RESEND_COOLDOWN_SECONDS)

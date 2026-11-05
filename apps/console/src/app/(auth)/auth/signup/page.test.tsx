@@ -713,7 +713,10 @@ describe("SignUpPage", () => {
       )
 
       expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
-      expect(mockResendSignupConfirmation).toHaveBeenCalledWith(undefined)
+      expect(mockResendSignupConfirmation).toHaveBeenCalledWith(
+        undefined,
+        "test@test.com",
+      )
       expect(screen.getByRole("status")).toHaveTextContent(
         "We sent a new confirmation email.",
       )

@@ -733,12 +733,15 @@ const RESEND_UNAVAILABLE: ResendSignupConfirmationResult = {
 }
 
 /**
- * Sends the signup confirmation again through the app email path. It takes no
- * email address: only the browser that just signed up holds the signed ticket,
- * so the result cannot reveal whether another account exists.
+ * Sends the signup confirmation again through the app email path. Only the
+ * browser that just signed up holds the signed ticket, so the result cannot
+ * reveal whether another account exists. The page sends the email it shows,
+ * and a mismatch gets the no-ticket answer: a newer signup in another tab
+ * replaced the ticket, and this page must not send that signup's email.
  */
 export const resendSignupConfirmation = async (
   recaptchaToken?: string,
+  shownEmail?: string,
 ): Promise<ResendSignupConfirmationResult> => {
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_resend")
   if (!recaptcha.verified)
@@ -757,6 +760,11 @@ export const resendSignupConfirmation = async (
       await clearSignupResendTicket()
       return RESEND_UNAVAILABLE
     }
+    if (
+      typeof shownEmail !== "string" ||
+      shownEmail.trim().toLowerCase() !== user.email.toLowerCase()
+    )
+      return RESEND_UNAVAILABLE
     if (user.email_confirmed_at) {
       await clearSignupResendTicket()
       return {

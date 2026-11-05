@@ -1098,6 +1098,13 @@ describe("confirmation email delivery", () => {
     },
     error: null,
   })
+  const SHOWN_EMAIL = "user@example.com"
+  const RESEND_UNAVAILABLE_RESULT = {
+    success: false,
+    error:
+      "We can't resend from this page. Sign up again with the same email and password to get a new link.",
+    errorCode: "resend_unavailable",
+  }
   const ticket = {
     user: "user-1",
     type: "signup" as const,
@@ -1196,7 +1203,7 @@ describe("confirmation email delivery", () => {
 
   describe("resendSignupConfirmation", () => {
     it("sends a new link through the app email path with the original params", async () => {
-      const result = await resendSignupConfirmation("resend-token")
+      const result = await resendSignupConfirmation("resend-token", SHOWN_EMAIL)
 
       expect(result).toEqual({ success: true })
       expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
@@ -1231,7 +1238,7 @@ describe("confirmation email delivery", () => {
     it("signs the device binding again for a bound first link", async () => {
       mockReadResendTicket.mockResolvedValue({ ...ticket, device: "device-1" })
 
-      await resendSignupConfirmation()
+      await resendSignupConfirmation(undefined, SHOWN_EMAIL)
 
       const sent = confirmationUrl()
       expect(sent.searchParams.get("device_attempt_id")).toBe("device-1")
@@ -1253,7 +1260,9 @@ describe("confirmation email delivery", () => {
         error: null,
       })
 
-      expect(await resendSignupConfirmation()).toEqual({ success: true })
+      expect(await resendSignupConfirmation(undefined, SHOWN_EMAIL)).toEqual({
+        success: true,
+      })
       expect(mockGenerateLink).toHaveBeenCalledWith({
         type: "magiclink",
         email: "user@example.com",
@@ -1265,7 +1274,7 @@ describe("confirmation email delivery", () => {
     it("enforces the cooldown from the last server-side send", async () => {
       mockGetUserById.mockResolvedValue(unconfirmedUser(20))
 
-      const result = await resendSignupConfirmation()
+      const result = await resendSignupConfirmation(undefined, SHOWN_EMAIL)
 
       expect(result).toMatchObject({
         success: false,
@@ -1283,7 +1292,7 @@ describe("confirmation email delivery", () => {
         reason: "low_score",
       })
 
-      expect(await resendSignupConfirmation("bad")).toMatchObject({
+      expect(await resendSignupConfirmation("bad", SHOWN_EMAIL)).toMatchObject({
         success: false,
         errorCode: "captcha_failed",
       })
@@ -1295,7 +1304,9 @@ describe("confirmation email delivery", () => {
     it("offers signup again without a ticket from this browser", async () => {
       mockReadResendTicket.mockResolvedValue(null)
 
-      expect(await resendSignupConfirmation()).toMatchObject({
+      expect(
+        await resendSignupConfirmation(undefined, SHOWN_EMAIL),
+      ).toMatchObject({
         success: false,
         errorCode: "resend_unavailable",
       })
@@ -1305,15 +1316,35 @@ describe("confirmation email delivery", () => {
 
     it("gives the no-ticket answer when the ticket's account is gone", async () => {
       mockReadResendTicket.mockResolvedValueOnce(null)
-      const noTicket = await resendSignupConfirmation()
+      const noTicket = await resendSignupConfirmation(undefined, SHOWN_EMAIL)
       mockGetUserById.mockResolvedValue({
         data: { user: null },
         error: { message: "User not found" },
       })
 
-      expect(await resendSignupConfirmation()).toEqual(noTicket)
+      expect(await resendSignupConfirmation(undefined, SHOWN_EMAIL)).toEqual(
+        noTicket,
+      )
       expect(mockClearResendTicket).toHaveBeenCalled()
       expect(mockGenerateLink).not.toHaveBeenCalled()
+    })
+
+    it("does not resend another tab's newer signup", async () => {
+      expect(
+        await resendSignupConfirmation(undefined, "other@example.com"),
+      ).toEqual(RESEND_UNAVAILABLE_RESULT)
+      expect(await resendSignupConfirmation()).toEqual(
+        RESEND_UNAVAILABLE_RESULT,
+      )
+      expect(mockClearResendTicket).not.toHaveBeenCalled()
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    })
+
+    it("matches the shown email without case or spaces", async () => {
+      expect(
+        await resendSignupConfirmation(undefined, " User@Example.com "),
+      ).toEqual({ success: true })
     })
 
     it("sends a confirmed user to sign in without a new link", async () => {
@@ -1328,7 +1359,9 @@ describe("confirmation email delivery", () => {
         error: null,
       })
 
-      expect(await resendSignupConfirmation()).toMatchObject({
+      expect(
+        await resendSignupConfirmation(undefined, SHOWN_EMAIL),
+      ).toMatchObject({
         success: false,
         errorCode: "already_confirmed",
       })
@@ -1339,7 +1372,9 @@ describe("confirmation email delivery", () => {
     it("reports an unsent resend", async () => {
       mockSendEmail.mockResolvedValue({ success: false })
 
-      expect(await resendSignupConfirmation()).toMatchObject({
+      expect(
+        await resendSignupConfirmation(undefined, SHOWN_EMAIL),
+      ).toMatchObject({
         success: false,
         errorCode: "email_not_sent",
       })
@@ -1354,7 +1389,9 @@ describe("confirmation email delivery", () => {
         error: null,
       })
 
-      expect(await resendSignupConfirmation()).toMatchObject({
+      expect(
+        await resendSignupConfirmation(undefined, SHOWN_EMAIL),
+      ).toMatchObject({
         success: false,
         errorCode: "email_not_sent",
       })
