@@ -93,6 +93,47 @@ describe("middleware", () => {
     expect(res).toBe(mockClient.response)
   })
 
+  it.each(["/ingest", "/ingest/i/v0/e/", "/ingest/static/array.js"])(
+    "strips Referer and bypasses auth for %s",
+    async (path) => {
+      const request = new NextRequest(
+        new URL(`https://console.superserve.ai${path}`),
+        {
+          headers: {
+            referer: `https://console.superserve.ai/auth/signin?next=/invite/ssinv_use_${"A".repeat(43)}`,
+            "user-agent": "test-browser",
+          },
+        },
+      )
+      const res = await middleware(request)
+
+      expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
+      expect(res.status).toBe(200)
+      expect(res.headers.has("location")).toBe(false)
+      const overrides = res.headers
+        .get("x-middleware-override-headers")!
+        .split(",")
+      expect(overrides).not.toContain("referer")
+      expect(res.headers.has("x-middleware-request-referer")).toBe(false)
+      expect(overrides).toContain("user-agent")
+      expect(res.headers.get("x-middleware-request-user-agent")).toBe(
+        "test-browser",
+      )
+    },
+  )
+
+  it.each(["/ingestion", "/ingest-private"])(
+    "still authenticates and redirects signed-out requests to %s",
+    async (path) => {
+      const res = await middleware(buildRequest(path))
+
+      expect(mockClient.supabase!.auth.getUser).toHaveBeenCalledOnce()
+      expect(new URL(res.headers.get("location")!).pathname).toBe(
+        "/auth/signin",
+      )
+    },
+  )
+
   it.each([
     [
       "true",
@@ -326,8 +367,8 @@ describe("middleware matcher", () => {
     "/ingest/i/v0/e/?ip=0",
     "/ingest/s/",
     "/ingest/static/array.js",
-  ])("bypasses auth for analytics request %s", (url) => {
-    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false)
+  ])("matches analytics request %s to strip Referer", (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
   })
 
   it.each(["/", "/sandboxes", "/settings", "/ingestion", "/ingest-private"])(
