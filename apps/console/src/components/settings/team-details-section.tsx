@@ -65,7 +65,13 @@ function TeamDetailsForm({ team }: { team: ActiveTeam }) {
   const { addToast } = useToast()
 
   const [name, setName] = useState(team.name)
+  const [previousName, setPreviousName] = useState(team.name)
   const [error, setError] = useState<string | undefined>()
+
+  if (team.name !== previousName) {
+    setPreviousName(team.name)
+    if (name === previousName) setName(team.name)
+  }
 
   const trimmed = name.trim()
   const dirty = trimmed !== team.name
