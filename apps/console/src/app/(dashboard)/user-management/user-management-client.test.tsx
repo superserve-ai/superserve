@@ -171,12 +171,12 @@ describe("UserManagementClient", () => {
       screen.getByRole("tab", { name: /^active members\s+1$/i }),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("tab", { name: /^invitations\s+1$/i }),
+      screen.getByRole("tab", { name: /^invited members\s+1$/i }),
     ).toBeInTheDocument()
     expect(
       screen.getByRole("tab", { name: /^inactive members\s+0$/i }),
     ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("tab", { name: /^invitations\s+1$/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /^invited members\s+1$/i }))
     expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: /invite member/i }),
@@ -235,7 +235,7 @@ describe("UserManagementClient", () => {
     expect(
       screen.getAllByRole("button", { name: /manage roles/i }),
     ).toHaveLength(1)
-    fireEvent.click(screen.getByRole("tab", { name: /^invitations\s+1$/i }))
+    fireEvent.click(screen.getByRole("tab", { name: /^invited members\s+1$/i }))
     expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /revoke/i })).toBeInTheDocument()
   })
@@ -397,6 +397,24 @@ describe("UserManagementClient", () => {
         screen.queryByRole("button", { name: /^revoke$/i }),
       ).not.toBeInTheDocument()
     })
+  })
+
+  it("counts pending email invitations as pending invites", () => {
+    mockUseTeamInvitations.mockReturnValue({
+      data: {
+        invitations: [
+          pendingInvitation,
+          { ...pendingInvitation, id: "inv-2", status: "expired" },
+          { ...pendingInvitation, id: "inv-3", status: "accepted" },
+        ],
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    render(<UserManagementClient />)
+
+    expect(screen.getByText("2 pending invites")).toBeInTheDocument()
   })
 
   describe("without team-management permission", () => {

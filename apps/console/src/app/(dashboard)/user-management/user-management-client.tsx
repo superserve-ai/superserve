@@ -38,6 +38,7 @@ import {
   useDisplayedTeam,
   useRemoveTeamMember,
   useRevokeTeamRole,
+  useTeamInvitations,
   useTeamManagement,
 } from "@/hooks/use-team-management"
 import { useUser } from "@/hooks/use-user"
@@ -474,7 +475,8 @@ function MemberTabs({
     },
     {
       value: "invited",
-      label: "Invitations",
+      // Email invitations have their own list below; this tab is memberships.
+      label: "Invited members",
       count: filteredMembers.invited.length,
     },
     {
@@ -514,7 +516,7 @@ function MemberTabs({
           members={filteredMembers.invited}
           onManageRoles={onManageRoles}
           showManageRoles={showManageRoles}
-          emptyLabel="No invitations match this search."
+          emptyLabel="No invited members match this search."
         />
       </TabsPanel>
       <TabsPanel value="inactive">
@@ -537,6 +539,7 @@ export function UserManagementClient() {
     (TeamMember & { team: TeamScope }) | null
   >(null)
   const removeMember = useRemoveTeamMember()
+  const { data: emailInvitations } = useTeamInvitations()
   const team = useDisplayedTeam()
   const { addToast } = useToast()
 
@@ -550,10 +553,15 @@ export function UserManagementClient() {
     const members = data?.members ?? []
     return {
       active: members.filter((member) => member.status === "active").length,
-      invited: members.filter((member) => member.status === "invited").length,
+      // An email invitation has no membership until it is accepted.
+      invited:
+        members.filter((member) => member.status === "invited").length +
+        (emailInvitations?.invitations ?? []).filter(
+          (invitation) => invitation.status === "pending",
+        ).length,
       inactive: members.filter((member) => member.status === "inactive").length,
     }
-  }, [data?.members])
+  }, [data?.members, emailInvitations?.invitations])
 
   if (isPending) {
     return (
@@ -668,7 +676,7 @@ export function UserManagementClient() {
                   Team members
                 </p>
                 <p className="mt-1 text-sm text-muted">
-                  Search members and switch between active, invitation, and
+                  Search members and switch between active, invited, and
                   inactive views.
                 </p>
               </div>
