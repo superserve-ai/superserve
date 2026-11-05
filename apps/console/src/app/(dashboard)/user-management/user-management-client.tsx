@@ -21,9 +21,10 @@ import {
   TabsList,
   TabsPanel,
   TabsTab,
+  useToast,
 } from "@superserve/ui"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ComponentType, FormEvent } from "react"
 
 import { EmptyState } from "@/components/empty-state"
@@ -31,14 +32,21 @@ import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
 import { TableSkeleton } from "@/components/table-skeleton"
 import {
+  sameTeam,
+  TEAM_CHANGED_MESSAGE,
   useAssignTeamRole,
+  useDisplayedTeam,
   useRemoveTeamMember,
   useRevokeTeamRole,
   useTeamManagement,
 } from "@/hooks/use-team-management"
 import { useUser } from "@/hooks/use-user"
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
-import type { TeamMember, TeamRoleAssignment } from "@/lib/api/team-management"
+import type {
+  TeamMember,
+  TeamRoleAssignment,
+  TeamScope,
+} from "@/lib/api/team-management"
 
 import {
   InvitationsSection,
@@ -150,6 +158,7 @@ function AssignRoleForm({
   onSelectedUserIdChange: (userId: string) => void
 }) {
   const assignRole = useAssignTeamRole()
+  const team = useDisplayedTeam()
   const activeMembers = members.filter((member) => member.status === "active")
   const [roleName, setRoleName] = useState("")
 
@@ -162,7 +171,10 @@ function AssignRoleForm({
     if (!selectedUserId || !selectedRoleName) {
       return
     }
-    assignRole.mutate({ user_id: selectedUserId, role_name: selectedRoleName })
+    assignRole.mutate({
+      team,
+      data: { user_id: selectedUserId, role_name: selectedRoleName },
+    })
   }
 
   if (activeMembers.length === 0 || roles.length === 0) {
@@ -346,6 +358,7 @@ function ActiveAssignmentRows({
   canRevoke: boolean
 }) {
   const revokeRole = useRevokeTeamRole()
+  const team = useDisplayedTeam()
   const activeAssignments = assignments.filter(
     (assignment) => !assignment.revoked_at,
   )
@@ -393,7 +406,12 @@ function ActiveAssignmentRows({
                     size="sm"
                     variant="outline"
                     disabled={revokeRole.isPending}
-                    onClick={() => revokeRole.mutate(assignment.assignment_id)}
+                    onClick={() =>
+                      revokeRole.mutate({
+                        team,
+                        assignmentId: assignment.assignment_id,
+                      })
+                    }
                   >
                     Revoke
                   </Button>
@@ -514,8 +532,17 @@ export function UserManagementClient() {
   const { data, isPending, error, refetch } = useTeamManagement()
   const [memberSearch, setMemberSearch] = useState("")
   const [selectedUserId, setSelectedUserId] = useState("")
-  const [removing, setRemoving] = useState<TeamMember | null>(null)
+  const [removing, setRemoving] = useState<
+    (TeamMember & { team: TeamScope }) | null
+  >(null)
   const removeMember = useRemoveTeamMember()
+  const team = useDisplayedTeam()
+  const { addToast } = useToast()
+
+  useEffect(() => {
+    if (removing && !sameTeam(removing.team, team)) setRemoving(null)
+  }, [removing, team])
+
   const { user } = useUser()
 
   const counts = useMemo(() => {
@@ -654,7 +681,11 @@ export function UserManagementClient() {
               // Leaving goes through Leave team, which protects the user's
               // only team, so the current user has no Remove button.
               onRemove={
-                capabilities.can_deactivate_members ? setRemoving : undefined
+                capabilities.can_deactivate_members
+                  ? (member) => {
+                      if (team) setRemoving({ ...member, team })
+                    }
+                  : undefined
               }
               currentUserId={user?.id}
               search={memberSearch}
@@ -724,7 +755,14 @@ export function UserManagementClient() {
         confirmLabel="Remove"
         onConfirm={async () => {
           if (removing) {
-            await removeMember.mutateAsync(removing.user_id).catch(() => {})
+            if (!sameTeam(removing.team, team)) {
+              setRemoving(null)
+              addToast(TEAM_CHANGED_MESSAGE, "error")
+              return
+            }
+            await removeMember
+              .mutateAsync({ team: removing.team, userId: removing.user_id })
+              .catch(() => {})
           }
         }}
       />

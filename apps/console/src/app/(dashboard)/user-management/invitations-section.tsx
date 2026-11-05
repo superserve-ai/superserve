@@ -24,10 +24,13 @@ import {
   useToast,
 } from "@superserve/ui"
 import { useRouter } from "next/navigation"
-import { type FormEvent, useState } from "react"
+import { type FormEvent, useEffect, useState } from "react"
 
 import {
+  sameTeam,
+  TEAM_CHANGED_MESSAGE,
   useCreateInvitation,
+  useDisplayedTeam,
   useLeaveTeam,
   useResendInvitation,
   useRevokeInvitation,
@@ -38,6 +41,7 @@ import { ApiError } from "@/lib/api/client"
 import type {
   TeamInvitation,
   TeamManagementCapabilities,
+  TeamScope,
 } from "@/lib/api/team-management"
 import { INVITE_COPY } from "@/lib/invite/copy"
 
@@ -72,6 +76,7 @@ function InviteDialog({
   const [email, setEmail] = useState("")
   const [error, setError] = useState<string | null>(null)
   const createInvitation = useCreateInvitation()
+  const team = useDisplayedTeam()
   const { addToast } = useToast()
 
   const reset = () => {
@@ -93,29 +98,32 @@ function InviteDialog({
       return
     }
     setError(null)
-    createInvitation.mutate(value, {
-      onSuccess: (result) => {
-        if (result.delivery === "sent") {
-          addToast(`Invitation sent to ${result.invitation.email}`, "success")
-        } else {
-          addToast(
-            "The invitation was created but its email could not be sent. Use Resend to try again.",
-            "error",
-          )
-        }
-        handleOpenChange(false)
-      },
-      onError: (failure) => {
-        // An unaccepted invitation (even an expired one) blocks a new one for
-        // the same email; the list behind the dialog has Resend and Revoke.
-        if ((failure as { code?: string }).code === "invitation_pending") {
-          addToast(failure.message, "error")
+    createInvitation.mutate(
+      { team, email: value },
+      {
+        onSuccess: (result) => {
+          if (result.delivery === "sent") {
+            addToast(`Invitation sent to ${result.invitation.email}`, "success")
+          } else {
+            addToast(
+              "The invitation was created but its email could not be sent. Use Resend to try again.",
+              "error",
+            )
+          }
           handleOpenChange(false)
-          return
-        }
-        setError(failure.message)
+        },
+        onError: (failure) => {
+          // An unaccepted invitation (even an expired one) blocks a new one for
+          // the same email; the list behind the dialog has Resend and Revoke.
+          if ((failure as { code?: string }).code === "invitation_pending") {
+            addToast(failure.message, "error")
+            handleOpenChange(false)
+            return
+          }
+          setError(failure.message)
+        },
       },
-    })
+    )
   }
 
   return (
@@ -216,7 +224,16 @@ export function InvitationsSection({ canManage }: { canManage: boolean }) {
   const { data, isPending, error, refetch } = useTeamInvitations()
   const resend = useResendInvitation()
   const revoke = useRevokeInvitation()
-  const [revoking, setRevoking] = useState<TeamInvitation | null>(null)
+  const [revoking, setRevoking] = useState<
+    (TeamInvitation & { team: TeamScope }) | null
+  >(null)
+
+  const team = useDisplayedTeam()
+  const { addToast } = useToast()
+
+  useEffect(() => {
+    if (revoking && !sameTeam(revoking.team, team)) setRevoking(null)
+  }, [revoking, team])
 
   // The backend is the authority on who may read the list: a refusal means
   // this user has no invitations view, not that something broke.
@@ -282,7 +299,9 @@ export function InvitationsSection({ canManage }: { canManage: boolean }) {
                           size="sm"
                           variant="outline"
                           disabled={resend.isPending}
-                          onClick={() => resend.mutate(invitation.id)}
+                          onClick={() =>
+                            resend.mutate({ team, invitationId: invitation.id })
+                          }
                         >
                           Resend
                         </Button>
@@ -290,7 +309,9 @@ export function InvitationsSection({ canManage }: { canManage: boolean }) {
                           size="sm"
                           variant="outline"
                           disabled={revoke.isPending}
-                          onClick={() => setRevoking(invitation)}
+                          onClick={() => {
+                            if (team) setRevoking({ ...invitation, team })
+                          }}
                         >
                           Revoke invitation
                         </Button>
@@ -313,7 +334,15 @@ export function InvitationsSection({ canManage }: { canManage: boolean }) {
         description={`${revoking?.email ?? "This person"} will no longer be able to join with this invitation link.`}
         confirmLabel="Revoke"
         onConfirm={async () => {
-          if (revoking) await revoke.mutateAsync(revoking.id).catch(() => {})
+          if (!revoking) return
+          if (!sameTeam(revoking.team, team)) {
+            setRevoking(null)
+            addToast(TEAM_CHANGED_MESSAGE, "error")
+            return
+          }
+          await revoke
+            .mutateAsync({ team: revoking.team, invitationId: revoking.id })
+            .catch(() => {})
         }}
       />
     </section>
@@ -328,7 +357,12 @@ export function LeaveTeamSection() {
   const teams = useTeams()
   const leave = useLeaveTeam()
   const { addToast } = useToast()
-  const [confirming, setConfirming] = useState(false)
+  const [confirming, setConfirming] = useState<TeamScope | null>(null)
+  const team = useDisplayedTeam()
+
+  useEffect(() => {
+    if (confirming && !sameTeam(confirming, team)) setConfirming(null)
+  }, [confirming, team])
 
   // Fail closed: until the directory says there is another team, block.
   const teamCount = teams.data?.teams.length
@@ -351,7 +385,9 @@ export function LeaveTeamSection() {
           variant="outline"
           disabled={onlyTeam || leave.isPending}
           title={blockedKnown ? LEAVE_BLOCKED_REASON : undefined}
-          onClick={() => setConfirming(true)}
+          onClick={() => {
+            if (team) setConfirming(team)
+          }}
         >
           <SignOutIcon className="size-3.5" weight="light" />
           Leave team
@@ -359,14 +395,21 @@ export function LeaveTeamSection() {
       </div>
 
       <ConfirmDialog
-        open={confirming}
-        onOpenChange={setConfirming}
+        open={confirming !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(null)
+        }}
         title="Leave team"
         description="You will lose access to this team. A team needs at least one owner, so you can't leave if you are the last one."
         confirmLabel="Leave team"
         onConfirm={async () => {
           try {
-            await leave.mutateAsync()
+            if (!sameTeam(confirming, team)) {
+              setConfirming(null)
+              addToast(TEAM_CHANGED_MESSAGE, "error")
+              return
+            }
+            await leave.mutateAsync({ team: confirming })
             addToast("You left the team", "success")
             router.replace("/sandboxes/")
           } catch (failure) {

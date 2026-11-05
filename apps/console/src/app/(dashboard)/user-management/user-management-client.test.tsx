@@ -1,11 +1,18 @@
 import { ToastProvider } from "@superserve/ui"
-import { render as baseRender, fireEvent, screen } from "@testing-library/react"
+import {
+  render as baseRender,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import type { ReactElement } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { TeamManagementResponse } from "@/lib/api/team-management"
 
 const {
+  mockDisplayedTeam,
   mockUseTeamManagement,
   mockUseTeamInvitations,
   mockUseTeams,
@@ -16,6 +23,7 @@ const {
   mockRouterReplace,
   mockUser,
 } = vi.hoisted(() => ({
+  mockDisplayedTeam: vi.fn(),
   mockUseTeamManagement: vi.fn(),
   mockUseTeamInvitations: vi.fn(),
   mockUseTeams: vi.fn(),
@@ -37,7 +45,9 @@ const mutation = (mutate = vi.fn()) => ({
   reset: vi.fn(),
 })
 
-vi.mock("@/hooks/use-team-management", () => ({
+vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/hooks/use-team-management")>()),
+  useDisplayedTeam: () => mockDisplayedTeam(),
   useTeamManagement: () => mockUseTeamManagement(),
   useTeamInvitations: () => mockUseTeamInvitations(),
   useAssignTeamRole: () => mutation(),
@@ -120,6 +130,7 @@ const baseManagement: TeamManagementResponse = {
 describe("UserManagementClient", () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockDisplayedTeam.mockReturnValue({ teamId: "team-1", region: "use" })
     mockUser.mockReturnValue(customer)
     mockUseTeamManagement.mockReturnValue({
       data: baseManagement,
@@ -410,6 +421,95 @@ describe("UserManagementClient", () => {
       })
     })
 
+    describe.each([
+      {
+        name: "member removal",
+        open: /remove member/i,
+        confirm: "Remove",
+        mutate: mockRemove,
+        variables: { userId: "user-3" },
+      },
+      {
+        name: "invitation revoke",
+        open: /revoke invitation/i,
+        confirm: "Revoke",
+        mutate: mockRevokeInvitation,
+        variables: { invitationId: "inv-1" },
+      },
+      {
+        name: "leave",
+        open: /^leave team$/i,
+        confirm: "Leave team",
+        mutate: mockLeave,
+        variables: {},
+      },
+    ])("$name confirmation scope", ({ open, confirm, mutate, variables }) => {
+      beforeEach(() => {
+        mockUseTeamInvitations.mockReturnValue({
+          data: { invitations: [pendingInvitation] },
+          isPending: false,
+          error: null,
+          refetch: vi.fn(),
+        })
+        mutate.mockResolvedValue(undefined)
+      })
+
+      it.each([
+        { teamId: "team-2", region: "use" },
+        { teamId: "team-1", region: "usw" },
+        null,
+      ])(
+        "closes without mutation when the displayed scope becomes %j",
+        async (next) => {
+          const view = render(<UserManagementClient />)
+          fireEvent.click(screen.getByRole("button", { name: open }))
+          expect(screen.getByRole("dialog")).toBeInTheDocument()
+
+          mockDisplayedTeam.mockReturnValue(next)
+          view.rerender(
+            <ToastProvider>
+              <UserManagementClient />
+            </ToastProvider>,
+          )
+
+          await waitFor(() =>
+            expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+          )
+          expect(mutate).not.toHaveBeenCalled()
+        },
+      )
+
+      it("confirms with the scope captured when opened", async () => {
+        const captured = { teamId: "team-1", region: "use" }
+        mockDisplayedTeam.mockReturnValue(captured)
+        const view = render(<UserManagementClient />)
+        fireEvent.click(screen.getByRole("button", { name: open }))
+        mockDisplayedTeam.mockReturnValue({ ...captured })
+        view.rerender(
+          <ToastProvider>
+            <UserManagementClient />
+          </ToastProvider>,
+        )
+        fireEvent.click(
+          within(screen.getByRole("dialog")).getByRole("button", {
+            name: confirm,
+          }),
+        )
+        await waitFor(() =>
+          expect(mutate).toHaveBeenCalledWith({ team: captured, ...variables }),
+        )
+        expect(mutate.mock.calls[0][0].team).toBe(captured)
+      })
+
+      it("does not open without a displayed scope", () => {
+        mockDisplayedTeam.mockReturnValue(null)
+        render(<UserManagementClient />)
+        fireEvent.click(screen.getByRole("button", { name: open }))
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+        expect(mutate).not.toHaveBeenCalled()
+      })
+    })
+
     it("explains full Owner access before an invitation is sent", () => {
       render(<UserManagementClient />)
 
@@ -506,7 +606,10 @@ describe("UserManagementClient", () => {
       expect(screen.getByText(/email not sent/i)).toBeInTheDocument()
       expect(screen.queryByText("done@example.com")).not.toBeInTheDocument()
       fireEvent.click(screen.getByRole("button", { name: /^resend$/i }))
-      expect(mockResend).toHaveBeenCalledWith("inv-1")
+      expect(mockResend).toHaveBeenCalledWith({
+        team: { teamId: "team-1", region: "use" },
+        invitationId: "inv-1",
+      })
       fireEvent.click(
         screen.getByRole("button", { name: /revoke invitation/i }),
       )

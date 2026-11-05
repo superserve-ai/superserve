@@ -70,6 +70,13 @@ export function useDisplayedTeam(): TeamScope | null {
   return { teamId, region: directory.activeRegion }
 }
 
+export const TEAM_CHANGED_MESSAGE =
+  "Your active team changed. Reload the page and try again."
+
+export function sameTeam(a: TeamScope | null, b: TeamScope | null): boolean {
+  return !!a && !!b && a.teamId === b.teamId && a.region === b.region
+}
+
 function requireTeam(team: TeamScope | null): TeamScope {
   if (!team) throw new Error(TEAM_NOT_READY_MESSAGE)
   return team
@@ -107,11 +114,15 @@ export function useTeamManagement() {
 export function useAssignTeamRole() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  const team = useDisplayedTeam()
 
   return useMutation({
-    mutationFn: (data: AssignTeamRoleRequest) =>
-      assignTeamRole(requireTeam(team), data),
+    mutationFn: ({
+      team,
+      data,
+    }: {
+      team: TeamScope | null
+      data: AssignTeamRoleRequest
+    }) => assignTeamRole(requireTeam(team), data),
     onSuccess: () => {
       addToast("Role assigned", "success")
     },
@@ -127,11 +138,15 @@ export function useAssignTeamRole() {
 export function useRevokeTeamRole() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  const team = useDisplayedTeam()
 
   return useMutation({
-    mutationFn: (assignmentId: string) =>
-      revokeTeamRole(requireTeam(team), assignmentId),
+    mutationFn: ({
+      team,
+      assignmentId,
+    }: {
+      team: TeamScope | null
+      assignmentId: string
+    }) => revokeTeamRole(requireTeam(team), assignmentId),
     onSuccess: () => {
       addToast("Role revoked", "success")
     },
@@ -153,10 +168,15 @@ export function useTeamInvitations() {
 
 export function useCreateInvitation() {
   const queryClient = useQueryClient()
-  const team = useDisplayedTeam()
 
   return useMutation({
-    mutationFn: async (email: string) =>
+    mutationFn: async ({
+      team,
+      email,
+    }: {
+      team: TeamScope | null
+      email: string
+    }) =>
       unwrap<Extract<SendInvitationResult, { ok: true }>>(
         await createInvitationAction(requireTeam(team), email),
       ),
@@ -169,10 +189,15 @@ export function useCreateInvitation() {
 export function useResendInvitation() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  const team = useDisplayedTeam()
 
   return useMutation({
-    mutationFn: async (invitationId: string) =>
+    mutationFn: async ({
+      team,
+      invitationId,
+    }: {
+      team: TeamScope | null
+      invitationId: string
+    }) =>
       unwrap<Extract<SendInvitationResult, { ok: true }>>(
         await resendInvitationAction(requireTeam(team), invitationId),
       ),
@@ -198,11 +223,15 @@ export function useResendInvitation() {
 export function useRevokeInvitation() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  const team = useDisplayedTeam()
 
   return useMutation({
-    mutationFn: async (invitationId: string) =>
-      unwrap(await revokeInvitationAction(requireTeam(team), invitationId)),
+    mutationFn: async ({
+      team,
+      invitationId,
+    }: {
+      team: TeamScope | null
+      invitationId: string
+    }) => unwrap(await revokeInvitationAction(requireTeam(team), invitationId)),
     onSuccess: () => {
       addToast("Invitation revoked", "success")
     },
@@ -218,11 +247,15 @@ export function useRevokeInvitation() {
 export function useRemoveTeamMember() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
-  const team = useDisplayedTeam()
 
   return useMutation({
-    mutationFn: (userId: string) =>
-      deactivateTeamMember(requireTeam(team), userId),
+    mutationFn: ({
+      team,
+      userId,
+    }: {
+      team: TeamScope | null
+      userId: string
+    }) => deactivateTeamMember(requireTeam(team), userId),
     onSuccess: () => {
       addToast("Member removed", "success")
     },
@@ -237,12 +270,12 @@ export function useRemoveTeamMember() {
 
 export function useLeaveTeam() {
   const queryClient = useQueryClient()
-  const team = useDisplayedTeam()
 
   return useMutation({
     // Leaving moves the active-team cookie, so share the switch-team guard.
     mutationKey: ["switch-team", "leave"],
-    mutationFn: async () => unwrap(await leaveTeamAction(requireTeam(team))),
+    mutationFn: async ({ team }: { team: TeamScope | null }) =>
+      unwrap(await leaveTeamAction(requireTeam(team))),
     onSuccess: async () => {
       refreshTeamScopedQueries(queryClient)
       await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
