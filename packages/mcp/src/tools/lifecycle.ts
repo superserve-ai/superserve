@@ -153,9 +153,9 @@ export function registerLifecycleTools(
           .max(MAX_TIMEOUT_SECONDS)
           .optional()
           .describe(
-            "Auto-pause the sandbox once nothing has used it for this long (60 to 604800 seconds). " +
+            "Auto-pause the sandbox after this long with no activity (60 to 604800 seconds). " +
               "Running commands, open terminals and command streams, file operations and preview " +
-              "traffic count as use. Off when omitted.",
+              "traffic count as activity. Off when omitted.",
           ),
         auto_delete_seconds: z
           .number()
@@ -653,7 +653,7 @@ export function registerLifecycleTools(
           .nullable()
           .optional()
           .describe(
-            "Auto-pause the sandbox once nothing has used it for this long (60 to 604800 seconds). " +
+            "Auto-pause the sandbox after this long with no activity (60 to 604800 seconds). " +
               "Pass null to turn idle pausing off. Omit to leave unchanged.",
           ),
         preview_access: z

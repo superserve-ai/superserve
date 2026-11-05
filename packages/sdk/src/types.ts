@@ -40,7 +40,7 @@ export interface SandboxInfo {
   memoryMib: number
   createdAt: Date
   timeoutSeconds?: number
-  /** Pause the sandbox once nothing has used it for this many seconds. */
+  /** Pause the sandbox after this many seconds with no activity. */
   idleTimeoutSeconds?: number
   /** Delete the sandbox after it has been continuously paused for this many seconds. */
   autoDeleteSeconds?: number
@@ -79,9 +79,9 @@ export interface SandboxCreateOptions extends ConnectionOptions {
   fromSnapshot?: string | { id: string }
   timeoutSeconds?: number
   /**
-   * Pause the sandbox once nothing has used it for this many seconds (60 to
+   * Pause the sandbox after this many seconds with no activity (60 to
    * 604800). Commands still running, open terminals and command streams, file
-   * operations and preview traffic all count as use. Off when omitted.
+   * operations and preview traffic all count as activity. Off when omitted.
    */
   idleTimeoutSeconds?: number
   /**

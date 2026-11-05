@@ -54,7 +54,7 @@ class SandboxInfo(BaseModel):
     memory_mib: int = 0
     created_at: datetime
     timeout_seconds: Optional[int] = None
-    # Pause the sandbox once nothing has used it for this many seconds.
+    # Pause the sandbox after this many seconds with no activity.
     idle_timeout_seconds: Optional[int] = None
     # Delete the sandbox after it has been continuously paused for this many seconds.
     auto_delete_seconds: Optional[int] = None

@@ -194,10 +194,10 @@ class Sandbox:
         ``{ENV_VAR: secret_name}``: the agent sees a proxy token under each env
         var; the in-host daemon swaps it for the real credential at egress.
 
-        ``idle_timeout_seconds`` (60 to 604800) pauses the sandbox once nothing
-        has used it for that long: running commands, open terminals and command
-        streams, file operations and preview traffic all count as use. Off when
-        omitted.
+        ``idle_timeout_seconds`` (60 to 604800) pauses the sandbox after that
+        many seconds with no activity: running commands, open terminals and
+        command streams, file operations and preview traffic all count as
+        activity. Off when omitted.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
@@ -706,8 +706,8 @@ class Sandbox:
         when the sandbox is already paused); pass ``None`` to disable
         auto-delete. ``timeout_seconds`` sets the auto-pause timeout; pass
         ``None`` to disable auto-pause. ``idle_timeout_seconds`` pauses the
-        sandbox once nothing has used it for that long; pass ``None`` to turn it
-        off. Omit any of them to leave it unchanged.
+        sandbox after that many seconds with no activity; pass ``None`` to turn
+        it off. Omit any of them to leave it unchanged.
         """
         self._require_not_deleted()
         body = build_update_body(

@@ -295,7 +295,7 @@ export function register(program: Command): void {
     )
     .option(
       "--idle-timeout <duration>",
-      "Auto-pause after this long unused, e.g. 10m (1m to 7d)",
+      "Auto-pause after this long with no activity, e.g. 10m (1m to 7d)",
     )
     .option(
       "--auto-delete <duration>",
@@ -331,7 +331,7 @@ The sandbox's access token is never printed, --json included.
 Examples:
   superserve sandbox create --name dev -t superserve/python-3.11
   superserve sandbox create --timeout 30m --auto-delete 7d -m env=ci
-  superserve sandbox create --idle-timeout 10m           # pause once unused
+  superserve sandbox create --idle-timeout 10m           # pause after 10m with no activity
   superserve sandbox create -s OPENAI_API_KEY=openai-prod --allow-out api.openai.com --deny-out 0.0.0.0/0
   superserve sandbox create --snapshot <snapshot-id>      # fork a snapshot`,
     )
@@ -626,7 +626,7 @@ Examples:
     )
     .option(
       "--idle-timeout <duration>",
-      'Auto-pause after this long unused (1m to 7d), or "none"',
+      'Auto-pause after this long with no activity (1m to 7d), or "none"',
     )
     .option(
       "--auto-delete <duration>",
