@@ -41,7 +41,7 @@ Even while streaming, the returned `result` still holds the complete `stdout` an
 
 ## Command timeout
 
-`timeoutMs` / `timeout_seconds` is a wall-clock limit on the whole command. Output does not reset it, so a command that keeps printing is still stopped at the limit, and `run()` returns exit code `124`. Set the timeout longer than the longest run you expect.
+`timeoutMs` / `timeout_seconds` is a wall-clock limit on the whole command. Output does not reset it. A command that keeps printing output still stops at the limit, and `run()` returns exit code `124`. Set a timeout that is longer than your longest expected run.
 
 ## Network drops
 
