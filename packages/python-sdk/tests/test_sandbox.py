@@ -257,6 +257,20 @@ class TestCreate:
             finally:
                 sandbox._close_http_client()
 
+    def test_sends_idle_timeout_seconds(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(
+                    200, json={**_raw(), "idle_timeout_seconds": 300}
+                )
+            )
+            sandbox = Sandbox.create(name="my-box", idle_timeout_seconds=300)
+            try:
+                body = json.loads(route.calls.last.request.content)
+                assert body["idle_timeout_seconds"] == 300
+            finally:
+                sandbox._close_http_client()
+
     def test_sends_preview_access(self) -> None:
         with respx.mock() as router:
             route = router.post(f"{API}/sandboxes").mock(
@@ -693,6 +707,15 @@ class TestInstanceMethods:
                 sbx.update(timeout_seconds=None)
                 assert json.loads(route.calls[4].request.content) == {
                     "timeout_seconds": None
+                }
+                # idle_timeout_seconds follows the same set/clear contract.
+                sbx.update(idle_timeout_seconds=600)
+                assert json.loads(route.calls[5].request.content) == {
+                    "idle_timeout_seconds": 600
+                }
+                sbx.update(idle_timeout_seconds=None)
+                assert json.loads(route.calls[6].request.content) == {
+                    "idle_timeout_seconds": None
                 }
             finally:
                 sbx._close_http_client()

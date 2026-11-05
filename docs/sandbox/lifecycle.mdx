@@ -157,6 +157,62 @@ sandbox.update(timeout_seconds=None)  # disable auto-pause
 ```
 </CodeGroup>
 
+## Idle timeout
+
+Set `idleTimeoutSeconds` to auto-pause a sandbox once nothing has used it for that long. Unlike `timeoutSeconds`, it never pauses a sandbox that is still in use, so it suits sandboxes that should stay up while someone works in them and stop billing once they go quiet.
+
+<CodeGroup>
+```typescript TypeScript {5}
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "dev-box",
+  idleTimeoutSeconds: 600, // auto-pause after 10m unused
+})
+```
+
+```python Python {5}
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="dev-box",
+    idle_timeout_seconds=600,  # auto-pause after 10m unused
+)
+```
+</CodeGroup>
+
+These count as use and keep the sandbox up:
+
+- A command still running, including one started with `commands.run()` that streams for a long time.
+- An open terminal or command stream, even with nothing typed.
+- File reads, writes, and directory listings, and saved-snapshot captures.
+- Traffic to the sandbox's preview URLs.
+
+These don't count:
+
+- Traffic the sandbox sends out, such as downloads or calls to other APIs.
+- A process you start in the background with `nohup` or `&`: once the command that launched it returns, it no longer holds the sandbox up.
+- CPU or disk activity on its own.
+- Changes to the sandbox's settings, such as metadata or egress rules.
+
+The sandbox is paused shortly after the timeout. Like any pause, it checkpoints memory and filesystem, and the next request resumes the sandbox where it left off. The value can be from 60 to 604800 seconds (7 days); leave it unset (the default) and the sandbox is never paused for being idle.
+
+`idleTimeoutSeconds` and `timeoutSeconds` are independent, and whichever fires first pauses the sandbox. Use both to pause on inactivity while still capping a session that never goes quiet.
+
+Set or clear it on an existing sandbox:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.update({ idleTimeoutSeconds: 900 }) // auto-pause after 15m unused
+await sandbox.update({ idleTimeoutSeconds: null }) // turn idle pausing off
+```
+
+```python Python
+sandbox.update(idle_timeout_seconds=900)  # auto-pause after 15m unused
+sandbox.update(idle_timeout_seconds=None)  # turn idle pausing off
+```
+</CodeGroup>
+
 ## Auto-delete
 
 By default a paused sandbox is kept forever. Set `autoDeleteSeconds` to delete it once it has been continuously paused for that long. This suits short-lived or unattended sandboxes: scheduled jobs, one-off experiments, or agent sessions that never get an explicit `kill()`.
@@ -211,5 +267,5 @@ sandbox.update(auto_delete_seconds=None)
 </CodeGroup>
 
 <Tip>
-Pair `autoDeleteSeconds` with `timeoutSeconds`: the timeout pauses the sandbox, then the auto-delete window cleans it up. A sandbox that never pauses is never auto-deleted.
+Pair `autoDeleteSeconds` with `timeoutSeconds` or `idleTimeoutSeconds`: the timeout pauses the sandbox, then the auto-delete window cleans it up. A sandbox that never pauses is never auto-deleted.
 </Tip>

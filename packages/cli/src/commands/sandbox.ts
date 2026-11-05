@@ -48,6 +48,7 @@ interface SandboxItem {
   source_snapshot_id?: string
   created_at?: string
   timeout_seconds?: number
+  idle_timeout_seconds?: number
   auto_delete_seconds?: number
   auto_delete_at?: string
   network?: { allow_out?: string[]; deny_out?: string[] }
@@ -94,6 +95,7 @@ const STATUSES = [
   "deleted",
 ]
 const MAX_TIMEOUT = 7 * 86_400
+const MIN_IDLE_TIMEOUT = 60
 const MAX_AUTO_DELETE = 30 * 86_400
 const PAUSE_WAIT_MS = 5 * 60_000
 
@@ -292,6 +294,10 @@ export function register(program: Command): void {
       "Auto-pause after this long active, e.g. 30m (max 7d)",
     )
     .option(
+      "--idle-timeout <duration>",
+      "Auto-pause after this long unused, e.g. 10m (1m to 7d)",
+    )
+    .option(
       "--auto-delete <duration>",
       "Delete after this long paused, e.g. 7d; 0 deletes on pause (max 30d)",
     )
@@ -325,6 +331,7 @@ The sandbox's access token is never printed, --json included.
 Examples:
   superserve sandbox create --name dev -t superserve/python-3.11
   superserve sandbox create --timeout 30m --auto-delete 7d -m env=ci
+  superserve sandbox create --idle-timeout 10m           # pause once unused
   superserve sandbox create -s OPENAI_API_KEY=openai-prod --allow-out api.openai.com --deny-out 0.0.0.0/0
   superserve sandbox create --snapshot <snapshot-id>      # fork a snapshot`,
     )
@@ -334,6 +341,7 @@ Examples:
         template?: string
         snapshot?: string
         timeout?: string
+        idleTimeout?: string
         autoDelete?: string
         metadata?: string[]
         env?: string[]
@@ -371,6 +379,13 @@ Examples:
               ? undefined
               : seconds(opts.timeout, "--timeout", {
                   min: 1,
+                  max: MAX_TIMEOUT,
+                }),
+          idle_timeout_seconds:
+            opts.idleTimeout === undefined
+              ? undefined
+              : seconds(opts.idleTimeout, "--idle-timeout", {
+                  min: MIN_IDLE_TIMEOUT,
                   max: MAX_TIMEOUT,
                 }),
           auto_delete_seconds:
@@ -570,6 +585,12 @@ Examples:
           s.timeout_seconds ? formatSeconds(s.timeout_seconds) : "none",
         ],
         [
+          "Idle timeout",
+          s.idle_timeout_seconds
+            ? formatSeconds(s.idle_timeout_seconds)
+            : "none",
+        ],
+        [
           "Auto-delete",
           s.auto_delete_seconds === undefined
             ? "none"
@@ -604,6 +625,10 @@ Examples:
       'Auto-pause after this long active (max 7d), or "none"',
     )
     .option(
+      "--idle-timeout <duration>",
+      'Auto-pause after this long unused (1m to 7d), or "none"',
+    )
+    .option(
       "--auto-delete <duration>",
       'Delete after this long paused (0 = on pause, max 30d), or "none"',
     )
@@ -628,6 +653,7 @@ are removed. Egress rules can only change while the sandbox is active.
 
 Examples:
   superserve sandbox update dev --timeout 1h --auto-delete none
+  superserve sandbox update dev --idle-timeout 15m
   superserve sandbox update dev -m env=prod -m owner=ci
   superserve sandbox update dev --allow-out api.openai.com --deny-out 0.0.0.0/0`,
     )
@@ -637,6 +663,7 @@ Examples:
         opts: {
           metadata?: string[]
           timeout?: string
+          idleTimeout?: string
           autoDelete?: string
           allowOut?: string[]
           denyOut?: string[]
@@ -666,6 +693,13 @@ Examples:
             max: MAX_TIMEOUT,
           })
         }
+        if (opts.idleTimeout !== undefined) {
+          body.idle_timeout_seconds = secondsOrNone(
+            opts.idleTimeout,
+            "--idle-timeout",
+            { min: MIN_IDLE_TIMEOUT, max: MAX_TIMEOUT },
+          )
+        }
         if (opts.autoDelete !== undefined) {
           body.auto_delete_seconds = secondsOrNone(
             opts.autoDelete,
@@ -683,7 +717,7 @@ Examples:
         if (Object.keys(body).length === 0) {
           throw usageError(
             "Nothing to update.",
-            "Pass at least one of --metadata, --clear-metadata, --timeout, --auto-delete, --allow-out, --deny-out, --clear-network, --preview-access.",
+            "Pass at least one of --metadata, --clear-metadata, --timeout, --idle-timeout, --auto-delete, --allow-out, --deny-out, --clear-network, --preview-access.",
           )
         }
         const id = await resolveSandboxId(ref)

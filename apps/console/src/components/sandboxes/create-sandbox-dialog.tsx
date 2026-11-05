@@ -265,6 +265,7 @@ function CopyButton({ text }: { text: string }) {
 interface FormState {
   name: string
   timeout: string
+  idleTimeout: string
   autoDelete: string
   allowRules: string[]
   denyRules: string[]
@@ -281,6 +282,7 @@ interface FormState {
  *  the control-plane API caps. */
 export const MAX_TIMEOUT_SECONDS = 604800
 export const MAX_AUTO_DELETE_SECONDS = 2592000
+export const MIN_IDLE_TIMEOUT_SECONDS = 60
 
 /**
  * Coerce a form string to a whole-second lifecycle window, or throw if the
@@ -312,12 +314,12 @@ export function parseWindowSeconds(
  * Exported for unit testing. Keeps the network/env/metadata branches in
  * one place so we can assert shape without driving the full dialog UI.
  *
- * Throws if `timeout` or `autoDelete` hold an invalid number (see
+ * Throws if `timeout`, `idleTimeout` or `autoDelete` hold an invalid number (see
  * {@link parseWindowSeconds}); the dialog surfaces the message as a toast.
  *
  * Rules:
  *  - `name` is trimmed.
- *  - `timeout` / `autoDelete` are only included when set, validated to a
+ *  - `timeout` / `idleTimeout` / `autoDelete` are only included when set, validated to a
  *    whole number in range.
  *  - `network` is only included when at least one allow or deny rule is
  *    non-empty. Within it, `allow_out` / `deny_out` are each only included
@@ -364,6 +366,12 @@ export function buildCreateSandboxRequest(
     1,
     MAX_TIMEOUT_SECONDS,
   )
+  const idleTimeoutSeconds = parseWindowSeconds(
+    state.idleTimeout,
+    "Idle timeout",
+    MIN_IDLE_TIMEOUT_SECONDS,
+    MAX_TIMEOUT_SECONDS,
+  )
   const autoDeleteSeconds = parseWindowSeconds(
     state.autoDelete,
     "Auto-delete",
@@ -381,6 +389,9 @@ export function buildCreateSandboxRequest(
         : {}),
     ...(timeoutSeconds !== undefined
       ? { timeout_seconds: timeoutSeconds }
+      : {}),
+    ...(idleTimeoutSeconds !== undefined
+      ? { idle_timeout_seconds: idleTimeoutSeconds }
       : {}),
     ...(autoDeleteSeconds !== undefined
       ? { auto_delete_seconds: autoDeleteSeconds }
@@ -428,6 +439,7 @@ export function CreateSandboxDialog({
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
   const [timeout, setTimeout] = useState("")
+  const [idleTimeout, setIdleTimeout] = useState("")
   const [autoDelete, setAutoDelete] = useState("")
   const [allowRules, setAllowRules] = useState<string[]>([])
   const [denyRules, setDenyRules] = useState<string[]>([])
@@ -525,6 +537,7 @@ export function CreateSandboxDialog({
   const handleReset = () => {
     setName("")
     setTimeout("")
+    setIdleTimeout("")
     setAutoDelete("")
     setAllowRules([])
     setDenyRules([])
@@ -545,6 +558,7 @@ export function CreateSandboxDialog({
       payload = buildCreateSandboxRequest({
         name,
         timeout,
+        idleTimeout,
         autoDelete,
         allowRules,
         denyRules,
@@ -562,6 +576,7 @@ export function CreateSandboxDialog({
 
     posthog.capture(SANDBOX_EVENTS.CREATED, {
       has_timeout: !!timeout,
+      has_idle_timeout: !!idleTimeout,
       has_auto_delete: !!autoDelete,
       has_network_rules: !!payload.network,
       allow_rule_count: payload.network?.allow_out?.length ?? 0,
@@ -769,7 +784,7 @@ export function CreateSandboxDialog({
 
                       <Field
                         label="Timeout"
-                        description="Auto-pause after this many seconds (max 604800 = 7 days)"
+                        description="Auto-pause after this many seconds active, used or not (max 604800 = 7 days)"
                       >
                         <Input
                           type="number"
@@ -781,6 +796,21 @@ export function CreateSandboxDialog({
                           max={MAX_TIMEOUT_SECONDS}
                           value={timeout}
                           onChange={(e) => setTimeout(e.target.value)}
+                        />
+                      </Field>
+
+                      <Field
+                        label="Idle timeout"
+                        description="Auto-pause once nothing has used the sandbox for this many seconds. Running commands, open terminals, file operations and preview traffic count as use. 60 to 604800 (7 days)."
+                      >
+                        <Input
+                          type="number"
+                          placeholder="Never pause when idle"
+                          suffix="sec"
+                          min={MIN_IDLE_TIMEOUT_SECONDS}
+                          max={MAX_TIMEOUT_SECONDS}
+                          value={idleTimeout}
+                          onChange={(e) => setIdleTimeout(e.target.value)}
                         />
                       </Field>
 
