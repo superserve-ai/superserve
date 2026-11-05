@@ -22,6 +22,16 @@ function expectNoBodyFragments(text: string): void {
   }
 }
 
+// Percent-encodes every character, as some clients do for a whole parameter;
+// each extra layer is an ordinary re-encoding of the result.
+function encodeEvery(text: string, layers = 1, hex = (h: string) => h): string {
+  let out = [...text]
+    .map((c) => `%${hex(c.charCodeAt(0).toString(16).padStart(2, "0"))}`)
+    .join("")
+  for (let i = 1; i < layers; i++) out = encodeURIComponent(out)
+  return out
+}
+
 function event(properties: Record<string, unknown>): CaptureResult {
   return { uuid: "u", event: "$pageview", properties }
 }
@@ -73,6 +83,25 @@ describe("redactInviteTokens", () => {
       )
       expect(out).toBe("/invite/ssinv_redacted/")
       expectNoBodyFragments(decodeURIComponent(out))
+    },
+  )
+
+  it.each([
+    ["upper-case", 1, (h: string) => h.toUpperCase()],
+    ["lower-case", 1, (h: string) => h.toLowerCase()],
+    ["double", 2, (h: string) => h.toUpperCase()],
+  ] as const)(
+    "redacts a %s fully encoded next parameter, prefix letters included",
+    (_, layers, hex) => {
+      for (const target of [`/invite/${TOKEN}/`, TOKEN]) {
+        const address = `/signin?next=${encodeEvery(target, layers, hex)}`
+        const out = redactInviteTokens(address)
+        expect(out).toContain("ssinv_redacted")
+        let decoded = out
+        for (let i = 0; i < layers; i++) decoded = decodeURIComponent(decoded)
+        expectNoBodyFragments(decoded)
+        expect(carriesInviteToken(address)).toBe(true)
+      }
     },
   )
 

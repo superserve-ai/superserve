@@ -9,6 +9,7 @@ import {
 import type { ReactElement } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { ApiError } from "@/lib/api/client"
 import type { TeamManagementResponse } from "@/lib/api/team-management"
 
 const {
@@ -50,6 +51,7 @@ const mutation = (mutate = vi.fn()) => ({
 vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/use-team-management")>()),
   useDisplayedTeam: () => mockDisplayedTeam(),
+  useLeaveScope: () => mockDisplayedTeam(),
   useTeamManagement: () => mockUseTeamManagement(),
   useTeamInvitations: () => mockUseTeamInvitations(),
   useAssignTeamRole: () => mutation(),
@@ -394,6 +396,39 @@ describe("UserManagementClient", () => {
       expect(
         screen.queryByRole("button", { name: /^revoke$/i }),
       ).not.toBeInTheDocument()
+    })
+  })
+
+  describe("without team-management permission", () => {
+    it.each([
+      [403, true],
+      [500, false],
+    ])("offers leave on a %s error: %s", async (status, offered) => {
+      mockUseTeamManagement.mockReturnValue({
+        data: undefined,
+        isPending: false,
+        error: new ApiError(status, "error", "Request failed"),
+        refetch: vi.fn(),
+      })
+      mockLeave.mockResolvedValue(undefined)
+      render(<UserManagementClient />)
+
+      const leave = screen.queryByRole("button", { name: /^leave team$/i })
+      if (!offered) {
+        expect(leave).not.toBeInTheDocument()
+        return
+      }
+      fireEvent.click(leave!)
+      fireEvent.click(
+        within(screen.getByRole("dialog")).getByRole("button", {
+          name: "Leave team",
+        }),
+      )
+      await waitFor(() =>
+        expect(mockLeave).toHaveBeenCalledWith({
+          team: { teamId: "team-1", region: "use" },
+        }),
+      )
     })
   })
 

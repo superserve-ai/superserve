@@ -42,6 +42,7 @@ import {
 } from "@/hooks/use-team-management"
 import { useUser } from "@/hooks/use-user"
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
+import { ApiError } from "@/lib/api/client"
 import type {
   TeamMember,
   TeamRoleAssignment,
@@ -572,6 +573,14 @@ export function UserManagementClient() {
       <div className="flex h-full flex-col">
         <PageHeader title="User Management" />
         <ErrorState message={error.message} onRetry={() => refetch()} />
+        {/* Leaving needs no team-management permission. */}
+        {error instanceof ApiError && error.status === 403 && (
+          <div className="px-6 pb-8">
+            <div className="mx-auto w-full max-w-7xl">
+              <LeaveTeamSection />
+            </div>
+          </div>
+        )}
       </div>
     )
   }

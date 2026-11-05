@@ -97,6 +97,22 @@ export function useDisplayedTeam(): TeamScope | null {
   return scope
 }
 
+/**
+ * The team a leave targets. Leaving needs no team-management permission, so
+ * when the management read is refused the directory's active team stands in;
+ * the server still rejects a scope that is not the session's active team.
+ */
+export function useLeaveScope(): TeamScope | null {
+  const displayed = useDisplayedTeam()
+  const { error } = useTeamManagement()
+  const { data: directory } = useTeams()
+  if (displayed) return displayed
+  if (!(error instanceof ApiError) || error.status !== 403) return null
+  return directory?.activeTeamId && directory.activeRegion
+    ? { teamId: directory.activeTeamId, region: directory.activeRegion }
+    : null
+}
+
 export const TEAM_CHANGED_MESSAGE =
   "Your active team changed. Reload the page and try again."
 

@@ -8,23 +8,39 @@ import { redactPreviewToken } from "@/lib/preview-token-redaction"
 // or percent-encoded, with multiple encoding layers; URL separators stay intact.
 export const REDACTED_INVITE_TOKEN = "ssinv_redacted"
 
+// Each letter of a fixed word, raw or percent-encoded in either case.
+function spelled(word: string): string {
+  return [...word]
+    .map((letter) => {
+      const codes = [letter.toLowerCase(), letter.toUpperCase()].map((c) =>
+        c.charCodeAt(0).toString(16),
+      )
+      return `(?:${letter}|%(?:25)*(?:${codes.join("|")}))`
+    })
+    .join("")
+}
+const SSINV = spelled("ssinv")
+const INVITE = spelled("invite")
+
 // ASCII letters, digits, "_" and "-", with any number of extra %25 layers.
 const ENCODED_UNDERSCORE = "%(?:25)*5[Ff]"
 const ENCODED_BODY_CHAR =
   "%(?:25)*(?:[46][1-9A-Fa-f]|[57][0-9Aa]|3[0-9]|5[Ff]|2[Dd])"
 const BODY_CHAR = `(?:[A-Za-z0-9_-]|${ENCODED_BODY_CHAR})`
-const TOKEN = new RegExp(`ssinv(?:_|${ENCODED_UNDERSCORE})${BODY_CHAR}+`, "gi")
-
-// Whatever sits in the segment after /invite/ is treated as a token, so a
-// spelling the pattern above does not recognise (including encoded prefix
-// letters) is still removed from the path.
-const SLASH = "(?:/|%(?:25)*2[Ff])"
-const INVITE_SEGMENT = new RegExp(
-  `(${SLASH}invite${SLASH})(?:[^/?#&%\\s"'<>]|${ENCODED_BODY_CHAR})+`,
+const TOKEN = new RegExp(
+  `${SSINV}(?:_|${ENCODED_UNDERSCORE})${BODY_CHAR}+`,
   "gi",
 )
 
-const MIGHT_CONTAIN = /ssinv|invite/i
+// Whatever sits in the segment after /invite/ is treated as a token, so a
+// spelling the pattern above does not recognise is still removed from the path.
+const SLASH = "(?:/|%(?:25)*2[Ff])"
+const INVITE_SEGMENT = new RegExp(
+  `(${SLASH}${INVITE}${SLASH})(?:[^/?#&%\\s"'<>]|${ENCODED_BODY_CHAR})+`,
+  "gi",
+)
+
+const MIGHT_CONTAIN = new RegExp(`${SSINV}|${INVITE}`, "i")
 const MAX_DEPTH = 80
 
 export function redactInviteTokens(text: string): string {

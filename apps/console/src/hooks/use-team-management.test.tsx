@@ -4,6 +4,7 @@ import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { ApiError } from "@/lib/api/client"
 import { teamKeys } from "@/lib/api/query-keys"
 
 const mocks = vi.hoisted(() => ({
@@ -39,6 +40,7 @@ import {
   useAssignTeamRole,
   useCreateInvitation,
   useDisplayedTeam,
+  useLeaveScope,
   useLeaveTeam,
   useRemoveTeamMember,
   useResendInvitation,
@@ -140,6 +142,43 @@ describe("displayed team scope", () => {
     expect(mocks.management).toHaveBeenCalledTimes(1)
     expect(mocks.directory).toHaveBeenCalledTimes(1)
   })
+})
+
+describe("leave scope", () => {
+  it.each([
+    [403, team],
+    [500, null],
+  ])(
+    "falls back to the directory team only when management is refused (%s)",
+    async (status, expected) => {
+      vi.clearAllMocks()
+      const client = new QueryClient({
+        defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+      })
+      client.setQueryData(teamKeys.directory(), {
+        activeTeamId: team.teamId,
+        activeRegion: team.region,
+      })
+      mocks.management.mockRejectedValue(
+        new ApiError(status, "error", "Request failed"),
+      )
+      const { result } = renderHook(
+        () => ({ scope: useLeaveScope(), displayed: useDisplayedTeam() }),
+        {
+          wrapper: ({ children }) => (
+            <QueryClientProvider client={client}>
+              {children}
+            </QueryClientProvider>
+          ),
+        },
+      )
+      await waitFor(() =>
+        expect(client.getQueryState(["team-management"])?.status).toBe("error"),
+      )
+      expect(result.current.displayed).toBeNull()
+      expect(result.current.scope).toEqual(expected)
+    },
+  )
 })
 
 describe("team mutation variables", () => {

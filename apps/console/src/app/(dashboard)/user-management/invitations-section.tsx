@@ -31,6 +31,7 @@ import {
   TEAM_CHANGED_MESSAGE,
   useCreateInvitation,
   useDisplayedTeam,
+  useLeaveScope,
   useLeaveTeam,
   useResendInvitation,
   useRevokeInvitation,
@@ -393,7 +394,7 @@ export function LeaveTeamSection() {
   const leave = useLeaveTeam()
   const { addToast } = useToast()
   const [confirming, setConfirming] = useState<TeamScope | null>(null)
-  const team = useDisplayedTeam()
+  const team = useLeaveScope()
 
   useEffect(() => {
     if (confirming && !sameTeam(confirming, team)) setConfirming(null)
