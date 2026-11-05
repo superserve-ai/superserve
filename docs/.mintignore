@@ -1,0 +1,3 @@
+# Top-level Markdown files are repo notes, not published pages. Write
+# published pages as .mdx; put internal notes outside docs/.
+/*.md
