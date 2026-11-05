@@ -4,22 +4,23 @@ import { redactPreviewToken } from "@/lib/preview-token-redaction"
 
 // An invitation token is a bearer credential for a team Owner seat, so it must
 // never reach analytics. Tokens travel in the /invite/<token> path and, through
-// sign-up, inside a `next=` query parameter, so they appear raw, percent-encoded
-// and encoded more than once.
+// sign-up, inside a `next=` query parameter. Any token character can appear raw
+// or percent-encoded, with multiple encoding layers; URL separators stay intact.
 export const REDACTED_INVITE_TOKEN = "ssinv_redacted"
 
-// "_" and "-" as the encoders spell them: literally or as %5F / %2D, with any
-// number of extra %25 layers.
+// ASCII letters, digits, "_" and "-", with any number of extra %25 layers.
 const ENCODED_UNDERSCORE = "%(?:25)*5[Ff]"
-const ENCODED_HYPHEN = "%(?:25)*2[Dd]"
-const BODY_CHAR = `(?:[A-Za-z0-9_-]|${ENCODED_UNDERSCORE}|${ENCODED_HYPHEN})`
+const ENCODED_BODY_CHAR =
+  "%(?:25)*(?:[46][1-9A-Fa-f]|[57][0-9Aa]|3[0-9]|5[Ff]|2[Dd])"
+const BODY_CHAR = `(?:[A-Za-z0-9_-]|${ENCODED_BODY_CHAR})`
 const TOKEN = new RegExp(`ssinv(?:_|${ENCODED_UNDERSCORE})${BODY_CHAR}+`, "gi")
 
 // Whatever sits in the segment after /invite/ is treated as a token, so a
-// spelling the pattern above does not recognise is still removed from the path.
+// spelling the pattern above does not recognise (including encoded prefix
+// letters) is still removed from the path.
 const SLASH = "(?:/|%(?:25)*2[Ff])"
 const INVITE_SEGMENT = new RegExp(
-  `(${SLASH}invite${SLASH})[^/?#&%\\s"'<>]+`,
+  `(${SLASH}invite${SLASH})(?:[^/?#&%\\s"'<>]|${ENCODED_BODY_CHAR})+`,
   "gi",
 )
 

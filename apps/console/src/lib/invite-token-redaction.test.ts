@@ -16,6 +16,12 @@ const BODY = "A1b2C3d4E5f6G7h8I9j0K1l2M3n4O5p6Q7r8S9t0U1v"
 const TOKEN = `ssinv_use_${BODY}`
 const DASHED = "ssinv_usw_ab-cd_ef-gh_ij-kl_mn-op_qr-st_uv-wx_yz-AB_CD"
 
+function expectNoBodyFragments(text: string): void {
+  for (let i = 0; i <= BODY.length - 4; i++) {
+    expect(text).not.toContain(BODY.slice(i, i + 4))
+  }
+}
+
 function event(properties: Record<string, unknown>): CaptureResult {
   return { uuid: "u", event: "$pageview", properties }
 }
@@ -25,6 +31,84 @@ describe("redactInviteTokens", () => {
     const out = redactInviteTokens(`https://x.test/invite/${TOKEN}/`)
     expect(out).not.toContain(BODY)
     expect(out).toBe("https://x.test/invite/ssinv_redacted/")
+  })
+
+  it("redacts a single encoded body character in a path", () => {
+    const out = redactInviteTokens(`/invite/ssinv_use_%41${BODY.slice(1)}/`)
+    expect(out).toBe("/invite/ssinv_redacted/")
+    expectNoBodyFragments(decodeURIComponent(out))
+  })
+
+  it("redacts a fully percent-encoded token body", () => {
+    const encoded = Array.from(
+      `${BODY}Zz_-`,
+      (char) => `%${char.charCodeAt(0).toString(16)}`,
+    ).join("")
+    const out = redactInviteTokens(`/signin?token=ssinv_use_${encoded}&keep=1`)
+    expect(out).toBe("/signin?token=ssinv_redacted&keep=1")
+    expectNoBodyFragments(decodeURIComponent(out))
+  })
+
+  it.each([1, 2, 3])(
+    "redacts a token with %i extra encoding layers",
+    (layers) => {
+      let next = `/invite/ssinv%5Fuse%5F%41${BODY.slice(1)}/`
+      for (let i = 0; i < layers; i++) next = encodeURIComponent(next)
+      const out = redactInviteTokens(`/signin?next=${next}&keep=1`)
+      const slash = `%${"25".repeat(layers - 1)}2F`
+      expect(out).toBe(
+        `/signin?next=${slash}invite${slash}ssinv_redacted${slash}&keep=1`,
+      )
+      let decoded = out
+      for (let i = 0; i <= layers; i++) decoded = decodeURIComponent(decoded)
+      expectNoBodyFragments(decoded)
+    },
+  )
+
+  it.each(["%73sinv", "%73%73%69%6E%76"])(
+    "redacts encoded prefix %s through the invite path fallback",
+    (prefix) => {
+      const out = redactInviteTokens(
+        `/invite/${prefix}%5Fuse%5F%41${BODY.slice(1)}/`,
+      )
+      expect(out).toBe("/invite/ssinv_redacted/")
+      expectNoBodyFragments(decodeURIComponent(out))
+    },
+  )
+
+  it.each([
+    "/",
+    "?",
+    "#",
+    "&",
+    "%2F",
+    "%3f",
+    "%23",
+    "%26",
+    "%3D",
+    "%252f",
+    "%40",
+    "%5B",
+    "%60",
+    "%7B",
+  ])("keeps the separator %s after a token", (separator) => {
+    const out = redactInviteTokens(`/invite/${TOKEN}${separator}settings`)
+    expect(out).toBe(`/invite/ssinv_redacted${separator}settings`)
+    expectNoBodyFragments(decodeURIComponent(out))
+  })
+
+  it("keeps an encoded separator after a short token", () => {
+    expect(redactInviteTokens("/invite/ssinv_use_abc%2Fsettings")).toBe(
+      "/invite/ssinv_redacted%2Fsettings",
+    )
+  })
+
+  it("keeps an encoded separator after an unrecognised invite token", () => {
+    const out = redactInviteTokens(
+      `/invite/unknown_%41${BODY.slice(1)}%2526keep=1`,
+    )
+    expect(out).toBe("/invite/ssinv_redacted%2526keep=1")
+    expectNoBodyFragments(decodeURIComponent(decodeURIComponent(out)))
   })
 
   it("redacts a token that contains - and _", () => {
