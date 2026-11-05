@@ -186,6 +186,7 @@ These count as use and keep the sandbox up:
 - A command still running, including one started with `commands.run()` that streams for a long time.
 - An open terminal or command stream, even with nothing typed.
 - File reads, writes, and directory listings, and saved-snapshot captures.
+- Desktop actions, such as screenshots, clicks, and typing.
 - Traffic to the sandbox's preview URLs.
 
 These don't count:
@@ -212,6 +213,32 @@ sandbox.update(idle_timeout_seconds=900)  # auto-pause after 15m unused
 sandbox.update(idle_timeout_seconds=None)  # turn idle pausing off
 ```
 </CodeGroup>
+
+<Note>
+The SDK and CLI support for the idle timeout ships in the next SDK and CLI releases. Until then, set it with the REST API.
+</Note>
+
+Set it with the REST API when you create the sandbox, then change or clear it with `PATCH`. Send `null` to turn idle pausing off:
+
+```bash
+# Create with a 10-minute idle timeout
+curl -X POST https://api.superserve.ai/sandboxes \
+  -H "X-API-Key: $SUPERSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "dev-box", "idle_timeout_seconds": 600}'
+
+# Change it to 15 minutes
+curl -X PATCH https://api.superserve.ai/sandboxes/$SANDBOX_ID \
+  -H "X-API-Key: $SUPERSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"idle_timeout_seconds": 900}'
+
+# Turn idle pausing off
+curl -X PATCH https://api.superserve.ai/sandboxes/$SANDBOX_ID \
+  -H "X-API-Key: $SUPERSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"idle_timeout_seconds": null}'
+```
 
 ## Auto-delete
 
