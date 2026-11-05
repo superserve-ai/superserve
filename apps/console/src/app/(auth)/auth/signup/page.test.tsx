@@ -750,6 +750,61 @@ describe("SignUpPage", () => {
       ).toBeDisabled()
     })
 
+    it("switches to the not-sent view when a resend fails", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSignUpWithEmail.mockResolvedValue({ success: true })
+      mockResendSignupConfirmation.mockResolvedValue(notSent)
+      render(<SignUpPage />)
+      await submit()
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+
+      expect(
+        await screen.findByText("We couldn't send your confirmation email"),
+      ).toBeInTheDocument()
+      expect(screen.queryByText("Check Your Email")).not.toBeInTheDocument()
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "we couldn't send the confirmation email",
+      )
+    })
+
+    it("blocks start over while a resend is in flight", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSignUpWithEmail.mockResolvedValue(notSent)
+      let finishResend: (value: { success: true }) => void = () => {}
+      mockResendSignupConfirmation.mockReturnValue(
+        new Promise((resolve) => {
+          finishResend = resolve
+        }),
+      )
+      render(<SignUpPage />)
+      await submit()
+      await screen.findByText("We couldn't send your confirmation email")
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+      const startOverButton = screen.getByRole("button", { name: "Start over" })
+      expect(startOverButton).toBeDisabled()
+      await user.click(startOverButton)
+      expect(screen.queryByRole("button", { name: "Sign Up" })).toBeNull()
+
+      await act(async () => {
+        finishResend({ success: true })
+      })
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Start over" })).toBeEnabled()
+    })
+
     it("lets the user start over with the entered details", async () => {
       mockSignUpWithEmail.mockResolvedValue(notSent)
       render(<SignUpPage />)

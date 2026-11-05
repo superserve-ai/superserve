@@ -353,6 +353,8 @@ export default function SignUpContent() {
         result.errorCode === "email_not_sent"
       )
         startResendCooldown(result.retryAfterSeconds ?? RESEND_COOLDOWN_SECONDS)
+      // A failed resend may already have replaced the earlier link.
+      if (result.errorCode === "email_not_sent") setEmailStatus("not_sent")
       setResendNotice({ text: result.error, error: true })
     } catch {
       setResendNotice({
@@ -398,7 +400,8 @@ export default function SignUpContent() {
         <button
           type="button"
           onClick={startOver}
-          className="font-medium text-foreground hover:underline"
+          disabled={isResending}
+          className="font-medium text-foreground hover:underline disabled:opacity-50"
         >
           Start over
         </button>
