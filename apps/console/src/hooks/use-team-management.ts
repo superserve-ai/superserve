@@ -12,6 +12,7 @@ import {
   leaveTeamAction,
   resendInvitationAction,
   revokeInvitationAction,
+  type LeaveTeamResult,
   type SendInvitationResult,
 } from "@/lib/api/team-invitations-actions"
 import {
@@ -23,6 +24,7 @@ import {
   type AssignTeamRoleRequest,
   type TeamScope,
 } from "@/lib/api/team-management"
+import type { TeamDirectoryResponse } from "@/lib/api/teams-actions"
 
 // Not team-scoped: switching teams resets every non-"teams" query, which
 // includes these, so one team's members never show under another.
@@ -300,8 +302,24 @@ export function useLeaveTeam() {
     // Leaving moves the active-team cookie, so share the switch-team guard.
     mutationKey: ["switch-team", "leave"],
     mutationFn: async ({ team }: { team: TeamScope | null }) =>
-      unwrap(await leaveTeamAction(requireTeam(team))),
-    onSuccess: async () => {
+      unwrap<LeaveTeamResult>(await leaveTeamAction(requireTeam(team))),
+    onSuccess: async ({ active }, { team }) => {
+      // Show the new selection before the refresh, which may fail and would
+      // otherwise keep the departed team active beside the new team's data.
+      await queryClient.cancelQueries({ queryKey: teamKeys.directory() })
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        (old) =>
+          old && {
+            ...old,
+            teams: old.teams.filter(
+              (item) =>
+                item.id !== team?.teamId || item.region !== team?.region,
+            ),
+            activeTeamId: active?.teamId ?? null,
+            activeRegion: active?.region ?? null,
+          },
+      )
       refreshTeamScopedQueries(queryClient)
       await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
     },

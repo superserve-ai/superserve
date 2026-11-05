@@ -194,4 +194,33 @@ describe("team mutation variables", () => {
     expect(mocks.revoke).toHaveBeenCalledWith(team, "inv-1")
     expect(mocks.leave).toHaveBeenCalledWith(team)
   })
+
+  it("selects the next team after a leave even if the refresh fails", async () => {
+    const next = { teamId: "next-team", region: "usw" }
+    mocks.leave.mockResolvedValue({ ok: true, active: next })
+    mocks.directory.mockRejectedValue(new Error("directory down"))
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    })
+    client.setQueryData(teamKeys.directory(), {
+      teams: [
+        { id: team.teamId, name: "Left", region: team.region },
+        { id: next.teamId, name: "Next", region: next.region },
+      ],
+      regions: ["use", "usw"],
+      activeTeamId: team.teamId,
+      activeRegion: team.region,
+    })
+    const { result } = renderHook(() => useLeaveTeam(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>{children}</QueryClientProvider>
+      ),
+    })
+    await act(() => result.current.mutateAsync({ team }))
+    expect(client.getQueryData(teamKeys.directory())).toMatchObject({
+      teams: [{ id: next.teamId }],
+      activeTeamId: next.teamId,
+      activeRegion: next.region,
+    })
+  })
 })

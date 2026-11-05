@@ -531,7 +531,7 @@ describe("leaveTeamAction", () => {
     )
     const log = vi.spyOn(console, "error").mockImplementation(() => {})
 
-    expect(await leaveTeamAction(here)).toEqual({ ok: true })
+    expect(await leaveTeamAction(here)).toEqual({ ok: true, active: other })
     expect(log).toHaveBeenCalled()
     log.mockRestore()
   })
@@ -651,7 +651,7 @@ describe("leaveTeamAction", () => {
 
     const result = await leaveTeamAction(here)
 
-    expect(result).toEqual({ ok: true })
+    expect(result).toEqual({ ok: true, active: other })
     expect(calls()[0].url).toBe("https://api.use.test/teams/team-1/leave")
     expect(mocks.invalidate).toHaveBeenCalledWith("user-1")
     expect(mocks.writeSelection).toHaveBeenCalledWith({

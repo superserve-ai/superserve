@@ -77,6 +77,10 @@ export type SendInvitationResult =
     }
   | InvitationActionError
 
+// `active` is the team the leave selected, so the caller can show it even
+// when its directory refresh fails.
+export type LeaveTeamResult = { ok: true; active: TeamMembership | null }
+
 const MESSAGES: Record<InvitationErrorCode, string> = {
   free_plan: "Upgrade to invite owners",
   already_member: "That person is already a member of this team.",
@@ -439,7 +443,7 @@ async function releaseLeaveLease(
  */
 export async function leaveTeamAction(
   expected: TeamScope,
-): Promise<{ ok: true } | InvitationActionError> {
+): Promise<LeaveTeamResult | InvitationActionError> {
   const context = await loadContext(expected)
   if (isFailure(context)) return context
 
@@ -464,7 +468,7 @@ async function leaveWithLease(
   context: Context,
   deadline: number,
   outcome: { unknown: boolean },
-): Promise<{ ok: true } | InvitationActionError> {
+): Promise<LeaveTeamResult | InvitationActionError> {
   let remaining: TeamMembership[]
   try {
     const directory = await listTeamMembershipsForUserDetailed(context.userId, {
@@ -504,5 +508,5 @@ async function leaveWithLease(
   if (next) {
     await writeTeamSelection({ region: next.region, teamId: next.teamId })
   }
-  return { ok: true }
+  return { ok: true, active: next }
 }

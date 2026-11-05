@@ -833,5 +833,9 @@ export async function GET(request: Request) {
       return response
     }
   }
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+  // A failed exchange keeps the invitation, so its retry can still join it.
+  const invite = inviteReturnPath(next)
+  return NextResponse.redirect(
+    `${origin}/auth/auth-code-error${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
+  )
 }

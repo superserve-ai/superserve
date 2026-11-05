@@ -1935,6 +1935,25 @@ describe("auth callback", () => {
       expect(retry.searchParams.get("next")).toBe(invite)
     })
 
+    it("keeps an invitation destination when the link exchange fails", async () => {
+      authVerifyOtpError = { message: "Email link is invalid or has expired" }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=expired&type=signup",
+      )
+      url.searchParams.set("next", invite)
+      const failure = new URL(
+        (await GET(new Request(url))).headers.get("location")!,
+      )
+      expect(failure.pathname).toBe("/auth/auth-code-error")
+      expect(failure.searchParams.get("next")).toBe(invite)
+      url.searchParams.set("next", "/billing")
+      const plain = new URL(
+        (await GET(new Request(url))).headers.get("location")!,
+      )
+      expect(plain.search).toBe("")
+    })
+
     it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(
       "does not turn unsafe next into a paid retry on degraded lookup: %s",
       async (next) => {
