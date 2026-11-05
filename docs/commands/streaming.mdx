@@ -41,11 +41,19 @@ Even while streaming, the returned `result` still holds the complete `stdout` an
 
 ## Command timeout
 
-`timeoutMs` / `timeout_seconds` is a wall-clock limit on the whole command. Output does not reset it. A command that keeps printing output still stops at the limit, and `run()` returns exit code `124`. Set a timeout that is longer than your longest expected run.
+`timeoutMs` / `timeout_seconds` is a wall-clock limit on the whole command. Output does not reset it. A command that keeps printing output still stops at the limit, and `run()` returns exit code `124`. If you leave the timeout off, the limit is 30 seconds, so set a timeout that is longer than your longest expected run. See [Timeouts](/commands/overview#timeouts) for the defaults.
 
-## Network drops
+## If the connection drops
 
-If the stream ends before the `finished` event (a network hiccup, say), `run()` throws. Retry from the caller if you need the resilience. The command keeps running in the sandbox after your client disconnects, so you can reconnect with `Sandbox.connect(id)` if you saved the ID.
+If the stream ends before the `finished` event (a network hiccup, say), `run()` throws `SandboxError`, and the sandbox then stops the command. A `run()` without callbacks is different: if the client goes away, the command keeps running until it exits or reaches its timeout. Either way, nothing reattaches to command output. `Sandbox.connect(id)` gets you the sandbox back to run new commands, not the old stream.
+
+For a job that has to outlive the connection, start it in the background with its output in a file, then read the file later. `run()` returns as soon as the job starts, and the job isn't bound by the command timeout:
+
+```bash
+nohup ./job.sh > /home/user/job.log 2>&1 &
+```
+
+A background job doesn't count as activity, so a sandbox with an [idle timeout](/sandbox/lifecycle#idle-timeout) can pause while the job runs.
 
 ## Capture and stream together
 
@@ -55,6 +63,7 @@ Streaming and sync return aren't mutually exclusive - capture chunks for logs wh
 ```typescript TypeScript
 const result = await sandbox.commands.run("./long-job.sh", {
   onStdout: (data) => process.stdout.write(data), // watch it live
+  timeoutMs: 600_000,
 })
 
 await uploadLogs(result.stdout) // full buffer, already captured for you
@@ -64,6 +73,7 @@ await uploadLogs(result.stdout) // full buffer, already captured for you
 result = sandbox.commands.run(
     "./long-job.sh",
     on_stdout=lambda data: print(data, end=""),  # watch it live
+    timeout_seconds=600,
 )
 
 upload_logs(result.stdout)  # full buffer, already captured for you
