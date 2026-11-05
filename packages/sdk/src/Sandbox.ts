@@ -247,6 +247,8 @@ export class Sandbox {
     const body: Record<string, unknown> = { name: options.name }
     if (options.timeoutSeconds !== undefined)
       body.timeout_seconds = options.timeoutSeconds
+    if (options.idleTimeoutSeconds !== undefined)
+      body.idle_timeout_seconds = options.idleTimeoutSeconds
     if (options.autoDeleteSeconds !== undefined)
       body.auto_delete_seconds = options.autoDeleteSeconds
     if (options.fromTemplate !== undefined) {
@@ -423,8 +425,8 @@ export class Sandbox {
    *
    * Unlike `connect(id).then(s => s.update(...))`, this does not activate the
    * sandbox — a paused sandbox stays paused. Use it to change `metadata`,
-   * `network`, `autoDeleteSeconds`, or `timeoutSeconds` from just an ID.
-   * Pass `null` for `autoDeleteSeconds` / `timeoutSeconds` to clear them.
+   * `network`, `autoDeleteSeconds`, `timeoutSeconds`, or `idleTimeoutSeconds`
+   * from just an ID. Pass `null` for any of the three to clear it.
    */
   static async updateById(
     sandboxId: string,
@@ -714,11 +716,12 @@ export class Sandbox {
 
   /**
    * Partially update this sandbox (metadata, network rules, auto-delete,
-   * timeout).
+   * timeout, idle timeout).
    *
    * `autoDeleteSeconds: null` clears the auto-delete window; a number sets
    * it, counting from now when the sandbox is already paused.
-   * `timeoutSeconds: null` clears the auto-pause timeout.
+   * `timeoutSeconds: null` clears the auto-pause timeout, and
+   * `idleTimeoutSeconds: null` turns idle pausing off.
    */
   async update(options: SandboxUpdateOptions): Promise<void> {
     await requestVoid({
@@ -739,6 +742,8 @@ export class Sandbox {
       body.auto_delete_seconds = options.autoDeleteSeconds
     if (options.timeoutSeconds !== undefined)
       body.timeout_seconds = options.timeoutSeconds
+    if (options.idleTimeoutSeconds !== undefined)
+      body.idle_timeout_seconds = options.idleTimeoutSeconds
     if (options.network !== undefined) {
       body.network = {
         allow_out: options.network.allowOut,
