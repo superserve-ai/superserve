@@ -12,10 +12,14 @@ const mocks = vi.hoisted(() => ({
   writeSelection: vi.fn(),
   sendEmail: vi.fn(),
   rpc: vi.fn(),
+  impersonation: vi.fn(),
 }))
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ auth: { getUser: mocks.getUser } }),
+}))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationContext: mocks.impersonation,
 }))
 vi.mock("@/lib/api/proxy-auth", () => ({
   getAuthApiKeyAndTeamForUser: mocks.getKeyAndTeam,
@@ -683,6 +687,25 @@ describe("leaveTeamAction", () => {
       ok: false,
       code: "last_owner",
     })
+    expect(mocks.writeSelection).not.toHaveBeenCalled()
+  })
+})
+
+describe("impersonation", () => {
+  it.each([
+    ["create", () => createInvitationAction(here, "new@example.com")],
+    ["resend", () => resendInvitationAction(here, "inv-1")],
+    ["revoke", () => revokeInvitationAction(here, "inv-1")],
+    ["leave", () => leaveTeamAction(here)],
+  ])("refuses to %s while viewing another team", async (_n, run) => {
+    mocks.impersonation.mockResolvedValue({ teamId: "team-7", region: "use" })
+    expect(await run()).toMatchObject({
+      ok: false,
+      code: "read_only_impersonation",
+    })
+    expect(mocks.getKeyAndTeam).not.toHaveBeenCalled()
+    expect(fetchSpy).not.toHaveBeenCalled()
+    expect(mocks.sendEmail).not.toHaveBeenCalled()
     expect(mocks.writeSelection).not.toHaveBeenCalled()
   })
 })

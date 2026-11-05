@@ -30,6 +30,7 @@ import type { ComponentType, FormEvent } from "react"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
+import { useDashboardTeamContext } from "@/components/query-provider"
 import { TableSkeleton } from "@/components/table-skeleton"
 import {
   sameTeam,
@@ -543,6 +544,8 @@ export function UserManagementClient() {
   const { data: emailInvitations } = useTeamInvitations()
   const team = useDisplayedTeam()
   const leaveScope = useLeaveScope()
+  // Leaving acts on the operator's own membership, not the team being viewed.
+  const impersonating = useDashboardTeamContext() !== null
   const { addToast } = useToast()
 
   useEffect(() => {
@@ -584,13 +587,15 @@ export function UserManagementClient() {
         <PageHeader title="User Management" />
         <ErrorState message={error.message} onRetry={() => refetch()} />
         {/* Leaving needs no team-management permission. */}
-        {error instanceof ApiError && error.status === 403 && (
-          <div className="px-6 pb-8">
-            <div className="mx-auto w-full max-w-7xl">
-              <LeaveTeamSection team={leaveScope} />
+        {!impersonating &&
+          error instanceof ApiError &&
+          error.status === 403 && (
+            <div className="px-6 pb-8">
+              <div className="mx-auto w-full max-w-7xl">
+                <LeaveTeamSection team={leaveScope} />
+              </div>
             </div>
-          </div>
-        )}
+          )}
       </div>
     )
   }
@@ -763,7 +768,7 @@ export function UserManagementClient() {
             </section>
           )}
 
-          <LeaveTeamSection team={leaveScope} />
+          {!impersonating && <LeaveTeamSection team={leaveScope} />}
         </div>
       </div>
 

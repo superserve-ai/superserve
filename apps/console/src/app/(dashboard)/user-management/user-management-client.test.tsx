@@ -14,6 +14,7 @@ import type { TeamManagementResponse } from "@/lib/api/team-management"
 
 const {
   mockDisplayedTeam,
+  mockImpersonatedTeam,
   mockUseTeamManagement,
   mockUseTeamInvitations,
   mockUseTeams,
@@ -26,6 +27,7 @@ const {
   mockUser,
 } = vi.hoisted(() => ({
   mockDisplayedTeam: vi.fn(),
+  mockImpersonatedTeam: vi.fn(),
   mockUseTeamManagement: vi.fn(),
   mockUseTeamInvitations: vi.fn(),
   mockUseTeams: vi.fn(),
@@ -61,6 +63,9 @@ vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
   useRevokeInvitation: () => mutation(mockRevokeInvitation),
   useRemoveTeamMember: () => mutation(mockRemove),
   useLeaveTeam: () => mutation(mockLeave),
+}))
+vi.mock("@/components/query-provider", () => ({
+  useDashboardTeamContext: () => mockImpersonatedTeam(),
 }))
 vi.mock("@/hooks/use-teams", () => ({ useTeams: () => mockUseTeams() }))
 vi.mock("@/hooks/use-user", () => ({
@@ -136,6 +141,7 @@ describe("UserManagementClient", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockDisplayedTeam.mockReturnValue({ teamId: "team-1", region: "use" })
+    mockImpersonatedTeam.mockReturnValue(null)
     mockUser.mockReturnValue(customer)
     mockUseTeamManagement.mockReturnValue({
       data: baseManagement,
@@ -447,6 +453,27 @@ describe("UserManagementClient", () => {
           team: { teamId: "team-1", region: "use" },
         }),
       )
+    })
+    it.each([
+      ["a 403 error", new ApiError(403, "error", "Request failed")],
+      ["the member list", null],
+    ])("hides leave on %s while viewing another team", (_n, error) => {
+      mockImpersonatedTeam.mockReturnValue({
+        teamId: "team-7",
+        region: "use",
+        name: "Viewed team",
+      })
+      mockUseTeamManagement.mockReturnValue({
+        data: error ? undefined : baseManagement,
+        isPending: false,
+        error,
+        refetch: vi.fn(),
+      })
+      render(<UserManagementClient />)
+
+      expect(
+        screen.queryByRole("button", { name: /^leave team$/i }),
+      ).not.toBeInTheDocument()
     })
   })
 

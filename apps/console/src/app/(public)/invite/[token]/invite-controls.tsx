@@ -19,6 +19,7 @@ import {
 function useJoin(token: string) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
+  const [reloaded, setReloaded] = useState(false)
   const router = useRouter()
 
   const join = async (
@@ -28,11 +29,15 @@ function useJoin(token: string) {
     setError(false)
     try {
       const result = await action(token)
-      if (result.status === "redirect") {
+      if (result.status === "reload") {
+        // The refreshed page can render this same component again, which
+        // keeps its state, so stop waiting rather than rely on a remount.
+        setReloaded(true)
+        router.refresh()
+      } else if (result.status === "redirect") {
         router.replace(result.to)
         return
-      }
-      if (result.code === "failed") {
+      } else if (result.code === "failed") {
         setError(true)
       } else {
         router.replace(`/invite/${token}/?failed=${result.code}`)
@@ -42,7 +47,7 @@ function useJoin(token: string) {
     }
     setBusy(false)
   }
-  return { busy, error, join }
+  return { busy, error, reloaded, join }
 }
 
 export function ConfirmControls({ token }: { token: string }) {
@@ -77,7 +82,7 @@ export function ConfirmControls({ token }: { token: string }) {
 // An account that started signup from this invite joins without a click. The
 // server action re-checks the intent cookie and the team state itself.
 export function AutoJoin({ token }: { token: string }) {
-  const { busy, error, join } = useJoin(token)
+  const { busy, error, reloaded, join } = useJoin(token)
   const started = useRef(false)
 
   useEffect(() => {
@@ -95,7 +100,7 @@ export function AutoJoin({ token }: { token: string }) {
           {INVITE_COPY.confirm.failed}
         </p>
       )}
-      {error ? (
+      {error || reloaded ? (
         <Button
           className="w-full"
           onClick={() => void join(joinInviteAction)}

@@ -8,8 +8,10 @@ import { failureForAcceptError } from "@/lib/invite/decision"
 import { clearInviteIntent, setInviteIntent } from "@/lib/invite/intent"
 import { createServerClient } from "@/lib/supabase/server"
 
+// "reload" re-renders the invite page in place, which decides what to show.
 export type InviteActionResult =
   | { status: "redirect"; to: string }
+  | { status: "reload" }
   | {
       status: "error"
       code:
@@ -22,14 +24,13 @@ export type InviteActionResult =
 
 async function acceptForSignedInUser(
   token: string,
-  path: string,
   { auto }: { auto: boolean },
 ): Promise<InviteActionResult> {
   const supabase = await createServerClient()
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return { status: "redirect", to: `${path}/` }
+  if (!user) return { status: "reload" }
   if (!user.email || !user.email_confirmed_at) {
     return { status: "error", code: "unavailable" }
   }
@@ -39,8 +40,7 @@ async function acceptForSignedInUser(
   // goes back to the page, which shows the confirm screen.
   if (auto) {
     const { view } = await loadInviteView(token)
-    if (view.kind !== "auto_accept")
-      return { status: "redirect", to: `${path}/` }
+    if (view.kind !== "auto_accept") return { status: "reload" }
   }
 
   let result: Awaited<ReturnType<typeof acceptInviteAndSelectTeam>>
@@ -66,9 +66,8 @@ async function acceptForSignedInUser(
 export async function joinInviteAction(
   token: string,
 ): Promise<InviteActionResult> {
-  const path = invitePath(token)
-  if (!path) return { status: "error", code: "unavailable" }
-  return acceptForSignedInUser(token, path, { auto: false })
+  if (!invitePath(token)) return { status: "error", code: "unavailable" }
+  return acceptForSignedInUser(token, { auto: false })
 }
 
 /**
@@ -79,9 +78,8 @@ export async function joinInviteAction(
 export async function autoJoinInviteAction(
   token: string,
 ): Promise<InviteActionResult> {
-  const path = invitePath(token)
-  if (!path) return { status: "error", code: "unavailable" }
-  return acceptForSignedInUser(token, path, { auto: true })
+  if (!invitePath(token)) return { status: "error", code: "unavailable" }
+  return acceptForSignedInUser(token, { auto: true })
 }
 
 /** Records that signup or sign-in began here, then continues to that screen. */

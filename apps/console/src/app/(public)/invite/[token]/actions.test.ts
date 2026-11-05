@@ -62,10 +62,7 @@ describe("joinInviteAction", () => {
   it("sends a signed-out caller back to the invite page", async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null } })
 
-    expect(await joinInviteAction(token)).toEqual({
-      status: "redirect",
-      to: `/invite/${token}/`,
-    })
+    expect(await joinInviteAction(token)).toEqual({ status: "reload" })
     expect(mocks.acceptInviteAndSelectTeam).not.toHaveBeenCalled()
   })
 
@@ -201,8 +198,7 @@ describe("autoJoinInviteAction", () => {
       mocks.loadInviteView.mockResolvedValue({ view: { kind } })
 
       expect(await autoJoinInviteAction(token)).toEqual({
-        status: "redirect",
-        to: `/invite/${token}/`,
+        status: "reload",
       })
       expect(mocks.acceptInviteAndSelectTeam).not.toHaveBeenCalled()
       expect(mocks.clearInviteIntent).not.toHaveBeenCalled()
@@ -212,10 +208,7 @@ describe("autoJoinInviteAction", () => {
   it("does nothing for a signed-out caller", async () => {
     mocks.getUser.mockResolvedValue({ data: { user: null } })
 
-    expect(await autoJoinInviteAction(token)).toEqual({
-      status: "redirect",
-      to: `/invite/${token}/`,
-    })
+    expect(await autoJoinInviteAction(token)).toEqual({ status: "reload" })
     expect(mocks.loadInviteView).not.toHaveBeenCalled()
     expect(mocks.acceptInviteAndSelectTeam).not.toHaveBeenCalled()
   })

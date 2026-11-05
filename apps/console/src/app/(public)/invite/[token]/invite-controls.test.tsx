@@ -3,6 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   replace: vi.fn(),
+  refresh: vi.fn(),
   autoJoin: vi.fn(),
   join: vi.fn(),
   signOut: vi.fn(),
@@ -10,7 +11,7 @@ const mocks = vi.hoisted(() => ({
 }))
 
 vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace: mocks.replace }),
+  useRouter: () => ({ replace: mocks.replace, refresh: mocks.refresh }),
 }))
 vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({ reset: mocks.reset }),
@@ -44,6 +45,22 @@ describe("AutoJoin", () => {
     expect(mocks.join).toHaveBeenCalledWith(token)
     expect(mocks.autoJoin).toHaveBeenCalledTimes(1)
     expect(mocks.autoJoin).toHaveBeenCalledWith(token)
+  })
+
+  it("offers Join when the server sends it back to the page", async () => {
+    const token = `ssinv_use_${"T".repeat(43)}`
+    mocks.autoJoin.mockResolvedValue({ status: "reload" })
+    mocks.join.mockResolvedValue({ status: "redirect", to: "/sandboxes" })
+
+    render(<AutoJoin token={token} />)
+
+    fireEvent.click(await screen.findByRole("button", { name: "Join team" }))
+    expect(mocks.refresh).toHaveBeenCalledTimes(1)
+    expect(screen.queryByRole("alert")).toBeNull()
+    await waitFor(() =>
+      expect(mocks.replace).toHaveBeenCalledWith("/sandboxes"),
+    )
+    expect(mocks.autoJoin).toHaveBeenCalledTimes(1)
   })
 })
 

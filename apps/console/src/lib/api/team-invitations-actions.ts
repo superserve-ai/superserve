@@ -2,6 +2,7 @@
 
 import { createHash } from "node:crypto"
 
+import { getImpersonationContext } from "@/lib/admin/impersonation"
 import { pickActiveTeam, writeTeamSelection } from "@/lib/api/active-team"
 import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
 import {
@@ -48,6 +49,7 @@ export type InvitationErrorCode =
   | "only_team"
   | "leave_in_progress"
   | "team_changed"
+  | "read_only_impersonation"
   | "forbidden"
   | "unauthorized"
   | "signup_blocked"
@@ -97,6 +99,8 @@ const MESSAGES: Record<InvitationErrorCode, string> = {
   only_team: "You can't leave your only team.",
   leave_in_progress: "Another leave is in progress. Try again in a moment.",
   team_changed: "Your active team changed. Reload the page and try again.",
+  read_only_impersonation:
+    "Write operations are disabled while viewing another team.",
   forbidden: "You don't have permission to do that.",
   unauthorized: "Your session has expired. Sign in again.",
   signup_blocked: SIGNUP_RESTRICTED_MESSAGE,
@@ -157,6 +161,11 @@ async function loadContext(
   } = await supabase.auth.getUser()
   if (!user) return failure("unauthorized")
   try {
+    // These actions skip the API proxy, so they apply its read-only rule
+    // here; otherwise they would act on the operator's own team.
+    if (await getImpersonationContext(user)) {
+      return failure("read_only_impersonation")
+    }
     const { apiKey, team } = await getAuthApiKeyAndTeamForUser(
       user,
       new Date().toISOString(),
