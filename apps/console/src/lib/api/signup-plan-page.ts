@@ -28,22 +28,45 @@ export function signupPlanPath(params: SignupPlanPageParams) {
   return `/onboarding/plan/?${query}`
 }
 
+export type SignupPlanPage = NonNullable<
+  Awaited<ReturnType<typeof readSignupPlanPage>>
+>
+
+// "blocked" is an answer: setup can't continue for this account or team.
+// "unavailable" is a read that failed twice, so the plan is unknown, not
+// refused.
+export type SignupPlanPageState =
+  | { status: "ready"; page: SignupPlanPage }
+  | { status: "blocked" }
+  | { status: "unavailable" }
+
 // Read before sending the destination page, so navigation keeps the previous
 // document visible. Provisioning stays in a handler where cookies are writable.
-// A failed read is retried once, past the render's request memoization, before
-// the caller shows the setup error. A second failure, or one that a retry
-// can't change, still returns null.
-export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
+// A failed read is retried once, past the render's request memoization. A
+// second failure is unavailable; one that a retry can't change is blocked.
+export async function getSignupPlanPageState(
+  params: SignupPlanPageParams = {},
+): Promise<SignupPlanPageState> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return attempt > 1
-        ? await readFresh(() => readSignupPlanPage(params))
-        : await readSignupPlanPage(params)
+      const page =
+        attempt > 1
+          ? await readFresh(() => readSignupPlanPage(params))
+          : await readSignupPlanPage(params)
+      return page ? { status: "ready", page } : { status: "blocked" }
     } catch (error) {
       unstable_rethrow(error)
-      if (attempt > 1 || error instanceof SignupSetupBlockedError) return null
+      if (error instanceof SignupSetupBlockedError) return { status: "blocked" }
+      if (attempt > 1) return { status: "unavailable" }
     }
   }
+}
+
+// For callers that show the setup error whether the plan was refused or
+// unknown.
+export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
+  const state = await getSignupPlanPageState(params)
+  return state.status === "ready" ? state.page : null
 }
 
 async function readSignupPlanPage(params: SignupPlanPageParams) {

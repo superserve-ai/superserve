@@ -17,9 +17,9 @@ export function SignupPlanGate({ children }: { children: ReactNode }) {
 }
 
 // The dashboard layout checks the team it renders with on the server and seeds
-// that answer, sending a team whose trial ended to the plan picker. This only re-checks after a team switch or a new team, in the
-// background: a failed read leaves the console usable and the next full load
-// checks again on the server.
+// that answer, sending a team whose trial ended to the plan picker. This only re-checks after a team switch, a new team, or a
+// server read that failed, in the background: a failed read leaves the
+// console usable and the next full load checks again on the server.
 function SelfSignupPlanGate({ children }: { children: ReactNode }) {
   const { ready, teamKey } = useBillingContext()
   const router = useRouter()

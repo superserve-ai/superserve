@@ -53,7 +53,7 @@ vi.mock("@/lib/api/signup-plan-actions", () => ({
 import { GET as prepareAccount } from "@/app/api/onboarding/prepare/route"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 
-import { getSignupPlanPage } from "./signup-plan-page"
+import { getSignupPlanPage, getSignupPlanPageState } from "./signup-plan-page"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -226,5 +226,27 @@ it("sends an expired session to sign-in instead of the setup error", async () =>
   })
   await expect(getSignupPlanPage()).rejects.toThrow(
     "/auth/signin?next=%2Fonboarding%2Fplan%2F%3F",
+  )
+})
+
+it("tells a plan that stayed unreadable apart from a blocked answer", async () => {
+  m.read.mockRejectedValue(new Error("Unable to check your plan."))
+  expect(await getSignupPlanPageState()).toEqual({ status: "unavailable" })
+  expect(m.read).toHaveBeenCalledTimes(2)
+  m.read.mockRejectedValue(new SignupSetupBlockedError("team_changed"))
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
+  expect(await getSignupPlanPageState({ account: "other" })).toEqual({
+    status: "blocked",
+  })
+  m.memberships.mockResolvedValue({ memberships: [], degradedRegions: [] })
+  expect(await getSignupPlanPageState({ setup_error: "1" })).toEqual({
+    status: "blocked",
+  })
+})
+it("reports a plan read that a retry recovered as ready", async () => {
+  m.read.mockRejectedValueOnce(new Error("Unavailable"))
+  const state = await getSignupPlanPageState()
+  expect(state.status === "ready" && state.page.context.teamKey).toBe(
+    "use:team",
   )
 })
