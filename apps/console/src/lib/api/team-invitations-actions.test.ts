@@ -463,6 +463,63 @@ describe("leaveTeamAction", () => {
     expect(leases.size).toBe(1)
   })
 
+  it.each([500, 502, 503, 504])(
+    "keeps the lease when the leave returns %s",
+    async (status) => {
+      const leases = installLeaseStore()
+      memberships([here, other])
+      fetchSpy.mockResolvedValue(json({}, status))
+
+      expect(await leaveTeamAction(here)).toMatchObject({
+        ok: false,
+        code: "unavailable",
+      })
+      expect(leases.size).toBe(1)
+    },
+  )
+
+  it("blocks another leave after a gateway timeout commits late", async () => {
+    installLeaseStore()
+    const teamA = { teamId: "team-a", region: "use" }
+    const teamB = { teamId: "team-b", region: "usw" }
+    const state = { teams: [teamA, teamB] }
+    mocks.listMemberships.mockImplementation(async () => ({
+      memberships: [...state.teams],
+      degradedRegions: [],
+    }))
+    mocks.completed.mockImplementation(async (_u: string, d: unknown) => d)
+    fetchSpy.mockImplementation(async (url: string) => {
+      if (url.includes("/teams/team-a/")) return json({}, 504)
+      state.teams = state.teams.filter((t) => t.teamId !== teamB.teamId)
+      return new Response(null, { status: 204 })
+    })
+    mocks.getKeyAndTeam.mockResolvedValueOnce({
+      apiKey: "ss_live_key",
+      team: teamA,
+    })
+
+    expect(await leaveTeamAction(teamA)).toMatchObject({
+      ok: false,
+      code: "unavailable",
+    })
+    state.teams = state.teams.filter((t) => t.teamId !== teamA.teamId)
+    mocks.getKeyAndTeam.mockResolvedValueOnce({
+      apiKey: "ss_live_key",
+      team: teamB,
+    })
+
+    expect(await leaveTeamAction(teamB)).toMatchObject({
+      ok: false,
+      code: "leave_in_progress",
+    })
+    expect(fetchSpy).toHaveBeenCalledTimes(1)
+    expect(fetchSpy).toHaveBeenCalledWith(
+      "https://api.use.test/teams/team-a/leave",
+      expect.any(Object),
+    )
+    expect(state.teams).toEqual([teamB])
+  })
+
   it("still succeeds when the lease release fails", async () => {
     memberships([here, other])
     fetchSpy.mockResolvedValue(new Response(null, { status: 204 }))

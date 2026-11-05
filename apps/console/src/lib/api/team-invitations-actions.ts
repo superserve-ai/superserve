@@ -453,8 +453,9 @@ export async function leaveTeamAction(
   try {
     return await leaveWithLease(context, deadline, outcome)
   } finally {
-    // A timed-out leave can still commit, so the lease is left to expire
-    // rather than letting another leave read the directory before it lands.
+    // A leave with no answer or a 5xx can still commit, so the lease is left
+    // to expire rather than letting another leave read the directory before
+    // it lands.
     if (!outcome.unknown) await releaseLeaveLease(context.userId, holder)
   }
 }
@@ -489,6 +490,10 @@ async function leaveWithLease(
 
   const response = await backend(context, "/leave")
   if (!response) {
+    outcome.unknown = true
+    return failure("unavailable")
+  }
+  if (response.status >= 500) {
     outcome.unknown = true
     return failure("unavailable")
   }
