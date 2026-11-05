@@ -14,15 +14,14 @@ import {
   type InviteActionResult,
 } from "./actions"
 
-function useJoin(
-  token: string,
-  action: (token: string) => Promise<InviteActionResult>,
-) {
+function useJoin(token: string) {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState(false)
   const router = useRouter()
 
-  const join = async () => {
+  const join = async (
+    action: (token: string) => Promise<InviteActionResult>,
+  ) => {
     setBusy(true)
     setError(false)
     try {
@@ -45,7 +44,7 @@ function useJoin(
 }
 
 export function ConfirmControls({ token }: { token: string }) {
-  const { busy, error, join } = useJoin(token, joinInviteAction)
+  const { busy, error, join } = useJoin(token)
 
   return (
     <div className="space-y-3">
@@ -54,7 +53,11 @@ export function ConfirmControls({ token }: { token: string }) {
           {INVITE_COPY.confirm.failed}
         </p>
       )}
-      <Button className="w-full" onClick={join} disabled={busy}>
+      <Button
+        className="w-full"
+        onClick={() => void join(joinInviteAction)}
+        disabled={busy}
+      >
         {busy ? INVITE_COPY.confirm.joining : INVITE_COPY.confirm.join}
       </Button>
       <Button
@@ -72,13 +75,13 @@ export function ConfirmControls({ token }: { token: string }) {
 // An account that started signup from this invite joins without a click. The
 // server action re-checks the intent cookie and the team state itself.
 export function AutoJoin({ token }: { token: string }) {
-  const { busy, error, join } = useJoin(token, autoJoinInviteAction)
+  const { busy, error, join } = useJoin(token)
   const started = useRef(false)
 
   useEffect(() => {
     if (started.current) return
     started.current = true
-    void join()
+    void join(autoJoinInviteAction)
     // join is recreated each render; the ref makes this run once.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [])
@@ -91,7 +94,11 @@ export function AutoJoin({ token }: { token: string }) {
         </p>
       )}
       {error ? (
-        <Button className="w-full" onClick={join} disabled={busy}>
+        <Button
+          className="w-full"
+          onClick={() => void join(joinInviteAction)}
+          disabled={busy}
+        >
           {INVITE_COPY.confirm.join}
         </Button>
       ) : (
