@@ -233,6 +233,14 @@ export function AdminSandboxDetailClient({
         </div>
         <div className="flex items-center gap-2">
           <span className="font-mono text-[10px] tracking-wider text-muted uppercase">
+            Idle timeout
+          </span>
+          <span className="font-mono text-xs text-foreground/80">
+            {formatTimeout(sandbox.idle_timeout_seconds)}
+          </span>
+        </div>
+        <div className="flex items-center gap-2">
+          <span className="font-mono text-[10px] tracking-wider text-muted uppercase">
             Snapshot
           </span>
           <span className="font-mono text-xs text-foreground/80">
