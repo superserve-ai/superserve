@@ -7,6 +7,7 @@ import {
   redactInviteTokens,
   redactInviteTokensDeep,
   redactInviteTokensFromEvent,
+  scrubPersistedInviteTokens,
   syncRecordingWithAddress,
 } from "./invite-token-redaction"
 import { registerPreviewTokenQueryParam } from "./preview-token-redaction"
@@ -81,6 +82,68 @@ describe("redactInviteTokensDeep", () => {
   it("returns the same reference when nothing changes", () => {
     const input = { a: ["x"], b: { c: "y" } }
     expect(redactInviteTokensDeep(input)).toBe(input)
+  })
+})
+
+describe("scrubPersistedInviteTokens", () => {
+  it.each([
+    [
+      "$initial_person_info",
+      { r: `/invite/${TOKEN}/`, u: `/invite/${TOKEN}/` },
+    ],
+    ["$initial_referrer_info", { $referrer: `/invite/${TOKEN}/` }],
+    [
+      "$initial_campaign_params",
+      { utm_content: TOKEN, custom: [{ next: encodeURIComponent(TOKEN) }] },
+    ],
+  ])("overwrites tokens in %s without mutating the value", (key, value) => {
+    const properties: Record<string, unknown> = { [key]: value }
+    const posthog = {
+      get_property: vi.fn((name: string) => properties[name]),
+      register: vi.fn((values: Record<string, unknown>) => {
+        Object.assign(properties, values)
+      }),
+    }
+
+    scrubPersistedInviteTokens(posthog)
+
+    expect(posthog.register).toHaveBeenCalledExactlyOnceWith({
+      [key]: redactInviteTokensDeep(value),
+    })
+    expect(JSON.stringify(properties)).not.toContain(TOKEN)
+    expect(JSON.stringify(value)).toContain(TOKEN)
+
+    scrubPersistedInviteTokens(posthog)
+    expect(posthog.register).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([undefined, null, false, 42, "unchanged", new Date(0)])(
+    "leaves missing or non-object values alone: %j",
+    (value) => {
+      const posthog = { get_property: vi.fn(() => value), register: vi.fn() }
+
+      scrubPersistedInviteTokens(posthog)
+
+      expect(posthog.get_property.mock.calls).toEqual([
+        ["$initial_person_info"],
+        ["$initial_referrer_info"],
+        ["$initial_campaign_params"],
+      ])
+      expect(posthog.register).not.toHaveBeenCalled()
+    },
+  )
+
+  it("keeps unrelated attribution unchanged", () => {
+    const value = {
+      r: "https://example.com/",
+      u: "/sandboxes/",
+      utm_source: "test",
+    }
+    const posthog = { get_property: vi.fn(() => value), register: vi.fn() }
+
+    scrubPersistedInviteTokens(posthog)
+
+    expect(posthog.register).not.toHaveBeenCalled()
   })
 })
 

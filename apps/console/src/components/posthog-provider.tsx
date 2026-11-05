@@ -8,6 +8,7 @@ import {
   redactCapturedRequest,
   redactInviteTokens,
   redactInviteTokensFromEvent,
+  scrubPersistedInviteTokens,
   syncRecordingWithAddress,
 } from "@/lib/invite-token-redaction"
 
@@ -25,8 +26,14 @@ if (typeof window !== "undefined") {
         cross_subdomain_cookie: true,
         // Invitation tokens never leave the browser: this is the final scrub
         // of every event, whatever put the token there.
-        before_send: redactInviteTokensFromEvent,
-        loaded: (ph) => syncRecordingWithAddress(ph, window.location.href),
+        before_send: (event) => {
+          scrubPersistedInviteTokens(posthog)
+          return redactInviteTokensFromEvent(event)
+        },
+        loaded: (ph) => {
+          scrubPersistedInviteTokens(ph)
+          syncRecordingWithAddress(ph, window.location.href)
+        },
         session_recording: {
           maskAllInputs: true,
           maskTextSelector: "[data-mask]",

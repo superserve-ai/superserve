@@ -1,4 +1,4 @@
-import type { CapturedNetworkRequest, CaptureResult } from "posthog-js"
+import type { CapturedNetworkRequest, CaptureResult, PostHog } from "posthog-js"
 
 import { redactPreviewToken } from "@/lib/preview-token-redaction"
 
@@ -68,6 +68,21 @@ export function redactInviteTokensDeep<T>(value: T, depth = 0): T {
     }
   }
   return (copy ?? value) as T
+}
+
+// /flags bypasses before_send and expands these persisted attribution values.
+export function scrubPersistedInviteTokens(
+  posthog: Pick<PostHog, "get_property" | "register">,
+): void {
+  for (const key of [
+    "$initial_person_info",
+    "$initial_referrer_info",
+    "$initial_campaign_params",
+  ]) {
+    const value = posthog.get_property(key)
+    const redacted = redactInviteTokensDeep(value)
+    if (redacted !== value) posthog.register({ [key]: redacted })
+  }
 }
 
 /**
