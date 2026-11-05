@@ -52,7 +52,7 @@ result = sandbox.commands.run(
 </CodeGroup>
 
 <Note>
-Streaming uses an *idle* timeout: the timer resets on every chunk. A command that keeps producing output never trips it, however long it runs. A command that goes silent still has to finish before the timeout.
+The timeout is a wall-clock limit, also when you stream. Output does not reset it. At the limit the command is stopped and `run()` returns exit code `124`.
 </Note>
 
 ## `spawn` (interactive session)

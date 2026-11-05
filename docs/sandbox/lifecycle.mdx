@@ -159,7 +159,7 @@ sandbox.update(timeout_seconds=None)  # disable auto-pause
 
 ## Idle timeout
 
-Set `idleTimeoutSeconds` to auto-pause a sandbox after this many seconds with no activity. Unlike `timeoutSeconds`, it never pauses a sandbox that is still in use, so it suits sandboxes that should stay up while someone works in them and stop billing once they go quiet.
+Set `idleTimeoutSeconds` to auto-pause a sandbox after this many seconds with no activity. Unlike `timeoutSeconds`, it never pauses a sandbox while a request or connection to it is open, so it suits sandboxes that should stay up while someone works in them and stop billing once they go quiet.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -179,7 +179,15 @@ sandbox = Sandbox.create(
     idle_timeout_seconds=600,  # auto-pause after 10m with no activity
 )
 ```
+
+```bash CLI
+superserve sandbox create --name dev-box --idle-timeout 10m  # 1m to 7d
+```
 </CodeGroup>
+
+<Note>
+Requires SDK 0.11.6+ (`@superserve/sdk` and `superserve`), CLI 2.1.2+, and MCP 0.3.4+ (`@superserve/mcp`). Older TypeScript SDK versions ignore `idleTimeoutSeconds` without an error. On older versions, use the [REST API](#set-it-with-the-rest-api).
+</Note>
 
 These count as activity and keep the sandbox up:
 
@@ -196,25 +204,45 @@ These don't count:
 - CPU or disk activity on its own.
 - Changes to the sandbox's settings, such as metadata or egress rules.
 
-The sandbox is paused shortly after the timeout. Like any pause, it checkpoints memory and filesystem, and the next request resumes the sandbox where it left off. The value can be from 60 to 604800 seconds (7 days); leave it unset (the default) and the sandbox is never paused for being idle.
+<Warning>
+A background job or an outbound-only workload, such as an agent loop that only calls external APIs, does not keep the sandbox up. The idle timeout can pause the sandbox while that work still runs. For that work, use `timeoutSeconds` or leave the idle timeout unset.
+</Warning>
+
+The sandbox is paused shortly after the timeout. Like any pause, it checkpoints memory and filesystem, and the next request resumes the sandbox where it left off. Each resume starts the idle count again. The value can be from 60 to 604800 seconds (7 days); leave it unset (the default) and the sandbox is never paused for being idle.
+
+<Note>
+A request sent in the first few seconds after an idle pause can fail with a `503` error (`sandbox is pausing`). The sandbox still resumes. Retry the request after about 10 seconds.
+</Note>
 
 `idleTimeoutSeconds` and `timeoutSeconds` are independent, and whichever fires first pauses the sandbox. Use both to pause on inactivity while still capping a session that never goes quiet.
 
-Set or clear it on an existing sandbox:
+Set, clear, or read it on an existing sandbox. The current value is `undefined` / `None` when idle pausing is off:
 
 <CodeGroup>
 ```typescript TypeScript
 await sandbox.update({ idleTimeoutSeconds: 900 }) // auto-pause after 15m with no activity
 await sandbox.update({ idleTimeoutSeconds: null }) // turn idle pausing off
+const { idleTimeoutSeconds } = await sandbox.getInfo() // current value
 ```
 
 ```python Python
 sandbox.update(idle_timeout_seconds=900)  # auto-pause after 15m with no activity
 sandbox.update(idle_timeout_seconds=None)  # turn idle pausing off
+idle_timeout = sandbox.get_info().idle_timeout_seconds  # current value
+```
+
+```bash CLI
+superserve sandbox update dev-box --idle-timeout 15m   # auto-pause after 15m with no activity
+superserve sandbox update dev-box --idle-timeout none  # turn idle pausing off
+superserve sandbox get dev-box                         # shows "Idle timeout: 15m" or "none"
 ```
 </CodeGroup>
 
-Over the REST API, set it when you create the sandbox, then change or clear it with `PATCH`. Send `null` to turn idle pausing off:
+A new value takes effect at once. If you lower it below the time the sandbox has already been idle, the sandbox is paused shortly after the change.
+
+### Set it with the REST API
+
+Set it when you create the sandbox, then change or clear it with `PATCH`. Send `null` to turn idle pausing off:
 
 ```bash
 # Create with a 10-minute idle timeout and keep the new sandbox's ID

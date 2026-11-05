@@ -39,9 +39,9 @@ Even while streaming, the returned `result` still holds the complete `stdout` an
 `AsyncSandbox` takes the same callbacks with an awaitable `run()`. See the [Sandbox reference](/sdk-reference/sandbox).
 </Note>
 
-## Idle timeout
+## Command timeout
 
-The timer resets on every chunk, so a command that keeps producing output won't trip `timeoutMs` no matter how long it runs. A command that goes completely silent still has to finish before the timeout.
+`timeoutMs` / `timeout_seconds` is a wall-clock limit on the whole command. Output does not reset it, so a command that keeps printing is still stopped at the limit, and `run()` returns exit code `124`. Set the timeout longer than the longest run you expect.
 
 ## Network drops
 
