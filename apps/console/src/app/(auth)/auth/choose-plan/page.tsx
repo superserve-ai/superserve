@@ -16,6 +16,14 @@ import {
   signupCheckoutReturnPath,
 } from "@/lib/billing/signup-checkout-paths"
 
+const SUPPORT_EMAIL = "support@superserve.ai"
+
+// Reasons where checkout failed, so the customer also gets a way to reach us.
+const NEEDS_SUPPORT = new Set<PlanPickerReason>([
+  "checkout_unavailable",
+  "checkout_refused",
+])
+
 const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
   checkout_elsewhere:
@@ -24,9 +32,15 @@ const MESSAGES: Record<PlanPickerReason, string> = {
     "Your free trial is used up or isn't available for this account. Your sandboxes are paused and nothing is deleted. Choose a plan to continue.",
   payment_failed:
     "We couldn't confirm a card for your plan. Choose a plan to try again.",
+  plan_required:
+    "Free covers your first team. Choose a plan to run sandboxes in this one.",
   plan_unavailable: "That plan is no longer available. Choose another plan.",
   checkout_canceled: "Checkout was cancelled. Choose a plan when you're ready.",
   checkout_unavailable: "We couldn't open checkout. Please try again.",
+  checkout_refused:
+    "We couldn't start checkout for this team, and trying again won't fix it.",
+  billing_admin_required:
+    "Only your team's billing administrators can choose a plan. Ask one of them to upgrade this team.",
 }
 
 function ChoosePlanContent() {
@@ -81,6 +95,18 @@ function ChoosePlanContent() {
           <p className="mt-2 text-center text-xs text-muted">
             {MESSAGES[reason]}
           </p>
+          {NEEDS_SUPPORT.has(reason) && (
+            <p className="mt-2 text-center text-xs text-muted">
+              Need help upgrading? Contact{" "}
+              <a
+                href={`mailto:${SUPPORT_EMAIL}`}
+                className="text-foreground underline underline-offset-4 hover:text-primary"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+              .
+            </p>
+          )}
           {reason === "checkout_elsewhere" ? (
             locator ? (
               <Button
@@ -115,7 +141,11 @@ function ChoosePlanContent() {
               Back to console
             </Button>
           ) : (
-            <PlanPickerOptions preselected={preselected} locator={locator} />
+            <PlanPickerOptions
+              preselected={preselected}
+              locator={locator}
+              adminRequired={reason === "billing_admin_required"}
+            />
           )}
         </div>
       </div>

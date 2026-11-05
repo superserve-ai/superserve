@@ -51,12 +51,18 @@ finally:
 
 Installing `langchain-superserve` also registers a `superserve` sandbox provider for [Deep Agents Code](https://docs.langchain.com/deepagents-code) (`dcode`), the terminal coding agent built on the Deep Agents SDK:
 
+<Warning>
+  `langchain-superserve` 0.0.1 requires `deepagents<0.7`, but current Deep Agents Code releases pin `deepagents` 0.7.x, so `dcode --install langchain-superserve --package` fails with an unsatisfiable-dependency error. Use the [Deep Agents SDK](#deep-agents-sdk) integration above until a compatible `langchain-superserve` release is published.
+</Warning>
+
 ```bash
 curl -LsSf https://langch.in/dcode | bash
 dcode --install langchain-superserve --package
 export SUPERSERVE_API_KEY=ss_live_...
 dcode --sandbox superserve
 ```
+
+Deep Agents Code 0.2 and later requires Python 3.14. The installer sets up its own uv-managed Python 3.14 environment, so it works when your system Python is older. On an older Python, `pip install deepagents-code` installs an older 0.1.x release instead.
 
 The provider defaults to the `superserve/python-3.11` template; override it with the `SUPERSERVE_TEMPLATE` environment variable.
 

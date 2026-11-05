@@ -28,6 +28,22 @@ async function teamBackend(user: User) {
   }
 }
 
+// A backend failure that checkout knows about. Its fields are safe to log:
+// they never carry text from the backend or from the customer.
+export class SignupCheckoutError extends Error {
+  constructor(
+    readonly stage: "plan" | "restart" | "checkout",
+    readonly status: number,
+  ) {
+    super(`signup ${stage} failed: ${status}`)
+    this.name = "SignupCheckoutError"
+  }
+}
+
+function isTransient(status: number) {
+  return status >= 500 || status === 408 || status === 429
+}
+
 async function readEntryState(
   backend: Awaited<ReturnType<typeof teamBackend>>,
 ): Promise<AwaitingPlanState | "activating" | null> {
@@ -36,7 +52,7 @@ async function readEntryState(
     cache: "no-store",
     signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
   })
-  if (!plan.ok) throw new Error(`billing plan read failed: ${plan.status}`)
+  if (!plan.ok) throw new SignupCheckoutError("plan", plan.status)
   const body = (await plan.json()) as { entry_state?: unknown }
   if (isPaymentActivating(body)) return "activating"
   return isAwaitingPlanState(body.entry_state) ? body.entry_state : null
@@ -111,12 +127,47 @@ export async function startSignupCheckout(
       signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
       body: JSON.stringify({ restart: true }),
     })
-    if (restart.ok) ({ response, result } = await create())
+    const recovery = (await restart.json().catch(() => ({}))) as {
+      outcome?: string
+    }
+    // Only a cleared checkout may be replaced. One that is still confirming
+    // a payment, or that already activated a plan, goes to the payment wait,
+    // which settles it.
+    if (
+      restart.status === 202 ||
+      (restart.ok &&
+        ["payment_confirmation_pending", "active"].includes(
+          recovery.outcome ?? "",
+        ))
+    )
+      return paymentSettlingPath(locator)
+    if (
+      restart.ok &&
+      ["retryable", "no_pending_pro_purchase"].includes(recovery.outcome ?? "")
+    )
+      ({ response, result } = await create())
+    else if (restart.ok || isTransient(restart.status))
+      throw new SignupCheckoutError("restart", restart.status)
   }
   if (response.status === 400 && result.error?.code === "invalid_offer")
     return planPickerPath("plan_unavailable", undefined, locator)
-  if (!response.ok)
-    throw new Error(`signup checkout failed: ${response.status}`)
+  if (response.status === 403)
+    return planPickerPath("billing_admin_required", undefined, locator)
+  if (!response.ok && result.error?.code === "payment_confirmation_pending")
+    return paymentSettlingPath(locator)
+  if (!response.ok) {
+    const { status } = response
+    const code = result.error?.code
+    console.error("Signup checkout refused", { status, code })
+    // A refusal that retrying cannot change goes to support instead of a
+    // "try again" loop. A resumed checkout that conflicts with an open one is
+    // still retryable: choosing a plan in the picker replaces it.
+    const replaceable =
+      !switchPlan && status === 409 && code === "plan_conflict"
+    if (!isTransient(status) && !replaceable)
+      return planPickerPath("checkout_refused", undefined, locator)
+    throw new SignupCheckoutError("checkout", status)
+  }
   if (result.url && isStripeCheckoutUrl(result.url)) return result.url
   if (result.outcome === "active") return "/sandboxes"
   return success
@@ -160,8 +211,9 @@ export async function settleSignupCheckout(
   )
     return null
   const entry = await readEntryState(backend)
-  if (entry === "activating" || (active && entry === "trial_ended")) return null
-  if (entry === "trial_ended" || entry === "payment_failed")
+  const unpaid = entry === "trial_ended" || entry === "plan_required"
+  if (entry === "activating" || (active && unpaid)) return null
+  if (unpaid || entry === "payment_failed")
     return planPickerPath(entry, undefined, locator)
   return "/sandboxes"
 }

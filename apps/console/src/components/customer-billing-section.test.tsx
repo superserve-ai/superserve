@@ -16,19 +16,15 @@ vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "u1" }, loading: false }),
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import {
-  act,
-  fireEvent,
-  render,
-  screen,
-  waitFor,
-  within,
-} from "@testing-library/react"
+import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 
-import { CustomerBillingSection } from "./customer-billing-section"
+import {
+  CustomerBillingSection,
+  usePlanBillingControls,
+} from "./customer-billing-section"
 
 const useCustomerBillingPeriods = vi.fn()
 const createStripeCheckoutSession = vi.fn()
@@ -129,6 +125,52 @@ vi.mock("@superserve/ui", async () => {
   }
 })
 
+function PlanBillingControls({
+  summary,
+}: {
+  summary: BillingSummaryResponse | null
+}) {
+  return usePlanBillingControls({
+    team: { teamId: "team-1", region: "use" },
+    summary,
+  })
+}
+
+function renderControls(summary: BillingSummaryResponse | null = baseSummary) {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+    },
+  })
+
+  return render(
+    <QueryClientProvider client={queryClient}>
+      <PlanBillingControls summary={summary} />
+    </QueryClientProvider>,
+  )
+}
+
+function mockLatestPeriod(period: Record<string, unknown>) {
+  useCustomerBillingPeriods.mockReturnValue({
+    data: {
+      periods: [
+        {
+          period_id: "test",
+          period_start: "2026-06-01T00:00:00Z",
+          period_end: "2026-07-01T00:00:00Z",
+          status: "active",
+          stripe_subscription_status: "active",
+          stripe_invoice_status: "paid",
+          ...period,
+        },
+      ],
+    },
+    isPending: false,
+    isFetching: false,
+    error: null,
+  })
+}
+
 function renderSection(
   summary: BillingSummaryResponse | null = baseSummary,
   cardless = false,
@@ -191,7 +233,7 @@ describe("CustomerBillingSection", () => {
 
   it("preserves historical periods, credits and portal on Free without setup prompts", async () => {
     renderSection({ ...baseSummary, payment_setup_required: true }, true)
-    expect(screen.getByText("Billing history")).toBeInTheDocument()
+    expect(screen.getByText("Billing account")).toBeInTheDocument()
     expect(screen.getByText("Credits remaining: $76.55")).toBeInTheDocument()
     expect(
       screen.getByText("Current billing period estimate: $100.00"),
@@ -199,7 +241,6 @@ describe("CustomerBillingSection", () => {
     expect(
       screen.queryByText(/Outstanding balance|Overdue balance/),
     ).not.toBeInTheDocument()
-    expect(screen.getByText("May 1, 2026 - Jun 1, 2026")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Open Customer Portal" }),
     ).toBeEnabled()
@@ -234,64 +275,58 @@ describe("CustomerBillingSection", () => {
     ).not.toBeInTheDocument()
   })
 
-  it.each([false, true])(
-    "shows unknown storage usage without hiding known charges (billable %s)",
-    (billable) => {
-      renderSection({
-        ...baseSummary,
-        resources: baseSummary.resources.map((resource) =>
-          resource.resource_key === "storage_gib"
-            ? {
-                ...resource,
-                usage: null,
-                billable,
-                charge_usd: billable ? 1.25 : 0,
-              }
-            : resource,
-        ),
-      })
-
-      const card = screen
-        .getByText("Storage")
-        .closest(".border-dashed") as HTMLElement
-      expect(within(card).getByText("Usage unavailable")).toBeInTheDocument()
-      expect(within(card).queryByText(/0.*GiB-hours/)).not.toBeInTheDocument()
-      expect(
-        within(card).getByText(
-          billable ? "Charge: $1.25" : "Tracked but not billed",
-        ),
-      ).toBeInTheDocument()
-      expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
-      expect(screen.getByText("Open Customer Portal")).toBeEnabled()
-    },
-  )
-
   it("uses the latest billing period even when the API returns unsorted rows", () => {
-    renderSection()
+    useCustomerBillingPeriods.mockReturnValue({
+      data: {
+        periods: [
+          {
+            period_id: "newer",
+            period_start: "2026-06-01T00:00:00.000Z",
+            period_end: "2026-07-01T00:00:00.000Z",
+            status: "active",
+            stripe_subscription_status: "active",
+            stripe_invoice_status: "draft",
+          },
+          {
+            period_id: "older",
+            period_start: "2026-05-01T00:00:00.000Z",
+            period_end: "2026-06-01T00:00:00.000Z",
+            status: "exported",
+            stripe_subscription_status: "past_due",
+          },
+        ],
+      },
+      isPending: false,
+      isFetching: false,
+      error: null,
+    })
+    renderControls()
 
-    expect(screen.getByText("Open Customer Portal")).toBeInTheDocument()
-    expect(screen.getAllByText("Jun 1, 2026 - Jul 1, 2026")).toHaveLength(2)
-    expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
-    expect(screen.queryByText("Tracking only")).not.toBeInTheDocument()
-    expect(screen.getByText("CPU")).toBeInTheDocument()
-    expect(screen.getByText("Memory")).toBeInTheDocument()
-    expect(screen.getByText("Storage")).toBeInTheDocument()
-    expect(screen.getByText("Tracked only")).toBeInTheDocument()
-    expect(screen.getAllByText("Billed")).toHaveLength(2)
-    expect(screen.getByText("0.03 vCPU-hours")).toBeInTheDocument()
-    expect(screen.getByText("0.56 GiB-hours")).toBeInTheDocument()
-    expect(screen.getByText("1.11 GiB-hours")).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeEnabled()
+    expect(screen.queryByTestId("plan-billing-problem")).not.toBeInTheDocument()
   })
 
-  it("keeps payment status neutral while the authoritative summary is unavailable", () => {
-    renderSection(null)
+  it("no longer renders a separate payment status card for a connected team", () => {
+    renderSection()
 
-    expect(screen.getByText("Payment Status")).toBeInTheDocument()
-    expect(screen.getAllByText("Unavailable")).toHaveLength(2)
     expect(
-      screen.getByText("Billing data is unavailable for this team right now."),
-    ).toBeInTheDocument()
-    expect(screen.queryByText("Tracking only")).not.toBeInTheDocument()
+      screen.queryByTestId("customer-billing-section"),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByText("Payment Status")).not.toBeInTheDocument()
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
+  })
+
+  it("renders no billing controls while the authoritative summary is unavailable", () => {
+    renderControls(null)
+    expect(
+      screen.queryByTestId("plan-billing-controls"),
+    ).not.toBeInTheDocument()
+    renderSection(null)
+    expect(
+      screen.queryByTestId("customer-billing-section"),
+    ).not.toBeInTheDocument()
   })
 
   it("disables the CTA while billing periods are still loading", () => {
@@ -302,9 +337,21 @@ describe("CustomerBillingSection", () => {
       error: null,
     })
 
-    renderSection()
+    renderControls()
 
     expect(screen.getByRole("button", { name: /loading/i })).toBeDisabled()
+  })
+
+  it("shows view-only copy instead of an action for members without billing rights", () => {
+    renderControls({
+      ...baseSummary,
+      permissions: { can_view: true, can_manage: false },
+    })
+
+    expect(
+      screen.getByText("Billing is view-only for your role."),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
   })
 
   it.each([
@@ -322,7 +369,7 @@ describe("CustomerBillingSection", () => {
           reject = rej
         }),
       )
-      renderSection({ ...baseSummary, portal_available: portalAvailable })
+      renderControls({ ...baseSummary, portal_available: portalAvailable })
 
       const button = screen.getByRole("button", { name: label })
       expect(button).toBeEnabled()
@@ -419,13 +466,13 @@ describe("CustomerBillingSection", () => {
       </QueryClientProvider>,
     )
 
+    expect(screen.getByRole("alert")).toHaveTextContent("Tracking only")
     expect(
-      screen.getByText("Usage is being tracked but you are not being charged"),
+      screen.getByText(
+        "Usage is tracked at standard rates, but this team is not charged yet.",
+      ),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole("button", { name: /tracking only/i }),
-    ).toBeDisabled()
-    expect(screen.getByText("Tracked only")).toBeInTheDocument()
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
   })
 
   it("shows a refresh notice when returning from Stripe", () => {
@@ -441,92 +488,110 @@ describe("CustomerBillingSection", () => {
     ).toBeInTheDocument()
   })
 
-  it.each(["paid", "open", "uncollectible", "void"])(
-    "retains invoice history and actionable %s state",
-    (status) => {
-      useCustomerBillingPeriods.mockReturnValue({
-        data: {
-          periods: [
-            {
-              period_id: "test",
-              period_start: "2026-06-01T00:00:00Z",
-              period_end: "2026-07-01T00:00:00Z",
-              status: "active",
-              stripe_subscription_status: "active",
-              stripe_invoice_status: status,
-            },
-          ],
-        },
-        isPending: false,
-        isFetching: false,
-        error: null,
-      })
-      renderSection()
-      expect(screen.queryByText("Billing is live")).not.toBeInTheDocument()
-      expect(screen.getByText("Billing Periods")).toBeInTheDocument()
+  it.each([
+    { status: "paid", problem: null },
+    { status: "draft", problem: null },
+    { status: "open", problem: null },
+    { status: "void", problem: null },
+    {
+      status: "uncollectible",
+      problem:
+        "The latest invoice could not be collected. Update your payment method in the customer portal.",
+    },
+  ])(
+    "keeps the portal and flags only a problem invoice: $status",
+    ({ status, problem }) => {
+      mockLatestPeriod({ stripe_invoice_status: status })
+      renderControls()
       expect(
         screen.getByRole("button", { name: "Open Customer Portal" }),
       ).toBeEnabled()
-      if (status === "paid") {
-        expect(screen.queryByText("Payment Status")).not.toBeInTheDocument()
-        expect(screen.queryByText("Connected")).not.toBeInTheDocument()
+      if (problem) {
+        expect(screen.getByTestId("plan-billing-problem")).toHaveTextContent(
+          problem,
+        )
       } else {
-        expect(screen.getByText("Payment Status")).toBeInTheDocument()
+        expect(
+          screen.queryByTestId("plan-billing-problem"),
+        ).not.toBeInTheDocument()
       }
     },
   )
+
   it.each([
-    { label: "pending period", status: "pending" },
-    { label: "failed period", status: "failed" },
     {
-      label: "blocked period",
-      status: "active",
-      blocked_reason: "Payment reconciliation pending",
+      label: "pending period",
+      period: { status: "pending" },
+      problem: "Billing for the current period is still processing.",
+    },
+    {
+      label: "failed period",
+      period: { status: "failed" },
+      problem: "Billing for the current period failed.",
     },
     {
       label: "pending subscription",
-      status: "active",
-      stripe_subscription_status: "incomplete",
+      period: { stripe_subscription_status: "incomplete" },
+      problem: "The subscription is waiting for payment confirmation.",
     },
     {
       label: "failed subscription",
-      status: "active",
-      stripe_subscription_status: "past_due",
+      period: { stripe_subscription_status: "past_due" },
+      problem:
+        "The last payment failed. Update your payment method in the customer portal.",
+    },
+    {
+      label: "canceled subscription",
+      period: { stripe_subscription_status: "canceled" },
+      problem: "The subscription is canceled.",
     },
     {
       label: "scheduled cancellation",
-      status: "active",
-      cancel_at_period_end: true,
+      period: { cancel_at_period_end: true },
+      problem:
+        "Billing is scheduled to end at the close of the current period.",
     },
-  ])("keeps payment status for $label", ({ label: _label, ...period }) => {
-    useCustomerBillingPeriods.mockReturnValue({
-      data: {
-        periods: [
-          {
-            period_id: "test",
-            period_start: "2026-06-01T00:00:00Z",
-            period_end: "2026-07-01T00:00:00Z",
-            stripe_subscription_status: "active",
-            stripe_invoice_status: "paid",
-            ...period,
-          },
-        ],
-      },
-      isPending: false,
-      isFetching: false,
-      error: null,
-    })
+  ])("shows a plan card status line for a $label", ({ period, problem }) => {
+    mockLatestPeriod(period)
+    renderControls()
+    expect(screen.getByTestId("plan-billing-problem")).toHaveTextContent(
+      problem,
+    )
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeEnabled()
+  })
+
+  it("keeps a blocked period notice outside the plan card", () => {
+    mockLatestPeriod({ blocked_reason: "Payment reconciliation pending" })
     renderSection()
-    expect(screen.getByText("Payment Status")).toBeInTheDocument()
+    expect(screen.getByText("Billing setup pending")).toBeInTheDocument()
+    expect(
+      screen.getByText("Payment reconciliation pending"),
+    ).toBeInTheDocument()
   })
 
   it("keeps disconnected payment and setup recovery visible", () => {
-    renderSection({
+    renderControls({
       ...baseSummary,
       portal_available: false,
       payment_setup_required: true,
     })
-    expect(screen.getByText("Payment setup required")).toBeInTheDocument()
+    expect(screen.getByTestId("plan-billing-problem")).toHaveTextContent(
+      "Payment setup required",
+    )
     expect(screen.getByRole("button", { name: "Set Up Billing" })).toBeEnabled()
+  })
+
+  it("explains live billing without a customer portal", () => {
+    renderControls({
+      ...baseSummary,
+      portal_available: false,
+      checkout_available: false,
+    })
+    expect(screen.getByTestId("plan-billing-problem")).toHaveTextContent(
+      "Billing is live, but no customer portal is currently available.",
+    )
+    expect(screen.queryByRole("button")).not.toBeInTheDocument()
   })
 })

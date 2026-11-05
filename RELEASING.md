@@ -1,6 +1,6 @@
 # Releasing
 
-How to publish new versions of the Superserve SDKs.
+How to publish new versions of the Superserve SDKs, CLI, and MCP server.
 
 ## TypeScript SDK to npm
 
@@ -54,15 +54,43 @@ Copy `.env.release.example` to `.env.release`, fill in tokens, and `source` it b
 | `NPM_CONFIG_TOKEN` | `bun publish` (TS SDK)    | [npmjs.com](https://www.npmjs.com) → account → access tokens → automation token           |
 | `UV_PUBLISH_TOKEN` | `uv publish` (Python SDK) | [pypi.org](https://pypi.org/manage/account/) → account → API tokens (starts with `pypi-`) |
 
-## CI workflow (GitHub Actions)
+## CI workflows (GitHub Actions)
 
-| Workflow         | Trigger                      | Action                                                                                                                        |
-| ---------------- | ---------------------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **Release SDKs** | Manual (`workflow_dispatch`) | Bumps version, builds, publishes to npm and/or PyPI, commits + tags. Inputs: `package` (`ts` / `python` / `both`), `version`. |
+| Workflow               | Trigger                                                     | Action                                                                                                                                                                                                  |
+| ---------------------- | ----------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Release SDKs**       | Manual (`workflow_dispatch`)                                | Sets the version, builds, publishes to npm and/or PyPI, and pushes the tag `@superserve/sdk@<version>` and/or `superserve-py@<version>`. Inputs: `package` (`ts` / `python` / `both`), `version`.       |
+| **Publish CLI**        | Push of a `cli-v<version>` tag                              | Builds the CLI and standalone binaries, creates the GitHub release (generated notes, binaries, `SHA256SUMS`), publishes `@superserve/cli` to npm, and updates the `superserve-ai/homebrew-tap` formula. |
+| **Publish MCP Server** | Push of an `mcp-v<version>` tag, or manual with a `version` | Pins `@superserve/sdk` to the published version, publishes `@superserve/mcp` to npm, and registers `server.json` in the MCP Registry.                                                                   |
 
-Required repo secrets:
+`main` is protected, so the workflows never push commits. Merge any version bump to `main` in a PR before you run a workflow or push a tag.
 
-| Secret       | Used by               |
-| ------------ | --------------------- |
-| `NPM_TOKEN`  | Release SDKs (ts)     |
-| `PYPI_TOKEN` | Release SDKs (python) |
+npm and PyPI publishing in CI uses Trusted Publishing (OIDC), so these workflows need no npm or PyPI token secrets. The PyPI job runs in the `pypi` environment, which must match the PyPI trusted publisher.
+
+`bun install` does not rewrite a workspace `version` in an existing `bun.lock`, so edit that line by hand. `uv lock` updates `uv.lock`, but a different uv version can also rewrite unrelated markers; keep only the `version` change.
+
+### SDKs
+
+1. Bump the version only for the SDK you release. For TypeScript, change the files listed under [TypeScript SDK to npm](#typescript-sdk-to-npm) and the `packages/sdk` entry in `bun.lock`. For Python, change the files listed under [Python SDK to PyPI](#python-sdk-to-pypi) and the `superserve` package in `uv.lock`. For `both`, do both. Merge that change to `main`.
+2. Run **Release SDKs** with the same `version` and the matching `package` (`ts`, `python`, or `both`).
+
+### CLI
+
+The workflow takes the version from the tag, so `packages/cli/package.json` does not need a bump.
+
+```bash
+git tag cli-v<version> <commit-on-main>
+git push origin cli-v<version>
+```
+
+The Homebrew step uses the repo secrets `RELEASE_APP_ID` and `RELEASE_APP_PRIVATE_KEY` (a GitHub App with write access to `superserve-ai/homebrew-tap`). The **CLI release check** workflow checks this credential on CLI pull requests and every week. The workflow is safe to re-run for the same tag.
+
+### MCP server
+
+1. Bump the version in `packages/mcp/package.json`, `packages/mcp/server.json` (both `version` fields), `packages/mcp/src/constants.ts` → `SERVER_VERSION`, and the `packages/mcp` workspace entry in `bun.lock`. Merge that change to `main`. `tests/version.test.ts` checks that `SERVER_VERSION` matches `package.json`.
+2. If the server needs a newer `@superserve/sdk`, raise `MIN_SDK_VERSION` in `.github/workflows/mcp-publish.yml` in the same PR, and publish the SDK first. The workflow fails if the published SDK is older than `MIN_SDK_VERSION`.
+3. Push the tag:
+
+```bash
+git tag mcp-v<version> <commit-on-main>
+git push origin mcp-v<version>
+```
