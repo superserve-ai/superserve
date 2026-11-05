@@ -366,11 +366,17 @@ export async function GET(request: Request) {
               ),
             )
           }
+          // An invitee retries through sign-in, so keep the invitation as the
+          // destination instead of falling back to first-team setup.
+          const invite = inviteReturnPath(next)
           return NextResponse.redirect(
             buildRedirectUrl(
               origin,
               paidSetupRecovery ??
-                "/auth/auth-code-error?reason=membership_lookup_degraded",
+                `/auth/auth-code-error?${new URLSearchParams({
+                  reason: "membership_lookup_degraded",
+                  ...(invite ? { next: invite } : {}),
+                })}`,
             ),
           )
         }

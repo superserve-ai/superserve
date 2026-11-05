@@ -1890,6 +1890,33 @@ describe("auth callback", () => {
       )
     })
 
+    it("keeps an invitation destination through a degraded lookup and its retry", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      directoryState = { memberships: [], degradedRegions: ["use"] }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=official&type=signup",
+      )
+      url.searchParams.set("next", invite)
+      const response = await GET(new Request(url))
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.pathname).toBe("/auth/auth-code-error")
+      expect(failure.searchParams.get("reason")).toBe(
+        "membership_lookup_degraded",
+      )
+      expect(failure.searchParams.get("next")).toBe(invite)
+      retrySearch = failure.searchParams
+      const ErrorPage = (await import("../auth-code-error/page")).default
+      render(createElement(ErrorPage))
+      const retry = new URL(
+        screen.getByRole("link", { name: "Try Again" }).getAttribute("href")!,
+        url,
+      )
+      cleanup()
+      expect(retry.pathname).toBe("/auth/signin")
+      expect(retry.searchParams.get("next")).toBe(invite)
+    })
+
     it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(
       "does not turn unsafe next into a paid retry on degraded lookup: %s",
       async (next) => {
