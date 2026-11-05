@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 vi.mock("server-only", () => ({}))
 vi.mock("@/lib/cells", () => ({
   cellFor: (region: string) => ({ apiBaseUrl: `https://api.${region}.test` }),
-  internalApiTokenFor: () => "internal-token",
+  DEFAULT_REGION: "use",
 }))
 
 const fetchSpy = vi.fn()
@@ -32,8 +32,44 @@ const previewBody = {
   available: true,
 }
 
+const consoleToken = "c".repeat(32)
+const westToken = "w".repeat(32)
+
 beforeEach(() => {
   fetchSpy.mockReset()
+  vi.stubEnv("TEAM_INVITATION_CONSOLE_TOKEN", consoleToken)
+  vi.stubEnv("TEAM_INVITATION_CONSOLE_TOKEN_USWEST", westToken)
+  vi.stubEnv("INTERNAL_API_TOKEN", "i".repeat(32))
+})
+
+describe("invitation credential", () => {
+  it("sends each region's invitation credential, never the internal token", async () => {
+    fetchSpy.mockResolvedValue(json(previewBody))
+    await previewInvitation(token)
+    await previewInvitation(`ssinv_usw_${"T".repeat(43)}`)
+    expect(
+      fetchSpy.mock.calls.map(([url, init]) => [
+        new URL(String(url)).host,
+        init.headers.Authorization,
+      ]),
+    ).toEqual([
+      ["api.use.test", `Bearer ${consoleToken}`],
+      ["api.usw.test", `Bearer ${westToken}`],
+    ])
+  })
+
+  it.each(["", "short"])(
+    "fails closed without a usable credential (%j)",
+    async (value) => {
+      vi.stubEnv("TEAM_INVITATION_CONSOLE_TOKEN", value)
+      expect(await previewInvitation(token)).toEqual({ ok: false })
+      expect(await acceptInvitation(token, user)).toEqual({
+        ok: false,
+        error: "retry",
+      })
+      expect(fetchSpy).not.toHaveBeenCalled()
+    },
+  )
 })
 
 describe("previewInvitation", () => {

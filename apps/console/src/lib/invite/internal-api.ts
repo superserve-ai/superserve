@@ -1,6 +1,6 @@
 import "server-only"
 import { inviteTokenRegion } from "@/lib/auth/invite-return-path"
-import { cellFor, internalApiTokenFor } from "@/lib/cells"
+import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 
 export interface InvitePreview {
   invitationId: string
@@ -40,12 +40,24 @@ export type InviteAcceptResult =
 
 const REQUEST_TIMEOUT_MS = 8000
 
+// Accept trusts the user identity this server sends, so the cells only take a
+// dedicated credential here, never the internal token that hosts also hold.
+function invitationTokenFor(region: string): string | null {
+  const token =
+    region === DEFAULT_REGION
+      ? process.env.TEAM_INVITATION_CONSOLE_TOKEN
+      : region === "usw"
+        ? process.env.TEAM_INVITATION_CONSOLE_TOKEN_USWEST
+        : undefined
+  return token && token.length >= 32 ? token : null
+}
+
 async function internalPost(
   region: string,
   path: string,
   body: unknown,
 ): Promise<Response | null> {
-  const token = internalApiTokenFor(region)
+  const token = invitationTokenFor(region)
   if (!token) return null
   try {
     return await fetch(new URL(path, cellFor(region).apiBaseUrl), {
