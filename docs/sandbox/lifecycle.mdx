@@ -264,14 +264,6 @@ curl -X PATCH https://api.superserve.ai/sandboxes/$SANDBOX_ID \
   -d '{"idle_timeout_seconds": null}'
 ```
 
-From the CLI, pass a duration, or `none` to turn idle pausing off:
-
-```bash
-superserve sandbox create --name dev-box --idle-timeout 10m
-superserve sandbox update dev-box --idle-timeout 15m
-superserve sandbox update dev-box --idle-timeout none
-```
-
 ## Auto-delete
 
 By default a paused sandbox is kept forever. Set `autoDeleteSeconds` to delete it once it has been continuously paused for that long. This suits short-lived or unattended sandboxes: scheduled jobs, one-off experiments, or agent sessions that never get an explicit `kill()`.
