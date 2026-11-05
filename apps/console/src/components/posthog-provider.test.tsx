@@ -121,3 +121,18 @@ it("keeps invite tokens out of real PostHog capture and flags requests, includin
     expect(body).not.toContain(TOKEN)
   }
 })
+
+it.each([
+  [`/invite/${TOKEN}/`, true],
+  ["/sandboxes/", false],
+])("starts replay disabled only on a token address: %s", async (path, off) => {
+  window.history.replaceState(null, "", path)
+  vi.stubEnv("NEXT_PUBLIC_POSTHOG_KEY", "invite-replay-test")
+  vi.resetModules()
+  const { default: posthog } = await import("posthog-js")
+  const init = vi.spyOn(posthog, "init").mockReturnValue(undefined)
+  await import("./posthog-provider")
+  expect(init.mock.calls[0][1]).toMatchObject({
+    disable_session_recording: off,
+  })
+})

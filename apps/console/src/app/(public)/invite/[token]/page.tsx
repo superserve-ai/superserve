@@ -11,8 +11,10 @@ import { beginInviteAuthAction } from "./actions"
 import { AutoJoin, ConfirmControls, MismatchControls } from "./invite-controls"
 
 function InviteCard({ children }: { children: React.ReactNode }) {
+  // The recorder's block class keeps the token in this page's form fields out
+  // of replay even if recording is active during a navigation.
   return (
-    <div className="relative min-h-screen overflow-hidden bg-background">
+    <div className="ph-no-capture relative min-h-screen overflow-hidden bg-background">
       <div className="relative z-10 flex min-h-screen flex-col items-center justify-center p-4">
         <div className="mb-8">
           <Link href="/" className="flex items-center gap-2">

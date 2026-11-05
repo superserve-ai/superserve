@@ -5,6 +5,7 @@ import { PostHogProvider as PHProvider } from "posthog-js/react"
 import type React from "react"
 
 import {
+  carriesInviteToken,
   redactCapturedRequest,
   redactInviteTokens,
   redactInviteTokensFromEvent,
@@ -24,6 +25,10 @@ if (typeof window !== "undefined") {
         capture_pageview: false,
         capture_pageleave: true,
         cross_subdomain_cookie: true,
+        // A recorder script that starts loading during init does not recheck
+        // a later stop when it lands, so a token address starts disabled;
+        // `loaded` records the pause and the next plain address resumes it.
+        disable_session_recording: carriesInviteToken(window.location.href),
         // Invitation tokens never leave the browser: this is the final scrub
         // of every event, whatever put the token there.
         before_send: (event) => {
