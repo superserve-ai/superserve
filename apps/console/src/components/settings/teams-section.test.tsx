@@ -112,6 +112,56 @@ describe("TeamsSection", () => {
     expect(screen.getByText(/becomes this team in US West/)).toBeInTheDocument()
   })
 
+  it.each([
+    ["the account is the only team", [account]],
+    [
+      "the user has other teams",
+      [account, { id: "team-a", name: "alpha", region: "usw" }],
+    ],
+  ])(
+    "converts the account in a single-region deployment when %s",
+    async (_, teams) => {
+      teamsData = {
+        teams,
+        regions: ["usw"],
+        activeTeamId: "team-me",
+        activeRegion: "usw",
+        convertibleTeams: [account],
+      }
+      const user = userEvent.setup()
+      render(<TeamsSection />)
+
+      expect(
+        screen.getByText(/Your current account becomes this team in US West/),
+      ).toBeInTheDocument()
+      expect(screen.queryByLabelText("Team region")).not.toBeInTheDocument()
+
+      await user.type(screen.getByPlaceholderText("my-team"), "acme")
+      await user.click(screen.getByRole("button", { name: "Create Team" }))
+      expect(mutate).toHaveBeenCalledWith(
+        { name: "acme", region: "usw", convertTeamId: "team-me" },
+        expect.anything(),
+      )
+    },
+  )
+
+  it("offers no new team in a single-region deployment", () => {
+    const other = { id: "team-a", name: "alpha", region: "usw" }
+    teamsData = {
+      teams: [account, other],
+      regions: ["usw"],
+      activeTeamId: "team-a",
+      activeRegion: "usw",
+      convertibleTeams: [account],
+    }
+    render(<TeamsSection />)
+
+    expect(screen.getByText("alpha")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Create Team" }),
+    ).not.toBeInTheDocument()
+  })
+
   it("converts whichever account team is active", async () => {
     const east = { id: "team-me-e", name: "user@example.com", region: "use" }
     teamsData = {

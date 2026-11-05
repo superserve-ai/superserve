@@ -25,12 +25,14 @@ import { regionLabel } from "@/lib/format"
  * Team directory + create-team form. The directory renders whenever the
  * user has more than one team or more than one cell is configured — a
  * multi-team user needs the Active marker regardless of region count
- * (switching itself lives in the sidebar team dropdown). The create-team
+ * (switching itself lives in the sidebar team dropdown). The new-team
  * form stays multi-cell-only: with a single configured cell there's no
- * region to choose, so the form has nothing to show.
+ * region to choose.
  *
  * While the active team is the user's own account team, creating a team
  * converts that account in its own region instead of adding another team.
+ * The conversion needs no region choice, so it shows with any number of
+ * cells.
  */
 export function TeamsSection() {
   const { data } = useTeams()
@@ -40,14 +42,17 @@ export function TeamsSection() {
   const [name, setName] = useState("")
   const [region, setRegion] = useState("use")
 
-  if (!data || (data.regions.length <= 1 && data.teams.length <= 1)) {
-    return null
-  }
-  const canCreate = data.regions.length > 1
   const conversion =
-    data.convertibleTeams?.find(
+    data?.convertibleTeams?.find(
       (t) => t.id === data.activeTeamId && t.region === data.activeRegion,
     ) ?? null
+  if (
+    !data ||
+    (!conversion && data.regions.length <= 1 && data.teams.length <= 1)
+  ) {
+    return null
+  }
+  const canCreate = conversion !== null || data.regions.length > 1
 
   const handleCreate = () => {
     createTeam.mutate(
