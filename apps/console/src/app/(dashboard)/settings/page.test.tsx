@@ -429,7 +429,7 @@ describe("Settings change password", () => {
     expect(updateUser).not.toHaveBeenCalled()
   })
 
-  it.each(["current_password_mismatch", "current_password_required"])(
+  it.each(["current_password_invalid", "current_password_required"])(
     "shows the current password error when Auth returns %s",
     async (code) => {
       updateUser.mockResolvedValue({ error: { code } })
