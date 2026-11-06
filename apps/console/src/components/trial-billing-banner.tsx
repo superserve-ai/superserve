@@ -97,17 +97,20 @@ export type TrialStage =
   | "plan_required"
 
 // The trial's stage from its entry state and balance. A team that never got a
-// trial grant also reports trial_ended; it must not be told its trial ended.
+// trial grant also reports trial_ended, so "ended" needs the balance to confirm
+// the trial was used; anything else stays neutral.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
 ): TrialStage {
   if (entry === "payment_failed" || entry === "plan_required") return entry
-  if (entry === "trial_ended" && trial?.state === "no_grant")
-    return "unavailable"
+  if (entry === "trial_ended") {
+    return trial?.state === "exhausted" || trial?.state === "expired"
+      ? "ended"
+      : "unavailable"
+  }
   const remaining = trial?.remaining_usd
   if (
-    entry === "trial_ended" ||
     trial?.state === "exhausted" ||
     (typeof remaining === "number" &&
       Number.isFinite(remaining) &&

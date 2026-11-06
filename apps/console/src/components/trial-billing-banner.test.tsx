@@ -454,9 +454,18 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
   })
 
+  it("says nothing about the trial while the summary is unavailable", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({ data: undefined })
+    const { container } = mount()
+    expect(container.textContent).not.toMatch(/ended|used up/)
+  })
+
   it("says sandboxes are paused and nothing is deleted once the trial ends", () => {
     entry("trial_ended")
-    mocks.summary.mockReturnValue({ data: trial(0) })
+    mocks.summary.mockReturnValue({
+      data: summary({ trial: { state: "exhausted", remaining_usd: 0 } }),
+    })
     mount()
     expect(banner()).toHaveTextContent(
       "Your free trial has ended. Your sandboxes are paused and nothing is deleted. Upgrade to resume.",
@@ -510,9 +519,11 @@ describe("trialStage", () => {
     ["trial", { state: "active", remaining_usd: 0.5 }, "trial"],
     ["trial", { state: "exhausted", remaining_usd: 0.5 }, "ended"],
     ["trial", { state: "active", remaining_usd: 0 }, "ended"],
-    ["trial_ended", { state: "active", remaining_usd: 0.5 }, "ended"],
     ["trial_ended", { state: "exhausted", remaining_usd: 0 }, "ended"],
+    ["trial_ended", { state: "expired", remaining_usd: 0.5 }, "ended"],
     ["trial_ended", { state: "no_grant", remaining_usd: 0 }, "unavailable"],
+    ["trial_ended", { state: "active", remaining_usd: 0 }, "unavailable"],
+    ["trial_ended", undefined, "unavailable"],
     ["payment_failed", undefined, "payment_failed"],
     ["trial", undefined, "trial"],
   ] as const)("%s with %o is %s", (entry, trial, stage) => {

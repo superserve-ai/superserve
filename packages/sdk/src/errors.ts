@@ -98,7 +98,7 @@ export class BillingError extends SandboxError {
   readonly actionUrl?: string
 
   constructor(
-    message = "Billing is not active for this account",
+    message = "Billing does not allow this request",
     code?: string,
     actionUrl?: string,
   ) {

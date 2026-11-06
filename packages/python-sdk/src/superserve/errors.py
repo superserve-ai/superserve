@@ -102,7 +102,7 @@ class BillingError(SandboxError):
 
     def __init__(
         self,
-        message: str = "Billing is not active for this account",
+        message: str = "Billing does not allow this request",
         code: str | None = None,
         action_url: str | None = None,
     ) -> None:

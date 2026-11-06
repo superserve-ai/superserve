@@ -67,7 +67,7 @@ describe("formatSdkError", () => {
     const msg = formatSdkError(
       new BillingError("unavailable", "billing_ineligible"),
     )
-    expect(msg).toMatch(/Billing is not active/)
+    expect(msg).toMatch(/Billing does not allow this request/)
     expect(msg).not.toMatch(/trial|deleted|card/i)
   })
   it("plan-limit billing errors keep the server message", () => {

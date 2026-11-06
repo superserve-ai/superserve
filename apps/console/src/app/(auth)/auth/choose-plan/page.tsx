@@ -57,21 +57,28 @@ const TRIAL_USED_UP =
 function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
   const account = locator?.account
   const team = locator?.team
-  const [outcome, setOutcome] = useState<TrialOutcome | null | undefined>(
-    account && team ? undefined : null,
-  )
+  const key = account && team ? `${account}/${team}` : null
+  // Tagged with the team it was read for, so a previous team's result is never
+  // shown while another team's balance loads.
+  const [read, setRead] = useState<{
+    key: string
+    outcome: TrialOutcome | null
+  } | null>(null)
   useEffect(() => {
-    if (!account || !team) return
+    if (!account || !team || !key) return
     let current = true
     getTrialOutcomeAction({ account, team })
-      .then((next) => current && setOutcome(next))
-      .catch(() => current && setOutcome(null))
+      .then((next) => current && setRead({ key, outcome: next }))
+      .catch((): void => {
+        if (current) setRead({ key, outcome: null })
+      })
     return () => {
       current = false
     }
-  }, [account, team])
-  if (outcome === undefined) return null
-  return outcome === "used_up" ? TRIAL_USED_UP : MESSAGES.trial_ended
+  }, [account, team, key])
+  if (key === null) return MESSAGES.trial_ended
+  if (read?.key !== key) return null
+  return read.outcome === "used_up" ? TRIAL_USED_UP : MESSAGES.trial_ended
 }
 
 function ChoosePlanContent() {

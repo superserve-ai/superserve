@@ -35,7 +35,7 @@ function formatBillingError(err: BillingError): string {
     return err.message
   }
   // Generic code (also used by older servers): claim nothing specific.
-  return `Billing is not active for this account. Do not retry. Ask the user to check their billing ${where}.`
+  return `Billing does not allow this request. Do not retry. Ask the user to check their billing ${where}.`
 }
 
 export function formatSdkError(err: unknown): string {

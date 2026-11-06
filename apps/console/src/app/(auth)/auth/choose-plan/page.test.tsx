@@ -35,10 +35,12 @@ vi.mock("@superserve/ui", () => ({
 vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
 const trial = vi.hoisted(() => ({
   outcome: null as "used_up" | "unavailable" | null,
+  perTeam: {} as Record<string, "used_up" | "unavailable" | null>,
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTeamCatalogAction: async () => null,
-  getTrialOutcomeAction: async () => trial.outcome,
+  getTrialOutcomeAction: async ({ team }: { team: string }) =>
+    team in trial.perTeam ? trial.perTeam[team] : trial.outcome,
 }))
 
 import ChoosePlanPage from "./page"
@@ -48,6 +50,7 @@ describe("plan picker", () => {
     params = new URLSearchParams()
     replace.mockReset()
     trial.outcome = null
+    trial.perTeam = {}
   })
 
   it("offers both plans when the trial has ended", async () => {
@@ -78,6 +81,28 @@ describe("plan picker", () => {
     render(<ChoosePlanPage />)
     expect(await screen.findByText(/Your free trial is used up/)).toBeTruthy()
     expect(screen.getByText(/nothing is deleted/)).toBeTruthy()
+  })
+
+  it("drops the previous team's used-up message when the team changes", async () => {
+    trial.perTeam = { "use:t1": "used_up", "use:t2": "unavailable" }
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:t1",
+    })
+    const { rerender } = render(<ChoosePlanPage />)
+    expect(await screen.findByText(/Your free trial is used up/)).toBeTruthy()
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:t2",
+    })
+    rerender(<ChoosePlanPage />)
+    expect(screen.queryByText(/used up/)).toBeNull()
+    expect(
+      await screen.findByText(/The free trial isn't available/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/used up/)).toBeNull()
   })
 
   it.each(["unavailable", null] as const)(
