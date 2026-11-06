@@ -1,0 +1,126 @@
+---
+title: "Harbor"
+sidebarTitle: Harbor
+description: Run Harbor agent evaluations and benchmarks in isolated Superserve sandboxes.
+icon: "flask"
+---
+
+[Harbor](https://github.com/harbor-framework/harbor) is a framework for evaluating agents on containerized tasks. Its `superserve` environment runs each trial in its own Superserve sandbox, so you can run many trials in parallel without a local Docker daemon.
+
+## Setup
+
+Install Harbor with the `superserve` extra:
+
+```bash
+uv tool install --python 3.13 "harbor[superserve]>=0.25.1.dev202611040613"
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+The version specifier selects Harbor's nightly build, which includes the `superserve` environment until the next stable release. Do not add `--prerelease allow`: it also lets uv pick prereleases of Harbor's dependencies, and `harbor run` then fails with `ModuleNotFoundError`. `--python 3.13` pins a Python version that all of Harbor's dependencies support. Without it, uv can select a newer Python for which some dependencies have no prebuilt wheels, and the install fails.
+
+See [API keys](/api-key) to create a Superserve API key. Also export the key for the agent you evaluate, for example `ANTHROPIC_API_KEY` for Claude Code.
+
+## Run a task
+
+Pass `-e superserve` (or `--env superserve`) to `harbor run`. Start with the oracle agent, which runs the task's reference solution:
+
+```bash
+harbor run -t hello-world/hello-world -e superserve -a oracle
+```
+
+Then run a real agent:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+harbor run -t hello-world/hello-world -e superserve \
+  -a claude-code -m anthropic/claude-haiku-4-5
+```
+
+Use `-n` to set how many trials run at the same time, and `-k` to set the number of attempts for each task:
+
+```bash
+harbor run -t hello-world/hello-world -e superserve -a oracle -n 3 -k 3
+```
+
+`-t` runs one task from the Harbor registry. Use `-d <dataset>@<version>` for a registry dataset, or `-p <path>` for a local task or dataset directory.
+
+## How tasks run
+
+Harbor picks one of two modes for each task:
+
+| Task definition | How it runs |
+| --- | --- |
+| `docker_image` in `task.toml` | Superserve builds a [template](/templates/overview) from the image and boots each trial sandbox from it. The template is named `harbor/<task>-<hash>` and is reused by later trials with the same image and resources. |
+| `Dockerfile` or `docker-compose.yaml` | Each trial boots from a Docker host template named `harbor/dind-<hash>`, then builds the task's image or Compose project inside the sandbox. Tasks with the same resources share this template. |
+
+If an image cannot boot as a sandbox, Harbor runs the task with Docker inside the sandbox instead. The first trial for a new image or resource shape waits for the template build. Later trials start from the cached template.
+
+<Note>
+  An image's `ENTRYPOINT` and `CMD` do not run in a template-booted sandbox. Commands run as the image's `USER` (`root` if the image does not set one), unless Harbor requests a specific user.
+</Note>
+
+## Configure the environment
+
+Pass environment options with `--ek key=value` (or `--environment-kwarg key=value`). Harbor parses each value as JSON when it is valid JSON, and as a string otherwise:
+
+```bash
+harbor run -t hello-world/hello-world -e superserve \
+  -a claude-code -m anthropic/claude-haiku-4-5 \
+  --ek auto_delete_seconds=3600 \
+  --ek 'secrets={"ANTHROPIC_API_KEY": "anthropic-eval"}'
+```
+
+| Option | Purpose |
+| --- | --- |
+| `api_key` | Superserve API key. The default is `SUPERSERVE_API_KEY`. |
+| `base_url` | Superserve API URL. The default is `SUPERSERVE_BASE_URL`, then the SDK default. |
+| `timeout_seconds` | Active time after which a sandbox is paused. The default is `86400` (24 hours). `null` disables it. |
+| `auto_delete_seconds` | Time a paused sandbox is kept before it is deleted. The default is `604800` (7 days). `null` keeps it. |
+| `secrets` | [Team secrets](/secrets/binding) to bind, as `{"ENV_VAR": "secret-name"}`. The sandbox sees a stand-in value, and the real credential is attached only to requests to the secret's hosts. A value for the same variable from Harbor is dropped. |
+| `max_concurrent_builds` | Template builds that one Harbor process runs at the same time. The default is `4`. Keep it at or below your team's build limit. |
+| `extra_docker_compose` | Additional Compose files layered onto the task. A non-empty list runs the task in Compose mode. |
+
+## Resources
+
+The task's `cpus`, `memory_mb`, and `storage_mb` set the sandbox's vCPUs, memory, and disk. Each sandbox is sized exactly to the task, so these values are both the reservation and the limit. GPUs are not supported. The task's values must fit your plan's [resource limits](/templates/build-spec#resource-limits).
+
+## Network policies
+
+[Harbor network policies](https://harborframework.com/docs/tasks/network-policies) map to Superserve [network rules](/sandbox/networking):
+
+| Harbor policy | Superserve rules |
+| --- | --- |
+| `public` | No rules. All egress is allowed. |
+| `no-network` | Deny `0.0.0.0/0`. |
+| `allowlist` | Allow the listed hosts and deny `0.0.0.0/0`. When the list has a hostname, Harbor also allows the sandbox's DNS resolvers. |
+
+- Hostname entries match the TLS SNI or HTTP `Host` header, so they allow ports 80 and 443 only. IPv4 address and CIDR entries allow all ports.
+- A wildcard such as `*.example.com` matches subdomains at any depth but not `example.com` itself. Add the apex domain as a separate entry.
+- Policy changes during a trial apply to new connections. Open connections stay open.
+
+## Clean up
+
+By default, Harbor deletes each sandbox when its trial ends. With `--no-delete`, Harbor pauses the sandbox instead, and Superserve deletes it after `auto_delete_seconds`.
+
+Harbor keeps its `harbor/...` templates for later runs. To remove one, delete it in the console or with the [CLI](/cli):
+
+```bash
+superserve template delete harbor/<name>-<hash>
+```
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="Harbor documentation" icon="book" href="https://harborframework.com/docs/sandboxes/pre-integrated-sandboxes">
+    Read how Harbor runs tasks in cloud sandboxes.
+  </Card>
+  <Card title="Harbor source" icon="github" href="https://github.com/harbor-framework/harbor/blob/main/src/harbor/environments/superserve.py">
+    Read the `superserve` environment's source on Harbor's `main` branch.
+  </Card>
+  <Card title="Templates" icon="layer-group" href="/templates/overview">
+    Learn how Superserve builds and caches templates.
+  </Card>
+  <Card title="Secrets" icon="key" href="/secrets/binding">
+    Bind team secrets to sandboxes.
+  </Card>
+</CardGroup>

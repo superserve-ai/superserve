@@ -14,6 +14,7 @@ import { buildCreateSandboxRequest } from "./create-sandbox-dialog"
 const emptyState = {
   name: "",
   timeout: "",
+  idleTimeout: "",
   autoDelete: "",
   allowRules: [] as string[],
   denyRules: [] as string[],
@@ -77,6 +78,29 @@ describe("buildCreateSandboxRequest", () => {
       timeout: "300",
     })
     expect(req.timeout_seconds).toBe(300)
+  })
+
+  it("includes idle_timeout_seconds when present and omits it when blank", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      idleTimeout: "600",
+    })
+    expect(req.idle_timeout_seconds).toBe(600)
+    expect(
+      buildCreateSandboxRequest({ ...emptyState, name: "x" })
+        .idle_timeout_seconds,
+    ).toBeUndefined()
+  })
+
+  it("rejects an idle timeout under a minute", () => {
+    expect(() =>
+      buildCreateSandboxRequest({
+        ...emptyState,
+        name: "x",
+        idleTimeout: "30",
+      }),
+    ).toThrow()
   })
 
   it("includes auto_delete_seconds as a number when present", () => {
@@ -234,6 +258,7 @@ describe("buildCreateSandboxRequest", () => {
     const req = buildCreateSandboxRequest({
       name: "full",
       timeout: "600",
+      idleTimeout: "900",
       autoDelete: "3600",
       allowRules: ["api.example.com"],
       denyRules: ["malicious.test"],
@@ -246,6 +271,7 @@ describe("buildCreateSandboxRequest", () => {
       name: "full",
       preview_access: "private",
       timeout_seconds: 600,
+      idle_timeout_seconds: 900,
       auto_delete_seconds: 3600,
       network: {
         allow_out: ["api.example.com"],

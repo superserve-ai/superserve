@@ -17,6 +17,8 @@ export interface SandboxListItem {
   /** The saved snapshot this sandbox was created from. */
   source_snapshot_id?: string
   timeout_seconds?: number
+  /** Pause after this many seconds with no activity. */
+  idle_timeout_seconds?: number
   auto_delete_seconds?: number
   /** Deletion deadline; present only while paused with auto_delete_seconds set. */
   auto_delete_at?: string
@@ -55,6 +57,8 @@ export interface CreateSandboxRequest {
   /** Saved snapshot ID to continue from; excludes from_template. */
   from_snapshot?: string
   timeout_seconds?: number
+  /** Pause after this many seconds with no activity. */
+  idle_timeout_seconds?: number
   /** Delete the sandbox once continuously paused for this many seconds. */
   auto_delete_seconds?: number
   env_vars?: Record<string, string>
@@ -73,6 +77,8 @@ export interface SandboxPatch {
   auto_delete_seconds?: number | null
   /** A number sets the auto-pause timeout; null disables it. */
   timeout_seconds?: number | null
+  /** A number sets the idle timeout; null turns idle pausing off. */
+  idle_timeout_seconds?: number | null
   preview_access?: PreviewAccessPolicy
 }
 
