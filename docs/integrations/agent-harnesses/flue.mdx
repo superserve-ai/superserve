@@ -177,9 +177,9 @@ Every command gets a timeout. Without one, the SDK request ends after 30 seconds
 
 ## Write the agent
 
-Flue calls `createSandbox` with the agent instance id. The agent below tags its sandbox with that id, so later turns for the same id find and reuse the same sandbox. Save it as `src/agents/coder.ts`.
+Flue calls `createSandbox` with the agent instance id. The agent below tags its sandbox with the agent name and that id, so later turns for the same agent and id find and reuse the same sandbox. Save it as `src/agents/coder.ts`.
 
-```typescript src/agents/coder.ts {9-29}
+```typescript src/agents/coder.ts {9-30}
 "use agent"
 import { useModel, useSandbox } from "@flue/runtime"
 import { Sandbox } from "@superserve/sdk"
@@ -189,11 +189,12 @@ export function Coder() {
   useModel("anthropic/claude-sonnet-5-5")
 
   useSandbox({
-    // Flue passes the agent instance id. Reuse the sandbox for that id,
-    // or create one on the first turn.
+    // Flue passes the agent instance id. Reuse the sandbox for this agent
+    // and id, or create one on the first turn.
     async createSandbox({ id }) {
+      const metadata = { flueAgent: "coder", flueAgentId: id }
       const [existing] = await Sandbox.list({
-        metadata: { flueAgentId: id },
+        metadata,
         status: ["starting", "active", "pausing", "paused", "resuming"],
       })
       if (existing) {
@@ -201,8 +202,8 @@ export function Coder() {
         return superserve(await Sandbox.connect(existing.id))
       }
       const sandbox = await Sandbox.create({
-        name: `flue-${id}`,
-        metadata: { flueAgentId: id },
+        name: `flue-coder-${id}`,
+        metadata,
         idleTimeoutSeconds: 15 * 60,
         autoDeleteSeconds: 24 * 60 * 60,
       })
@@ -282,9 +283,9 @@ Then pass the template name to `Sandbox.create` in `src/agents/coder.ts`:
 
 ```typescript {3}
 const sandbox = await Sandbox.create({
-  name: `flue-${id}`,
+  name: `flue-coder-${id}`,
   fromTemplate: "flue-coder",
-  metadata: { flueAgentId: id },
+  metadata,
   idleTimeoutSeconds: 15 * 60,
   autoDeleteSeconds: 24 * 60 * 60,
 })
@@ -300,7 +301,9 @@ import { Sandbox } from "@superserve/sdk"
 const [agentId] = process.argv.slice(2)
 if (!agentId) throw new Error("Usage: delete-sandbox.ts <agent-id>")
 
-for (const { id } of await Sandbox.list({ metadata: { flueAgentId: agentId } })) {
+for (const { id } of await Sandbox.list({
+  metadata: { flueAgent: "coder", flueAgentId: agentId },
+})) {
   await Sandbox.killById(id)
   console.log(`Deleted sandbox ${id}`)
 }
@@ -311,13 +314,14 @@ node --env-file=.env scripts/delete-sandbox.ts demo-1
 ```
 
 ```text
-Deleted sandbox a8b6f86f-5a3a-4ada-81af-e27a6ad80ef1
+Deleted sandbox 718cffb7-6289-4cc7-86ad-628f9a4b2e62
 ```
 
 See [Metadata tags](/sandbox/metadata) for more about filters.
 
 ## Good to know
 
+- The lookup in `createSandbox` is not atomic. If two processes can start the same agent instance at the same time, store the sandbox id with the conversation in your database, and connect to that id instead.
 - The model can call only Flue's tools. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
 - Cancelling a Flue call does not stop a command that is already running in the sandbox. The command stops when its timeout expires.
 - The default sandbox has `python3` but no `python`. Tell the model in the system prompt, or use a template with the tools you need.
