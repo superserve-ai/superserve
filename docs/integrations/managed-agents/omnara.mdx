@@ -21,7 +21,7 @@ This is for you if:
 - **You** create the pool, choose the template, and set the size and capacity limits. You grant the pool to a project, and agents in that project use it through `machine_sources`.
 - **Superserve** runs the machines. Each pool machine is one sandbox named `omnara-mch-...`, tagged with `omnara-installation` and `omnara-machine` metadata. Omnara starts the `omnarad` daemon in the sandbox, and the daemon connects out to Omnara over HTTPS. Omnara sends the agent's commands over that connection.
 
-No inbound ports are required. The daemon connects out to Omnara, and Superserve reaches the sandbox through its own control plane.
+No inbound ports are required. Superserve reaches the sandbox through its own control plane.
 
 ## Prerequisites
 
@@ -79,8 +79,8 @@ No inbound ports are required. The daemon connects out to Omnara, and Superserve
 
     | Template | Shape (vCPU · mem · disk) | Use it for |
     |---|---|---|
-    | `superserve/omnara` | 2 · 4096 MiB · 8192 MiB | The default. Ubuntu 24.04 with Omnara's default machine environment: Python 3.12 with uv, Node.js 24, Go, `gh`, `jq`, `rg`, PostgreSQL, Redis, and Playwright with headless Chromium. Commands start in `/workspace`. |
-    | `superserve/base` | 2 · 4096 MiB · 8192 MiB | Ubuntu 24.04 with `git`, `curl`, Python 3.12, and Node.js 22, for agents that only run shell commands. |
+    | `superserve/omnara` | 2 · 4096 MiB · 8192 MiB | The default. Omnara's default machine environment (Python, Node.js, Go, PostgreSQL, Redis, Playwright). Commands start in `/workspace`. |
+    | `superserve/base` | 2 · 4096 MiB · 8192 MiB | Ubuntu 24.04 with Python and Node.js, for agents that only run shell commands. |
     | Your own | Set in the build spec | A [team template](/templates/create) with your runtimes, package caches, and certificates built in. Use its name, for example `acme/agent-box`. |
 
     The template must have the status `ready` before a pool can use it. See [System templates](/templates/overview#system-templates) for the full contents of each template.
@@ -100,16 +100,16 @@ No inbound ports are required. The daemon connects out to Omnara, and Superserve
       --max-total-memory-mb 8192
     ```
 
-    The JSON flags take JSON values, so the provider name is the quoted string `'"superserve"'`. The per-machine maximums must be at least the template's size: 2 vCPU and 4096 MiB for the system templates. The `--max-total-*` flags cap the whole pool.
+    The JSON flags take JSON values, so the provider name is the quoted string `'"superserve"'`. The per-machine maximums must be at least the template's size: 2 vCPU and 4096 MiB for the system templates. The `--max-total-*` flags cap the whole pool. Note the pool id (`mpo_...`) in the output.
 
-    `--default-machine-provider-options` also accepts a `startup_script` that runs on each new machine before the daemon starts. To limit which templates grants and agent configs can choose, set `allowed_templates` in `--provider-config`. See Omnara's [Superserve provider](https://docs.omnara.com/machines/providers/superserve) page for the full field list.
+    See Omnara's [Superserve provider](https://docs.omnara.com/machines/providers/superserve) page for `startup_script`, `allowed_templates`, and other fields.
 
     To use the dashboard instead, open **Machines**, click **New pool**, and choose **Superserve**.
   </Step>
 
   <Step title="Grant the pool to a project">
     ```bash
-    npx omnara grant pools add --machine-pool-id <pool-id>
+    npx omnara grant pools add --machine-pool-id mpo_...
     ```
 
     The grant can also set stricter limits and project environment variables. Run `npx omnara grant pools add --help` for the overlay flags.
@@ -174,7 +174,7 @@ print(machine.id, machine.name, machine.status)
 ```
 </CodeGroup>
 
-The [network log](/sandbox/network-log) for the sandbox shows every HTTP and HTTPS connection the machine made, including the daemon's connection to Omnara and each request from the agent's commands.
+The [network log](/sandbox/network-log) for the sandbox shows the machine's HTTP and HTTPS connections on ports 80 and 443, including the daemon's connection to Omnara and connections from the agent's commands.
 
 ## Pause and resume a machine
 
@@ -198,7 +198,7 @@ Sandbox.connect(machine.id)
 ```
 </CodeGroup>
 
-The daemon reconnects, usually within half a minute, and Omnara marks the machine `online` again. The agent continues on the same machine. Memory, processes, and files are restored from the checkpoint, so the workspace and any background processes are as the agent left them. See [Pause, resume, and delete](/sandbox/lifecycle).
+The daemon reconnects, usually within half a minute, and Omnara marks the machine `online` again. The agent continues on the same machine. The workspace and background processes are restored from the checkpoint as the agent left them. See [Pause, resume, and delete](/sandbox/lifecycle).
 
 <Warning>
   Do not set `timeoutSeconds` or `idleTimeoutSeconds` on a pool machine's
@@ -242,7 +242,7 @@ sandbox.update(
 ```
 </CodeGroup>
 
-The rules apply immediately to new connections. The daemon stays connected as long as the Omnara API host is allowed, and requests from the agent's commands to any other host fail. Blocked requests show as denied in the [network log](/sandbox/network-log). The rules stay on the sandbox through pause and resume, and the daemon reconnects under them after a resume.
+The rules apply immediately to new connections. The daemon stays connected as long as the Omnara API host is allowed, and requests from the agent's commands to any other host fail. Blocked HTTP and HTTPS connections show as denied in the [network log](/sandbox/network-log). See [Network rules](/sandbox/networking) for the rule format. The rules stay on the sandbox through pause and resume, and the daemon reconnects under them after a resume.
 
 <Note>
   The rules belong to one sandbox. Omnara does not set network rules when it
@@ -251,11 +251,9 @@ The rules apply immediately to new connections. The daemon stays connected as lo
   Omnara's release host, `releases.omnara.com` on app.omnara.com.
 </Note>
 
-See [Network rules](/sandbox/networking) for the rule format.
-
 ## Credentials for agent commands
 
-Omnara does not bind Superserve [secrets](/secrets/overview) when it creates a machine. A secret attached to the sandbox later reaches only processes started after the attach call, and the daemon that runs the agent's commands started at boot. So a Superserve secret attached to a running pool machine does not reach the agent's commands.
+Omnara does not bind Superserve [secrets](/secrets/overview) when it creates a machine, and a secret attached later reaches only processes started after the attach call, not the daemon that runs the agent's commands.
 
 To give the agent's commands a credential, such as a `GH_TOKEN` for `gh` and `git`, use Omnara's secret environment variables: `--default-machine-secret-env` on the pool, `--default-machine-secret-env-overlay` on the grant, or `secret_env_overlay` in the agent config. See Omnara's [agent configuration](https://docs.omnara.com/agents/configuration#machines). Omnara resolves the value into the machine's environment, so any process on the machine can read it. Scope these tokens to what the agent needs.
 
@@ -272,7 +270,7 @@ Archiving an agent deletes the machines it created from pools. The sandbox is de
 Delete the pool before the secret it uses. Deleting the pool also removes its project grants. Omnara rejects the secret deletion with `error: API 409 [conflict]: conflict` while a pool still references it.
 
 ```bash
-npx omnara pools delete <pool-id>
+npx omnara pools delete mpo_...
 npx omnara secrets delete sec_...
 ```
 
