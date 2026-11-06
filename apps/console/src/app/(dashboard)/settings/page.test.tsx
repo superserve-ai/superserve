@@ -403,10 +403,10 @@ describe("Settings change password", () => {
 
     submitPasswords("sandbox12345")
 
-    expect(screen.getByText("Add an uppercase letter.")).toBeTruthy()
-    expect(
-      screen.getByLabelText("New Password").getAttribute("aria-invalid"),
-    ).toBe("true")
+    const error = screen.getByText("Add an uppercase letter.")
+    const input = screen.getByLabelText("New Password")
+    expect(input.getAttribute("aria-invalid")).toBe("true")
+    expect(input.getAttribute("aria-describedby")).toBe(error.id)
     expect(screen.queryByText(hint)).toBeNull()
     expect(signInWithPassword).not.toHaveBeenCalled()
     expect(updateUser).not.toHaveBeenCalled()
@@ -420,6 +420,21 @@ describe("Settings change password", () => {
     expect(screen.getByText("Use 72 characters or fewer.")).toBeTruthy()
     expect(signInWithPassword).not.toHaveBeenCalled()
     expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("clears the rule error once a corrected password is submitted", async () => {
+    renderPage()
+
+    submitPasswords("sandbox12345")
+    expect(screen.getByText("Add an uppercase letter.")).toBeTruthy()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith({ password: "Sandbox12345" }),
+    )
+    expect(screen.queryByText("Add an uppercase letter.")).toBeNull()
+    expect(screen.getByText(hint)).toBeTruthy()
   })
 
   it("updates a password that meets the rule", async () => {

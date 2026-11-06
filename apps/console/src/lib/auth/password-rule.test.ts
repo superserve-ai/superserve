@@ -46,6 +46,11 @@ describe("passwordRuleError", () => {
     )
     // 63 bytes plus one 4-byte emoji is 67 bytes, still within the cap.
     expect(passwordRuleError("Sandbox42".padEnd(63, "x") + "🙂")).toBeNull()
+    // 68 bytes plus one 4-byte emoji is exactly 72 bytes; one more byte fails.
+    expect(passwordRuleError("Sandbox42".padEnd(68, "x") + "🙂")).toBeNull()
+    expect(passwordRuleError("Sandbox42".padEnd(69, "x") + "🙂")).toBe(
+      "Use 72 characters or fewer. Accented letters, symbols, and emoji count as more than one.",
+    )
   })
 
   it("names a missing part only after the length checks pass", () => {
