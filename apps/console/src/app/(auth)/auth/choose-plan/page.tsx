@@ -5,7 +5,7 @@ import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
 import posthog from "posthog-js"
-import { Suspense, useEffect } from "react"
+import { Suspense, useEffect, useRef } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
@@ -70,14 +70,22 @@ function ChoosePlanContent() {
   }, [settling, router])
   // New teams start on a trial, so this picker, not /onboarding/plan, is where
   // most customers first see plans. $pageview alone does not say why.
+  // plan_options_requested says the page asked for plans; billing permissions
+  // or an empty catalog can still hide them. The ref keeps StrictMode's effect
+  // replay from recording the same picker state twice.
+  const recordedView = useRef<string | null>(null)
   useEffect(() => {
     if (settling) return
+    const view = {
+      reason,
+      requested_offer: preselected ?? "not_specified",
+      plan_options_requested: picking,
+    }
+    const key = JSON.stringify(view)
+    if (recordedView.current === key) return
+    recordedView.current = key
     try {
-      posthog.capture(PLAN_PICKER_EVENTS.VIEWED, {
-        reason,
-        requested_offer: preselected ?? "not_specified",
-        plans_offered: picking,
-      })
+      posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
     } catch {
       /* Analytics never controls the picker. */
     }

@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react"
+import { StrictMode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 let params = new URLSearchParams()
@@ -158,8 +159,23 @@ describe("plan picker", () => {
     expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
       reason: "trial_ended",
       requested_offer: "developer",
-      plans_offered: true,
+      plan_options_requested: true,
     })
+  })
+
+  it("records one picker view under StrictMode", async () => {
+    params = new URLSearchParams({
+      reason: "upgrade",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(
+      <StrictMode>
+        <ChoosePlanPage />
+      </StrictMode>,
+    )
+    await screen.findByRole("button", { name: "Developer" })
+    expect(capture).toHaveBeenCalledTimes(1)
   })
 
   it("records a picker with no plans and an unknown reason as an upgrade", () => {
@@ -168,7 +184,7 @@ describe("plan picker", () => {
     expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
       reason: "upgrade",
       requested_offer: "not_specified",
-      plans_offered: false,
+      plan_options_requested: false,
     })
   })
 
