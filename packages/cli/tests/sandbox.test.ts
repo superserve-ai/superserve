@@ -546,10 +546,10 @@ describe("new account setup", () => {
   })
 
   for (const code of ["billing_ineligible", "trial_check_unavailable"]) {
-    for (const marker of ["missing", "expired"]) {
-      test(`a saved key with a ${marker} signup marker fails right away for ${code}`, async () => {
+    for (const marker of ["no", "an expired"]) {
+      test(`a saved key with ${marker} signup marker fails right away for ${code}`, async () => {
         const dir = await credentialsDir(
-          marker === "expired" ? Date.now() - 1 : undefined,
+          marker === "an expired" ? Date.now() - 1 : undefined,
         )
         const r = await runCli(["sandbox", "create", "--name", "x"], {
           env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
