@@ -5,7 +5,7 @@ import { billingKeys, teamKeys } from "@/lib/api/query-keys"
 import { refreshTeamScopedQueries } from "./use-teams"
 
 describe("refreshTeamScopedQueries", () => {
-  it("invalidates billing and resets all non-team queries", () => {
+  it("invalidates billing and resets everything but the team directory", () => {
     const queryClient = {
       invalidateQueries: vi.fn(),
       resetQueries: vi.fn(),
@@ -22,6 +22,9 @@ describe("refreshTeamScopedQueries", () => {
     const predicate = queryClient.resetQueries.mock.calls[0][0]
       .predicate as (query: { queryKey: readonly unknown[] }) => boolean
     expect(predicate({ queryKey: teamKeys.directory() })).toBe(false)
+    expect(
+      predicate({ queryKey: teamKeys.renameAccess("use", "team-1") }),
+    ).toBe(true)
     expect(predicate({ queryKey: billingKeys.all })).toBe(true)
   })
 })
