@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test"
+import { describe, expect, setSystemTime, test } from "bun:test"
 
 import { API, apiError, json, runCli, SANDBOX_ID, TEST_KEY } from "./harness"
 
@@ -407,42 +407,38 @@ describe("new account setup", () => {
       "Sandbox usage is unavailable until billing is active",
     )
 
-  test("right after login, a 402 waits for the account to finish setting up", async () => {
+  async function credentialsDir(setupUntil?: number): Promise<string> {
     const { mkdtempSync, writeFileSync } = await import("node:fs")
     const { tmpdir } = await import("node:os")
     const { join } = await import("node:path")
     const dir = mkdtempSync(join(tmpdir(), "ss-fresh-"))
     writeFileSync(
       join(dir, "credentials.json"),
-      JSON.stringify({ api_key: TEST_KEY, setup_until: Date.now() + 60_000 }),
+      JSON.stringify({ api_key: TEST_KEY, setup_until: setupUntil }),
     )
-    let posts = 0
-    const r = await runCli(["sandbox", "create", "--name", "first"], {
-      env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
-      fetch: () =>
-        ++posts === 1
-          ? ineligible()
-          : json({ id: SANDBOX_ID, name: "first", status: "active" }, 201),
-    })
-    expect(r.exitCode).toBe(0)
-    expect(posts).toBe(2)
-    expect(r.stderr).toContain("Finishing account setup")
-  })
+    return dir
+  }
 
-  for (const code of [
-    "trial_exhausted",
-    "trial_unavailable",
-    "trial_check_unavailable",
-  ]) {
+  for (const code of ["billing_ineligible", "trial_check_unavailable"]) {
+    test(`right after login, ${code} waits for the account to finish setting up`, async () => {
+      const dir = await credentialsDir(Date.now() + 60_000)
+      let posts = 0
+      const r = await runCli(["sandbox", "create", "--name", "first"], {
+        env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
+        fetch: () =>
+          ++posts === 1
+            ? apiError(402, code, "Account setup is still in progress")
+            : json({ id: SANDBOX_ID, name: "first", status: "active" }, 201),
+      })
+      expect(r.exitCode).toBe(0)
+      expect(r.requests).toHaveLength(2)
+      expect(r.stderr).toContain("Finishing account setup")
+    })
+  }
+
+  for (const code of ["trial_exhausted", "trial_unavailable"]) {
     test(`right after login, ${code} fails fast with the action URL`, async () => {
-      const { mkdtempSync, writeFileSync } = await import("node:fs")
-      const { tmpdir } = await import("node:os")
-      const { join } = await import("node:path")
-      const dir = mkdtempSync(join(tmpdir(), "ss-trial-"))
-      writeFileSync(
-        join(dir, "credentials.json"),
-        JSON.stringify({ api_key: TEST_KEY, setup_until: Date.now() + 60_000 }),
-      )
+      const dir = await credentialsDir(Date.now() + 60_000)
       const url = "https://console.example.com/auth/choose-plan"
       const r = await runCli(["sandbox", "create", "--name", "x", "--json"], {
         env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
@@ -470,6 +466,42 @@ describe("new account setup", () => {
     })
   }
 
+  test("right after login, trial_check_unavailable surfaces the last error after the setup deadline", async () => {
+    const dir = await credentialsDir(Date.now() + 60_000)
+    const url = "https://console.example.com/plan-usage"
+    const message = `We could not confirm the free trial: ${url}`
+    let posts = 0
+    try {
+      const r = await runCli(["sandbox", "create", "--name", "x", "--json"], {
+        env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
+        fetch: () => {
+          if (++posts === 2) setSystemTime(Date.now() + 90_001)
+          return json(
+            {
+              error: {
+                code: "trial_check_unavailable",
+                message:
+                  posts === 1 ? "Trial claim is still in progress" : message,
+                action_url: url,
+              },
+            },
+            402,
+          )
+        },
+      })
+      expect(r.exitCode).not.toBe(0)
+      expect(r.requests).toHaveLength(2)
+      expect(JSON.parse(r.stderr).error).toEqual({
+        message,
+        code: "trial_check_unavailable",
+        status: 402,
+        action_url: url,
+      })
+    } finally {
+      setSystemTime()
+    }
+  })
+
   test("human output prints the message and a next step", async () => {
     const url = "https://console.example.com/auth/choose-plan"
     const r = await runCli(["sandbox", "create", "--name", "x"], {
@@ -490,7 +522,7 @@ describe("new account setup", () => {
     expect(r.stderr).toContain(`choose a plan at ${url}`)
   })
 
-  test("a check-unavailable 402 gets its own next step, not a retry or denial", async () => {
+  test("without a fresh login, a check-unavailable 402 fails right away with its own next step", async () => {
     const url = "https://console.example.com/plan-usage"
     const r = await runCli(["sandbox", "create", "--name", "x"], {
       fetch: () =>
@@ -506,27 +538,30 @@ describe("new account setup", () => {
         ),
     })
     expect(r.exitCode).not.toBe(0)
+    expect(r.requests).toHaveLength(1)
+    expect(r.stderr).not.toContain("Finishing account setup")
     expect(r.stderr).toContain("We could not confirm the free trial")
     expect(r.stderr).not.toMatch(/used up|not available|then retry/)
     expect(r.stderr.split(url)).toHaveLength(2)
   })
 
-  test("a saved key without the signup marker (--with-key) fails right away", async () => {
-    const { mkdtempSync, writeFileSync } = await import("node:fs")
-    const { tmpdir } = await import("node:os")
-    const { join } = await import("node:path")
-    const dir = mkdtempSync(join(tmpdir(), "ss-withkey-"))
-    writeFileSync(
-      join(dir, "credentials.json"),
-      JSON.stringify({ api_key: TEST_KEY }),
-    )
-    const r = await runCli(["sandbox", "create", "--name", "x"], {
-      env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
-      fetch: () => ineligible(),
-    })
-    expect(r.exitCode).not.toBe(0)
-    expect(r.requests).toHaveLength(1)
-  })
+  for (const code of ["billing_ineligible", "trial_check_unavailable"]) {
+    for (const marker of ["missing", "expired"]) {
+      test(`a saved key with a ${marker} signup marker fails right away for ${code}`, async () => {
+        const dir = await credentialsDir(
+          marker === "expired" ? Date.now() - 1 : undefined,
+        )
+        const r = await runCli(["sandbox", "create", "--name", "x"], {
+          env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
+          fetch: () =>
+            apiError(402, code, "Account setup is still in progress"),
+        })
+        expect(r.exitCode).not.toBe(0)
+        expect(r.requests).toHaveLength(1)
+        expect(r.stderr).not.toContain("Finishing account setup")
+      })
+    }
+  }
 
   test("without a fresh login, a 402 fails right away", async () => {
     const r = await runCli(["sandbox", "create", "--name", "x"], {
