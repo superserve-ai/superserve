@@ -358,6 +358,32 @@ describe("PlanPickerOptions", () => {
     expect(screen.queryByRole("form", { name: "Team plan" })).toBeNull()
   })
 
+  it("lets the user open another of their teams when no plan is sellable", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Side project" }))
+    expect(screen.getByText(/No plans are available/)).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Current" })).toBeNull()
+    expect(mocks.switchTeam).toHaveBeenCalledWith("team-2", "use")
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+  })
+
+  it("offers no other team when no plan is sellable and the user has none", async () => {
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.teams = [{ id: "team-1", name: "Current", region: "use" }]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(await screen.findByText(/No plans are available/)).toBeTruthy()
+    await act(async () => {})
+    expect(screen.queryByText(/open another team/)).toBeNull()
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy()
+  })
+
   it("still asks a member without billing access to ask an administrator when no plan is sellable", async () => {
     mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
     mocks.cards = [card("enterprise", { kind: "custom", name: "Bespoke" })]

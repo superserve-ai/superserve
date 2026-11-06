@@ -318,6 +318,7 @@ export function PlanPickerOptions({
         {enterprise ? (
           <EnterpriseOption card={enterprise} className="w-full max-w-sm" />
         ) : null}
+        <OtherTeams locator={locator} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
