@@ -235,38 +235,28 @@
             "pages": ["GET /activity"]
           }
         ],
-        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+        "openapi": "https://api.superserve.ai/openapi.yaml"
       },
       {
-        "anchor": "Cookbook",
-        "icon": "utensils",
+        "anchor": "Integrations",
+        "icon": "puzzle-piece",
         "groups": [
+          {
+            "group": "Overview",
+            "pages": ["integrations/overview"]
+          },
           {
             "group": "Coding Agents",
             "pages": [
               "integrations/coding-agents/claude",
               "integrations/coding-agents/codex",
-              "integrations/coding-agents/opencode",
               "integrations/coding-agents/kilocode",
+              "integrations/coding-agents/opencode",
               "integrations/coding-agents/pi"
             ]
           },
           {
-            "group": "Personal Agents",
-            "pages": [
-              "integrations/personal-agents/openclaw",
-              "integrations/personal-agents/hermes"
-            ]
-          },
-          {
-            "group": "Managed Agents",
-            "pages": [
-              "integrations/managed-agents/claude-managed-agents",
-              "integrations/managed-agents/cursor-cloud-agents"
-            ]
-          },
-          {
-            "group": "Agent Harnesses",
+            "group": "Agent Frameworks",
             "pages": [
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
@@ -277,13 +267,25 @@
             ]
           },
           {
-            "group": "Evaluations",
+            "group": "Personal Agents",
             "pages": [
-              "integrations/evaluations/harbor"
+              "integrations/personal-agents/hermes",
+              "integrations/personal-agents/openclaw"
             ]
           },
           {
-            "group": "MCP Sandboxes",
+            "group": "Managed Agents",
+            "pages": [
+              "integrations/managed-agents/claude-managed-agents",
+              "integrations/managed-agents/cursor-cloud-agents"
+            ]
+          },
+          {
+            "group": "Evaluations",
+            "pages": ["integrations/evaluations/harbor"]
+          },
+          {
+            "group": "MCP & Tools",
             "pages": ["integrations/mcp"]
           }
         ]
