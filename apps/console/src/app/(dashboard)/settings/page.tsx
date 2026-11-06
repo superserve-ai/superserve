@@ -122,9 +122,19 @@ export default function SettingsPage() {
         addToast("Current password is incorrect", "error")
         return
       }
+      // Auth checks current_password itself once "Require current password"
+      // is on, so a stolen access token alone cannot change the password.
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
+        current_password: currentPassword,
       })
+      if (
+        error?.code === "current_password_mismatch" ||
+        error?.code === "current_password_required"
+      ) {
+        addToast("Current password is incorrect", "error")
+        return
+      }
       if (error) throw error
       setCurrentPassword("")
       setNewPassword("")
