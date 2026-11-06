@@ -544,7 +544,8 @@ export async function requireGoogleSignupProof(
     // Treat cookie-store/configuration failures as a missing proof below.
   }
   await trackGoogleSignupBypass()
-  throw new Error("Google signup verification required")
+  // Send the user back through the proof step instead of a setup error page.
+  throw new GoogleSignupRecoveryRequiredError()
 }
 
 async function trackGoogleSignupBypass(): Promise<void> {

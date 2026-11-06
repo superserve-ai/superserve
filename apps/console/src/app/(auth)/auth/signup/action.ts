@@ -13,6 +13,7 @@ import { deviceReturnPath } from "@/lib/auth/device-return-path"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import {
   claimGoogleSignupRecovery,
+  isGoogleUser,
   issueGoogleSignupProof,
 } from "@/lib/auth/google-signup-proof"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
@@ -62,6 +63,7 @@ import { verifyRecaptcha } from "@/lib/recaptcha/verify"
 import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
 import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createAdminClient } from "@/lib/supabase/admin"
+import { createServerClient } from "@/lib/supabase/server"
 import { ycReturnPath } from "@/lib/yc/return-path"
 
 const signUpSchema = z.object({
@@ -75,6 +77,23 @@ export async function claimGoogleRecoveryContinuation(
   reason: string,
 ): Promise<boolean> {
   return claimGoogleSignupRecovery(reason)
+}
+
+/**
+ * The Google account this browser just signed in with, so the recovery page
+ * can send the user back to that same account without Google's account
+ * chooser. It is only a hint: the callback still requires the signup proof.
+ */
+export async function googleRecoveryAccount(): Promise<string | undefined> {
+  try {
+    const supabase = await createServerClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    return user?.email && isGoogleUser(user) ? user.email : undefined
+  } catch {
+    return undefined
+  }
 }
 
 export async function isCloudflareSignupObservationEnabled(): Promise<boolean> {
