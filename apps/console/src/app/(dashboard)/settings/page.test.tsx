@@ -45,6 +45,9 @@ vi.mock("@/hooks/use-billing-v2", () => ({
   usePrepaidBalance: () => ({ data: undefined }),
 }))
 
+vi.mock("@/components/settings/team-details-section", () => ({
+  TeamDetailsSection: () => null,
+}))
 vi.mock("@/components/settings/teams-section", () => ({
   TeamsSection: () => null,
 }))
