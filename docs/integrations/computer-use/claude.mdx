@@ -27,6 +27,8 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 The script creates a desktop sandbox and sends the task with the three tools. It answers every tool call in Claude's response, in order, and sends the results back. It stops when Claude replies without a tool call, and kills the sandbox at the end.
 
+The TypeScript sample uses top-level `await`, so it must run as an ES module: save it as `agent.mts` (or set `"type": "module"` in `package.json`) and run it with `npx tsx agent.mts`.
+
 <CodeGroup>
 ```typescript TypeScript
 import Anthropic from "@anthropic-ai/sdk"
