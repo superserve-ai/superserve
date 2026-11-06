@@ -33,8 +33,12 @@ vi.mock("@superserve/ui", () => ({
     ),
 }))
 vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
+const trial = vi.hoisted(() => ({
+  outcome: null as "used_up" | "unavailable" | null,
+}))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTeamCatalogAction: async () => null,
+  getTrialOutcomeAction: async () => trial.outcome,
 }))
 
 import ChoosePlanPage from "./page"
@@ -43,6 +47,7 @@ describe("plan picker", () => {
   beforeEach(() => {
     params = new URLSearchParams()
     replace.mockReset()
+    trial.outcome = null
   })
 
   it("offers both plans when the trial has ended", async () => {
@@ -62,6 +67,37 @@ describe("plan picker", () => {
     )
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
   })
+
+  it("says the trial is used up only when its balance shows it was", async () => {
+    trial.outcome = "used_up"
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(await screen.findByText(/Your free trial is used up/)).toBeTruthy()
+    expect(screen.getByText(/nothing is deleted/)).toBeTruthy()
+  })
+
+  it.each(["unavailable", null] as const)(
+    "does not say the trial is used up when the trial outcome is %s",
+    async (outcome) => {
+      trial.outcome = outcome
+      params = new URLSearchParams({
+        reason: "trial_ended",
+        account: "u1",
+        team: "use:team-1",
+      })
+      render(<ChoosePlanPage />)
+      expect(
+        await screen.findByText(
+          "The free trial isn't available for this account. Choose a plan to run sandboxes.",
+        ),
+      ).toBeTruthy()
+      expect(screen.queryByText(/used up/)).toBeNull()
+    },
+  )
 
   it("only re-checks the original checkout for checkout_elsewhere", () => {
     params = new URLSearchParams({
@@ -129,6 +165,7 @@ describe("plan picker", () => {
     render(<ChoosePlanPage />)
     expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
     expect(screen.getByRole("link", { name: "Back to console" })).toBeTruthy()
+    expect(screen.queryByText(/used up/)).toBeNull()
   })
 
   it("offers no purchase when a checkout return names no checkout", () => {

@@ -4,16 +4,19 @@ import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Suspense, useEffect } from "react"
+import { Suspense, useEffect, useState } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
+import { getTrialOutcomeAction } from "@/lib/billing/plan-offers-actions"
 import {
+  type CheckoutLocator,
   checkoutLocator,
   isSignupCheckoutOffer,
   paymentSettlingPath,
   type PlanPickerReason,
   signupCheckoutReturnPath,
+  type TrialOutcome,
 } from "@/lib/billing/signup-checkout-paths"
 
 const SUPPORT_EMAIL = "support@superserve.ai"
@@ -28,8 +31,10 @@ const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
   checkout_elsewhere:
     "This checkout belongs to a different account or team than the one you're signed in to now. Switch back to it, then try again.",
+  // Neutral: a team that was never granted a trial also lands here. The used-up
+  // copy below is shown only once the team's trial balance confirms it.
   trial_ended:
-    "Your free trial is used up or isn't available for this account. Your sandboxes are paused and nothing is deleted. Choose a plan to continue.",
+    "The free trial isn't available for this account. Choose a plan to run sandboxes.",
   payment_failed:
     "We couldn't confirm a card for your plan. Choose a plan to try again.",
   plan_required:
@@ -41,6 +46,32 @@ const MESSAGES: Record<PlanPickerReason, string> = {
     "We couldn't start checkout for this team, and trying again won't fix it.",
   billing_admin_required:
     "Only your team's billing administrators can choose a plan. Ask one of them to upgrade this team.",
+}
+
+const TRIAL_USED_UP =
+  "Your free trial is used up. Your sandboxes are paused and nothing is deleted. Choose a plan to continue."
+
+// Says "used up" only when the team's trial balance shows a trial was used.
+// Until that is known nothing is shown, so the copy never flips; an unreadable
+// balance keeps the neutral message.
+function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
+  const account = locator?.account
+  const team = locator?.team
+  const [outcome, setOutcome] = useState<TrialOutcome | null | undefined>(
+    account && team ? undefined : null,
+  )
+  useEffect(() => {
+    if (!account || !team) return
+    let current = true
+    getTrialOutcomeAction({ account, team })
+      .then((next) => current && setOutcome(next))
+      .catch(() => current && setOutcome(null))
+    return () => {
+      current = false
+    }
+  }, [account, team])
+  if (outcome === undefined) return null
+  return outcome === "used_up" ? TRIAL_USED_UP : MESSAGES.trial_ended
 }
 
 function ChoosePlanContent() {
@@ -93,7 +124,11 @@ function ChoosePlanContent() {
             Choose a plan
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
-            {MESSAGES[reason]}
+            {reason === "trial_ended" ? (
+              <TrialEndedMessage locator={locator} />
+            ) : (
+              MESSAGES[reason]
+            )}
           </p>
           {NEEDS_SUPPORT.has(reason) && (
             <p className="mt-2 text-center text-xs text-muted">

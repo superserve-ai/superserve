@@ -5,6 +5,7 @@ from __future__ import annotations
 import pytest
 from superserve.errors import (
     AuthenticationError,
+    BillingError,
     BuildError,
     ConflictError,
     NotFoundError,
@@ -89,6 +90,47 @@ class TestMapApiError:
         assert isinstance(err, RateLimitError)
         assert err.code == "too_many_builds"
 
+    @pytest.mark.parametrize("code", ["trial_exhausted", "trial_unavailable"])
+    def test_402_trial_codes_return_billing_error_with_action_url(
+        self, code: str
+    ) -> None:
+        err = map_api_error(
+            402,
+            {
+                "error": {
+                    "code": code,
+                    "message": "Add a card and choose a plan",
+                    "action_url": "https://console.example.com/auth/choose-plan",
+                }
+            },
+        )
+        assert isinstance(err, BillingError)
+        assert isinstance(err, SandboxError)
+        assert err.status_code == 402
+        assert err.code == code
+        assert err.action_url == "https://console.example.com/auth/choose-plan"
+
+    def test_402_billing_ineligible_has_no_action_url(self) -> None:
+        err = map_api_error(
+            402,
+            {
+                "error": {
+                    "code": "billing_ineligible",
+                    "message": "Sandbox usage is unavailable until billing is active",
+                }
+            },
+        )
+        assert isinstance(err, BillingError)
+        assert err.code == "billing_ineligible"
+        assert err.action_url is None
+
+    def test_402_ignores_non_string_action_url(self) -> None:
+        err = map_api_error(
+            402, {"error": {"code": "trial_exhausted", "action_url": 5}}
+        )
+        assert isinstance(err, BillingError)
+        assert err.action_url is None
+
     def test_500_returns_server_error(self) -> None:
         err = map_api_error(500, {"error": {"message": "boom"}})
         assert isinstance(err, ServerError)
@@ -143,6 +185,7 @@ class TestErrorHierarchy:
         assert issubclass(SandboxTimeoutError, SandboxError)
         assert issubclass(ServerError, SandboxError)
         assert issubclass(RateLimitError, SandboxError)
+        assert issubclass(BillingError, SandboxError)
 
     def test_rate_limit_error_has_status_429(self) -> None:
         err = RateLimitError(code="rate_limited")

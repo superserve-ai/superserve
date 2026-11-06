@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   AuthenticationError,
+  BillingError,
   BuildError,
   ConflictError,
   mapApiError,
@@ -95,6 +96,47 @@ describe("mapApiError", () => {
     const err = mapApiError(409, withError("conflict", "wrong state"))
     expect(err).toBeInstanceOf(ConflictError)
     expect(err.code).toBe("conflict")
+  })
+
+  it("maps 402 trial codes to BillingError with the action URL", () => {
+    for (const code of ["trial_exhausted", "trial_unavailable"]) {
+      const err = mapApiError(402, {
+        error: {
+          code,
+          message: "Add a card and choose a plan",
+          action_url: "https://console.example.com/auth/choose-plan",
+        },
+      })
+      expect(err).toBeInstanceOf(BillingError)
+      expect(err).toBeInstanceOf(SandboxError)
+      expect(err.name).toBe("BillingError")
+      expect(err.statusCode).toBe(402)
+      expect(err.code).toBe(code)
+      expect((err as BillingError).actionUrl).toBe(
+        "https://console.example.com/auth/choose-plan",
+      )
+    }
+  })
+
+  it("maps a generic 402 billing_ineligible without an action URL", () => {
+    const err = mapApiError(
+      402,
+      withError(
+        "billing_ineligible",
+        "Sandbox usage is unavailable until billing is active",
+      ),
+    )
+    expect(err).toBeInstanceOf(BillingError)
+    expect(err.statusCode).toBe(402)
+    expect(err.code).toBe("billing_ineligible")
+    expect((err as BillingError).actionUrl).toBeUndefined()
+  })
+
+  it("ignores a non-string action_url on a 402", () => {
+    const err = mapApiError(402, {
+      error: { code: "trial_exhausted", message: "x", action_url: 5 as never },
+    })
+    expect((err as BillingError).actionUrl).toBeUndefined()
   })
 
   it("maps 429 rate_limited to RateLimitError", () => {

@@ -10,7 +10,11 @@ import {
   type PlanCard,
   planCardsSchema,
 } from "./plans"
-import type { CheckoutLocator } from "./signup-checkout-paths"
+import {
+  type CheckoutLocator,
+  type TrialOutcome,
+  trialOutcome,
+} from "./signup-checkout-paths"
 
 export interface TeamCatalog {
   offers: BillingOffer[]
@@ -86,6 +90,34 @@ export async function canManageTeamBillingAction(
     }
     const canManage = body.permissions?.can_manage
     return typeof canManage === "boolean" ? canManage : null
+  } catch {
+    return null
+  }
+}
+
+// Whether the picker's team used up a trial grant or never had one, or null
+// when it can't be read. Only the grant state is read: why a team got no trial
+// is never exposed.
+export async function getTrialOutcomeAction(
+  locator: CheckoutLocator,
+): Promise<TrialOutcome | null> {
+  try {
+    const {
+      data: { user },
+    } = await (await createServerClient()).auth.getUser()
+    if (!user || locator.account !== user.id) return null
+    const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
+    if (locator.team !== `${team.region}:${team.teamId}`) return null
+    const response = await fetch(
+      new URL("/billing/summary", cellFor(team.region).apiBaseUrl),
+      {
+        headers: { "X-API-Key": apiKey },
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      },
+    )
+    if (!response.ok) return null
+    return trialOutcome(await response.json())
   } catch {
     return null
   }

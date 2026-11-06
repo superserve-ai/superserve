@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   awaitingPlanRedirect,
   isPaymentActivating,
+  trialOutcome,
 } from "./signup-checkout-paths"
 
 const team = {
@@ -76,5 +77,21 @@ it("sends a team that needs a plan to the picker with its own reason", () => {
     reason: "plan_required",
     account: "owner",
     team: "usw:team",
+  })
+})
+
+describe("trialOutcome", () => {
+  it.each([
+    [{ trial: { state: "exhausted" } }, "used_up"],
+    [{ trial: { state: "expired" } }, "used_up"],
+    [{ trial: { state: "no_grant" } }, "unavailable"],
+    [{ trial: { state: "active" } }, "unavailable"],
+    [{ trial: { state: "unknown" } }, "unavailable"],
+    [{ trial: null }, "unavailable"],
+    [{}, "unavailable"],
+    [null, "unavailable"],
+    ["exhausted", "unavailable"],
+  ])("%j is %s", (summary, outcome) => {
+    expect(trialOutcome(summary)).toBe(outcome)
   })
 })

@@ -106,6 +106,21 @@ export type PlanPickerReason =
   | "checkout_refused"
   | "billing_admin_required"
 
+// Whether a team that is awaiting its first plan used up a trial grant or
+// never had one. Anything else, including a summary without a trial, is
+// "unavailable" so a team is never told its trial was used when it was not.
+export type TrialOutcome = "used_up" | "unavailable"
+
+export function trialOutcome(summary: unknown): TrialOutcome {
+  const trial =
+    summary && typeof summary === "object"
+      ? (summary as { trial?: { state?: unknown } | null }).trial
+      : null
+  return trial?.state === "exhausted" || trial?.state === "expired"
+    ? "used_up"
+    : "unavailable"
+}
+
 export const PLAN_PICKER_ROUTE = "/auth/choose-plan/"
 
 // A picker without a locator offers no purchase, only a way back.

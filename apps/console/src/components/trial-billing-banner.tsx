@@ -89,14 +89,22 @@ function formatUsd(amount: number | null | undefined): string | null {
     : null
 }
 
-export type TrialStage = "trial" | "ended" | "payment_failed" | "plan_required"
+export type TrialStage =
+  | "trial"
+  | "ended"
+  | "unavailable"
+  | "payment_failed"
+  | "plan_required"
 
-// The trial's stage from its entry state and balance.
+// The trial's stage from its entry state and balance. A team that never got a
+// trial grant also reports trial_ended; it must not be told its trial ended.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
 ): TrialStage {
   if (entry === "payment_failed" || entry === "plan_required") return entry
+  if (entry === "trial_ended" && trial?.state === "no_grant")
+    return "unavailable"
   const remaining = trial?.remaining_usd
   if (
     entry === "trial_ended" ||
@@ -182,6 +190,11 @@ function TrialEntryBanner({
         <>
           We couldn&apos;t confirm a card for your plan. Your sandboxes are
           paused and nothing is deleted. Upgrade to resume.
+        </>
+      ) : stage === "unavailable" ? (
+        <>
+          The free trial isn&apos;t available for this account. Upgrade to run
+          sandboxes.
         </>
       ) : stage === "ended" ? (
         <>

@@ -429,6 +429,63 @@ describe("new account setup", () => {
     expect(r.stderr).toContain("Finishing account setup")
   })
 
+  for (const code of ["trial_exhausted", "trial_unavailable"]) {
+    test(`right after login, ${code} fails fast with the action URL`, async () => {
+      const { mkdtempSync, writeFileSync } = await import("node:fs")
+      const { tmpdir } = await import("node:os")
+      const { join } = await import("node:path")
+      const dir = mkdtempSync(join(tmpdir(), "ss-trial-"))
+      writeFileSync(
+        join(dir, "credentials.json"),
+        JSON.stringify({ api_key: TEST_KEY, setup_until: Date.now() + 60_000 }),
+      )
+      const url = "https://console.example.com/auth/choose-plan"
+      const r = await runCli(["sandbox", "create", "--name", "x", "--json"], {
+        env: { SUPERSERVE_API_KEY: undefined, SUPERSERVE_CONFIG_DIR: dir },
+        fetch: () =>
+          json(
+            {
+              error: {
+                code,
+                message: `Add a card and choose a plan: ${url}`,
+                action_url: url,
+              },
+            },
+            402,
+          ),
+      })
+      expect(r.exitCode).not.toBe(0)
+      expect(r.requests).toHaveLength(1)
+      expect(r.stderr).not.toContain("Finishing account setup")
+      expect(JSON.parse(r.stderr).error).toEqual({
+        message: `Add a card and choose a plan: ${url}`,
+        code,
+        status: 402,
+        action_url: url,
+      })
+    })
+  }
+
+  test("human output prints the message and a next step", async () => {
+    const url = "https://console.example.com/auth/choose-plan"
+    const r = await runCli(["sandbox", "create", "--name", "x"], {
+      fetch: () =>
+        json(
+          {
+            error: {
+              code: "trial_unavailable",
+              message: "The free trial is not available for this account.",
+              action_url: url,
+            },
+          },
+          402,
+        ),
+    })
+    expect(r.exitCode).not.toBe(0)
+    expect(r.stderr).toContain("The free trial is not available")
+    expect(r.stderr).toContain(`choose a plan at ${url}`)
+  })
+
   test("a saved key without the signup marker (--with-key) fails right away", async () => {
     const { mkdtempSync, writeFileSync } = await import("node:fs")
     const { tmpdir } = await import("node:os")

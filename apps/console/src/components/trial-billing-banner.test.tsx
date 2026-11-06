@@ -441,6 +441,19 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.queryByRole("region", { name: "Free trial" })).toBeNull()
   })
 
+  it("does not say the trial ended when no trial was ever granted", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({
+      data: summary({ trial: { state: "no_grant", remaining_usd: 0 } }),
+    })
+    mount()
+    expect(banner()).toHaveTextContent(
+      "The free trial isn't available for this account. Upgrade to run sandboxes.",
+    )
+    expect(banner()).not.toHaveTextContent(/ended|used up/)
+    expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
+  })
+
   it("says sandboxes are paused and nothing is deleted once the trial ends", () => {
     entry("trial_ended")
     mocks.summary.mockReturnValue({ data: trial(0) })
@@ -498,6 +511,8 @@ describe("trialStage", () => {
     ["trial", { state: "exhausted", remaining_usd: 0.5 }, "ended"],
     ["trial", { state: "active", remaining_usd: 0 }, "ended"],
     ["trial_ended", { state: "active", remaining_usd: 0.5 }, "ended"],
+    ["trial_ended", { state: "exhausted", remaining_usd: 0 }, "ended"],
+    ["trial_ended", { state: "no_grant", remaining_usd: 0 }, "unavailable"],
     ["payment_failed", undefined, "payment_failed"],
     ["trial", undefined, "trial"],
   ] as const)("%s with %o is %s", (entry, trial, stage) => {

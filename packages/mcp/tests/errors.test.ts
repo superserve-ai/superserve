@@ -1,5 +1,6 @@
 import {
   AuthenticationError,
+  BillingError,
   ConflictError,
   NotFoundError,
   RateLimitError,
@@ -36,6 +37,45 @@ describe("formatSdkError", () => {
       new RateLimitError("Rate limit exceeded", "too_many_sandboxes"),
     )
     expect(msg).toMatch(/quota/i)
+  })
+  it("trial_exhausted tells the agent to ask the user to choose a plan", () => {
+    const msg = formatSdkError(
+      new BillingError(
+        "used up",
+        "trial_exhausted",
+        "https://console.example.com/auth/choose-plan",
+      ),
+    )
+    expect(msg).toMatch(/free trial credit is used up/)
+    expect(msg).toContain("https://console.example.com/auth/choose-plan")
+    expect(msg).toMatch(/Do not retry/)
+    expect(msg).toMatch(/Nothing is deleted/)
+  })
+  it("trial_unavailable does not say the trial was used up", () => {
+    const msg = formatSdkError(
+      new BillingError(
+        "n/a",
+        "trial_unavailable",
+        "https://console.example.com/auth/choose-plan",
+      ),
+    )
+    expect(msg).toMatch(/not available for this account/)
+    expect(msg).not.toMatch(/used up/)
+    expect(msg).toContain("https://console.example.com/auth/choose-plan")
+  })
+  it("generic billing_ineligible claims nothing specific", () => {
+    const msg = formatSdkError(
+      new BillingError("unavailable", "billing_ineligible"),
+    )
+    expect(msg).toMatch(/Billing is not active/)
+    expect(msg).not.toMatch(/trial|deleted|card/i)
+  })
+  it("plan-limit billing errors keep the server message", () => {
+    expect(
+      formatSdkError(
+        new BillingError("Plan allows 4 vCPU", "sandbox_exceeds_plan_limits"),
+      ),
+    ).toBe("Plan allows 4 vCPU")
   })
   it("server errors flag transience", () => {
     expect(formatSdkError(new ServerError())).toMatch(/retry/i)

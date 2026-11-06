@@ -82,6 +82,32 @@ export class RateLimitError extends SandboxError {
   }
 }
 
+/**
+ * 402 from the API: the account cannot use sandboxes until billing is set up.
+ * `code` distinguishes the variant:
+ * - `trial_exhausted` — the free trial credit is used up.
+ * - `trial_unavailable` — the free trial is not available for this account.
+ * - `billing_ineligible` — generic; billing is not active for this account.
+ * - `free_allowance_exhausted` — the free allowance is used up until it resets.
+ * - `sandbox_exceeds_plan_limits` — the requested size exceeds the plan limits.
+ *
+ * `actionUrl` is where the user can add a card and choose a plan. It is only
+ * present when the API sends one, so older servers leave it undefined.
+ */
+export class BillingError extends SandboxError {
+  readonly actionUrl?: string
+
+  constructor(
+    message = "Billing is not active for this account",
+    code?: string,
+    actionUrl?: string,
+  ) {
+    super(message, 402, code)
+    this.name = "BillingError"
+    this.actionUrl = actionUrl
+  }
+}
+
 export class ServerError extends SandboxError {
   constructor(
     message = "Internal server error",
@@ -129,7 +155,7 @@ export function mapApiError(
   status: number,
   body: {
     // Data-plane (boxd) file errors are a bare string: { error: "..." }.
-    error?: { code?: string; message?: string } | string
+    error?: { code?: string; message?: string; action_url?: string } | string
     // Connect RPC errors (boxd's DesktopService) are flat: { code, message }.
     code?: string
     message?: string
@@ -153,6 +179,14 @@ export function mapApiError(
       return new NotFoundError(message, code)
     case 409:
       return new ConflictError(message, code)
+    case 402: {
+      const actionUrl = error?.action_url
+      return new BillingError(
+        message,
+        code,
+        typeof actionUrl === "string" && actionUrl ? actionUrl : undefined,
+      )
+    }
     case 429:
       return new RateLimitError(message, code)
     default:
