@@ -7,7 +7,7 @@ import { useParams, useRouter } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { useState } from "react"
 
-import { ErrorState } from "@/components/error-state"
+import { ErrorState, errorStateMessage } from "@/components/error-state"
 import { useQueryScope } from "@/components/query-provider"
 import { ActivitySection } from "@/components/sandboxes/activity-section"
 import { DeleteSandboxDialog } from "@/components/sandboxes/delete-sandbox-dialog"
@@ -174,7 +174,8 @@ export default function SandboxDetailPage() {
           </Link>
         </div>
         <ErrorState
-          message={error?.message ?? "Sandbox not found"}
+          error={error}
+          message={errorStateMessage(error, "Sandbox not found")}
           onRetry={() => refetch()}
         />
       </div>

@@ -133,7 +133,7 @@ function TemplatesPageContent() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Templates">{newButton}</PageHeader>
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState error={error} onRetry={() => refetch()} />
       </div>
     )
   }

@@ -10,7 +10,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useState } from "react"
 
-import { ErrorState } from "@/components/error-state"
+import { ErrorState, errorStateMessage } from "@/components/error-state"
 import { AuditLogTable } from "@/components/secrets/audit-log-table"
 import { AuthShapeVisualization } from "@/components/secrets/auth-shape-visualization"
 import { AUTH_TYPE_LABEL } from "@/components/secrets/auth-type-label"
@@ -56,7 +56,8 @@ export default function SecretDetailPage() {
           </Link>
         </div>
         <ErrorState
-          message={error?.message ?? "Secret not found"}
+          error={error}
+          message={errorStateMessage(error, "Secret not found")}
           onRetry={() => refetch()}
         />
       </div>
