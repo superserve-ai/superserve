@@ -82,7 +82,8 @@ describe("plan picker", () => {
     })
     render(<ChoosePlanPage />)
     expect(await screen.findByText(/Your free trial is used up/)).toBeTruthy()
-    expect(screen.getByText(/nothing is deleted/)).toBeTruthy()
+    expect(screen.getByText(/can still be deleted/)).toBeTruthy()
+    expect(screen.queryByText(/nothing is deleted/)).toBeNull()
   })
 
   it("drops the previous team's used-up message when the team changes", async () => {

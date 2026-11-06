@@ -21,7 +21,7 @@ function formatBillingError(err: BillingError): string {
     ? `at ${err.actionUrl}`
     : "in the Superserve console"
   const keep =
-    "Nothing is deleted; existing sandboxes stay paused until a plan is active."
+    "This block does not delete sandboxes, but a sandbox set to auto-delete after a pause can still be deleted. Other existing sandboxes stay paused until a plan is active."
   if (err.code === "trial_exhausted") {
     return `The free trial credit is used up. Do not retry. Ask the user to add a card and choose a plan ${where}. ${keep}`
   }

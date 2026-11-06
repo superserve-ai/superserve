@@ -49,7 +49,10 @@ describe("formatSdkError", () => {
     expect(msg).toMatch(/free trial credit is used up/)
     expect(msg).toContain("https://console.example.com/auth/choose-plan")
     expect(msg).toMatch(/Do not retry/)
-    expect(msg).toMatch(/Nothing is deleted/)
+    expect(msg).toMatch(
+      /does not delete sandboxes, but a sandbox set to auto-delete/,
+    )
+    expect(msg).not.toMatch(/Nothing is deleted/)
   })
   it("trial_unavailable does not say the trial was used up", () => {
     const msg = formatSdkError(
@@ -75,7 +78,10 @@ describe("formatSdkError", () => {
     expect(msg).not.toMatch(/used up|not available for this account/)
     expect(msg).toMatch(/Do not retry in a loop/)
     expect(msg).toContain("https://console.example.com/plan-usage")
-    expect(msg).toMatch(/Nothing is deleted/)
+    expect(msg).toMatch(
+      /does not delete sandboxes, but a sandbox set to auto-delete/,
+    )
+    expect(msg).not.toMatch(/Nothing is deleted/)
   })
   it("generic billing_ineligible claims nothing specific", () => {
     const msg = formatSdkError(

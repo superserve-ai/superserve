@@ -100,36 +100,32 @@ export type TrialStage =
   | "plan_required"
 
 // The trial's stage from its entry state, balance and the server's trial block.
-// A team that never got a trial grant also reports trial_ended, so "ended"
-// needs the block or the balance to confirm the trial was used. "unavailable"
-// (denied) needs the server's explicit trial_unavailable; a null block is a
-// failed reason read or a generic denial, so it stays "unknown", and a trial
-// that could not be confirmed is its own stage.
+// The entry state and the summary load independently, so an explicit
+// trial_block decides first, whatever the entry state: check_unavailable, then
+// exhausted, then unavailable (denied). Without one, "ended" needs proof: an
+// exhausted or expired balance, or a live trial whose credit ran out. A null
+// block is a failed reason read or a generic denial, so a team that is not on
+// a live trial stays "unknown" and the copy claims nothing about the trial.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
   block?: BillingTrialBlock | null,
 ): TrialStage {
   if (entry === "payment_failed" || entry === "plan_required") return entry
-  if (entry === "trial_ended") {
-    if (block === "trial_check_unavailable") return "check_unavailable"
-    return block === "trial_exhausted" ||
-      trial?.state === "exhausted" ||
-      trial?.state === "expired"
-      ? "ended"
-      : block === "trial_unavailable"
-        ? "unavailable"
-        : "unknown"
-  }
-  const remaining = trial?.remaining_usd
-  if (
-    trial?.state === "exhausted" ||
-    (typeof remaining === "number" &&
-      Number.isFinite(remaining) &&
-      remaining <= 0)
-  )
-    return "ended"
-  return "trial"
+  if (block === "trial_check_unavailable") return "check_unavailable"
+  if (block === "trial_exhausted") return "ended"
+  if (block === "trial_unavailable") return "unavailable"
+  if (trial?.state === "exhausted" || trial?.state === "expired") return "ended"
+  if (entry === "trial_ended") return "unknown"
+  if (!trial) return "trial"
+  // Any other balance state (such as no_grant) is not a live trial.
+  if (trial.state !== "active") return "unknown"
+  const remaining = trial.remaining_usd
+  return typeof remaining === "number" &&
+    Number.isFinite(remaining) &&
+    remaining <= 0
+    ? "ended"
+    : "trial"
 }
 
 function TrialEntryBanner({

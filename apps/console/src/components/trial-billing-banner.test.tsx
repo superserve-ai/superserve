@@ -607,6 +607,19 @@ describe("trialStage", () => {
     ["trial_ended", undefined, "unknown", undefined],
     ["trial_ended", undefined, "unknown", null],
     ["trial_ended", undefined, "ended", "trial_exhausted"],
+    [
+      "trial",
+      { state: "exhausted", remaining_usd: 0 },
+      "check_unavailable",
+      "trial_check_unavailable",
+    ],
+    [
+      "trial",
+      { state: "active", remaining_usd: 0 },
+      "unavailable",
+      "trial_unavailable",
+    ],
+    ["trial", { state: "no_grant", remaining_usd: 0 }, "unknown", null],
     ["trial_ended", undefined, "unavailable", "trial_unavailable"],
     ["trial_ended", undefined, "check_unavailable", "trial_check_unavailable"],
     [
