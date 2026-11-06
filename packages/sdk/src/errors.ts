@@ -83,11 +83,11 @@ export class RateLimitError extends SandboxError {
 }
 
 /**
- * 402 from the API: the account cannot use sandboxes until billing is set up.
+ * 402 from the API: billing does not allow this request.
  * `code` distinguishes the variant:
  * - `trial_exhausted` — the free trial credit is used up.
  * - `trial_unavailable` — the free trial is not available for this account.
- * - `billing_ineligible` — generic; billing is not active for this account.
+ * - `billing_ineligible` — generic; billing does not allow this request.
  * - `free_allowance_exhausted` — the free allowance is used up until it resets.
  * - `sandbox_exceeds_plan_limits` — the requested size exceeds the plan limits.
  *
