@@ -85,6 +85,31 @@ describe("sendSignInLink", () => {
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
+  it("does not send when the captcha provider is unavailable", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: true,
+      providerOutcome: "unavailable",
+    })
+
+    const result = await sendSignInLink("user@example.com", "any-token")
+
+    expect(result).toEqual({ success: false, errorCode: "captcha_unavailable" })
+    expect(afterCallbacks).toHaveLength(0)
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it("sends when the captcha integration is not configured", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: true,
+      providerOutcome: "unconfigured",
+    })
+
+    const result = await sendSignInLink("user@example.com", undefined)
+
+    expect(result).toEqual({ success: true })
+    expect(afterCallbacks).toHaveLength(1)
+  })
+
   it.each([
     [
       "unknown",

@@ -177,7 +177,11 @@ function SignInContent() {
           method: "email_link",
           reason: result.errorCode,
         })
-        setLinkError("We couldn't verify you're human. Please try again.")
+        setLinkError(
+          result.errorCode === "captcha_failed"
+            ? "We couldn't verify you're human. Please try again."
+            : "Could not send the link. Please try again.",
+        )
         return
       }
       posthog.capture(AUTH_EVENTS.SIGN_IN_LINK_REQUESTED, {
@@ -290,6 +294,7 @@ function SignInContent() {
               setEmail(e.target.value)
               setLinkSentTo(null)
             }}
+            disabled={isLinkSending}
             error={errors.email}
           />
           <Input
@@ -343,7 +348,10 @@ function SignInContent() {
             {linkSentTo ? (
               <p aria-live="polite" className="text-xs text-foreground">
                 If an account exists, we sent a link to{" "}
-                <span className="font-medium">{linkSentTo}</span>.
+                <span data-mask className="font-medium">
+                  {linkSentTo}
+                </span>
+                .
               </p>
             ) : (
               <>

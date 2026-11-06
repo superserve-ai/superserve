@@ -551,6 +551,10 @@ describe("SignInPage", () => {
       ).toHaveTextContent(
         "If an account exists, we sent a link to someone@example.com.",
       )
+      // Session replay must not record the typed address.
+      expect(within(region).getByText("someone@example.com")).toHaveAttribute(
+        "data-mask",
+      )
       expect(mockSendSignInLink).toHaveBeenCalledWith(
         "someone@example.com",
         undefined,
@@ -595,6 +599,54 @@ describe("SignInPage", () => {
       expect(
         within(region).queryByText(/If an account exists/),
       ).not.toBeInTheDocument()
+    })
+
+    it("shows a retry error when the captcha provider is unavailable", async () => {
+      mockSendSignInLink.mockResolvedValue({
+        success: false,
+        errorCode: "captcha_unavailable",
+      })
+      const region = await failPasswordSignIn()
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      expect(
+        await within(region).findByText(
+          "Could not send the link. Please try again.",
+        ),
+      ).toBeInTheDocument()
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
+        method: "email_link",
+        reason: "captcha_unavailable",
+      })
+    })
+
+    it("locks the email field while a link request is pending", async () => {
+      let resolveRequest!: (value: { success: true }) => void
+      mockSendSignInLink.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRequest = resolve
+        }),
+      )
+      const region = await failPasswordSignIn("someone@example.com")
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      const emailInput = screen.getByPlaceholderText("Email")
+      await waitFor(() => expect(emailInput).toBeDisabled())
+      resolveRequest({ success: true })
+      await within(region).findByText(/If an account exists/)
+      expect(emailInput).toBeEnabled()
+
+      // Editing the address afterwards offers the link again.
+      await user.type(emailInput, "x")
+      expect(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      ).toBeInTheDocument()
     })
 
     it("tracks a request error", async () => {

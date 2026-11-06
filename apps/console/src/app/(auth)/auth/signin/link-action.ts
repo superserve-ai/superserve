@@ -106,11 +106,17 @@ export const sendSignInLink = async (
   recaptchaToken: unknown,
   next?: unknown,
 ): Promise<
-  { success: true } | { success: false; errorCode: "captcha_failed" }
+  | { success: true }
+  | { success: false; errorCode: "captcha_failed" | "captcha_unavailable" }
 > => {
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signin_link")
   if (!recaptcha.verified) {
     return { success: false, errorCode: "captcha_failed" }
+  }
+  // verifyRecaptcha also passes when the provider is down. This action has no
+  // other throttle, so it must not send email without a real verdict.
+  if (recaptcha.providerOutcome === "unavailable") {
+    return { success: false, errorCode: "captcha_unavailable" }
   }
 
   const parsed = linkSchema.safeParse({ email })
