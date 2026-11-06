@@ -547,6 +547,58 @@ describe("SignUpPage", () => {
     expect(mockGoogleRecoveryAccount).toHaveBeenCalledTimes(1)
   })
 
+  it("waits for a slow account lookup before it starts the Google trip", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    let resolveAccount!: (email: string | undefined) => void
+    mockGoogleRecoveryAccount.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAccount = resolve
+      }),
+    )
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(
+      <StrictMode>
+        <RecoverySignUpPage />
+      </StrictMode>,
+    )
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+    await waitFor(() => expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1))
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+
+    resolveAccount("new.user@example.com")
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    expect(mockSignInWithOAuth.mock.lastCall![0].options.queryParams).toEqual({
+      login_hint: "new.user@example.com",
+    })
+    expect(mockGoogleRecoveryAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens the account chooser when the account lookup fails", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    mockGoogleRecoveryAccount.mockRejectedValue(new Error("network"))
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    expect(mockSignInWithOAuth.mock.lastCall![0].options.queryParams).toEqual({
+      prompt: "select_account",
+    })
+    expect(screen.queryByText(/Continuing as/)).not.toBeInTheDocument()
+  })
+
   it("lets the user pick a different Google account on the recovery trip", async () => {
     mockSearchParams = new URLSearchParams(
       "complete_google=1&reason=started_from_signin",
