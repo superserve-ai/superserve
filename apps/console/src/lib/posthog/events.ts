@@ -56,6 +56,10 @@ export const API_KEY_EVENTS = {
   BULK_REVOKED: "api_key_bulk_revoked",
 } as const
 
+export const PLAN_PICKER_EVENTS = {
+  VIEWED: "plan_picker_viewed",
+} as const
+
 export const SNAPSHOT_EVENTS = {
   TAKEN: "snapshot_taken",
   RENAMED: "snapshot_renamed",
