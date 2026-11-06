@@ -235,7 +235,17 @@ describe("SignUpPage", () => {
     ).toBeInTheDocument()
   })
 
-  it("shows an inline error when passwords do not match", async () => {
+  it("shows the password rule before submit", async () => {
+    render(<SignUpPage />)
+
+    const password = await screen.findByPlaceholderText("Password")
+    const hint = screen.getByText(
+      "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number.",
+    )
+    expect(password).toHaveAttribute("aria-describedby", hint.id)
+  })
+
+  it("names the missing part of a weak password without calling the server", async () => {
     render(<SignUpPage />)
 
     await user.type(
@@ -244,6 +254,27 @@ describe("SignUpPage", () => {
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    expect(
+      await screen.findByText("Add an uppercase letter."),
+    ).toBeInTheDocument()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
+
+  it("shows an inline error when passwords do not match", async () => {
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
       "different",
@@ -280,10 +311,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -296,7 +327,7 @@ describe("SignUpPage", () => {
     )
     expect(mockSignUpWithEmail).toHaveBeenCalledWith(
       "test@test.com",
-      "password123",
+      "Password123",
       "Test User",
       undefined,
       undefined,
@@ -357,10 +388,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -371,7 +402,7 @@ describe("SignUpPage", () => {
     await waitFor(() => {
       expect(mockSignUpWithEmail).toHaveBeenCalledWith(
         "test@test.com",
-        "password123",
+        "Password123",
         "Test User",
         undefined,
         undefined,
@@ -395,10 +426,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -420,10 +451,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -443,10 +474,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -689,10 +720,10 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -847,17 +878,17 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     await waitFor(() => {
       expect(mockSignUpWithEmail).toHaveBeenCalledWith(
         "test@test.com",
-        "password123",
+        "Password123",
         "Test User",
         "real-token",
         undefined,
