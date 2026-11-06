@@ -148,6 +148,15 @@ describe("ResetPasswordPage", () => {
     expect(mockUpdateUser).not.toHaveBeenCalled()
   })
 
+  it("rejects a password over 72 bytes without calling the server", async () => {
+    render(<ResetPasswordPage />)
+
+    await fillAndSubmit("Sandbox42".padEnd(73, "x"))
+
+    expect(await screen.findByText("Use 72 characters or fewer.")).toBeTruthy()
+    expect(mockUpdateUser).not.toHaveBeenCalled()
+  })
+
   it("cancels pending redirect on unmount", async () => {
     mockUpdateUser.mockResolvedValue({ error: null })
     const { unmount } = render(<ResetPasswordPage />)

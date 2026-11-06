@@ -412,6 +412,16 @@ describe("Settings change password", () => {
     expect(updateUser).not.toHaveBeenCalled()
   })
 
+  it("rejects a password over 72 bytes without calling the server", () => {
+    renderPage()
+
+    submitPasswords("Sandbox42".padEnd(73, "x"))
+
+    expect(screen.getByText("Use 72 characters or fewer.")).toBeTruthy()
+    expect(signInWithPassword).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
   it("updates a password that meets the rule", async () => {
     renderPage()
 

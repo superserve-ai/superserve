@@ -266,6 +266,27 @@ describe("SignUpPage", () => {
     expect(mockSignUpWithEmail).not.toHaveBeenCalled()
   })
 
+  it("rejects a password over 72 bytes without calling the server", async () => {
+    const tooLong = "Sandbox42".padEnd(73, "x")
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.click(screen.getByPlaceholderText("Password"))
+    await user.paste(tooLong)
+    await user.click(screen.getByPlaceholderText("Confirm Password"))
+    await user.paste(tooLong)
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    expect(
+      await screen.findByText("Use 72 characters or fewer."),
+    ).toBeInTheDocument()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
+
   it("shows an inline error when passwords do not match", async () => {
     render(<SignUpPage />)
 
