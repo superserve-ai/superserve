@@ -84,7 +84,7 @@ from mesa_sdk import Mesa, repo
 from superserve import Sandbox
 
 
-async def main():
+async def main() -> None:
     # --- Outside the sandbox: set up Mesa resources (the Mesa SDK is async) ---
     async with Mesa(private_key=os.environ["MESA_PRIVATE_KEY"]) as mesa:
         # Create a repo (or use an existing one)
@@ -170,7 +170,7 @@ await template.waitUntilReady();
 ```
 
 ```python Python
-from superserve import Template, RunStep
+from superserve import RunStep, Template
 
 template = Template.create(
     name="agent-with-mesa",
@@ -182,7 +182,9 @@ template = Template.create(
         RunStep(
             run="apt-get update && apt-get install -y --no-install-recommends ca-certificates curl git && rm -rf /var/lib/apt/lists/*"
         ),
-        RunStep(run="curl -fsSL https://mesa.dev/install.sh | sh -s -- --version latest --yes"),
+        RunStep(
+            run="curl -fsSL https://mesa.dev/install.sh | sh -s -- --version latest --yes"
+        ),
     ],
 )
 
