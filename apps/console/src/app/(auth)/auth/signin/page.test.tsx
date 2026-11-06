@@ -576,6 +576,23 @@ describe("SignInPage", () => {
       ).toBeInTheDocument()
     })
 
+    it("sends the offer destination when there is no explicit next", async () => {
+      searchParamsMap = { offer: "pro_monthly" }
+      const region = await failPasswordSignIn("someone@example.com")
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      await waitFor(() =>
+        expect(mockSendSignInLink).toHaveBeenCalledWith(
+          "someone@example.com",
+          undefined,
+          "/billing/pro/",
+        ),
+      )
+    })
+
     it("shows an error and tracks the failure when the captcha check fails", async () => {
       mockSendSignInLink.mockResolvedValue({
         success: false,

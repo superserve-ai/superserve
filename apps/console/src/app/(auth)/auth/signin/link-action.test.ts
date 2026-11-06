@@ -177,7 +177,21 @@ describe("sendSignInLink", () => {
   })
 
   it.each([
+    "/billing/pro/",
+    "/auth/choose-plan/?reason=upgrade&offer=pro_monthly&team=team-1",
+  ])("keeps the sign-in destination %s", async (next) => {
+    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+
+    await sendSignInLink("user@example.com", "token", next)
+    await runAfter()
+
+    const url = new URL(mockSendEmail.mock.calls[0][0].react.signInUrl)
+    expect(url.searchParams.get("next")).toBe(next)
+  })
+
+  it.each([
     "/auth/reset-password",
+    "/auth/choose-plan/?reason=upgrade&redirect=https://evil.example.com",
     "//evil.example.com",
     "https://evil.example.com",
     "/",

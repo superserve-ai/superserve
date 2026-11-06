@@ -4,6 +4,7 @@ import { after } from "next/server"
 import * as z from "zod"
 
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
+import { isPlanPickerPath } from "@/lib/billing/signup-checkout-paths"
 import { sendEmail } from "@/lib/email/send"
 import { SignInLinkEmail } from "@/lib/email/templates/sign-in-link"
 import { trackEvent } from "@/lib/posthog/actions"
@@ -21,7 +22,8 @@ function safeNext(raw: unknown): string | null {
     raw === "/" ||
     !raw.startsWith("/") ||
     raw.startsWith("//") ||
-    raw.startsWith("/auth/") ||
+    // Other /auth/ pages, such as reset-password, are not sign-in landings.
+    (raw.startsWith("/auth/") && !isPlanPickerPath(raw)) ||
     /[\\\u0000- \u007f]/.test(raw)
   ) {
     return null

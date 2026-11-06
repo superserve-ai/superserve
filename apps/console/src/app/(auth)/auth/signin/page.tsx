@@ -171,7 +171,13 @@ function SignInContent() {
         setLinkError("We couldn't verify you're human. Please try again.")
         return
       }
-      const result = await sendSignInLink(email, recaptchaToken, nextUrl)
+      const result = await sendSignInLink(
+        email,
+        recaptchaToken,
+        nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
+          ? signInOfferDestination(rawOffer)
+          : nextUrl,
+      )
       if (!result.success) {
         posthog.capture(AUTH_EVENTS.SIGN_IN_LINK_FAILED, {
           method: "email_link",
