@@ -27,6 +27,8 @@ export OPENAI_API_KEY=sk-...
 
 The script creates a desktop sandbox, sends the task with the `computer` tool, and then answers each `computer_call` with a screenshot taken after its actions ran. It stops when the model replies with text, and kills the sandbox at the end.
 
+The TypeScript sample uses top-level `await`, so it must run as an ES module: save it as `agent.mts` (or set `"type": "module"` in `package.json`) and run it with `npx tsx agent.mts`.
+
 <CodeGroup>
 ```typescript TypeScript
 import { type DesktopAction, Sandbox, type Screenshot } from "@superserve/sdk"
