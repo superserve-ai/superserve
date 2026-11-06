@@ -222,6 +222,7 @@
           {
             "group": "Team Management",
             "pages": [
+              "PATCH /teams/{team_id}",
               "GET /teams/{team_id}/members",
               "POST /teams/{team_id}/members",
               "DELETE /teams/{team_id}/members/{user_id}",
