@@ -8,6 +8,7 @@ import { useEffect, useState } from "react"
 import { PlanOverviewSection } from "@/components/billing/plan-overview-section"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PageHeader } from "@/components/page-header"
+import { TeamDetailsSection } from "@/components/settings/team-details-section"
 import { TeamsSection } from "@/components/settings/teams-section"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useBillingSettings } from "@/hooks/use-billing-usage"
@@ -252,6 +253,9 @@ export default function SettingsPage() {
         </div>
 
         <Separator />
+
+        {/* The active team: name (editable with permission), region, ID */}
+        <TeamDetailsSection />
 
         {/* Renders nothing for a single-cell user with one team, unless that
             team is the user's own account and can become a team */}
