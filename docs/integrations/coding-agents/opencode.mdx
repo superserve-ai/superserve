@@ -1,11 +1,11 @@
 ---
-title: "Opencode"
-sidebarTitle: Opencode
-description: Run Opencode in a Superserve sandbox.
+title: "OpenCode"
+sidebarTitle: OpenCode
+description: Run OpenCode in a Superserve sandbox.
 icon: "/logos/integrations/opencode.svg"
 ---
 
-Opencode is an open-source terminal coding agent. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+OpenCode is an open-source terminal coding agent. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
 
 ## Via the console
 
@@ -66,7 +66,7 @@ sandbox.commands.run("echo 'export PATH=/home/user/.opencode/bin:$PATH' >> ~/.ba
 ```
 </CodeGroup>
 
-Opencode reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent.
+OpenCode reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent.
 
 Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `opencode`.
 
