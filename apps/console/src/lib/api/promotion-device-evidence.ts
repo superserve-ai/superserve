@@ -5,7 +5,7 @@ import {
   enterpriseProvisioningContext,
   type EnterpriseProvisioningAuthority,
 } from "@/lib/admin/enterprise-provisioning-authority"
-import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 type AccountOperation =
@@ -19,6 +19,7 @@ type AccountOperation =
   | "recover-team"
   | "complete-team"
   | "discover-team-creations"
+  | "record-device"
 
 interface CreationLocator {
   readonly userId: string
@@ -429,6 +430,29 @@ async function registerPromotionSignupDeviceForAccount(
   if (result.outcome !== "owner" && result.outcome !== "owner_conflict")
     throw new PromotionEvidenceError("authority_unavailable")
   return result.outcome
+}
+
+/**
+ * Record a provider-verified device for an account that predates signup
+ * evidence, in every region, since each region decides trials on its own.
+ */
+export async function recordExistingAccountDevice(
+  expectedUserId: string,
+  fingerprint: string,
+): Promise<boolean> {
+  const userId = await verifiedAccountId(expectedUserId)
+  const results = await Promise.allSettled(
+    configuredRegions().map((region) =>
+      post(
+        region,
+        "/internal/promotion/account/record-device",
+        "account",
+        { user_id: userId },
+        { userId, operation: "record-device", recovery: { fingerprint } },
+      ),
+    ),
+  )
+  return results.every((result) => result.status === "fulfilled")
 }
 
 /** A non-issuing East snapshot; it cannot prove that a team received credit. */

@@ -91,18 +91,57 @@ Commands run as the template's user (the image's `USER`, or the template's `user
 
 ## Timeouts
 
-Pass a timeout to kill a command that runs longer than you expect.
+The timeout is a hard limit on how long a command runs. When it's reached, the sandbox stops the command and `run()` returns with exit code `124`. It doesn't throw, so check the exit code. Output doesn't extend the limit: a command that keeps printing still stops on time.
 
 <CodeGroup>
 ```typescript TypeScript
 const result = await sandbox.commands.run("sleep 100", {
   timeoutMs: 5_000,
 })
+if (result.exitCode === 124) {
+  console.error("Timed out after 5 seconds")
+}
 ```
 
 ```python Python
 result = sandbox.commands.run("sleep 100", timeout_seconds=5)
+if result.exit_code == 124:
+    print("Timed out after 5 seconds")
 ```
 </CodeGroup>
+
+What happens depends on the method and whether you set a timeout:
+
+| | Timeout left off | Timeout set |
+| --- | --- | --- |
+| `run()` | The sandbox stops the command after 30 seconds. Without callbacks, the SDK also stops waiting at 30 seconds and throws `TimeoutError` / `SandboxTimeoutError`. With callbacks, the result has exit code `124`. | The sandbox stops the command at the limit, and the result has exit code `124`. |
+| `spawn()` | No limit. The process runs until it exits or you kill it. | The sandbox stops the process at the limit, and `wait()` resolves with exit code `124`. |
+
+Set a timeout on any `run()` that can take longer than 30 seconds. For a process with no fixed end, like a server, use [`spawn()`](/commands/sessions) without one.
+
+<Note>
+TypeScript rounds `timeoutMs` up to whole seconds. `run()` treats `timeoutMs: 0` the same as leaving it out, and throws `ValidationError` for a value that is negative, not finite, or out of range.
+</Note>
+
+## Large output
+
+Without callbacks, `run()` returns stdout and stderr in one JSON response, capped at 8 MiB of JSON-encoded output for both streams together. Characters that JSON escapes count for more than one byte (a `<` counts as six), so output with many of them is cut below 8 MiB of raw text. When the cap is reached, the sandbox drops the rest, sets `truncated` to `true` on the result, and appends a notice to `stderr`. The command itself still runs to the end.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("cat big.log")
+if (result.truncated) {
+  console.warn("Output was truncated")
+}
+```
+
+```python Python
+result = sandbox.commands.run("cat big.log")
+if result.truncated:
+    print("Output was truncated")
+```
+</CodeGroup>
+
+For the full output, [stream it](/commands/streaming) with callbacks, or redirect it to a file in the sandbox and read the file. Streamed runs return everything, and `truncated` is always `false`.
 
 For longer commands, [stream the output](/commands/streaming) as it runs. To send input to a process while it runs, [open a session](/commands/sessions).

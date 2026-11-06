@@ -157,11 +157,17 @@ Key behaviors:
   sandbox transparently resumes it first — you do **not** call `resume()` yourself.
 - **`timeoutSeconds` / `timeout_seconds` caps active lifetime, then auto-_pauses_** —
   state is preserved, it is **not** deleted. (Bounded by an API-side upper limit.)
+  It counts active time, so work still running when it elapses is paused mid-run.
+- **`idleTimeoutSeconds` / `idle_timeout_seconds` auto-_pauses_ after that long with no
+  activity** (60s to 7d; off by default). Running commands, open terminals and command
+  streams, file operations and preview traffic count as activity; outbound traffic and
+  background processes launched with `nohup`/`&` do not. Prefer it over `timeoutSeconds`
+  for interactive boxes: it never pauses one that is in use.
 - **`autoDeleteSeconds` / `auto_delete_seconds` garbage-collects paused sandboxes** — the box
   is deleted once continuously paused for that long (resume cancels the countdown; `0` =
   delete on pause; unset = kept forever). Set it for scratch work you won't `kill()` yourself,
-  and pair it with `timeoutSeconds` so the box actually pauses. Both are settable after
-  creation via `update()`; pass `null`/`None` to clear.
+  and pair it with `timeoutSeconds` or `idleTimeoutSeconds` so the box actually pauses. All
+  are settable after creation via `update()`; pass `null`/`None` to clear.
 - `resume()` rotates the per-sandbox access token; the SDK re-injects it into
   `sandbox.files` for you — keep using the **same** object after resume.
 - `kill()` is **idempotent** (a 404 is swallowed). `pause()`/`resume()`/`kill()` return nothing.
@@ -201,13 +207,18 @@ or `disk` argument on `create()`**. To change the shape, boot from (or build) a 
 template. The default template `superserve/base` (`ubuntu:24.04`) is **2 vCPU · 4096 MiB
 memory · 8192 MiB disk**.
 
-| Shape field | Min  | Max (platform ceiling) | Default |
-| ----------- | ---- | ---------------------- | ------- |
-| `vcpu`      | 1    | 4                      | 1       |
-| `memoryMib` | 256  | 4096                   | 1024    |
-| `diskMib`   | 1024 | 8192                   | 4096    |
+| Limit         | `vcpu` (vCPUs) | `memoryMib` (MiB)  |
+| ------------- | -------------- | ------------------ |
+| Min           | 1 vCPU         | 256 MiB            |
+| Default       | 1 vCPU         | 1 GiB (1024 MiB)   |
+| Free max      | 2 vCPU         | 4 GiB (4096 MiB)   |
+| Developer max | 4 vCPU         | 16 GiB (16384 MiB) |
+| Pro max       | 16 vCPU        | 64 GiB (65536 MiB) |
 
-- **New teams are capped at 2 vCPU / 4096 MiB / 8192 MiB disk** — email support@superserve.ai to raise it.
+- Limits depend on the team's plan. For larger sandboxes, email support@superserve.ai.
+- `memoryMib` and `diskMib` take values in MiB (1 GiB = 1024 MiB).
+- `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
+  team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
   including the heavier ones (`python-ml`, `code-interpreter`, `claude-code`, `openclaw`,
   `hermes`, `omnara`, `desktop`). See the full catalog in the docs.
@@ -216,26 +227,26 @@ memory · 8192 MiB disk**.
 
 ## Common operations
 
-| Task                | TypeScript                                                                 | Python (sync)                                                                             | Returns / notes                                                                                                                               |
-| ------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
-| Create              | `Sandbox.create({ name })`                                                 | `Sandbox.create(name=...)`                                                                | `Sandbox`; opts: `timeoutSeconds`, `autoDeleteSeconds`, `metadata`, `envVars`, `network`, `fromTemplate`, `fromSnapshot` (snapshot or its ID) |
-| Reconnect           | `Sandbox.connect(id)`                                                      | `Sandbox.connect(id)`                                                                     | `Sandbox`; auto-resumes if paused                                                                                                             |
-| List                | `Sandbox.list({ metadata })`                                               | `Sandbox.list(metadata=...)`                                                              | `SandboxInfo[]` (no live instance); metadata filters combine with AND                                                                         |
-| Delete by id        | `Sandbox.killById(id)`                                                     | `Sandbox.kill_by_id(id)`                                                                  | idempotent                                                                                                                                    |
-| Fresh info          | `sandbox.getInfo()`                                                        | `sandbox.get_info()`                                                                      | `SandboxInfo`                                                                                                                                 |
-| Pause               | `sandbox.pause()`                                                          | `sandbox.pause()`                                                                         | —                                                                                                                                             |
-| Resume              | `sandbox.resume()`                                                         | `sandbox.resume()`                                                                        | rotates access token                                                                                                                          |
-| Delete              | `sandbox.kill()`                                                           | `sandbox.kill()`                                                                          | idempotent                                                                                                                                    |
-| Snapshot            | `sandbox.snapshot({ name })`                                               | `sandbox.snapshot(name=...)`                                                              | `Snapshot` of memory + disk, kept until deleted; running box is paused for the capture                                                        |
-| Fork                | `Sandbox.create({ name, fromSnapshot })`                                   | `Sandbox.create(name=..., from_snapshot=...)`                                             | new sandbox continuing from the snapshot, processes running                                                                                   |
-| List snapshots      | `sandbox.snapshots()`                                                      | `sandbox.snapshots()`                                                                     | `SnapshotInfo[]`, newest first; `rename()` / `delete()` on a `Snapshot`                                                                       |
-| Update              | `sandbox.update({ metadata, network, autoDeleteSeconds, timeoutSeconds })` | `sandbox.update(metadata=..., network=..., auto_delete_seconds=..., timeout_seconds=...)` | patches tags / egress / auto-delete / timeout; **metadata is replaced, not merged**; pass `null`/`None` to clear auto-delete or timeout       |
-| Run command         | `sandbox.commands.run(cmd, opts)`                                          | `sandbox.commands.run(cmd, ...)`                                                          | `{ stdout, stderr, exitCode }` / `CommandResult`; opts: `cwd`, `env`, `user`, timeout                                                         |
-| Stream output       | `run(cmd, { onStdout, onStderr })`                                         | `run(cmd, on_stdout=..., on_stderr=...)`                                                  | chunks via callbacks; result still holds full buffer                                                                                          |
-| Interactive process | `sandbox.commands.spawn(cmd, opts)`                                        | `AsyncSandbox(...).commands.spawn(...)`                                                   | full-duplex session (sync Python raises — use async)                                                                                          |
-| Write file          | `sandbox.files.write(path, content)`                                       | `sandbox.files.write(path, content)`                                                      | parent dirs auto-created                                                                                                                      |
-| Read bytes          | `sandbox.files.read(path)`                                                 | `sandbox.files.read(path)`                                                                | `Uint8Array` / `bytes`                                                                                                                        |
-| Read text           | `sandbox.files.readText(path)`                                             | `sandbox.files.read_text(path)`                                                           | UTF-8 string                                                                                                                                  |
+| Task                | TypeScript                                                                 | Python (sync)                                                                             | Returns / notes                                                                                                                                                     |
+| ------------------- | -------------------------------------------------------------------------- | ----------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Create              | `Sandbox.create({ name })`                                                 | `Sandbox.create(name=...)`                                                                | `Sandbox`; opts: `timeoutSeconds`, `idleTimeoutSeconds`, `autoDeleteSeconds`, `metadata`, `envVars`, `network`, `fromTemplate`, `fromSnapshot` (snapshot or its ID) |
+| Reconnect           | `Sandbox.connect(id)`                                                      | `Sandbox.connect(id)`                                                                     | `Sandbox`; auto-resumes if paused                                                                                                                                   |
+| List                | `Sandbox.list({ metadata })`                                               | `Sandbox.list(metadata=...)`                                                              | `SandboxInfo[]` (no live instance); metadata filters combine with AND                                                                                               |
+| Delete by id        | `Sandbox.killById(id)`                                                     | `Sandbox.kill_by_id(id)`                                                                  | idempotent                                                                                                                                                          |
+| Fresh info          | `sandbox.getInfo()`                                                        | `sandbox.get_info()`                                                                      | `SandboxInfo`                                                                                                                                                       |
+| Pause               | `sandbox.pause()`                                                          | `sandbox.pause()`                                                                         | —                                                                                                                                                                   |
+| Resume              | `sandbox.resume()`                                                         | `sandbox.resume()`                                                                        | rotates access token                                                                                                                                                |
+| Delete              | `sandbox.kill()`                                                           | `sandbox.kill()`                                                                          | idempotent                                                                                                                                                          |
+| Snapshot            | `sandbox.snapshot({ name })`                                               | `sandbox.snapshot(name=...)`                                                              | `Snapshot` of memory + disk, kept until deleted; running box is paused for the capture                                                                              |
+| Fork                | `Sandbox.create({ name, fromSnapshot })`                                   | `Sandbox.create(name=..., from_snapshot=...)`                                             | new sandbox continuing from the snapshot, processes running                                                                                                         |
+| List snapshots      | `sandbox.snapshots()`                                                      | `sandbox.snapshots()`                                                                     | `SnapshotInfo[]`, newest first; `rename()` / `delete()` on a `Snapshot`                                                                                             |
+| Update              | `sandbox.update({ metadata, network, autoDeleteSeconds, timeoutSeconds })` | `sandbox.update(metadata=..., network=..., auto_delete_seconds=..., timeout_seconds=...)` | patches tags / egress / auto-delete / timeouts; **metadata is replaced, not merged**; pass `null`/`None` to clear auto-delete or a timeout                          |
+| Run command         | `sandbox.commands.run(cmd, opts)`                                          | `sandbox.commands.run(cmd, ...)`                                                          | `{ stdout, stderr, exitCode }` / `CommandResult`; opts: `cwd`, `env`, `user`, timeout                                                                               |
+| Stream output       | `run(cmd, { onStdout, onStderr })`                                         | `run(cmd, on_stdout=..., on_stderr=...)`                                                  | chunks via callbacks; result still holds full buffer                                                                                                                |
+| Interactive process | `sandbox.commands.spawn(cmd, opts)`                                        | `AsyncSandbox(...).commands.spawn(...)`                                                   | full-duplex session (sync Python raises — use async)                                                                                                                |
+| Write file          | `sandbox.files.write(path, content)`                                       | `sandbox.files.write(path, content)`                                                      | parent dirs auto-created                                                                                                                                            |
+| Read bytes          | `sandbox.files.read(path)`                                                 | `sandbox.files.read(path)`                                                                | `Uint8Array` / `bytes`                                                                                                                                              |
+| Read text           | `sandbox.files.readText(path)`                                             | `sandbox.files.read_text(path)`                                                           | UTF-8 string                                                                                                                                                        |
 
 **Unit footgun:** the command timeout is **`timeoutMs` (milliseconds) in TS** but
 **`timeout_seconds` (seconds) in Python**. `run("…", { timeoutMs: 10000 })` ≈ `run("…", timeout_seconds=10)`.
@@ -263,19 +274,26 @@ r = sandbox.commands.run("npm run build",
 print(f"exited {r.exit_code}", len(r.stdout))
 ```
 
-Streaming uses an **idle timeout** that resets on each chunk (a chatty command never trips
-it; a silent one still must finish in time). If the stream drops before the `finished`
-event, `run()` **throws** — but the command keeps running in the sandbox, so reconnect with
-`Sandbox.connect(id)` if you saved the ID.
+The command timeout is a **hard limit**, streamed or not: output does **not** reset it. At
+the limit the sandbox stops the command and `run()` returns **exit code `124`** (no throw).
+With no timeout set, the sandbox stops the command after 30 s (a sync `run()` throws
+`TimeoutError` / `SandboxTimeoutError`), so set one for longer jobs. If the stream drops
+before the `finished` event, `run()` **throws** `SandboxError` and the sandbox **stops the
+command**. Without callbacks, the command keeps running if the client goes away, until it
+exits or hits its timeout. **Nothing reattaches to command output** (`Sandbox.connect(id)`
+only returns the sandbox). For a job that must outlive your client, start it in the
+background, where the timeout doesn't apply (`nohup job > /home/user/job.log 2>&1 &`), and
+read the log later.
 
 Use **`spawn()`** when you need to send stdin, signal the process, or keep a REPL open. It
 resolves once the process is _running_ and hands back a session: `stdin.write(data)`,
 `stdin.close()` (EOF), `kill(signal?)` (default `SIGTERM`), `wait()` (resolves on exit;
-rejects if the socket drops first). `spawn()` is **async-only in Python** (`AsyncSandbox`;
-sync raises and points you there) and needs **Node 22+** in TS (or a `ws` polyfill).
+rejects if the socket drops first, and the sandbox then stops the process). `spawn()` is
+**async-only in Python** (`AsyncSandbox`; sync raises and points you there) and needs
+**Node 22+** in TS (or a `ws` polyfill).
 
 ```ts
-const session = await sandbox.commands.spawn("python -i", {
+const session = await sandbox.commands.spawn("python3 -i", {
   onStdout: (data) => process.stdout.write(data),
 })
 session.stdin.write("print(2 + 2)\n")
@@ -285,7 +303,7 @@ console.log((await session.wait()).exitCode)
 
 ```python
 # spawn is async only → use AsyncSandbox; `async with` kills + closes on exit
-session = await sandbox.commands.spawn("python -i",
+session = await sandbox.commands.spawn("python3 -i",
     on_stdout=lambda data: print(data, end=""))
 async with session:
     await session.stdin.write("print(2 + 2)\n")
@@ -555,8 +573,10 @@ try {
 - No `vcpu`/`memory`/`disk` on `create()` — size the VM via the template.
 - `Template.create()` returns when the build is _queued_; boot a sandbox only **after**
   `waitUntilReady()` resolves.
-- Streaming `run()` uses an idle timeout (resets per chunk) and throws if the stream ends
-  without a `finished` event; the command keeps running — reconnect via `connect(id)`.
+- The command timeout is a hard limit, not an idle timeout: output doesn't reset it, and at
+  the limit `run()` returns exit code `124`. If a streamed `run()` drops, it throws and the
+  sandbox stops the command; a sync `run()` keeps running until it exits or hits its
+  timeout. No API reattaches to command output.
 - (Python) the sandbox holds a shared `httpx` client, closed on `kill()` — always
   `kill()` rather than just dropping the reference.
 

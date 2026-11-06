@@ -17,6 +17,7 @@ describe("toSandboxInfo", () => {
     memory_mib: 512,
     created_at: "2026-01-01T00:00:00.000Z",
     timeout_seconds: 600,
+    idle_timeout_seconds: 300,
     network: { allow_out: ["1.1.1.1"], deny_out: ["2.2.2.2"] },
     metadata: { env: "prod" },
   }
@@ -31,6 +32,7 @@ describe("toSandboxInfo", () => {
     expect(info.createdAt).toBeInstanceOf(Date)
     expect(info.createdAt.toISOString()).toBe("2026-01-01T00:00:00.000Z")
     expect(info.timeoutSeconds).toBe(600)
+    expect(info.idleTimeoutSeconds).toBe(300)
     expect(info.network).toEqual({
       allowOut: ["1.1.1.1"],
       denyOut: ["2.2.2.2"],
@@ -71,6 +73,7 @@ describe("toSandboxInfo", () => {
     expect(info.vcpuCount).toBe(0)
     expect(info.memoryMib).toBe(0)
     expect(info.timeoutSeconds).toBeUndefined()
+    expect(info.idleTimeoutSeconds).toBeUndefined()
     expect(info.autoDeleteSeconds).toBeUndefined()
     expect(info.autoDeleteAt).toBeUndefined()
     expect(info.network).toBeUndefined()

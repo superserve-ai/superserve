@@ -1,6 +1,7 @@
 "use client"
 
 import { Badge, cn } from "@superserve/ui"
+import type { ReactNode } from "react"
 
 import {
   billingCredits,
@@ -64,7 +65,13 @@ function creditNote(
     : "Usage is billed at standard rates."
 }
 
-export function CurrentPlan({ summary }: { summary: BillingSummaryResponse }) {
+export function CurrentPlan({
+  summary,
+  billingControls,
+}: {
+  summary: BillingSummaryResponse
+  billingControls?: ReactNode
+}) {
   const plan = summary.plan
   const currency = currencyCode(summary)
   const remaining = billingCredits(summary).remaining
@@ -96,6 +103,7 @@ export function CurrentPlan({ summary }: { summary: BillingSummaryResponse }) {
             ? priceLabel(plan, currency)
             : "Plan details couldn't be loaded."}
         </p>
+        {billingControls ? <div className="pt-1">{billingControls}</div> : null}
       </div>
       <div className="space-y-3 border-t border-dashed border-border p-5 sm:border-t-0 sm:border-l sm:p-6">
         <p className={EYEBROW}>Credits remaining</p>

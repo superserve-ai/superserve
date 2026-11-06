@@ -16,7 +16,7 @@ Every error raised by the SDK extends a common base class - `SandboxError` in Ty
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
 | `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-paused sandbox, or patching `network` rules while paused). |
 | `RateLimitError` | `RateLimitError` | `429` | Rate limit or per-team quota reached. Branch on `code` (see below). |
-| `TimeoutError` | `SandboxTimeoutError` | - | Request or command timed out. |
+| `TimeoutError` | `SandboxTimeoutError` | - | The SDK stopped waiting for a response. A command that reaches its own timeout doesn't throw: it returns exit code `124`. |
 | `ServerError` | `ServerError` | `5xx` | Platform error - usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
 
 <Note>
