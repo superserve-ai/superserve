@@ -28,6 +28,9 @@ function formatBillingError(err: BillingError): string {
   if (err.code === "trial_unavailable") {
     return `The free trial is not available for this account. Do not retry. Ask the user to add a card and choose a plan ${where}. ${keep}`
   }
+  if (err.code === "trial_check_unavailable") {
+    return `The free trial could not be confirmed because a required check did not complete. Do not retry in a loop. Ask the user to add a card and choose a plan ${where}, or contact support@superserve.ai. ${keep}`
+  }
   if (
     err.code === "free_allowance_exhausted" ||
     err.code === "sandbox_exceeds_plan_limits"

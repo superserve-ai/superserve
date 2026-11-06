@@ -21,6 +21,7 @@ import { useUser } from "@/hooks/use-user"
 import type {
   BillingSummaryResponse,
   BillingTrialBalance,
+  BillingTrialBlock,
 } from "@/lib/api/billing"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { pickerOfferSellable, pickerPlanLabel } from "@/lib/billing/plan-picker"
@@ -93,19 +94,25 @@ export type TrialStage =
   | "trial"
   | "ended"
   | "unavailable"
+  | "check_unavailable"
   | "payment_failed"
   | "plan_required"
 
-// The trial's stage from its entry state and balance. A team that never got a
-// trial grant also reports trial_ended, so "ended" needs the balance to confirm
-// the trial was used; anything else stays neutral.
+// The trial's stage from its entry state, balance and the server's trial block.
+// A team that never got a trial grant also reports trial_ended, so "ended"
+// needs the block or the balance to confirm the trial was used, and a trial
+// that could not be confirmed is its own stage, never "unavailable" (denied).
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
+  block?: BillingTrialBlock | null,
 ): TrialStage {
   if (entry === "payment_failed" || entry === "plan_required") return entry
   if (entry === "trial_ended") {
-    return trial?.state === "exhausted" || trial?.state === "expired"
+    if (block === "trial_check_unavailable") return "check_unavailable"
+    return block === "trial_exhausted" ||
+      trial?.state === "exhausted" ||
+      trial?.state === "expired"
       ? "ended"
       : "unavailable"
   }
@@ -140,7 +147,7 @@ function TrialEntryBanner({
   const requested = trialPlanOffer(signup?.requestedOffer)
   const selected =
     requested && pickerOfferSellable(offers, requested) ? requested : undefined
-  const stage = trialStage(entry, summary.trial)
+  const stage = trialStage(entry, summary.trial, summary.trial_block)
   const remaining = formatUsd(summary.trial?.remaining_usd)
   const plan = selected ? pickerPlanLabel(offers, selected) : null
   const upgrade = plan ? `Upgrade to ${plan}` : "Upgrade"
@@ -198,6 +205,11 @@ function TrialEntryBanner({
         <>
           The free trial isn&apos;t available for this account. Upgrade to run
           sandboxes.
+        </>
+      ) : stage === "check_unavailable" ? (
+        <>
+          We couldn&apos;t confirm the free trial for this account because a
+          required check didn&apos;t complete. Upgrade to run sandboxes.
         </>
       ) : stage === "ended" ? (
         <>

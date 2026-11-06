@@ -106,19 +106,34 @@ export type PlanPickerReason =
   | "checkout_refused"
   | "billing_admin_required"
 
-// Whether a team that is awaiting its first plan used up a trial grant or
-// never had one. Anything else, including a summary without a trial, is
-// "unavailable" so a team is never told its trial was used when it was not.
-export type TrialOutcome = "used_up" | "unavailable"
+// Why a team that is awaiting its first plan has no trial. The three states
+// never share a message:
+// - "used_up": the trial grant was spent.
+// - "unavailable": the trial was denied, or never granted.
+// - "check_unavailable": the trial could not be confirmed because a required
+//   check did not complete. Not a denial and not proof of anything.
+// Anything unrecognized, including a summary without a trial, is "unavailable"
+// so a team is never told its trial was used when it was not.
+export type TrialOutcome = "used_up" | "unavailable" | "check_unavailable"
 
 export function trialOutcome(summary: unknown): TrialOutcome {
-  const trial =
-    summary && typeof summary === "object"
-      ? (summary as { trial?: { state?: unknown } | null }).trial
-      : null
-  return trial?.state === "exhausted" || trial?.state === "expired"
-    ? "used_up"
-    : "unavailable"
+  const {
+    trial,
+    trial_block: block,
+  }: {
+    trial?: { state?: unknown } | null
+    trial_block?: unknown
+  } = summary && typeof summary === "object" ? summary : {}
+  // The server's own reason wins over the balance: when it could not confirm
+  // the trial, a balance read alongside it proves nothing.
+  if (block === "trial_check_unavailable") return "check_unavailable"
+  if (
+    block === "trial_exhausted" ||
+    trial?.state === "exhausted" ||
+    trial?.state === "expired"
+  )
+    return "used_up"
+  return "unavailable"
 }
 
 export const PLAN_PICKER_ROUTE = "/auth/choose-plan/"

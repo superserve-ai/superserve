@@ -90,7 +90,10 @@ class TestMapApiError:
         assert isinstance(err, RateLimitError)
         assert err.code == "too_many_builds"
 
-    @pytest.mark.parametrize("code", ["trial_exhausted", "trial_unavailable"])
+    @pytest.mark.parametrize(
+        "code",
+        ["trial_exhausted", "trial_unavailable", "trial_check_unavailable"],
+    )
     def test_402_trial_codes_return_billing_error_with_action_url(
         self, code: str
     ) -> None:

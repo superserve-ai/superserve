@@ -60,6 +60,15 @@ function billingHint(err: BillingError): string | undefined {
       ? "Add a card and choose a plan, then retry."
       : `Add a card and choose a plan at ${err.actionUrl}, then retry.`
   }
+  // Not a denial and not a used-up trial: a required check did not complete,
+  // so retrying the same request does not help.
+  if (err.code === "trial_check_unavailable") {
+    const where =
+      err.actionUrl && !err.message.includes(err.actionUrl)
+        ? ` at ${err.actionUrl}`
+        : ""
+    return `We could not confirm the free trial. Add a card and choose a plan${where}, or contact support@superserve.ai.`
+  }
   // Older servers send only the generic code; claim nothing specific.
   if (err.code === "billing_ineligible") {
     return "Check your billing status in the Superserve console."

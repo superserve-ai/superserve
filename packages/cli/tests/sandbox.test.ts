@@ -429,7 +429,11 @@ describe("new account setup", () => {
     expect(r.stderr).toContain("Finishing account setup")
   })
 
-  for (const code of ["trial_exhausted", "trial_unavailable"]) {
+  for (const code of [
+    "trial_exhausted",
+    "trial_unavailable",
+    "trial_check_unavailable",
+  ]) {
     test(`right after login, ${code} fails fast with the action URL`, async () => {
       const { mkdtempSync, writeFileSync } = await import("node:fs")
       const { tmpdir } = await import("node:os")
@@ -484,6 +488,27 @@ describe("new account setup", () => {
     expect(r.exitCode).not.toBe(0)
     expect(r.stderr).toContain("The free trial is not available")
     expect(r.stderr).toContain(`choose a plan at ${url}`)
+  })
+
+  test("a check-unavailable 402 gets its own next step, not a retry or denial", async () => {
+    const url = "https://console.example.com/plan-usage"
+    const r = await runCli(["sandbox", "create", "--name", "x"], {
+      fetch: () =>
+        json(
+          {
+            error: {
+              code: "trial_check_unavailable",
+              message: `We could not confirm the free trial for this account because a required check did not complete. Add a card and choose a plan to use sandboxes: ${url}`,
+              action_url: url,
+            },
+          },
+          402,
+        ),
+    })
+    expect(r.exitCode).not.toBe(0)
+    expect(r.stderr).toContain("We could not confirm the free trial")
+    expect(r.stderr).not.toMatch(/used up|not available|then retry/)
+    expect(r.stderr.split(url)).toHaveLength(2)
   })
 
   test("a saved key without the signup marker (--with-key) fails right away", async () => {

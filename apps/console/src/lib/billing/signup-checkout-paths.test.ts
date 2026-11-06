@@ -91,6 +91,18 @@ describe("trialOutcome", () => {
     [{}, "unavailable"],
     [null, "unavailable"],
     ["exhausted", "unavailable"],
+    [{ trial_block: "trial_exhausted" }, "used_up"],
+    [{ trial_block: "trial_unavailable" }, "unavailable"],
+    [{ trial_block: "trial_check_unavailable" }, "check_unavailable"],
+    [{ trial_block: null, trial: { state: "no_grant" } }, "unavailable"],
+    [
+      { trial_block: "trial_unavailable", trial: { state: "exhausted" } },
+      "used_up",
+    ],
+    [
+      { trial_block: "trial_check_unavailable", trial: { state: "exhausted" } },
+      "check_unavailable",
+    ],
   ])("%j is %s", (summary, outcome) => {
     expect(trialOutcome(summary)).toBe(outcome)
   })

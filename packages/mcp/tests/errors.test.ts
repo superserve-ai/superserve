@@ -63,6 +63,20 @@ describe("formatSdkError", () => {
     expect(msg).not.toMatch(/used up/)
     expect(msg).toContain("https://console.example.com/auth/choose-plan")
   })
+  it("trial_check_unavailable is neither used up nor a denial", () => {
+    const msg = formatSdkError(
+      new BillingError(
+        "n/a",
+        "trial_check_unavailable",
+        "https://console.example.com/plan-usage",
+      ),
+    )
+    expect(msg).toMatch(/could not be confirmed/)
+    expect(msg).not.toMatch(/used up|not available for this account/)
+    expect(msg).toMatch(/Do not retry in a loop/)
+    expect(msg).toContain("https://console.example.com/plan-usage")
+    expect(msg).toMatch(/Nothing is deleted/)
+  })
   it("generic billing_ineligible claims nothing specific", () => {
     const msg = formatSdkError(
       new BillingError("unavailable", "billing_ineligible"),

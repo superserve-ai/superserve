@@ -99,7 +99,11 @@ describe("mapApiError", () => {
   })
 
   it("maps 402 trial codes to BillingError with the action URL", () => {
-    for (const code of ["trial_exhausted", "trial_unavailable"]) {
+    for (const code of [
+      "trial_exhausted",
+      "trial_unavailable",
+      "trial_check_unavailable",
+    ]) {
       const err = mapApiError(402, {
         error: {
           code,

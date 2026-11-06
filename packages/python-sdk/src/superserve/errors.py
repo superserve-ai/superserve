@@ -92,6 +92,8 @@ class BillingError(SandboxError):
 
     - ``trial_exhausted`` — the free trial credit is used up.
     - ``trial_unavailable`` — the free trial is not available for this account.
+    - ``trial_check_unavailable`` — the free trial could not be confirmed because
+      a required check did not complete. Not a denial; retrying does not resolve it.
     - ``billing_ineligible`` — generic; billing does not allow this request.
     - ``free_allowance_exhausted`` — the free allowance is used up until it resets.
     - ``sandbox_exceeds_plan_limits`` — the requested size exceeds the plan limits.

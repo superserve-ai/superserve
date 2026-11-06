@@ -34,14 +34,16 @@ vi.mock("@superserve/ui", () => ({
 }))
 vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
 const trial = vi.hoisted(() => ({
-  outcome: null as "used_up" | "unavailable" | null,
-  perTeam: {} as Record<string, "used_up" | "unavailable" | null>,
+  outcome: null as TrialOutcome | null,
+  perTeam: {} as Record<string, TrialOutcome | null>,
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTeamCatalogAction: async () => null,
   getTrialOutcomeAction: async ({ team }: { team: string }) =>
     team in trial.perTeam ? trial.perTeam[team] : trial.outcome,
 }))
+
+import type { TrialOutcome } from "@/lib/billing/signup-checkout-paths"
 
 import ChoosePlanPage from "./page"
 
@@ -105,24 +107,53 @@ describe("plan picker", () => {
     expect(screen.queryByText(/used up/)).toBeNull()
   })
 
-  it.each(["unavailable", null] as const)(
-    "does not say the trial is used up when the trial outcome is %s",
-    async (outcome) => {
-      trial.outcome = outcome
-      params = new URLSearchParams({
-        reason: "trial_ended",
-        account: "u1",
-        team: "use:team-1",
-      })
-      render(<ChoosePlanPage />)
-      expect(
-        await screen.findByText(
-          "The free trial isn't available for this account. Choose a plan to run sandboxes.",
-        ),
-      ).toBeTruthy()
-      expect(screen.queryByText(/used up/)).toBeNull()
-    },
-  )
+  it("says the trial isn't available only when it was denied", async () => {
+    trial.outcome = "unavailable"
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(
+      await screen.findByText(
+        "The free trial isn't available for this account. Choose a plan to run sandboxes.",
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/used up|couldn't confirm/)).toBeNull()
+  })
+
+  it("says the trial could not be confirmed, not denied or used up", async () => {
+    trial.outcome = "check_unavailable"
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(
+      await screen.findByText(
+        "We couldn't confirm the free trial for this account because a required check didn't complete. Choose a plan to run sandboxes.",
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText(/used up|isn't available/)).toBeNull()
+  })
+
+  it("claims nothing about the trial when the console cannot read it", async () => {
+    trial.outcome = null
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(
+      await screen.findByText("Choose a plan to run sandboxes."),
+    ).toBeTruthy()
+    expect(
+      screen.queryByText(/used up|isn't available|couldn't confirm/),
+    ).toBeNull()
+  })
 
   it("only re-checks the original checkout for checkout_elsewhere", () => {
     params = new URLSearchParams({

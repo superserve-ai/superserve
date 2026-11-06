@@ -2,9 +2,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { BillingSummaryResponse } from "@/lib/api/billing"
+import type {
+  BillingSummaryResponse,
+  BillingTrialBalance,
+  BillingTrialBlock,
+} from "@/lib/api/billing"
+import type { AwaitingPlanState } from "@/lib/billing/signup-checkout-paths"
 
-import { TrialBillingBanner, trialStage } from "./trial-billing-banner"
+import {
+  TrialBillingBanner,
+  type TrialStage,
+  trialStage,
+} from "./trial-billing-banner"
 
 const mocks = vi.hoisted(() => ({
   summary: vi.fn(),
@@ -454,6 +463,21 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
   })
 
+  it("says the trial could not be confirmed, not denied or ended", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({
+      data: summary({
+        trial: { state: "no_grant", remaining_usd: 0 },
+        trial_block: "trial_check_unavailable",
+      }),
+    })
+    mount()
+    expect(banner()).toHaveTextContent(
+      "We couldn't confirm the free trial for this account because a required check didn't complete. Upgrade to run sandboxes.",
+    )
+    expect(banner()).not.toHaveTextContent(/ended|used up|isn't available/)
+  })
+
   it("says nothing about the trial while the summary is unavailable", () => {
     entry("trial_ended")
     mocks.summary.mockReturnValue({ data: undefined })
@@ -515,18 +539,54 @@ describe("TrialBillingBanner for a new team's trial", () => {
 })
 
 describe("trialStage", () => {
-  it.each([
-    ["trial", { state: "active", remaining_usd: 0.5 }, "trial"],
-    ["trial", { state: "exhausted", remaining_usd: 0.5 }, "ended"],
-    ["trial", { state: "active", remaining_usd: 0 }, "ended"],
-    ["trial_ended", { state: "exhausted", remaining_usd: 0 }, "ended"],
-    ["trial_ended", { state: "expired", remaining_usd: 0.5 }, "ended"],
-    ["trial_ended", { state: "no_grant", remaining_usd: 0 }, "unavailable"],
-    ["trial_ended", { state: "active", remaining_usd: 0 }, "unavailable"],
-    ["trial_ended", undefined, "unavailable"],
-    ["payment_failed", undefined, "payment_failed"],
-    ["trial", undefined, "trial"],
-  ] as const)("%s with %o is %s", (entry, trial, stage) => {
-    expect(trialStage(entry, trial)).toBe(stage)
+  it.each<
+    [
+      AwaitingPlanState,
+      BillingTrialBalance | undefined,
+      TrialStage,
+      BillingTrialBlock | undefined,
+    ]
+  >([
+    ["trial", { state: "active", remaining_usd: 0.5 }, "trial", undefined],
+    ["trial", { state: "exhausted", remaining_usd: 0.5 }, "ended", undefined],
+    ["trial", { state: "active", remaining_usd: 0 }, "ended", undefined],
+    [
+      "trial_ended",
+      { state: "exhausted", remaining_usd: 0 },
+      "ended",
+      undefined,
+    ],
+    [
+      "trial_ended",
+      { state: "expired", remaining_usd: 0.5 },
+      "ended",
+      undefined,
+    ],
+    [
+      "trial_ended",
+      { state: "no_grant", remaining_usd: 0 },
+      "unavailable",
+      undefined,
+    ],
+    [
+      "trial_ended",
+      { state: "active", remaining_usd: 0 },
+      "unavailable",
+      undefined,
+    ],
+    ["trial_ended", undefined, "unavailable", undefined],
+    ["trial_ended", undefined, "ended", "trial_exhausted"],
+    ["trial_ended", undefined, "unavailable", "trial_unavailable"],
+    ["trial_ended", undefined, "check_unavailable", "trial_check_unavailable"],
+    [
+      "trial_ended",
+      { state: "exhausted", remaining_usd: 0 },
+      "check_unavailable",
+      "trial_check_unavailable",
+    ],
+    ["payment_failed", undefined, "payment_failed", undefined],
+    ["trial", undefined, "trial", undefined],
+  ])("%s with %o is %s", (entry, trial, stage, block) => {
+    expect(trialStage(entry, trial, block)).toBe(stage)
   })
 })

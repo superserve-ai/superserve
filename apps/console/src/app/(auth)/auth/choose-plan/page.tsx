@@ -31,10 +31,9 @@ const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
   checkout_elsewhere:
     "This checkout belongs to a different account or team than the one you're signed in to now. Switch back to it, then try again.",
-  // Neutral: a team that was never granted a trial also lands here. The used-up
-  // copy below is shown only once the team's trial balance confirms it.
-  trial_ended:
-    "The free trial isn't available for this account. Choose a plan to run sandboxes.",
+  // Neutral: claims nothing about the trial. The copy below says used up,
+  // denied or unconfirmed only once the team's summary confirms which.
+  trial_ended: "Choose a plan to run sandboxes.",
   payment_failed:
     "We couldn't confirm a card for your plan. Choose a plan to try again.",
   plan_required:
@@ -48,12 +47,19 @@ const MESSAGES: Record<PlanPickerReason, string> = {
     "Only your team's billing administrators can choose a plan. Ask one of them to upgrade this team.",
 }
 
-const TRIAL_USED_UP =
-  "Your free trial is used up. Your sandboxes are paused and nothing is deleted. Choose a plan to continue."
+const TRIAL_COPY: Record<TrialOutcome, string> = {
+  used_up:
+    "Your free trial is used up. Your sandboxes are paused and nothing is deleted. Choose a plan to continue.",
+  unavailable:
+    "The free trial isn't available for this account. Choose a plan to run sandboxes.",
+  check_unavailable:
+    "We couldn't confirm the free trial for this account because a required check didn't complete. Choose a plan to run sandboxes.",
+}
 
-// Says "used up" only when the team's trial balance shows a trial was used.
-// Until that is known nothing is shown, so the copy never flips; an unreadable
-// balance keeps the neutral message.
+// Says which of the three trial states the team is in only once its summary
+// confirms it. Until that is known nothing is shown, so the copy never flips;
+// a summary the console cannot read keeps the neutral message, so a load
+// failure is never shown as a denial.
 function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
   const account = locator?.account
   const team = locator?.team
@@ -78,7 +84,7 @@ function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
   }, [account, team, key])
   if (key === null) return MESSAGES.trial_ended
   if (read?.key !== key) return null
-  return read.outcome === "used_up" ? TRIAL_USED_UP : MESSAGES.trial_ended
+  return read.outcome ? TRIAL_COPY[read.outcome] : MESSAGES.trial_ended
 }
 
 function ChoosePlanContent() {
