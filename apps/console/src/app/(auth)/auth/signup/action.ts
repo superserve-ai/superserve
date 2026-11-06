@@ -257,6 +257,7 @@ export const beginGoogleSignup = async (
     turnstileToken,
   )
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_google")
+  const recaptchaBlock = strictRecaptchaBlock(recaptcha)
   await trackEvent(AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED, signupAttemptId, {
     provider: "recaptcha",
     signup_attempt_id: signupAttemptId,
@@ -264,12 +265,12 @@ export const beginGoogleSignup = async (
     verified: recaptcha.verified,
     provider_outcome: recaptcha.providerOutcome,
     reason: "reason" in recaptcha ? recaptcha.reason : null,
+    block_reason: recaptchaBlock?.reason ?? null,
     score: recaptcha.score,
     recaptcha_assessment_id: recaptcha.assessmentId ?? null,
     recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
     observed_at: new Date().toISOString(),
   })
-  const recaptchaBlock = strictRecaptchaBlock(recaptcha)
   if (recaptchaBlock) {
     if (fingerprintEventId)
       await consumeFingerprintSignupEventId(fingerprintEventId)
@@ -413,6 +414,7 @@ export const signUpWithEmail = async (
   }
 
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup")
+  const recaptchaBlock = strictRecaptchaBlock(recaptcha)
   await trackEvent(AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED, signupAttemptId, {
     provider: "recaptcha",
     signup_attempt_id: signupAttemptId,
@@ -420,12 +422,12 @@ export const signUpWithEmail = async (
     verified: recaptcha.verified,
     provider_outcome: recaptcha.providerOutcome,
     reason: "reason" in recaptcha ? recaptcha.reason : null,
+    block_reason: recaptchaBlock?.reason ?? null,
     score: recaptcha.score,
     recaptcha_assessment_id: recaptcha.assessmentId ?? null,
     recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
     observed_at: new Date().toISOString(),
   })
-  const recaptchaBlock = strictRecaptchaBlock(recaptcha)
   if (recaptchaBlock) {
     if (fingerprintEventId)
       await consumeFingerprintSignupEventId(fingerprintEventId)

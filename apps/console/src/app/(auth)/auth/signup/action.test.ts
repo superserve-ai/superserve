@@ -940,6 +940,15 @@ describe("signUpWithEmail", () => {
       )
 
       expect(result).toEqual(expected)
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_signup_recaptcha_observed",
+        expect.any(String),
+        expect.objectContaining({
+          provider_outcome: providerOutcome,
+          block_reason:
+            providerOutcome === "unavailable" ? "provider_unavailable" : null,
+        }),
+      )
       const sent = providerOutcome === "unconfigured" ? 1 : 0
       expect(mockGenerateLink).toHaveBeenCalledTimes(sent)
       expect(mockSendEmail).toHaveBeenCalledTimes(sent)
