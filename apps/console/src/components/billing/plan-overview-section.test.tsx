@@ -703,9 +703,18 @@ describe("a summary that disagrees with the plan", () => {
       data: plan({ effective_from }),
       isError: false,
     })
-    render(<PlanOverviewSection summary={changed as BillingSummaryResponse} />)
+    render(
+      <PlanOverviewSection
+        summary={changed as BillingSummaryResponse}
+        billingControls={<button type="button">Open Customer Portal</button>}
+      />,
+    )
     expect(screen.getByText("Loading your plan…")).toBeTruthy()
     expect(screen.queryByText(/of \$250 used|couldn't be loaded/)).toBeNull()
+    // The payment action stays available while the contract settles.
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeTruthy()
   })
 
   it("stops waiting on a pending contract once the plan has settled", () => {

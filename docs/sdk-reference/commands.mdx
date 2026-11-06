@@ -52,7 +52,7 @@ result = sandbox.commands.run(
 </CodeGroup>
 
 <Note>
-Streaming uses an *idle* timeout: the timer resets on every chunk. A command that keeps producing output never trips it, however long it runs. A command that goes silent still has to finish before the timeout.
+The timeout is a wall-clock limit, also for streamed commands. Output does not reset it. At the limit, the command stops and `run()` returns exit code `124`. See [Timeouts](/commands/overview#timeouts) for the defaults.
 </Note>
 
 ## `spawn` (interactive session)
@@ -82,7 +82,7 @@ result = await session.wait()
 </CodeGroup>
 
 <Note>
-In Python, `spawn()` is on `AsyncSandbox` only; the synchronous version raises. It takes the same `cwd`, `user`, `env`, `timeoutMs` / `timeout_seconds`, `onStdout`, and `onStderr` options as `run`. Leave the timeout off for a long-lived process.
+In Python, `spawn()` is on `AsyncSandbox` only; the synchronous version raises. It takes the same `cwd`, `user`, `env`, `timeoutMs` / `timeout_seconds`, `onStdout` / `on_stdout`, and `onStderr` / `on_stderr` options as `run`. Unlike `run`, it has no default timeout, so leave the timeout off for a long-lived process.
 </Note>
 
 ## `CommandSession`
@@ -92,7 +92,7 @@ In Python, `spawn()` is on `AsyncSandbox` only; the synchronous version raises. 
 | `stdin.write(data)` | Write to stdin: a string (UTF-8) or raw bytes. |
 | `stdin.close()` | Close stdin, signalling EOF. |
 | `kill(signal?)` | Send a signal (default `"SIGTERM"`). |
-| `wait()` | Resolve with the [`CommandResult`](#commandresult) on exit; rejects if the connection drops first. |
+| `wait()` | Resolve with the [`CommandResult`](#commandresult) on exit; rejects if the connection drops first. The sandbox stops the process when the connection drops, and a session can't be reattached. |
 | `close()` | Kill the process and close the connection. |
 
 In Python the methods are awaitable (`await session.stdin.write(...)`, `await session.kill()`, `await session.wait()`) and the session is an `async with` context manager. In TypeScript the session supports `await using` for automatic cleanup.
@@ -104,11 +104,12 @@ In Python the methods are awaitable (`await session.stdin.write(...)`, `await se
 | `cwd` | `string` | Working directory. Server-side default when unset. |
 | `user` | `string` | User to run as: a name or uid, optionally `:group` (`"root"`, `"1000"`, `"app:app"`). Defaults to the template's user (the image's `USER`, or the template's `user` step). |
 | `env` | `Record<string, string>` | Env vars for this command only (merged with sandbox-wide env vars). |
-| `timeoutMs` / `timeout_seconds` | `number` | Command timeout. Only sent when specified. |
+| `timeoutMs` / `timeout_seconds` | `number` | Hard limit on how long the command runs. At the limit, the command stops and the result has exit code `124`. When unset, `run` stops the command after 30 seconds and `spawn` has no limit. TypeScript rounds up to whole seconds; `run` treats `0` as unset and throws `ValidationError` for a value that is negative, not finite, or out of range. |
 | `onStdout` / `on_stdout` | `(data: string) => void` | Stream stdout chunks. |
 | `onStderr` / `on_stderr` | `(data: string) => void` | Stream stderr chunks. |
-| `signal` | `AbortSignal` | TypeScript only. Cancels the start, or kills the process once it's running. |
-| `startupSignal` | `AbortSignal` | TypeScript only. Cancels only the connect and start; a command already running is left alone. Defaults to `signal`. |
+| `signal` | `AbortSignal` | TypeScript only. On `run`, stops waiting and throws. Without callbacks, the command keeps running in the sandbox until it exits or reaches its timeout; with callbacks, the sandbox stops it. On `spawn`, cancels the start, or kills the process once it's running. |
+| `startupSignal` | `AbortSignal` | TypeScript only, `spawn` only. Cancels only the connect and start; a command already running is left alone. Defaults to `signal`. |
+| `maxOutputBytes` | `number` | TypeScript only, `run` without callbacks. Largest response body the SDK buffers. Defaults to 10 MiB. A larger response throws `ValidationError`. |
 
 ## `CommandResult`
 
@@ -118,6 +119,7 @@ interface CommandResult {
   stdout: string
   stderr: string
   exitCode: number
+  truncated: boolean
 }
 ```
 
@@ -128,8 +130,13 @@ class CommandResult(BaseModel):
     stdout: str
     stderr: str
     exit_code: int
+    truncated: bool = False
 ```
 </CodeGroup>
+
+`exitCode` / `exit_code` is `124` when the command reached its timeout.
+
+`truncated` is `true` when the output of a `run()` without callbacks reached the 8 MiB cap on JSON-encoded stdout and stderr combined. Escaped characters count for more than one byte, so the cap can be reached below 8 MiB of raw output. The sandbox drops the rest of the output and appends a notice to `stderr`. Streamed runs return the full output, and `truncated` is always `false` for them.
 
 ## Non-zero exit codes
 
@@ -154,9 +161,10 @@ if result.exit_code != 0:
 
 Commonly raised:
 
-- `TimeoutError` / `SandboxTimeoutError`: the timeout elapsed before the command finished
+- `TimeoutError` / `SandboxTimeoutError`: the SDK stopped waiting for a response. A sync `run()` without a timeout throws this after 30 seconds. A command that reaches its own timeout doesn't throw: it returns exit code `124`.
+- `ValidationError`: an invalid `timeoutMs`, or a response larger than `maxOutputBytes` (TypeScript)
 - `NotFoundError`: the sandbox was deleted
 - `ConflictError`: the sandbox is in an invalid state
-- `SandboxError`: the connection dropped mid-stream without a terminal `finished` event (streaming only)
+- `SandboxError`: the connection dropped before the command finished (streaming and `spawn`), or a TypeScript `signal` aborted a `run()`. The sandbox stops a streamed `run()` command or a `spawn()` process. A `run()` without callbacks keeps running until it exits or reaches its timeout. None can be reattached.
 
 See [Errors](/errors) for the full hierarchy.

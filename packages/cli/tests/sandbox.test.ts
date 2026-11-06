@@ -26,6 +26,8 @@ describe("sandbox", () => {
         "superserve/python-3.11",
         "--timeout",
         "30m",
+        "--idle-timeout",
+        "10m",
         "--auto-delete",
         "0",
         "-m",
@@ -54,6 +56,7 @@ describe("sandbox", () => {
       name: "dev",
       from_template: "superserve/python-3.11",
       timeout_seconds: 1800,
+      idle_timeout_seconds: 600,
       auto_delete_seconds: 0,
       metadata: { env: "ci" },
       env_vars: { A: "1=2" },
@@ -80,6 +83,8 @@ describe("sandbox", () => {
       ["--template", "t", "--snapshot", SANDBOX_ID],
       ["--snapshot", "not-an-id"],
       ["--timeout", "8d"],
+      ["--idle-timeout", "30s"],
+      ["--idle-timeout", "8d"],
       ["--auto-delete", "31d"],
     ]) {
       const r = await runCli(["sandbox", "create", ...args])
@@ -146,6 +151,8 @@ describe("sandbox", () => {
         SANDBOX_ID,
         "--timeout",
         "none",
+        "--idle-timeout",
+        "none",
         "--auto-delete",
         "2h",
         "--allow-out",
@@ -157,6 +164,7 @@ describe("sandbox", () => {
     expect(r.requests[0].method).toBe("PATCH")
     expect(r.requests[0].json()).toEqual({
       timeout_seconds: null,
+      idle_timeout_seconds: null,
       auto_delete_seconds: 7200,
       network: { allow_out: ["api.example.com"], deny_out: [] },
     })

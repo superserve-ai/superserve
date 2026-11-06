@@ -35,6 +35,7 @@ def _valid_raw() -> dict:
         "memory_mib": 1024,
         "created_at": "2026-01-01T12:00:00",
         "timeout_seconds": 600,
+        "idle_timeout_seconds": 300,
         "network": {"allow_out": ["1.2.3.4"], "deny_out": []},
         "metadata": {"key": "value"},
     }
@@ -50,6 +51,7 @@ class TestToSandboxInfo:
         assert info.vcpu_count == 2
         assert info.memory_mib == 1024
         assert info.timeout_seconds == 600
+        assert info.idle_timeout_seconds == 300
         assert info.metadata == {"key": "value"}
 
     def test_auto_delete_fields_parse(self) -> None:
@@ -87,6 +89,7 @@ class TestToSandboxInfo:
         assert info.vcpu_count == 0
         assert info.memory_mib == 0
         assert info.timeout_seconds is None
+        assert info.idle_timeout_seconds is None
         assert info.auto_delete_seconds is None
         assert info.auto_delete_at is None
         assert info.network is None
