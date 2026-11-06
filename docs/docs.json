@@ -235,27 +235,41 @@
             "pages": ["GET /activity"]
           }
         ],
-        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+        "openapi": "https://api.superserve.ai/openapi.yaml"
       },
       {
-        "anchor": "Cookbook",
-        "icon": "utensils",
+        "anchor": "Integrations",
+        "icon": "puzzle-piece",
         "groups": [
+          {
+            "group": "Overview",
+            "pages": ["integrations/overview"]
+          },
           {
             "group": "Coding Agents",
             "pages": [
               "integrations/coding-agents/claude",
               "integrations/coding-agents/codex",
-              "integrations/coding-agents/opencode",
               "integrations/coding-agents/kilocode",
+              "integrations/coding-agents/opencode",
               "integrations/coding-agents/pi"
+            ]
+          },
+          {
+            "group": "Agent Frameworks",
+            "pages": [
+              "integrations/agent-harnesses/agno",
+              "integrations/agent-harnesses/claude-agent-sdk",
+              "integrations/agent-harnesses/langchain",
+              "integrations/agent-harnesses/openai-agents-sdk",
+              "integrations/agent-harnesses/vercel-ai-sdk"
             ]
           },
           {
             "group": "Personal Agents",
             "pages": [
-              "integrations/personal-agents/openclaw",
-              "integrations/personal-agents/hermes"
+              "integrations/personal-agents/hermes",
+              "integrations/personal-agents/openclaw"
             ]
           },
           {
@@ -266,16 +280,6 @@
             ]
           },
           {
-            "group": "Agent Harnesses",
-            "pages": [
-              "integrations/agent-harnesses/agno",
-              "integrations/agent-harnesses/claude-agent-sdk",
-              "integrations/agent-harnesses/langchain",
-              "integrations/agent-harnesses/openai-agents-sdk",
-              "integrations/agent-harnesses/vercel-ai-sdk"
-            ]
-          },
-          {
             "group": "Evaluations",
             "pages": [
               "integrations/evaluations/harbor",
@@ -283,7 +287,7 @@
             ]
           },
           {
-            "group": "MCP Sandboxes",
+            "group": "MCP & Tools",
             "pages": ["integrations/mcp"]
           }
         ]
