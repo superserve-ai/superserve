@@ -31,7 +31,7 @@ import asyncio
 from superserve import AsyncSandbox
 
 
-async def main():
+async def main() -> None:
     # spawn is async only, so use AsyncSandbox.
     sandbox = await AsyncSandbox.create(name="repl")
     async with await sandbox.commands.spawn(
