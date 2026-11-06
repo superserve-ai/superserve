@@ -19,10 +19,12 @@ import {
   type GoogleMembershipState,
 } from "@/lib/auth/google-onboarding"
 import {
+  googleSignupProofFailure,
   hasValidGoogleSignupProof,
   hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
+  markGoogleSignupRecovery,
   readGooglePromotionEvidence,
   retainOriginalGoogleSignup,
   revokeGoogleSignupAuthorization,
@@ -432,19 +434,25 @@ export async function GET(request: Request) {
               ? await hasValidGoogleSignupProof(signupAttemptId)
               : await hasValidLegacyGoogleSignupProof()
             if (!proofValid) {
+              const proofFailure =
+                await googleSignupProofFailure(signupAttemptId)
               await trackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
                 user.id,
                 {
                   reason: "missing_or_invalid_proof",
+                  proof_failure: proofFailure,
                   provider,
                 },
               )
               console.warn("Google OAuth onboarding blocked", {
                 reason: "missing_or_invalid_proof",
+                proofFailure,
               })
+              await markGoogleSignupRecovery(proofFailure)
               const recoveryUrl = new URL("/auth/signup", origin)
               recoveryUrl.searchParams.set("complete_google", "1")
+              recoveryUrl.searchParams.set("reason", proofFailure)
               if (requestedOffer)
                 recoveryUrl.searchParams.set("offer", requestedOffer)
               const signupOfferParam = offerIntent

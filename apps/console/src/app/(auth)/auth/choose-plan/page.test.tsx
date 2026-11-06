@@ -91,6 +91,39 @@ describe("plan picker", () => {
     )
   })
 
+  it.each(["checkout_refused", "checkout_unavailable"])(
+    "keeps the plans and adds a support contact for %s",
+    async (reason) => {
+      params = new URLSearchParams({
+        reason,
+        account: "u1",
+        team: "use:team-1",
+      })
+      render(<ChoosePlanPage />)
+      expect(
+        await screen.findByRole("button", { name: "Developer" }),
+      ).toBeTruthy()
+      expect(
+        screen
+          .getByRole("link", { name: "support@superserve.ai" })
+          .getAttribute("href"),
+      ).toBe("mailto:support@superserve.ai")
+    },
+  )
+
+  it("shows no support contact when checkout simply was cancelled", async () => {
+    params = new URLSearchParams({
+      reason: "checkout_canceled",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    await screen.findByRole("button", { name: "Developer" })
+    expect(
+      screen.queryByRole("link", { name: "support@superserve.ai" }),
+    ).toBeNull()
+  })
+
   it("offers no purchase without the account and team it was shown for", () => {
     params = new URLSearchParams({ reason: "trial_ended", offer: "developer" })
     render(<ChoosePlanPage />)

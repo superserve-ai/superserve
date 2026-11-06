@@ -5,7 +5,7 @@ import {
   enterpriseProvisioningContext,
   type EnterpriseProvisioningAuthority,
 } from "@/lib/admin/enterprise-provisioning-authority"
-import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 type AccountOperation =
@@ -19,6 +19,7 @@ type AccountOperation =
   | "recover-team"
   | "complete-team"
   | "discover-team-creations"
+  | "record-device"
 
 interface CreationLocator {
   readonly userId: string
@@ -29,6 +30,8 @@ interface CreationLocator {
 export interface PromotionTeamPreparation extends CreationLocator {
   readonly name: string
   readonly authorityUnavailable: boolean
+  // Every team after the account's first starts awaiting a paid plan.
+  readonly additionalTeam?: boolean
 }
 
 export interface PreparedPromotionTeam extends PromotionTeamPreparation {
@@ -429,6 +432,29 @@ async function registerPromotionSignupDeviceForAccount(
   return result.outcome
 }
 
+/**
+ * Record a provider-verified device for an account that predates signup
+ * evidence, in every region, since each region decides trials on its own.
+ */
+export async function recordExistingAccountDevice(
+  expectedUserId: string,
+  fingerprint: string,
+): Promise<boolean> {
+  const userId = await verifiedAccountId(expectedUserId)
+  const results = await Promise.allSettled(
+    configuredRegions().map((region) =>
+      post(
+        region,
+        "/internal/promotion/account/record-device",
+        "account",
+        { user_id: userId },
+        { userId, operation: "record-device", recovery: { fingerprint } },
+      ),
+    ),
+  )
+  return results.every((result) => result.status === "fulfilled")
+}
+
 /** A non-issuing East snapshot; it cannot prove that a team received credit. */
 export async function getPromotionSignupEligibility(
   expectedUserId?: string,
@@ -539,7 +565,9 @@ function validatePreparation(input: PromotionTeamPreparation): void {
     typeof input.name !== "string" ||
     !input.name.trim() ||
     Buffer.byteLength(input.name, "utf8") > 256 ||
-    typeof input.authorityUnavailable !== "boolean"
+    typeof input.authorityUnavailable !== "boolean" ||
+    (input.additionalTeam !== undefined &&
+      typeof input.additionalTeam !== "boolean")
   )
     throw new PromotionEvidenceError("invalid_evidence")
 }
@@ -581,6 +609,7 @@ function readPreparedTeam(
     teamId: value.team_id,
     name: value.name,
     authorityUnavailable: value.authority_unavailable,
+    additionalTeam: value.additional_team === true,
     createdAt: value.created_at,
     state: value.state as PreparedPromotionTeam["state"],
     outcome: value.outcome as PreparedPromotionTeam["outcome"],
@@ -592,11 +621,20 @@ function readPreparedTeam(
     "teamId",
     "name",
     "authorityUnavailable",
+    "additionalTeam",
   ] as const) {
     if (expected[field] !== undefined && expected[field] !== result[field])
       throw new PromotionEvidenceError("authority_unavailable")
   }
   return result
+}
+
+// Sent only when set: the control plane rejects unknown fields, and an absent
+// flag is a first team.
+function additionalTeamField(
+  binding: PromotionTeamPreparation,
+): Record<string, boolean> {
+  return binding.additionalTeam ? { additional_team: true } : {}
 }
 
 /** Persist before dispatch. The locator must already be retained by the caller. */
@@ -633,6 +671,7 @@ async function preparePromotionTeamForAccount(
     name: binding.name,
     home_region: binding.region,
     authority_unavailable: binding.authorityUnavailable,
+    ...additionalTeamField(binding),
   }
   const result = await post(
     binding.region,
@@ -739,6 +778,7 @@ async function completePromotionTeamForAccount(
     name: binding.name,
     home_region: binding.region,
     authority_unavailable: binding.authorityUnavailable,
+    ...additionalTeamField(binding),
   }
   const result = readPreparedTeam(
     await post(
