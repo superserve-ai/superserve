@@ -912,6 +912,40 @@ describe("signUpWithEmail", () => {
     },
   )
 
+  it.each([
+    [
+      "unavailable",
+      {
+        success: false,
+        error: "We couldn't reach our bot-check. Please try again in a minute.",
+        errorCode: "captcha_unavailable",
+      },
+    ],
+    ["unconfigured", { success: true }],
+  ] as const)(
+    "handles an %s reCAPTCHA provider on email signup",
+    async (providerOutcome, expected) => {
+      mockVerifyRecaptcha.mockResolvedValue({ verified: true, providerOutcome })
+      mockGenerateLink.mockResolvedValue({
+        data: { properties: { hashed_token: "abc123" } },
+        error: null,
+      })
+      mockSendEmail.mockResolvedValue({ success: true })
+
+      const result = await signUpWithEmail(
+        "user@test.com",
+        "password123",
+        "Test User",
+        "recaptcha-token",
+      )
+
+      expect(result).toEqual(expected)
+      const sent = providerOutcome === "unconfigured" ? 1 : 0
+      expect(mockGenerateLink).toHaveBeenCalledTimes(sent)
+      expect(mockSendEmail).toHaveBeenCalledTimes(sent)
+    },
+  )
+
   it("returns error when email is already registered", async () => {
     mockGenerateLink.mockResolvedValue({
       data: null,
@@ -1221,6 +1255,40 @@ describe("beginGoogleSignup", () => {
         stage: "captcha_verification",
       },
     )
+  })
+  it("fails closed when the reCAPTCHA provider is unavailable", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: true,
+      providerOutcome: "unavailable",
+    })
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: false,
+      error: "We couldn't reach our bot-check. Please try again in a minute.",
+      errorCode: "captcha_unavailable",
+    })
+    expect(mockIssueGoogleSignupProof).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_failed",
+      expect.any(String),
+      {
+        reason: "provider_unavailable",
+        stage: "captcha_verification",
+      },
+    )
+  })
+
+  it("still issues proof when reCAPTCHA is not configured", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: true,
+      providerOutcome: "unconfigured",
+    })
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: true,
+      signupAttemptId: expect.any(String),
+    })
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
   })
 })
 

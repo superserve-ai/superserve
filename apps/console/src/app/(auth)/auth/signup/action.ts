@@ -131,6 +131,32 @@ async function readCloudflareClientContext() {
   }
 }
 
+// verifyRecaptcha also passes when the provider is down. Signup creates an
+// account, so it must not run without a real verdict.
+function strictRecaptchaBlock(
+  recaptcha: Awaited<ReturnType<typeof verifyRecaptcha>>,
+) {
+  if (!recaptcha.verified) {
+    return {
+      reason: recaptcha.reason,
+      response: {
+        error: "We couldn't verify you're human. Please try again.",
+        errorCode: "captcha_failed" as const,
+      },
+    }
+  }
+  if (recaptcha.providerOutcome === "unavailable") {
+    return {
+      reason: "provider_unavailable",
+      response: {
+        error: "We couldn't reach our bot-check. Please try again in a minute.",
+        errorCode: "captcha_unavailable" as const,
+      },
+    }
+  }
+  return undefined
+}
+
 export async function readFingerprintSignupEventId(): Promise<
   string | undefined
 > {
@@ -196,7 +222,7 @@ export const beginGoogleSignup = async (
   | {
       success: false
       error: string
-      errorCode: "captcha_failed" | "proof_unavailable"
+      errorCode: "captcha_failed" | "captcha_unavailable" | "proof_unavailable"
     }
 > => {
   const capture =
@@ -243,7 +269,8 @@ export const beginGoogleSignup = async (
     recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
     observed_at: new Date().toISOString(),
   })
-  if (!recaptcha.verified) {
+  const recaptchaBlock = strictRecaptchaBlock(recaptcha)
+  if (recaptchaBlock) {
     if (fingerprintEventId)
       await consumeFingerprintSignupEventId(fingerprintEventId)
     await scheduleFingerprintObservation(
@@ -256,18 +283,14 @@ export const beginGoogleSignup = async (
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED,
       signupAttemptId,
       {
-        reason: recaptcha.reason,
+        reason: recaptchaBlock.reason,
         stage: "captcha_verification",
       },
     )
     console.warn("Google signup blocked by reCAPTCHA", {
-      reason: recaptcha.reason,
+      reason: recaptchaBlock.reason,
     })
-    return {
-      success: false,
-      error: "We couldn't verify you're human. Please try again.",
-      errorCode: "captcha_failed" as const,
-    }
+    return { success: false, ...recaptchaBlock.response }
   }
 
   try {
@@ -402,19 +425,16 @@ export const signUpWithEmail = async (
     recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
     observed_at: new Date().toISOString(),
   })
-  if (!recaptcha.verified) {
+  const recaptchaBlock = strictRecaptchaBlock(recaptcha)
+  if (recaptchaBlock) {
     if (fingerprintEventId)
       await consumeFingerprintSignupEventId(fingerprintEventId)
     emitFingerprintObservation()
     console.warn("Signup blocked by reCAPTCHA", {
       email: parsed.data.email,
-      reason: recaptcha.reason,
+      reason: recaptchaBlock.reason,
     })
-    return {
-      success: false,
-      error: "We couldn't verify you're human. Please try again.",
-      errorCode: "captcha_failed" as const,
-    }
+    return { success: false as const, ...recaptchaBlock.response }
   }
 
   try {

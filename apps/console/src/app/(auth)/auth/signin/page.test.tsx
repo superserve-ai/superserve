@@ -298,6 +298,32 @@ describe("SignInPage", () => {
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
+  it("shows the lockout message from the password verification hook", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      error: {
+        code: "invalid_credentials",
+        message:
+          "Too many sign-in attempts. Try again in 15 minutes or reset your password.",
+      },
+    })
+    render(<SignInPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    expect(
+      await screen.findByText(
+        "Too many sign-in attempts. Try again in 15 minutes or reset your password.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Invalid email or password.")).toBeNull()
+    expect(mockReplace).not.toHaveBeenCalled()
+  })
+
   it("shows email-not-confirmed inline error", async () => {
     mockSignInWithPassword.mockResolvedValue({
       error: { message: "Email not confirmed" },
