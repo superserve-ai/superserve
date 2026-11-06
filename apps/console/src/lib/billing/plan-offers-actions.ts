@@ -95,10 +95,10 @@ export async function canManageTeamBillingAction(
   }
 }
 
-// Whether the picker's team used up its trial, was denied one, or could not be
-// checked, or null when the console itself can't read the summary. Only the
-// grant state and the server's trial block are read: why a team was denied is
-// never exposed.
+// Whether the picker's team used up its trial, was explicitly denied one, could
+// not be checked, or has no known reason, or null when the console itself can't
+// read the summary. Only the grant state and the server's trial block are read:
+// why a team was denied is never exposed.
 export async function getTrialOutcomeAction(
   locator: CheckoutLocator,
 ): Promise<TrialOutcome | null> {

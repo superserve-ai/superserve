@@ -139,21 +139,24 @@ describe("plan picker", () => {
     expect(screen.queryByText(/used up|isn't available/)).toBeNull()
   })
 
-  it("claims nothing about the trial when the console cannot read it", async () => {
-    trial.outcome = null
-    params = new URLSearchParams({
-      reason: "trial_ended",
-      account: "u1",
-      team: "use:team-1",
-    })
-    render(<ChoosePlanPage />)
-    expect(
-      await screen.findByText("Choose a plan to run sandboxes."),
-    ).toBeTruthy()
-    expect(
-      screen.queryByText(/used up|isn't available|couldn't confirm/),
-    ).toBeNull()
-  })
+  it.each(["unknown", null] as const)(
+    "claims nothing about the trial when its outcome is %s",
+    async (outcome) => {
+      trial.outcome = outcome
+      params = new URLSearchParams({
+        reason: "trial_ended",
+        account: "u1",
+        team: "use:team-1",
+      })
+      render(<ChoosePlanPage />)
+      expect(
+        await screen.findByText("Choose a plan to run sandboxes."),
+      ).toBeTruthy()
+      expect(
+        screen.queryByText(/used up|isn't available|couldn't confirm/),
+      ).toBeNull()
+    },
+  )
 
   it("only re-checks the original checkout for checkout_elsewhere", () => {
     params = new URLSearchParams({

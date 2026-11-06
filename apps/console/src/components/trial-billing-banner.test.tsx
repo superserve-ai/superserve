@@ -450,16 +450,46 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.queryByRole("region", { name: "Free trial" })).toBeNull()
   })
 
-  it("does not say the trial ended when no trial was ever granted", () => {
+  it("says the trial isn't available only when the server reports it denied", () => {
     entry("trial_ended")
     mocks.summary.mockReturnValue({
-      data: summary({ trial: { state: "no_grant", remaining_usd: 0 } }),
+      data: summary({
+        trial: { state: "no_grant", remaining_usd: 0 },
+        trial_block: "trial_unavailable",
+      }),
     })
     mount()
     expect(banner()).toHaveTextContent(
       "The free trial isn't available for this account. Upgrade to run sandboxes.",
     )
     expect(banner()).not.toHaveTextContent(/ended|used up/)
+    expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
+  })
+
+  it.each([undefined, null])(
+    "claims nothing about the trial when trial_block is %s",
+    (block) => {
+      entry("trial_ended")
+      mocks.summary.mockReturnValue({
+        data: summary({
+          trial: { state: "no_grant", remaining_usd: 0 },
+          trial_block: block,
+        }),
+      })
+      mount()
+      // Labelled "No plan", not "Free trial": the banner claims nothing.
+      const neutral = screen.getByRole("region", { name: "No plan" })
+      expect(neutral).toHaveTextContent("Upgrade to run sandboxes.")
+      expect(neutral).not.toHaveTextContent(
+        /trial|ended|used up|isn't available|couldn't confirm/,
+      )
+    },
+  )
+
+  it("keeps the upgrade action for the neutral message", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({ data: summary({ trial: null }) })
+    mount()
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
   })
 
@@ -544,7 +574,7 @@ describe("trialStage", () => {
       AwaitingPlanState,
       BillingTrialBalance | undefined,
       TrialStage,
-      BillingTrialBlock | undefined,
+      BillingTrialBlock | null | undefined,
     ]
   >([
     ["trial", { state: "active", remaining_usd: 0.5 }, "trial", undefined],
@@ -565,16 +595,17 @@ describe("trialStage", () => {
     [
       "trial_ended",
       { state: "no_grant", remaining_usd: 0 },
-      "unavailable",
+      "unknown",
       undefined,
     ],
     [
       "trial_ended",
       { state: "active", remaining_usd: 0 },
-      "unavailable",
+      "unknown",
       undefined,
     ],
-    ["trial_ended", undefined, "unavailable", undefined],
+    ["trial_ended", undefined, "unknown", undefined],
+    ["trial_ended", undefined, "unknown", null],
     ["trial_ended", undefined, "ended", "trial_exhausted"],
     ["trial_ended", undefined, "unavailable", "trial_unavailable"],
     ["trial_ended", undefined, "check_unavailable", "trial_check_unavailable"],

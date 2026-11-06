@@ -54,12 +54,13 @@ const TRIAL_COPY: Record<TrialOutcome, string> = {
     "The free trial isn't available for this account. Choose a plan to run sandboxes.",
   check_unavailable:
     "We couldn't confirm the free trial for this account because a required check didn't complete. Choose a plan to run sandboxes.",
+  unknown: MESSAGES.trial_ended,
 }
 
-// Says which of the three trial states the team is in only once its summary
-// confirms it. Until that is known nothing is shown, so the copy never flips;
-// a summary the console cannot read keeps the neutral message, so a load
-// failure is never shown as a denial.
+// Says which trial state the team is in only once its summary confirms it.
+// Until that is known nothing is shown, so the copy never flips. A summary the
+// console cannot read, or one with no trial reason, keeps the neutral message,
+// so neither a load failure nor an unexplained block is shown as a denial.
 function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
   const account = locator?.account
   const team = locator?.team

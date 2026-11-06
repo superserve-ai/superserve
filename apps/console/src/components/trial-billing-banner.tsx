@@ -95,13 +95,16 @@ export type TrialStage =
   | "ended"
   | "unavailable"
   | "check_unavailable"
+  | "unknown"
   | "payment_failed"
   | "plan_required"
 
 // The trial's stage from its entry state, balance and the server's trial block.
 // A team that never got a trial grant also reports trial_ended, so "ended"
-// needs the block or the balance to confirm the trial was used, and a trial
-// that could not be confirmed is its own stage, never "unavailable" (denied).
+// needs the block or the balance to confirm the trial was used. "unavailable"
+// (denied) needs the server's explicit trial_unavailable; a null block is a
+// failed reason read or a generic denial, so it stays "unknown", and a trial
+// that could not be confirmed is its own stage.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
@@ -114,7 +117,9 @@ export function trialStage(
       trial?.state === "exhausted" ||
       trial?.state === "expired"
       ? "ended"
-      : "unavailable"
+      : block === "trial_unavailable"
+        ? "unavailable"
+        : "unknown"
   }
   const remaining = trial?.remaining_usd
   if (
@@ -156,7 +161,11 @@ function TrialEntryBanner({
   return (
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
-      label={stage === "plan_required" ? "No plan" : "Free trial"}
+      label={
+        stage === "plan_required" || stage === "unknown"
+          ? "No plan"
+          : "Free trial"
+      }
       action={
         <ManageAction canManage={canManage}>
           {selected && locator ? (
@@ -206,6 +215,8 @@ function TrialEntryBanner({
           The free trial isn&apos;t available for this account. Upgrade to run
           sandboxes.
         </>
+      ) : stage === "unknown" ? (
+        <>Upgrade to run sandboxes.</>
       ) : stage === "check_unavailable" ? (
         <>
           We couldn&apos;t confirm the free trial for this account because a

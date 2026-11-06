@@ -106,15 +106,20 @@ export type PlanPickerReason =
   | "checkout_refused"
   | "billing_admin_required"
 
-// Why a team that is awaiting its first plan has no trial. The three states
-// never share a message:
+// Why a team that is awaiting its first plan has no trial. The states never
+// share a message:
 // - "used_up": the trial grant was spent.
-// - "unavailable": the trial was denied, or never granted.
+// - "unavailable": the server explicitly reported the trial as denied.
 // - "check_unavailable": the trial could not be confirmed because a required
 //   check did not complete. Not a denial and not proof of anything.
-// Anything unrecognized, including a summary without a trial, is "unavailable"
-// so a team is never told its trial was used when it was not.
-export type TrialOutcome = "used_up" | "unavailable" | "check_unavailable"
+// - "unknown": no reason is known. The server leaves trial_block null when it
+//   could not read the reason and for denials it keeps generic, so neither is
+//   a confirmed trial denial and the copy claims nothing about the trial.
+export type TrialOutcome =
+  | "used_up"
+  | "unavailable"
+  | "check_unavailable"
+  | "unknown"
 
 export function trialOutcome(summary: unknown): TrialOutcome {
   const {
@@ -133,7 +138,7 @@ export function trialOutcome(summary: unknown): TrialOutcome {
     trial?.state === "expired"
   )
     return "used_up"
-  return "unavailable"
+  return block === "trial_unavailable" ? "unavailable" : "unknown"
 }
 
 export const PLAN_PICKER_ROUTE = "/auth/choose-plan/"
