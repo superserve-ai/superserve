@@ -235,7 +235,7 @@
             "pages": ["GET /activity"]
           }
         ],
-        "openapi": "https://raw.githubusercontent.com/superserve-ai/sandbox/refs/heads/main/api/openapi.yaml"
+        "openapi": "https://api.superserve.ai/openapi.yaml"
       },
       {
         "anchor": "Integrations",
