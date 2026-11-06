@@ -33,9 +33,16 @@ import { FileRow } from "./file-row"
 const DEFAULT_PATH = "/home/user"
 const loggedErrors = new WeakSet<object>()
 
-/** Show copy from the API error body, stable copy for other listing failures. */
+/**
+ * Show copy from the API error body (both a code and a message), stable copy
+ * for other listing failures.
+ */
 export function listingErrorMessage(error: unknown): string {
-  if (error instanceof ApiError && error.messageFromBody) {
+  if (
+    error instanceof ApiError &&
+    error.messageFromBody &&
+    error.code !== "unknown_error"
+  ) {
     return error.message
   }
   return "This folder couldn't be loaded. Please try again."

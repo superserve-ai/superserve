@@ -384,14 +384,21 @@ describe("FileBrowser — listing errors", () => {
 })
 
 describe("listingErrorMessage", () => {
-  it.each(["not_found", "unknown_error"])(
-    "returns the body message for an API error with code %s",
-    (code) => {
-      expect(
-        listingErrorMessage(new ApiError(404, code, "Folder not found.", true)),
-      ).toBe("Folder not found.")
-    },
-  )
+  it("returns the body message for an API error with a body code", () => {
+    expect(
+      listingErrorMessage(
+        new ApiError(404, "not_found", "Folder not found.", true),
+      ),
+    ).toBe("Folder not found.")
+  })
+
+  it("returns stable copy for a body message without a body code", () => {
+    expect(
+      listingErrorMessage(
+        new ApiError(502, "unknown_error", "signal is aborted", true),
+      ),
+    ).toBe("This folder couldn't be loaded. Please try again.")
+  })
 
   it("returns stable copy for an API error without a body message", () => {
     expect(
