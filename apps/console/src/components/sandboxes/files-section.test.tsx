@@ -305,6 +305,46 @@ describe("FileBrowser — listing errors", () => {
     })
   })
 
+  it("shows stable copy and logs a primitive listing rejection once", async () => {
+    fetchSpy.mockRejectedValue("Failed to fetch")
+
+    const { rerender } = renderSection()
+
+    expect(await screen.findByText(fallbackMessage)).toBeInTheDocument()
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+    expect(consoleErrorSpy).toHaveBeenCalledWith("Failed to list folder", {
+      error: "Failed to fetch",
+      path: "/home/user",
+    })
+
+    rerender(
+      <FilesSection
+        sandbox={{ ...activeSandbox, name: "renamed" }}
+        onStart={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(fallbackMessage)).toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows stable copy when the API error message is blank", async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ error: { code: "not_found", message: "" } }),
+          { status: 404, statusText: "Not Found" },
+        ),
+      ),
+    )
+
+    renderSection()
+
+    expect(await screen.findByText(fallbackMessage)).toBeInTheDocument()
+    expect(screen.queryByText("Not Found")).not.toBeInTheDocument()
+  })
+
   it("shows stable copy for a non-JSON gateway response", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
@@ -344,10 +384,19 @@ describe("FileBrowser — listing errors", () => {
 })
 
 describe("listingErrorMessage", () => {
-  it("returns the message for an API error with an API code", () => {
+  it.each(["not_found", "unknown_error"])(
+    "returns the body message for an API error with code %s",
+    (code) => {
+      expect(
+        listingErrorMessage(new ApiError(404, code, "Folder not found.", true)),
+      ).toBe("Folder not found.")
+    },
+  )
+
+  it("returns stable copy for an API error without a body message", () => {
     expect(
-      listingErrorMessage(new ApiError(404, "not_found", "Folder not found.")),
-    ).toBe("Folder not found.")
+      listingErrorMessage(new ApiError(404, "not_found", "Not Found", false)),
+    ).toBe("This folder couldn't be loaded. Please try again.")
   })
 
   it.each([

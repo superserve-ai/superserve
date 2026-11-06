@@ -1,12 +1,19 @@
 export class ApiError extends Error {
   status: number
   code: string
+  messageFromBody: boolean
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    messageFromBody = false,
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
+    this.messageFromBody = messageFromBody
   }
 }
 
@@ -76,11 +83,18 @@ async function request<R>(
     if (!response.ok) {
       let code = "unknown_error"
       let message = response.statusText
+      let messageFromBody = false
 
       try {
         const body = await response.json()
         if (body?.error?.code) code = body.error.code
-        if (body?.error?.message) message = body.error.message
+        if (
+          typeof body?.error?.message === "string" &&
+          body.error.message.trim() !== ""
+        ) {
+          message = body.error.message
+          messageFromBody = true
+        }
       } catch {
         // response body is not JSON, use defaults
       }
@@ -91,7 +105,7 @@ async function request<R>(
       )
         window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
 
-      throw new ApiError(response.status, code, message)
+      throw new ApiError(response.status, code, message, messageFromBody)
     }
 
     return await read(response)

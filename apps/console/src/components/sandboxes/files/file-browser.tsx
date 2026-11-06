@@ -33,13 +33,9 @@ import { FileRow } from "./file-row"
 const DEFAULT_PATH = "/home/user"
 const loggedErrors = new WeakSet<object>()
 
-/** Show API error copy when available, stable copy for other listing failures. */
+/** Show copy from the API error body, stable copy for other listing failures. */
 export function listingErrorMessage(error: unknown): string {
-  if (
-    error instanceof ApiError &&
-    error.code !== "unknown_error" &&
-    error.message.trim() !== ""
-  ) {
+  if (error instanceof ApiError && error.messageFromBody) {
     return error.message
   }
   return "This folder couldn't be loaded. Please try again."
@@ -376,13 +372,18 @@ function ListingError({
   path,
   onRetry,
 }: {
-  error: Error
+  error: unknown
   path: string
   onRetry: () => void
 }) {
   useEffect(() => {
-    if (loggedErrors.has(error)) return
-    loggedErrors.add(error)
+    if (
+      (typeof error === "object" && error !== null) ||
+      typeof error === "function"
+    ) {
+      if (loggedErrors.has(error)) return
+      loggedErrors.add(error)
+    }
     console.error("Failed to list folder", { error, path })
   }, [error, path])
 
