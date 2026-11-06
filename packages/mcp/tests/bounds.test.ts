@@ -42,6 +42,15 @@ describe("resource bounds (in-memory, fake client)", () => {
     expect(r.text).toMatch(/validation|too_big/i)
   })
 
+  it("sandbox_create rejects an idle timeout under a minute", async () => {
+    const r = await callTool(conn.client, "sandbox_create", {
+      name: "t",
+      idle_timeout_seconds: 59,
+    })
+    expect(r.isError).toBe(true)
+    expect(r.text).toMatch(/validation|too_small/i)
+  })
+
   it("sandbox_files_read refuses a file over the read cap (no full buffering)", async () => {
     const id = await createSandbox()
     // A 2 MiB file is allowed to exist; the read cap is 1 MiB. The cap is passed

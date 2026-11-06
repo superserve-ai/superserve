@@ -133,6 +133,8 @@ export interface CreateInput {
   fromTemplate?: string
   fromSnapshot?: string
   timeoutSeconds?: number
+  /** Pause the sandbox after this many seconds with no activity. */
+  idleTimeoutSeconds?: number
   /** Delete the sandbox once continuously paused for this many seconds. */
   autoDeleteSeconds?: number
   metadata?: Record<string, string>
@@ -152,6 +154,8 @@ export interface UpdateInput {
   autoDeleteSeconds?: number | null
   /** A number sets the auto-pause timeout; null disables it. */
   timeoutSeconds?: number | null
+  /** A number sets the idle timeout; null turns idle pausing off. */
+  idleTimeoutSeconds?: number | null
   previewAccess?: PreviewAccessPolicy
 }
 
@@ -317,6 +321,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         fromTemplate: input.fromTemplate,
         fromSnapshot: input.fromSnapshot,
         timeoutSeconds: input.timeoutSeconds,
+        idleTimeoutSeconds: input.idleTimeoutSeconds,
         autoDeleteSeconds: input.autoDeleteSeconds,
         metadata: input.metadata,
         envVars: input.envVars,
@@ -345,6 +350,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
           network: input.network,
           autoDeleteSeconds: input.autoDeleteSeconds,
           timeoutSeconds: input.timeoutSeconds,
+          idleTimeoutSeconds: input.idleTimeoutSeconds,
           previewAccess: input.previewAccess,
         },
         conn,
