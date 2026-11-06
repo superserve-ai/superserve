@@ -13,6 +13,7 @@
 - [ ] Tested locally
 - [ ] Added/updated tests
 - [ ] All tests passing
+- [ ] If this changes the API reference: the spec at https://api.superserve.ai/openapi.yaml and the docs are public, and this change adds no internal endpoints (`/internal/**`), secrets, tokens, internal hostnames or IPs, infrastructure details, or other sensitive data
 
 ## Screenshots/Demo
 <!-- If applicable, add screenshots or a demo link -->
