@@ -297,7 +297,18 @@
       "x": "https://x.com/superserve_ai",
       "github": "https://github.com/superserve-ai/",
       "linkedin": "https://www.linkedin.com/company/super-serve-ai/"
-    }
+    },
+    "links": [
+      {
+        "header": "Resources",
+        "items": [
+          {
+            "label": "Status",
+            "href": "https://status.superserve.ai"
+          }
+        ]
+      }
+    ]
   },
   "integrations": {
     "posthog": {
