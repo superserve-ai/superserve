@@ -259,16 +259,24 @@ function SignInContent() {
           </Button>
         </form>
 
-        {/* Sign up link */}
-        <p className="mt-5 text-center text-xs text-muted">
-          Don&apos;t have an account?{" "}
-          <Link
-            href={signUpHref}
-            className="font-medium text-foreground hover:underline"
-          >
-            Sign up
-          </Link>
-        </p>
+        {/* Sign up */}
+        <div className="relative mt-6 mb-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-dashed border-border" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-surface px-3 text-muted">
+              New to Superserve?
+            </span>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          className="w-full"
+          render={<Link href={signUpHref} />}
+        >
+          Create an account
+        </Button>
 
         {/* Privacy */}
         <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
