@@ -262,7 +262,8 @@
             "group": "Managed Agents",
             "pages": [
               "integrations/managed-agents/claude-managed-agents",
-              "integrations/managed-agents/cursor-cloud-agents"
+              "integrations/managed-agents/cursor-cloud-agents",
+              "integrations/managed-agents/omnara"
             ]
           },
           {
