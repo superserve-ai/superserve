@@ -90,12 +90,12 @@ describe("ResetPasswordPage", () => {
     mockCapture.mockReset()
   })
 
-  async function fillAndSubmit() {
+  async function fillAndSubmit(value = "Password123") {
     // Suspense boundary — wait for it to resolve to the real content.
     const password = await screen.findByPlaceholderText("New Password")
     const confirm = screen.getByPlaceholderText("Confirm New Password")
-    fireEvent.change(password, { target: { value: "password123" } })
-    fireEvent.change(confirm, { target: { value: "password123" } })
+    fireEvent.change(password, { target: { value } })
+    fireEvent.change(confirm, { target: { value } })
     const button = screen.getByRole("button", { name: /Update Password/ })
     fireEvent.click(button)
   }
@@ -107,7 +107,7 @@ describe("ResetPasswordPage", () => {
     await fillAndSubmit()
 
     await waitFor(() => {
-      expect(mockUpdateUser).toHaveBeenCalledWith({ password: "password123" })
+      expect(mockUpdateUser).toHaveBeenCalledWith({ password: "Password123" })
       expect(mockCapture).toHaveBeenCalledWith("auth_password_reset_completed")
     })
 
@@ -118,6 +118,34 @@ describe("ResetPasswordPage", () => {
       },
       { timeout: 3000 },
     )
+  })
+
+  it("shows the password rule before submit", async () => {
+    render(<ResetPasswordPage />)
+
+    const password = await screen.findByPlaceholderText("New Password")
+    expect(
+      screen.getByText(
+        "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number.",
+      ),
+    ).toBeTruthy()
+    expect(password.getAttribute("aria-describedby")).toBe(
+      "reset-password-rule",
+    )
+  })
+
+  it("names the missing part of a weak password without calling the server", async () => {
+    render(<ResetPasswordPage />)
+
+    await fillAndSubmit("sandbox12345")
+
+    expect(await screen.findByText("Add an uppercase letter.")).toBeTruthy()
+    expect(
+      screen.queryByText(
+        "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number.",
+      ),
+    ).toBeNull()
+    expect(mockUpdateUser).not.toHaveBeenCalled()
   })
 
   it("cancels pending redirect on unmount", async () => {
