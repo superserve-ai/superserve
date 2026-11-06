@@ -13,6 +13,7 @@ import {
   MAX_AUTO_DELETE_SECONDS,
   MAX_NETWORK_LOG_LIMIT,
   MAX_TIMEOUT_SECONDS,
+  MIN_IDLE_TIMEOUT_SECONDS,
 } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { RESERVED_PREVIEW_PORT } from "../lib/previewUrl.js"
@@ -38,6 +39,7 @@ interface CreateArgs {
   from_template?: string
   from_snapshot?: string
   timeout_seconds?: number
+  idle_timeout_seconds?: number
   auto_delete_seconds?: number
   metadata?: Record<string, string>
   env_vars?: Record<string, string>
@@ -54,6 +56,7 @@ interface UpdateArgs {
   deny_out?: string[]
   auto_delete_seconds?: number | null
   timeout_seconds?: number | null
+  idle_timeout_seconds?: number | null
   preview_access?: "public" | "private"
 }
 
@@ -141,7 +144,18 @@ export function registerLifecycleTools(
           .max(MAX_TIMEOUT_SECONDS)
           .optional()
           .describe(
-            "Idle timeout before the sandbox is auto-paused (max 604800 = 7 days).",
+            "Auto-pause the sandbox once it has been active this long, used or not (max 604800 = 7 days).",
+          ),
+        idle_timeout_seconds: z
+          .number()
+          .int()
+          .min(MIN_IDLE_TIMEOUT_SECONDS)
+          .max(MAX_TIMEOUT_SECONDS)
+          .optional()
+          .describe(
+            "Auto-pause the sandbox after this long with no activity (60 to 604800 seconds). " +
+              "Running commands, open terminals and command streams, file operations and preview " +
+              "traffic count as activity. Off when omitted.",
           ),
         auto_delete_seconds: z
           .number()
@@ -174,8 +188,9 @@ export function registerLifecycleTools(
           .optional()
           .describe(
             "Egress allow rules — domain patterns (e.g. 'api.github.com', '*.github.com'), IPs, or CIDRs to permit. " +
-              "This ADDS allowed destinations; on its own it does NOT block anything else. For a strict allowlist " +
-              "(deny everything except these), also pass deny_out: ['0.0.0.0/0']. If the allowlist has domain rules or " +
+              "For a strict allowlist (deny everything except these), always also pass deny_out: ['0.0.0.0/0']. " +
+              "Do not use allow_out alone to keep other egress open: it can also block destinations that are not " +
+              "listed, so list every host the workload needs. If the allowlist has domain rules or " +
               "the workload resolves hostnames, also include the sandbox DNS resolvers '1.1.1.1/32' and '8.8.8.8/32', " +
               "or no hostname will resolve; leave them out of an IP-only allowlist.",
           ),
@@ -206,6 +221,7 @@ export function registerLifecycleTools(
       from_template,
       from_snapshot,
       timeout_seconds,
+      idle_timeout_seconds,
       auto_delete_seconds,
       metadata,
       env_vars,
@@ -220,6 +236,7 @@ export function registerLifecycleTools(
           fromTemplate: from_template,
           fromSnapshot: from_snapshot,
           timeoutSeconds: timeout_seconds,
+          idleTimeoutSeconds: idle_timeout_seconds,
           autoDeleteSeconds: auto_delete_seconds,
           metadata,
           envVars: env_vars,
@@ -426,7 +443,7 @@ export function registerLifecycleTools(
     {
       title: "Get sandbox details",
       description:
-        "Get current details (status, resources, metadata, timeout) for one sandbox by id. " +
+        "Get current details (status, resources, metadata, timeouts) for one sandbox by id. " +
         "Read-only — does not resume a paused sandbox.",
       inputSchema: {
         sandbox_id: z.string().describe("ID of the sandbox."),
@@ -452,6 +469,9 @@ export function registerLifecycleTools(
         }
         if (i.timeoutSeconds !== undefined) {
           structured.timeout_seconds = i.timeoutSeconds
+        }
+        if (i.idleTimeoutSeconds !== undefined) {
+          structured.idle_timeout_seconds = i.idleTimeoutSeconds
         }
         if (i.autoDeleteSeconds !== undefined) {
           structured.auto_delete_seconds = i.autoDeleteSeconds
@@ -579,7 +599,7 @@ export function registerLifecycleTools(
     {
       title: "Update a sandbox",
       description:
-        "Change a sandbox's metadata, egress network rules, auto-delete window, or auto-pause timeout after " +
+        "Change a sandbox's metadata, egress network rules, auto-delete window, or auto-pause timeouts after " +
         "creation. Use this to lock down or open up outbound network access (rules apply to new connections), " +
         "or to schedule cleanup of a sandbox you no longer need running. Only the fields you pass are changed.",
       inputSchema: {
@@ -590,9 +610,10 @@ export function registerLifecycleTools(
         allow_out: stringArray()
           .optional()
           .describe(
-            "Egress allow rules — domain patterns, IPs, or CIDRs to permit. Adds allowed destinations; does NOT by " +
-              "itself block other egress. For a strict allowlist, also pass deny_out: ['0.0.0.0/0']; if it has domain " +
-              "rules or the workload resolves hostnames, include the sandbox DNS resolvers '1.1.1.1/32' and '8.8.8.8/32'.",
+            "Egress allow rules — domain patterns, IPs, or CIDRs to permit. For a strict allowlist, always also pass " +
+              "deny_out: ['0.0.0.0/0']. allow_out alone can also block destinations that are not listed, so list every " +
+              "host the workload needs; if it has domain rules or the workload resolves hostnames, include the sandbox " +
+              "DNS resolvers '1.1.1.1/32' and '8.8.8.8/32'.",
           ),
         deny_out: stringArray()
           .optional()
@@ -621,8 +642,19 @@ export function registerLifecycleTools(
           .nullable()
           .optional()
           .describe(
-            "Idle timeout before the sandbox is auto-paused (max 604800 = 7 days). Pass null to " +
-              "disable auto-pause. Omit to leave unchanged.",
+            "Auto-pause the sandbox once it has been active this long, used or not (max 604800 = " +
+              "7 days). Pass null to disable. Omit to leave unchanged.",
+          ),
+        idle_timeout_seconds: z
+          .number()
+          .int()
+          .min(MIN_IDLE_TIMEOUT_SECONDS)
+          .max(MAX_TIMEOUT_SECONDS)
+          .nullable()
+          .optional()
+          .describe(
+            "Auto-pause the sandbox after this long with no activity (60 to 604800 seconds). " +
+              "Pass null to turn idle pausing off. Omit to leave unchanged.",
           ),
         preview_access: z
           .enum(["public", "private"])
@@ -650,6 +682,7 @@ export function registerLifecycleTools(
       deny_out,
       auto_delete_seconds,
       timeout_seconds,
+      idle_timeout_seconds,
       preview_access,
     }) => {
       try {
@@ -658,6 +691,7 @@ export function registerLifecycleTools(
           network: toNetwork(allow_out, deny_out),
           autoDeleteSeconds: auto_delete_seconds,
           timeoutSeconds: timeout_seconds,
+          idleTimeoutSeconds: idle_timeout_seconds,
           previewAccess: preview_access,
         })
         return toolOk(`updated ${sandbox_id}`, { id: sandbox_id })

@@ -76,7 +76,7 @@ For environment overrides and single-language runs, see [CONTRIBUTING.md](./CONT
 
 ## Releasing
 
-See [RELEASING.md](./RELEASING.md) for publishing the SDKs to npm and PyPI.
+See [RELEASING.md](./RELEASING.md) for publishing the SDKs, CLI, and MCP server.
 
 ## Contributing
 

@@ -32,22 +32,29 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.tools.superserve import SuperserveTools
 
+superserve = SuperserveTools(timeout=600)
+
 agent = Agent(
     name="Sandboxed Python Agent",
     model=OpenAIResponses(id="gpt-5.5"),
-    tools=[SuperserveTools(timeout=600)],
+    tools=[superserve],
     instructions=[
         "Execute requested code with run_python_code or run_command.",
         "Return the code and its actual execution output.",
     ],
 )
 
-agent.print_response(
-    "Generate the first 10 Fibonacci numbers, then calculate their sum and average."
-)
+try:
+    agent.print_response(
+        "Generate the first 10 Fibonacci numbers, then calculate their sum and average."
+    )
+finally:
+    superserve.shutdown_sandbox(agent)
 ```
 
 The toolkit creates a Python-ready sandbox on the first tool call. With `persistent=True`, the default, Agno stores its ID in session state and reuses the same sandbox across tool calls and runs in that session. Sync and async agents use the same sandbox automatically.
+
+`timeout` only pauses an idle sandbox; it does not delete it. Call `shutdown_sandbox(agent)` when you are done, as in the example, and set `auto_delete_seconds` as a backstop for runs that exit early.
 
 ## Configure the sandbox
 
