@@ -13,13 +13,17 @@ The Claude Agent SDK is Anthropic's framework for building agents with tool-use 
 ```bash TypeScript
 npm install @superserve/sdk @anthropic-ai/claude-agent-sdk zod
 export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
 ```
 
 ```bash Python
 pip install superserve claude-agent-sdk
 export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
 ```
 </CodeGroup>
+
+The agent loop runs on your machine, so the Claude Agent SDK reads `ANTHROPIC_API_KEY` from your local environment. Only the commands that the agent runs go to the sandbox.
 
 ## Wire the sandbox into the agent
 
@@ -53,20 +57,22 @@ const superserve = createSdkMcpServer({
   tools: [bash],
 })
 
-for await (const message of query({
-  prompt: "List the files in /tmp and tell me how many there are.",
-  options: {
-    tools: [], // disable built-in tools so commands run only in the sandbox
-    mcpServers: { superserve },
-    allowedTools: ["mcp__superserve__bash"],
-  },
-})) {
-  if (message.type === "result" && message.subtype === "success") {
-    console.log(message.result)
+try {
+  for await (const message of query({
+    prompt: "List the files in /tmp and tell me how many there are.",
+    options: {
+      tools: [], // disable built-in tools so commands run only in the sandbox
+      mcpServers: { superserve },
+      allowedTools: ["mcp__superserve__bash"],
+    },
+  })) {
+    if (message.type === "result" && message.subtype === "success") {
+      console.log(message.result)
+    }
   }
+} finally {
+  await sandbox.kill() // delete the sandbox even if the agent run fails
 }
-
-await sandbox.kill()
 ```
 
 ```python Python {7-14}
@@ -96,11 +102,13 @@ options = ClaudeAgentOptions(
 async def main():
     global sandbox
     sandbox = await AsyncSandbox.create(name="agent-runtime")
-    async with ClaudeSDKClient(options=options) as client:
-        await client.query("List the files in /tmp and tell me how many there are.")
-        async for msg in client.receive_response():
-            print(msg)
-    await sandbox.kill()
+    try:
+        async with ClaudeSDKClient(options=options) as client:
+            await client.query("List the files in /tmp and tell me how many there are.")
+            async for msg in client.receive_response():
+                print(msg)
+    finally:
+        await sandbox.kill()  # delete the sandbox even if the agent run fails
 
 anyio.run(main)
 ```
