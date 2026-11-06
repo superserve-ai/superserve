@@ -203,7 +203,13 @@ export default function SignUpContent() {
   const signInHref = `/auth/signin${signInParams.size ? `?${signInParams}` : ""}`
   const isCompleteGoogleSignup = searchParams.get("complete_google") === "1"
   const googleRecoveryReason = searchParams.get("reason") ?? ""
-  const googleRecoveryMessage = GOOGLE_RECOVERY_MESSAGES[googleRecoveryReason]
+  // The reason comes from the URL; an inherited key like __proto__ is not one.
+  const googleRecoveryMessage = Object.hasOwn(
+    GOOGLE_RECOVERY_MESSAGES,
+    googleRecoveryReason,
+  )
+    ? GOOGLE_RECOVERY_MESSAGES[googleRecoveryReason]
+    : undefined
   const autoContinued = useRef(false)
 
   useEffect(() => {
