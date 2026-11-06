@@ -220,8 +220,8 @@ function TrialEntryBanner({
         </>
       ) : stage === "ended" ? (
         <>
-          Your free trial has ended. Your sandboxes are paused and nothing is
-          deleted. Upgrade to resume.
+          Your free trial has ended. Your sandboxes are paused. A sandbox set to
+          auto-delete after a pause can still be deleted. Upgrade to resume.
         </>
       ) : (
         <>
@@ -263,12 +263,22 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
   const trial = summary.trial
   const currentUrgentRunway = useCurrentUrgentRunway(trial)
 
-  if (!trial || (trial.state !== "active" && trial.state !== "exhausted"))
+  // An explicit trial_block decides first, as in trialStage: check_unavailable,
+  // then exhausted, then unavailable (denied). Without one, only the balance.
+  const block = summary.trial_block
+  const blocked =
+    block === "trial_check_unavailable" ||
+    block === "trial_exhausted" ||
+    block === "trial_unavailable"
+  if (
+    !blocked &&
+    (!trial || (trial.state !== "active" && trial.state !== "exhausted"))
+  )
     return null
 
-  const exhausted = trial.state === "exhausted"
-  const urgent = exhausted || currentUrgentRunway
-  const remaining = formatUsd(trial.remaining_usd)
+  const exhausted = block === "trial_exhausted" || trial?.state === "exhausted"
+  const urgent = blocked || exhausted || currentUrgentRunway
+  const remaining = formatUsd(trial?.remaining_usd)
 
   return (
     <div
@@ -282,7 +292,23 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
       )}
     >
       <p className="min-w-0 flex-1 basis-72">
-        {exhausted ? (
+        {block === "trial_check_unavailable" ? (
+          <>
+            We couldn&apos;t confirm the free trial for this account because a
+            required check didn&apos;t complete. Add a payment method to run
+            sandboxes.
+          </>
+        ) : block === "trial_exhausted" ? (
+          <>
+            Your free trial credit has run out. Add a payment method to continue
+            running sandboxes.
+          </>
+        ) : block === "trial_unavailable" ? (
+          <>
+            The free trial isn&apos;t available for this account. Add a payment
+            method to run sandboxes.
+          </>
+        ) : exhausted ? (
           <>
             Your free trial credit has run out. Add a payment method to continue
             running sandboxes.

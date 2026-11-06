@@ -120,6 +120,35 @@ describe("TrialBillingBanner", () => {
     },
   )
 
+  it.each([
+    [
+      "trial_check_unavailable",
+      "We couldn't confirm the free trial for this account because a required check didn't complete. Add a payment method to run sandboxes.",
+    ],
+    [
+      "trial_unavailable",
+      "The free trial isn't available for this account. Add a payment method to run sandboxes.",
+    ],
+    [
+      "trial_exhausted",
+      "Your free trial credit has run out. Add a payment method to continue running sandboxes.",
+    ],
+  ] as const)(
+    "an explicit %s beats an exhausted balance without an entry state",
+    (trial_block, text) => {
+      mocks.summary.mockReturnValue({
+        data: summary({
+          trial: { state: "exhausted", remaining_usd: 0 },
+          trial_block,
+        }),
+      })
+      mount()
+      expect(screen.getByRole("status")).toHaveTextContent(text)
+      if (trial_block !== "trial_exhausted")
+        expect(screen.getByRole("status")).not.toHaveTextContent("run out")
+    },
+  )
+
   it.each(["no_grant", "expired", "ended_by_billing_activation", "unexpected"])(
     "hides lifecycle %s",
     (state) => {
@@ -515,14 +544,14 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(container.textContent).not.toMatch(/ended|used up/)
   })
 
-  it("says sandboxes are paused and nothing is deleted once the trial ends", () => {
+  it("says sandboxes are paused, with the auto-delete caveat, once the trial ends", () => {
     entry("trial_ended")
     mocks.summary.mockReturnValue({
       data: summary({ trial: { state: "exhausted", remaining_usd: 0 } }),
     })
     mount()
     expect(banner()).toHaveTextContent(
-      "Your free trial has ended. Your sandboxes are paused and nothing is deleted. Upgrade to resume.",
+      "Your free trial has ended. Your sandboxes are paused. A sandbox set to auto-delete after a pause can still be deleted. Upgrade to resume.",
     )
     expect(banner()).toHaveClass("bg-red-100")
     expect(screen.getByRole("link", { name: "Upgrade" })).toHaveAttribute(
