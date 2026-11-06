@@ -213,6 +213,8 @@ vi.mock("@/lib/cells", () => ({
 
 const mockHasValidGoogleSignupProof = vi.fn()
 const mockHasValidLegacyGoogleSignupProof = vi.fn()
+const mockGoogleSignupProofFailure = vi.fn()
+const mockMarkGoogleSignupRecovery = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
 const mockMarkGoogleSignupAttempt = vi.fn()
 const mockRevokeGoogleSignupAuthorization = vi.fn()
@@ -246,6 +248,10 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockHasValidGoogleSignupProof(...args),
   hasValidLegacyGoogleSignupProof: (...args: unknown[]) =>
     mockHasValidLegacyGoogleSignupProof(...args),
+  googleSignupProofFailure: (...args: unknown[]) =>
+    mockGoogleSignupProofFailure(...args),
+  markGoogleSignupRecovery: (...args: unknown[]) =>
+    mockMarkGoogleSignupRecovery(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
   retainOriginalGoogleSignup: (...args: unknown[]) =>
@@ -453,6 +459,8 @@ describe("auth callback", () => {
     mockHasValidLegacyGoogleSignupProof
       .mockReset()
       .mockImplementation(async () => proofAvailable)
+    mockGoogleSignupProofFailure.mockReset().mockResolvedValue("no_proof")
+    mockMarkGoogleSignupRecovery.mockReset().mockResolvedValue(undefined)
     mockConsumeGoogleSignupProof.mockReset()
     mockRevokeGoogleSignupAuthorization.mockReset().mockResolvedValue(undefined)
     mockMarkGoogleSignupAttempt.mockReset().mockResolvedValue(undefined)
@@ -1127,6 +1135,39 @@ describe("auth callback", () => {
         { kind: "unavailable" },
         undefined,
       )
+    })
+
+    it("tells the recovery page and the blocked event why the signup check failed", async () => {
+      googleMembershipState = { kind: "first_time" }
+      proofAvailable = false
+      for (const [query, failure] of [
+        ["google_signin_intent=pre-auth-intent", "started_from_signin"],
+        ["signup_attempt_id=attempt-1", "expired"],
+      ] as const) {
+        mockTrackEvent.mockClear()
+        mockGoogleSignupProofFailure.mockResolvedValueOnce(failure)
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&${query}`,
+          ),
+        )
+        const location = new URL(response.headers.get("location")!)
+        expect(location.pathname).toBe("/auth/signup")
+        expect(location.searchParams.get("complete_google")).toBe("1")
+        expect(location.searchParams.get("reason")).toBe(failure)
+        expect(mockMarkGoogleSignupRecovery).toHaveBeenLastCalledWith(failure)
+        expect(mockGoogleSignupProofFailure).toHaveBeenLastCalledWith(
+          query.startsWith("signup_attempt_id") ? "attempt-1" : undefined,
+        )
+        expect(mockTrackEvent).toHaveBeenCalledWith(
+          "auth_google_signup_bypass_blocked",
+          "u1",
+          expect.objectContaining({
+            reason: "missing_or_invalid_proof",
+            proof_failure: failure,
+          }),
+        )
+      }
     })
 
     it("keeps a v2 offer through the Google signup recovery page", async () => {

@@ -54,6 +54,8 @@ class SandboxInfo(BaseModel):
     memory_mib: int = 0
     created_at: datetime
     timeout_seconds: Optional[int] = None
+    # Pause the sandbox after this many seconds with no activity.
+    idle_timeout_seconds: Optional[int] = None
     # Delete the sandbox after it has been continuously paused for this many seconds.
     auto_delete_seconds: Optional[int] = None
     # When the sandbox will be auto-deleted. Set only while paused with auto_delete_seconds configured.
@@ -113,9 +115,11 @@ def build_update_body(
     auto_delete_seconds: int | None,
     timeout_seconds: int | None,
     preview_access: PreviewAccessPolicy | None,
+    idle_timeout_seconds: int | None = UNSET,
 ) -> dict[str, Any]:
     """Serialize sandbox update args to the wire body. UNSET fields are omitted;
-    an explicit None for auto_delete_seconds / timeout_seconds clears them."""
+    an explicit None for auto_delete_seconds / timeout_seconds /
+    idle_timeout_seconds clears them."""
     body: dict[str, Any] = {}
     if metadata is not None:
         body["metadata"] = metadata
@@ -123,6 +127,8 @@ def build_update_body(
         body["auto_delete_seconds"] = auto_delete_seconds
     if timeout_seconds is not UNSET:
         body["timeout_seconds"] = timeout_seconds
+    if idle_timeout_seconds is not UNSET:
+        body["idle_timeout_seconds"] = idle_timeout_seconds
     if network is not None:
         body["network"] = {
             "allow_out": network.allow_out,
@@ -198,6 +204,7 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         memory_mib=raw.get("memory_mib", 0),
         created_at=_parse_iso8601(raw["created_at"]),
         timeout_seconds=raw.get("timeout_seconds"),
+        idle_timeout_seconds=raw.get("idle_timeout_seconds"),
         auto_delete_seconds=raw.get("auto_delete_seconds"),
         auto_delete_at=(
             _parse_iso8601(raw["auto_delete_at"]) if raw.get("auto_delete_at") else None

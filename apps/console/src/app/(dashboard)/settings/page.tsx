@@ -253,7 +253,8 @@ export default function SettingsPage() {
 
         <Separator />
 
-        {/* Renders nothing unless a second cell (region) is configured */}
+        {/* Renders nothing for a single-cell user with one team, unless that
+            team is the user's own account and can become a team */}
         <TeamsSection />
 
         {billingVisible && (
