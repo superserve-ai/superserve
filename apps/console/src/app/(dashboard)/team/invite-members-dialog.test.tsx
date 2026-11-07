@@ -232,6 +232,46 @@ describe("InviteMembersDialog", () => {
     expect(
       await screen.findByText("1 sent. 1 needs attention."),
     ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Retry failed" })).toBeEnabled()
+  })
+  it("hides the primary button after every invitation was sent", async () => {
+    setup()
+    paste("one@example.com two@example.com")
+    send()
+    await screen.findByText("2 sent.")
+    expect(
+      screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
+    ).not.toBeInTheDocument()
+  })
+  it("does not retry invitations whose delivery failed", async () => {
+    mocks.create.mockResolvedValueOnce({ delivery: "failed" })
+    setup()
+    paste("one@example.com")
+    send()
+    await screen.findByText("1 needs attention.")
+    expect(screen.getByText("Invite created, email failed")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
+    ).not.toBeInTheDocument()
+  })
+  it("offers Send invites when a new address is added after sending", async () => {
+    setup()
+    paste("one@example.com")
+    send()
+    await screen.findByText("1 sent.")
+    paste("two@example.com")
+    expect(screen.getByRole("button", { name: "Send invites" })).toBeEnabled()
+    expect(
+      screen.queryByRole("button", { name: "Retry failed" }),
+    ).not.toBeInTheDocument()
+    send()
+    await screen.findByText("2 sent.")
+    expect(mocks.create).toHaveBeenCalledTimes(2)
+    expect(mocks.create).toHaveBeenLastCalledWith({
+      team,
+      email: "two@example.com",
+      role: "team_admin",
+    })
   })
   it("counts rows skipped for invalid addresses as needing attention", async () => {
     mocks.create.mockResolvedValueOnce({ delivery: "sent" })
@@ -310,7 +350,7 @@ describe("InviteMembersDialog", () => {
     await user.click(screen.getByRole("option", { name: "Viewer" }))
     expect(select).toHaveTextContent("Viewer")
     expect(screen.queryByText("Role not allowed")).not.toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
+    send()
     await screen.findByText("Sent")
     expect(mocks.create).toHaveBeenLastCalledWith({
       team,
@@ -382,10 +422,11 @@ describe("InviteMembersDialog", () => {
       email: "one@example.com",
       role: "team_admin",
     })
+    expect(screen.getByRole("button", { name: "Retry failed" })).toBeEnabled()
     fireEvent.change(screen.getByLabelText("Email for three@example.com"), {
       target: { value: "fixed@example.com" },
     })
-    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
+    send()
     await waitFor(() => expect(mocks.create).toHaveBeenCalledTimes(4))
     expect(mocks.create.mock.calls[3][0].email).toBe("fixed@example.com")
     expect(screen.getAllByText("Sent")).toHaveLength(2)
@@ -419,22 +460,43 @@ describe("InviteMembersDialog", () => {
     expect(mocks.create).toHaveBeenCalledTimes(1)
     expect(mocks.refresh).toHaveBeenCalledOnce()
   })
-  it("caps rows at 20", () => {
-    setup()
-    paste(
-      Array.from(
-        { length: 22 },
-        (_, index) => `person${index}@example.com`,
-      ).join(" "),
-    )
-    expect(screen.getAllByRole("button", { name: /^Remove / })).toHaveLength(20)
-    expect(screen.getByLabelText("Email addresses")).toBeDisabled()
-    expect(screen.getByText(/20-person limit reached/)).toBeInTheDocument()
-    fireEvent.click(
-      screen.getByRole("button", { name: "Remove person0@example.com" }),
-    )
-    expect(screen.getByLabelText("Email addresses")).toBeEnabled()
-  })
+  it.each([20, 22])(
+    "shows one limit message after pasting %s addresses",
+    (count) => {
+      setup()
+      paste(
+        Array.from(
+          { length: count },
+          (_, index) => `person${index}@example.com`,
+        ).join(" "),
+      )
+      expect(screen.getAllByRole("button", { name: /^Remove / })).toHaveLength(
+        20,
+      )
+      expect(screen.getByLabelText("Email addresses")).toBeDisabled()
+      expect(screen.getAllByText(/20-person limit reached/)).toHaveLength(1)
+      expect(
+        screen.queryByText(
+          "Paste a list or press Enter to add an address. Up to 20 people.",
+        ),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByText("You can invite up to 20 people at a time."),
+      ).not.toBeInTheDocument()
+      fireEvent.click(
+        screen.getByRole("button", { name: "Remove person0@example.com" }),
+      )
+      expect(screen.getByLabelText("Email addresses")).toBeEnabled()
+      expect(
+        screen.queryByText(/20-person limit reached/),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByText(
+          "Paste a list or press Enter to add an address. Up to 20 people.",
+        ),
+      ).toBeInTheDocument()
+    },
+  )
   it("resets when closed", () => {
     setup()
     paste("one@example.com")

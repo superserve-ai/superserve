@@ -100,7 +100,6 @@ export function InviteMembersDialog({
     setRows((previous) => {
       const result = [...previous]
       let duplicates = false
-      let capped = false
       for (const email of addresses) {
         if (
           result.some((row) => row.email.toLowerCase() === email.toLowerCase())
@@ -108,19 +107,10 @@ export function InviteMembersDialog({
           duplicates = true
           continue
         }
-        if (result.length === MAX_ROWS) {
-          capped = true
-          continue
-        }
+        if (result.length === MAX_ROWS) continue
         result.push({ id: nextId.current++, email, role: defaultRole })
       }
-      setNote(
-        capped
-          ? "You can invite up to 20 people at a time."
-          : duplicates
-            ? "Duplicate addresses ignored."
-            : "",
-      )
+      setNote(duplicates ? "Duplicate addresses ignored." : "")
       return result
     })
     setDraft("")
@@ -145,6 +135,7 @@ export function InviteMembersDialog({
     EMAIL_PATTERN.test(row.email) &&
     row.email.length <= 320 &&
     (!rolesSupported || roles.some((role) => role === row.role))
+  const sendableRows = rows.filter(sendable)
   const close = (open: boolean) => {
     if (sending) return
     if (!open) {
@@ -264,15 +255,12 @@ export function InviteMembersDialog({
             }}
           />
           <p className="mt-2 text-xs text-muted">
-            Paste a list or press Enter to add an address. Up to 20 people.
+            {rows.length >= MAX_ROWS
+              ? "20-person limit reached. Remove a row to add someone else."
+              : "Paste a list or press Enter to add an address. Up to 20 people."}
           </p>
           {note && (
             <output className="mt-2 block text-xs text-muted">{note}</output>
-          )}
-          {rows.length >= MAX_ROWS && (
-            <p className="mt-2 text-xs text-muted">
-              20-person limit reached. Remove a row to add someone else.
-            </p>
           )}
           {rolesSupported && roles.length === 0 && (
             <p className="mt-2 text-xs text-muted">
@@ -412,14 +400,19 @@ export function InviteMembersDialog({
             >
               {attempted ? "Close" : "Cancel"}
             </Button>
-            <Button disabled={sending || !rows.some(sendable)} onClick={send}>
-              <PaperPlaneTiltIcon className="size-3.5" weight="light" />
-              {sending
-                ? "Sending..."
-                : attempted
-                  ? "Retry failed"
-                  : "Send invites"}
-            </Button>
+            {(!attempted || sending || sendableRows.length > 0) && (
+              <Button
+                disabled={sending || sendableRows.length === 0}
+                onClick={send}
+              >
+                <PaperPlaneTiltIcon className="size-3.5" weight="light" />
+                {sending
+                  ? "Sending..."
+                  : sendableRows.some((row) => row.status === "error")
+                    ? "Retry failed"
+                    : "Send invites"}
+              </Button>
+            )}
           </DialogFooter>
         </div>
       </DialogPopup>

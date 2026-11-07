@@ -258,6 +258,15 @@ function ActiveAssignmentRows({
 }) {
   const revokeRole = useRevokeTeamRole()
   const team = useDisplayedTeam()
+  const { addToast } = useToast()
+  const [revoking, setRevoking] = useState<
+    (TeamRoleAssignment & { team: TeamScope }) | null
+  >(null)
+
+  useEffect(() => {
+    if (revoking && !sameTeam(revoking.team, team)) setRevoking(null)
+  }, [revoking, team])
+
   const activeAssignments = assignments.filter(
     (assignment) => !assignment.revoked_at,
   )
@@ -302,12 +311,9 @@ function ActiveAssignmentRows({
                     size="sm"
                     variant="outline"
                     disabled={revokeRole.isPending}
-                    onClick={() =>
-                      revokeRole.mutate({
-                        team,
-                        assignmentId: assignment.assignment_id,
-                      })
-                    }
+                    onClick={() => {
+                      if (team) setRevoking({ ...assignment, team })
+                    }}
                   >
                     Revoke
                   </Button>
@@ -317,6 +323,29 @@ function ActiveAssignmentRows({
           ))}
         </TableBody>
       </Table>
+      <ConfirmDialog
+        open={revoking !== null}
+        onOpenChange={(open) => {
+          if (!open) setRevoking(null)
+        }}
+        title="Revoke role"
+        description={`Revoke ${revoking ? roleLabel(revoking.role_name) : "this role"} from ${revoking?.email ?? "this member"}?`}
+        confirmLabel="Revoke"
+        onConfirm={async () => {
+          if (!revoking) return
+          if (!sameTeam(revoking.team, team)) {
+            setRevoking(null)
+            addToast(TEAM_CHANGED_MESSAGE, "error")
+            return
+          }
+          await revokeRole
+            .mutateAsync({
+              team: revoking.team,
+              assignmentId: revoking.assignment_id,
+            })
+            .catch(() => {})
+        }}
+      />
     </div>
   )
 }

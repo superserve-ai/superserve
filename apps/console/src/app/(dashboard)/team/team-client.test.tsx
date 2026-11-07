@@ -21,6 +21,7 @@ const {
   mockUseTeams,
   mockCreateInvitation,
   mockAssignRole,
+  mockRevokeRole,
   mockLeave,
   mockRemove,
   mockResend,
@@ -35,6 +36,7 @@ const {
   mockUseTeams: vi.fn(),
   mockCreateInvitation: vi.fn(),
   mockAssignRole: vi.fn(),
+  mockRevokeRole: vi.fn(),
   mockLeave: vi.fn(),
   mockRemove: vi.fn(),
   mockResend: vi.fn(),
@@ -61,7 +63,7 @@ vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
   useTeamManagement: () => mockUseTeamManagement(),
   useTeamInvitations: () => mockUseTeamInvitations(),
   useAssignTeamRole: () => mutation(mockAssignRole),
-  useRevokeTeamRole: () => mutation(),
+  useRevokeTeamRole: () => mutation(mockRevokeRole),
   useCreateInvitation: () => mutation(mockCreateInvitation),
   useResendInvitation: () => mutation(mockResend),
   useRevokeInvitation: () => mutation(mockRevokeInvitation),
@@ -79,6 +81,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockRouterReplace }),
 }))
 
+import { InviteMemberCard } from "./invitations-section"
 import { TeamClient } from "./team-client"
 
 const customer = { id: "user-1", app_metadata: {} }
@@ -205,6 +208,11 @@ describe("TeamClient", () => {
       expect(
         within(header).queryByText(/Other team|Same ID in East/),
       ).not.toBeInTheDocument()
+      if (state !== "members") {
+        expect(
+          screen.queryByText("Only Owners can invite people or change roles."),
+        ).not.toBeInTheDocument()
+      }
     },
   )
 
@@ -277,6 +285,23 @@ describe("TeamClient", () => {
       screen.queryByRole("button", { name: /update role/i }),
     ).not.toBeInTheDocument()
   })
+
+  it.each(["hidden", "enabled", "blocked_free_plan"] as const)(
+    "shows the no-invite explanation only for hidden state: %s",
+    (state) => {
+      render(<InviteMemberCard state={state} />)
+
+      const explanation = screen.queryByText(
+        "Only Owners can invite people or change roles.",
+      )
+      if (state === "hidden") {
+        expect(explanation).toHaveClass("text-sm", "text-muted")
+        expect(explanation?.parentElement?.tagName).toBe("SECTION")
+      } else {
+        expect(explanation).not.toBeInTheDocument()
+      }
+    },
+  )
 
   it("shows backend-advertised controls for capable staff and submits the chosen member and role", async () => {
     const user = userEvent.setup()
@@ -507,6 +532,62 @@ describe("TeamClient", () => {
         screen.getByRole("button", { name: /^revoke$/i }),
       ).toBeInTheDocument()
     })
+
+    it("confirms the role and member before revoking the assignment", async () => {
+      mockUser.mockReturnValue(staff)
+      mockRevokeRole.mockResolvedValue(undefined)
+      const captured = { teamId: "team-1", region: "use" }
+      mockDisplayedTeam.mockReturnValue(captured)
+      render(<TeamClient />)
+
+      fireEvent.click(screen.getByRole("button", { name: "Revoke" }))
+      let dialog = screen.getByRole("dialog", { name: "Revoke role" })
+      expect(dialog).toHaveTextContent("Revoke Owner from owner@example.com?")
+      expect(mockRevokeRole).not.toHaveBeenCalled()
+      fireEvent.click(within(dialog).getByRole("button", { name: "Cancel" }))
+      await waitFor(() =>
+        expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+      )
+      expect(mockRevokeRole).not.toHaveBeenCalled()
+
+      fireEvent.click(screen.getByRole("button", { name: "Revoke" }))
+      dialog = screen.getByRole("dialog", { name: "Revoke role" })
+      fireEvent.click(within(dialog).getByRole("button", { name: "Revoke" }))
+      await waitFor(() => expect(mockRevokeRole).toHaveBeenCalledOnce())
+      expect(mockRevokeRole).toHaveBeenCalledWith({
+        team: captured,
+        assignmentId: "assignment-1",
+      })
+      expect(mockRevokeRole.mock.calls[0][0].team).toBe(captured)
+    })
+
+    it.each([
+      { teamId: "team-2", region: "use" },
+      { teamId: "team-1", region: "usw" },
+      null,
+    ])(
+      "closes role revocation without mutating when the team becomes %j",
+      async (next) => {
+        mockUser.mockReturnValue(staff)
+        const view = render(<TeamClient />)
+        fireEvent.click(screen.getByRole("button", { name: "Revoke" }))
+        expect(
+          screen.getByRole("dialog", { name: "Revoke role" }),
+        ).toBeInTheDocument()
+
+        mockDisplayedTeam.mockReturnValue(next)
+        view.rerender(
+          <ToastProvider>
+            <TeamClient />
+          </ToastProvider>,
+        )
+
+        await waitFor(() =>
+          expect(screen.queryByRole("dialog")).not.toBeInTheDocument(),
+        )
+        expect(mockRevokeRole).not.toHaveBeenCalled()
+      },
+    )
 
     it("keeps staff read-only when the backend withholds the capability", () => {
       mockUser.mockReturnValue(staff)

@@ -30,7 +30,7 @@ export type InviteControlState = "hidden" | "enabled" | "blocked_free_plan"
 /**
  * What the invite control looks like for these capabilities. Free-plan teams
  * see the control grayed out with the upgrade reason; anyone without the
- * backend's go-ahead sees nothing.
+ * backend's go-ahead sees an explanation.
  */
 export function inviteControlState(
   capabilities: TeamManagementCapabilities,
@@ -61,7 +61,15 @@ export function InviteMemberCard({
     if (inviting && !sameTeam(inviting, team)) setInviting(null)
   }, [inviting, team])
 
-  if (state === "hidden") return null
+  if (state === "hidden") {
+    return (
+      <section>
+        <p className="text-sm text-muted">
+          Only Owners can invite people or change roles.
+        </p>
+      </section>
+    )
+  }
   const blocked = state === "blocked_free_plan"
 
   return (
