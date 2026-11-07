@@ -379,7 +379,7 @@ function ActiveAssignmentRows({
             <TableHead>Member</TableHead>
             <TableHead>Role</TableHead>
             <TableHead>Granted</TableHead>
-            {canRevoke && <TableHead className="w-32" />}
+            {canRevoke && <TableHead />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -407,6 +407,7 @@ function ActiveAssignmentRows({
                       <Button
                         size="sm"
                         variant="outline"
+                        className="shrink-0"
                         disabled={revokeRole.isPending || ownerBlocked}
                         title={ownerBlocked ? LAST_OWNER_REASON : undefined}
                         aria-describedby={
