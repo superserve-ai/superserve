@@ -298,7 +298,8 @@ sandbox_computer  { sandbox_id: "a1b2c3…", action: "key", text: "Return" }
 ```
 
 `screenshot` and input actions return the screen as a JPEG image
-(`image/jpeg`). Input actions return a fresh screenshot of the result, so the
+(`image/jpeg`) by default. Older desktop sandboxes return PNG instead, so read
+the image's `mimeType` rather than assuming JPEG. Input actions return a fresh screenshot of the result, so the
 model's act-then-look turn is one tool call; pass `screenshot_after: false`
 when sending several actions back to back. `wait` pauses without a request to
 the sandbox. `stream_url` returns a live browser viewer for the desktop under
