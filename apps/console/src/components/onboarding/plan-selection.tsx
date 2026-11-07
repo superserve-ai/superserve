@@ -97,7 +97,8 @@ export function PlanSelection({
         }
         completionSent.current = true
       }
-      navigate("/sandboxes")
+      // A payment check and the legacy effect can both see one restored page.
+      if (!navigating.current) navigate("/sandboxes")
     },
     [billingReturn, navigate],
   )

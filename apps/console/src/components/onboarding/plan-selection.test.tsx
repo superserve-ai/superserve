@@ -320,6 +320,24 @@ describe("plan step analytics", () => {
     )
   })
 
+  it("leaves a restored legacy page only once", async () => {
+    const legacy: SignupPlanContext = { ...selecting, state: "legacy" }
+    vi.mocked(getSignupPlanAction).mockImplementation(async () => ({
+      ...legacy,
+    }))
+    render(<PlanSelection initial={legacy} />)
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(1))
+    const restored = new Event("pageshow")
+    Object.defineProperty(restored, "persisted", { value: true })
+    fireEvent(window, restored)
+    await waitFor(() => expect(assign).toHaveBeenCalledTimes(2))
+    await act(async () => {})
+    expect(assign).toHaveBeenCalledTimes(2)
+    expect(
+      planActions().filter((properties) => properties?.action === "skipped"),
+    ).toHaveLength(1)
+  })
+
   it("keeps the completion event for a team that chose a plan", async () => {
     render(
       <PlanSelection
