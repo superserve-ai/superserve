@@ -10,6 +10,7 @@ import {
   type TeamSelection,
 } from "@/lib/api/active-team"
 import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
+import { isPersonalTeam, ownsTeam, renameTeam } from "@/lib/api/team-conversion"
 import {
   invalidateMembershipDirectory,
   listTeamsForUser,
@@ -39,6 +40,30 @@ export interface TeamDirectoryResponse {
   regions: string[]
   activeTeamId: string | null
   activeRegion: string | null
+  // The user's own account teams, which a team creation converts in place
+  // instead of creating another team while one of them is active.
+  convertibleTeams?: TeamSummary[]
+}
+
+async function readTeamDirectory(userId: string) {
+  const [teams, selection] = await Promise.all([
+    listTeamsForUser(userId),
+    readTeamSelection(),
+  ])
+  const { memberships } = await completedMemberships(userId, {
+    memberships: teams.map((t) => ({ teamId: t.id, region: t.region })),
+    degradedRegions: [],
+  })
+  const selectable = new Set(memberships.map((m) => `${m.region}:${m.teamId}`))
+  const completedTeams = teams.filter((t) =>
+    selectable.has(`${t.region}:${t.id}`),
+  )
+  const active = pickActiveTeam(memberships, selection)
+  const activeTeam =
+    completedTeams.find(
+      (t) => t.id === active?.teamId && t.region === active.region,
+    ) ?? null
+  return { teams: completedTeams, activeTeam }
 }
 
 export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
@@ -48,24 +73,30 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const [teams, selection] = await Promise.all([
-    listTeamsForUser(user.id),
-    readTeamSelection(),
-  ])
-  const { memberships } = await completedMemberships(user.id, {
-    memberships: teams.map((t) => ({ teamId: t.id, region: t.region })),
-    degradedRegions: [],
-  })
-  const selectable = new Set(memberships.map((m) => `${m.region}:${m.teamId}`))
-  const completedTeams = teams.filter((t) =>
-    selectable.has(`${t.region}:${t.id}`),
+  const { teams, activeTeam } = await readTeamDirectory(user.id)
+  // Eligibility does not depend on the active team, so a cached directory
+  // still offers the conversion after the user switches to an account team.
+  const owned = await Promise.all(
+    teams
+      .filter((t) => isPersonalTeam(t, user.email))
+      .map(async (team) => {
+        try {
+          return (await ownsTeam(team.region, user.id, team.id)) ? team : null
+        } catch (error) {
+          // Offer the conversion: the action checks the owner again and
+          // refuses a non-owner. Without it, the form creates a new team.
+          console.error("team directory: owner lookup failed:", error)
+          return team
+        }
+      }),
   )
-  const active = pickActiveTeam(memberships, selection)
+  const convertibleTeams = owned.filter((t): t is TeamSummary => t !== null)
   return {
-    teams: completedTeams,
+    teams,
     regions: configuredRegions(),
-    activeTeamId: active?.teamId ?? null,
-    activeRegion: active?.region ?? null,
+    activeTeamId: activeTeam?.id ?? null,
+    activeRegion: activeTeam?.region ?? null,
+    convertibleTeams,
   }
 }
 
@@ -110,6 +141,7 @@ export async function createTeamAction(
   name: string,
   region?: string,
   operationId?: string,
+  convertTeamId?: string,
 ): Promise<
   | TeamSummary
   | {
@@ -117,6 +149,7 @@ export async function createTeamAction(
         | "signup_blocked"
         | "google_signup_recovery_required"
         | "team_name_conflict"
+        | "team_conversion_unavailable"
       message: string
     }
 > {
@@ -131,10 +164,49 @@ export async function createTeamAction(
     throw new Error("A distinct team creation operation is required")
   const trimmed = name.trim()
   if (!trimmed) throw new Error("Team name is required")
+  // Team creation enforces this limit in provisioning; a conversion skips it.
+  if (Buffer.byteLength(trimmed, "utf8") > 256)
+    throw new Error("Enter a team name between 1 and 256 bytes")
 
   const targetRegion = region ?? DEFAULT_REGION
   if (!configuredRegions().includes(targetRegion)) {
     throw new Error(`Region ${targetRegion} is not available`)
+  }
+
+  // The form asks to convert the user's own account team. A conversion never
+  // falls back to a new team: that is the outcome the user did not ask for.
+  if (convertTeamId) {
+    const { teams } = await readTeamDirectory(user.id)
+    const target = teams.find(
+      (t) => t.id === convertTeamId && t.region === targetRegion,
+    )
+    if (!target) {
+      // The client drops its pending conversion on a refusal, so refuse only
+      // what the account's cell confirms.
+      if (
+        await conversionTargetUnconfirmed(targetRegion, user.id, convertTeamId)
+      )
+        throw new Error("Could not read your account team. Try again.")
+      return teamConversionUnavailable()
+    }
+    if (!(await ownsTeam(targetRegion, user.id, target.id)))
+      return teamConversionUnavailable()
+    // A retry after the converted response was lost finds the new name.
+    if (target.name !== trimmed) {
+      if (!isPersonalTeam(target, user.email))
+        return teamConversionUnavailable()
+      const renamed = await renameTeam(
+        targetRegion,
+        target.id,
+        target.name,
+        trimmed,
+      )
+      if (renamed === "name_taken") return teamNameConflict()
+      if (renamed === "changed") return teamConversionUnavailable()
+    }
+    invalidateMembershipDirectory(user.id)
+    await storeTeamSelection({ region: targetRegion, teamId: target.id })
+    return { id: target.id, name: trimmed, region: targetRegion }
   }
 
   let team: ProvisionedTeam
@@ -152,11 +224,7 @@ export async function createTeamAction(
       error instanceof PromotionEvidenceError &&
       error.code === "team_name_conflict"
     )
-      return {
-        code: "team_name_conflict",
-        message:
-          "That team name is already taken. Submit a different name to start a new creation.",
-      }
+      return teamNameConflict()
     if (error instanceof SignupRestrictedError)
       return { code: "signup_blocked", message: SIGNUP_RESTRICTED_MESSAGE }
     if (error instanceof GoogleSignupRecoveryRequiredError)
@@ -168,4 +236,35 @@ export async function createTeamAction(
   await storeTeamSelection({ region: targetRegion, teamId: team.id })
 
   return { id: team.id, name: team.name, region: targetRegion }
+}
+
+// The directory omits a cell it could not read. A membership that its cell
+// still reports, or a cell that fails again, leaves the conversion open.
+async function conversionTargetUnconfirmed(
+  region: string,
+  userId: string,
+  teamId: string,
+): Promise<boolean> {
+  if (!(await membershipExistsInCell(region, userId, teamId))) return false
+  const { memberships, degradedRegions } = await completedMemberships(userId, {
+    memberships: [{ region, teamId }],
+    degradedRegions: [],
+  })
+  return memberships.length > 0 || degradedRegions.length > 0
+}
+
+function teamNameConflict() {
+  return {
+    code: "team_name_conflict" as const,
+    message:
+      "That team name is already taken. Submit a different name to start a new creation.",
+  }
+}
+
+function teamConversionUnavailable() {
+  return {
+    code: "team_conversion_unavailable" as const,
+    message:
+      "Your account can no longer be converted. Reload the page and try again.",
+  }
 }
