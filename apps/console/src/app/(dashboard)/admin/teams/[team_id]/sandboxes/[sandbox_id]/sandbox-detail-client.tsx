@@ -4,7 +4,7 @@ import { ArrowLeftIcon } from "@phosphor-icons/react"
 import { cn } from "@superserve/ui"
 import Link from "next/link"
 
-import { ErrorState } from "@/components/error-state"
+import { ErrorState, errorStateMessage } from "@/components/error-state"
 import { usePlatformTeamSandbox } from "@/hooks/use-platform-sandboxes"
 import { formatMemory, formatTime, formatTimeout } from "@/lib/format"
 
@@ -125,7 +125,8 @@ export function AdminSandboxDetailClient({
           </Link>
         </div>
         <ErrorState
-          message={error?.message ?? "Sandbox not found"}
+          error={error}
+          message={errorStateMessage(error, "Sandbox not found")}
           onRetry={() => refetch()}
         />
       </div>

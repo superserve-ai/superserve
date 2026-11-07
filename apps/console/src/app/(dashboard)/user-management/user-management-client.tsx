@@ -585,7 +585,7 @@ export function UserManagementClient() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="User Management" />
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState error={error} onRetry={() => refetch()} />
         {/* Leaving needs no team-management permission. */}
         {!impersonating &&
           error instanceof ApiError &&
