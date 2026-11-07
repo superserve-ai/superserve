@@ -2,13 +2,13 @@
 
 import {
   ArrowSquareOutIcon,
-  PlusIcon,
   ShieldCheckIcon,
   UserMinusIcon,
   UsersIcon,
 } from "@phosphor-icons/react"
 import {
   Button,
+  ConfirmDialog,
   Field,
   Input,
   Table,
@@ -21,21 +21,43 @@ import {
   TabsList,
   TabsPanel,
   TabsTab,
+  useToast,
 } from "@superserve/ui"
 import Link from "next/link"
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 import type { ComponentType, FormEvent } from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { PageHeader } from "@/components/page-header"
+import { useDashboardTeamContext } from "@/components/query-provider"
 import { TableSkeleton } from "@/components/table-skeleton"
 import {
+  sameTeam,
+  TEAM_CHANGED_MESSAGE,
   useAssignTeamRole,
+  useDisplayedTeam,
+  useLeaveScope,
+  useRemoveTeamMember,
   useRevokeTeamRole,
+  useTeamInvitations,
   useTeamManagement,
 } from "@/hooks/use-team-management"
-import type { TeamMember, TeamRoleAssignment } from "@/lib/api/team-management"
+import { useUser } from "@/hooks/use-user"
+import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
+import { ApiError } from "@/lib/api/client"
+import type {
+  TeamMember,
+  TeamRoleAssignment,
+  TeamScope,
+} from "@/lib/api/team-management"
+
+import {
+  InvitationsSection,
+  InviteMemberCard,
+  inviteControlState,
+  LeaveTeamSection,
+} from "./invitations-section"
 
 function roleLabel(role: string): string {
   return role
@@ -128,45 +150,6 @@ function SummaryCard({
   )
 }
 
-function InviteMemberCard() {
-  return (
-    <div className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
-      <div className="grid gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-        <div>
-          <p className="text-lg font-medium text-foreground">Invite member</p>
-          <p className="mt-2 text-sm leading-relaxed text-muted">
-            Invite new members to join your team.
-          </p>
-          <div className="mt-4 border border-border bg-muted/20 px-4 py-3 text-sm text-muted">
-            Email invitations coming soon.
-          </div>
-        </div>
-
-        <div className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]">
-          <Field label="Email address">
-            <Input disabled placeholder="name@company.com" value="" />
-          </Field>
-          <Field label="Role">
-            <select
-              disabled
-              className="h-9 w-full border border-border bg-background px-3 text-sm text-muted outline-none"
-              value="member"
-            >
-              <option value="member">Member</option>
-            </select>
-          </Field>
-          <div className="flex items-end">
-            <Button type="button" size="sm" disabled>
-              <PlusIcon className="size-3.5" weight="light" />
-              Send invitation
-            </Button>
-          </div>
-        </div>
-      </div>
-    </div>
-  )
-}
-
 function AssignRoleForm({
   members,
   roles,
@@ -179,6 +162,7 @@ function AssignRoleForm({
   onSelectedUserIdChange: (userId: string) => void
 }) {
   const assignRole = useAssignTeamRole()
+  const team = useDisplayedTeam()
   const activeMembers = members.filter((member) => member.status === "active")
   const [roleName, setRoleName] = useState("")
 
@@ -191,7 +175,10 @@ function AssignRoleForm({
     if (!selectedUserId || !selectedRoleName) {
       return
     }
-    assignRole.mutate({ user_id: selectedUserId, role_name: selectedRoleName })
+    assignRole.mutate({
+      team,
+      data: { user_id: selectedUserId, role_name: selectedRoleName },
+    })
   }
 
   if (activeMembers.length === 0 || roles.length === 0) {
@@ -252,19 +239,33 @@ function AssignRoleForm({
 function MemberActions({
   member,
   onManageRoles,
+  showManageRoles,
+  onRemove,
 }: {
   member: TeamMember
   onManageRoles: (userId: string) => void
+  showManageRoles: boolean
+  onRemove?: (member: TeamMember) => void
 }) {
   return (
-    <Button
-      size="sm"
-      variant="outline"
-      onClick={() => onManageRoles(member.user_id)}
-    >
-      <ShieldCheckIcon className="size-3.5" weight="light" />
-      Manage roles
-    </Button>
+    <div className="flex gap-2">
+      {showManageRoles && (
+        <Button
+          size="sm"
+          variant="outline"
+          onClick={() => onManageRoles(member.user_id)}
+        >
+          <ShieldCheckIcon className="size-3.5" weight="light" />
+          Manage roles
+        </Button>
+      )}
+      {onRemove && (
+        <Button size="sm" variant="outline" onClick={() => onRemove(member)}>
+          <UserMinusIcon className="size-3.5" weight="light" />
+          Remove member
+        </Button>
+      )}
+    </div>
   )
 }
 
@@ -272,13 +273,18 @@ function MemberTable({
   members,
   onManageRoles,
   showManageRoles,
+  onRemove,
+  currentUserId,
   emptyLabel,
 }: {
   members: TeamMember[]
   onManageRoles: (userId: string) => void
   showManageRoles: boolean
+  onRemove?: (member: TeamMember) => void
+  currentUserId?: string
   emptyLabel: string
 }) {
+  const showActions = showManageRoles || Boolean(onRemove)
   if (members.length === 0) {
     return (
       <div className="border border-border bg-background/60 px-4 py-6 text-sm text-muted">
@@ -296,7 +302,7 @@ function MemberTable({
             <TableHead>Status</TableHead>
             <TableHead>Active roles</TableHead>
             <TableHead>Updated</TableHead>
-            {showManageRoles && <TableHead className="w-40" />}
+            {showActions && <TableHead className="w-64" />}
           </TableRow>
         </TableHeader>
         <TableBody>
@@ -325,11 +331,18 @@ function MemberTable({
               >
                 {new Date(member.updated_at).toLocaleDateString()}
               </TableCell>
-              {showManageRoles && (
+              {showActions && (
                 <TableCell>
                   <MemberActions
                     member={member}
                     onManageRoles={onManageRoles}
+                    showManageRoles={showManageRoles}
+                    onRemove={
+                      member.status === "active" &&
+                      member.user_id !== currentUserId
+                        ? onRemove
+                        : undefined
+                    }
                   />
                 </TableCell>
               )}
@@ -349,6 +362,7 @@ function ActiveAssignmentRows({
   canRevoke: boolean
 }) {
   const revokeRole = useRevokeTeamRole()
+  const team = useDisplayedTeam()
   const activeAssignments = assignments.filter(
     (assignment) => !assignment.revoked_at,
   )
@@ -396,7 +410,12 @@ function ActiveAssignmentRows({
                     size="sm"
                     variant="outline"
                     disabled={revokeRole.isPending}
-                    onClick={() => revokeRole.mutate(assignment.assignment_id)}
+                    onClick={() =>
+                      revokeRole.mutate({
+                        team,
+                        assignmentId: assignment.assignment_id,
+                      })
+                    }
                   >
                     Revoke
                   </Button>
@@ -414,11 +433,15 @@ function MemberTabs({
   members,
   onManageRoles,
   showManageRoles,
+  onRemove,
+  currentUserId,
   search,
 }: {
   members: TeamMember[]
   onManageRoles: (userId: string) => void
   showManageRoles: boolean
+  onRemove?: (member: TeamMember) => void
+  currentUserId?: string
   search: string
 }) {
   const normalize = (value: string) => value.toLowerCase().trim()
@@ -454,7 +477,8 @@ function MemberTabs({
     },
     {
       value: "invited",
-      label: "Invitations",
+      // Email invitations have their own list below; this tab is memberships.
+      label: "Invited members",
       count: filteredMembers.invited.length,
     },
     {
@@ -484,6 +508,8 @@ function MemberTabs({
           members={filteredMembers.active}
           onManageRoles={onManageRoles}
           showManageRoles={showManageRoles}
+          onRemove={onRemove}
+          currentUserId={currentUserId}
           emptyLabel="No active members match this search."
         />
       </TabsPanel>
@@ -492,7 +518,7 @@ function MemberTabs({
           members={filteredMembers.invited}
           onManageRoles={onManageRoles}
           showManageRoles={showManageRoles}
-          emptyLabel="No invitations match this search."
+          emptyLabel="No invited members match this search."
         />
       </TabsPanel>
       <TabsPanel value="inactive">
@@ -511,15 +537,36 @@ export function UserManagementClient() {
   const { data, isPending, error, refetch } = useTeamManagement()
   const [memberSearch, setMemberSearch] = useState("")
   const [selectedUserId, setSelectedUserId] = useState("")
+  const [removing, setRemoving] = useState<
+    (TeamMember & { team: TeamScope }) | null
+  >(null)
+  const removeMember = useRemoveTeamMember()
+  const { data: emailInvitations } = useTeamInvitations()
+  const team = useDisplayedTeam()
+  const leaveScope = useLeaveScope()
+  // Leaving acts on the operator's own membership, not the team being viewed.
+  const impersonating = useDashboardTeamContext() !== null
+  const { addToast } = useToast()
+
+  useEffect(() => {
+    if (removing && !sameTeam(removing.team, team)) setRemoving(null)
+  }, [removing, team])
+
+  const { user } = useUser()
 
   const counts = useMemo(() => {
     const members = data?.members ?? []
     return {
       active: members.filter((member) => member.status === "active").length,
-      invited: members.filter((member) => member.status === "invited").length,
+      // An email invitation has no membership until it is accepted.
+      invited:
+        members.filter((member) => member.status === "invited").length +
+        (emailInvitations?.invitations ?? []).filter(
+          (invitation) => invitation.status === "pending",
+        ).length,
       inactive: members.filter((member) => member.status === "inactive").length,
     }
-  }, [data?.members])
+  }, [data?.members, emailInvitations?.invitations])
 
   if (isPending) {
     return (
@@ -539,6 +586,16 @@ export function UserManagementClient() {
       <div className="flex h-full flex-col">
         <PageHeader title="User Management" />
         <ErrorState message={error.message} onRetry={() => refetch()} />
+        {/* Leaving needs no team-management permission. */}
+        {!impersonating &&
+          error instanceof ApiError &&
+          error.status === 403 && (
+            <div className="px-6 pb-8">
+              <div className="mx-auto w-full max-w-7xl">
+                <LeaveTeamSection team={leaveScope} />
+              </div>
+            </div>
+          )}
       </div>
     )
   }
@@ -557,9 +614,13 @@ export function UserManagementClient() {
   }
 
   const capabilities = data.capabilities
+  // Role changes are platform-staff tools: the proxy refuses them for
+  // everyone else, so customers see assignments read-only.
+  const isStaff = canViewOtherUsersAccount(user)
+  const canAssignRoles = isStaff && capabilities.can_assign_roles
+  const canRevokeRoles = isStaff && capabilities.can_revoke_roles
   const assignableRoles = data.mutation_options?.assignable_roles ?? []
-  const canMutateRoles =
-    capabilities.can_assign_roles || capabilities.can_revoke_roles
+  const canMutateRoles = canAssignRoles || canRevokeRoles
   const activeMembers = data.members.filter(
     (member) => member.status === "active",
   )
@@ -613,7 +674,7 @@ export function UserManagementClient() {
             />
           </div>
 
-          {capabilities.can_invite_members && <InviteMemberCard />}
+          <InviteMemberCard state={inviteControlState(capabilities)} />
 
           <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
             <div className="mb-4 flex flex-col gap-3 lg:flex-row lg:items-end lg:justify-between">
@@ -622,7 +683,7 @@ export function UserManagementClient() {
                   Team members
                 </p>
                 <p className="mt-1 text-sm text-muted">
-                  Search members and switch between active, invitation, and
+                  Search members and switch between active, invited, and
                   inactive views.
                 </p>
               </div>
@@ -640,7 +701,17 @@ export function UserManagementClient() {
             <MemberTabs
               members={data.members}
               onManageRoles={setSelectedUserId}
-              showManageRoles={capabilities.can_view_role_assignments}
+              showManageRoles={canAssignRoles}
+              // Leaving goes through Leave team, which protects the user's
+              // only team, so the current user has no Remove button.
+              onRemove={
+                capabilities.can_deactivate_members
+                  ? (member) => {
+                      if (team) setRemoving({ ...member, team })
+                    }
+                  : undefined
+              }
+              currentUserId={user?.id}
               search={memberSearch}
             />
 
@@ -650,6 +721,13 @@ export function UserManagementClient() {
               </p>
             )}
           </section>
+
+          <InvitationsSection
+            canResend={capabilities.can_invite_owners === true}
+            canRevoke={
+              capabilities.can_invite_members && capabilities.can_assign_roles
+            }
+          />
 
           {capabilities.can_view_role_assignments && (
             <section className="border border-border/80 bg-background/75 p-6 backdrop-blur-sm">
@@ -673,7 +751,7 @@ export function UserManagementClient() {
                 </div>
 
                 <div className="space-y-5">
-                  {capabilities.can_assign_roles && (
+                  {canAssignRoles && (
                     <AssignRoleForm
                       members={data.members}
                       roles={assignableRoles}
@@ -683,14 +761,38 @@ export function UserManagementClient() {
                   )}
                   <ActiveAssignmentRows
                     assignments={data.assignments}
-                    canRevoke={capabilities.can_revoke_roles}
+                    canRevoke={canRevokeRoles}
                   />
                 </div>
               </div>
             </section>
           )}
+
+          {!impersonating && <LeaveTeamSection team={leaveScope} />}
         </div>
       </div>
+
+      <ConfirmDialog
+        open={removing !== null}
+        onOpenChange={(open) => {
+          if (!open) setRemoving(null)
+        }}
+        title="Remove member"
+        description={`${removing?.email ?? "This member"} will lose access to this team.`}
+        confirmLabel="Remove"
+        onConfirm={async () => {
+          if (removing) {
+            if (!sameTeam(removing.team, team)) {
+              setRemoving(null)
+              addToast(TEAM_CHANGED_MESSAGE, "error")
+              return
+            }
+            await removeMember
+              .mutateAsync({ team: removing.team, userId: removing.user_id })
+              .catch(() => {})
+          }
+        }}
+      />
     </div>
   )
 }
