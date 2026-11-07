@@ -222,6 +222,7 @@
           {
             "group": "Team Management",
             "pages": [
+              "PATCH /teams/{team_id}",
               "GET /teams/{team_id}/members",
               "POST /teams/{team_id}/members",
               "DELETE /teams/{team_id}/members/{user_id}",
@@ -296,7 +297,18 @@
       "x": "https://x.com/superserve_ai",
       "github": "https://github.com/superserve-ai/",
       "linkedin": "https://www.linkedin.com/company/super-serve-ai/"
-    }
+    },
+    "links": [
+      {
+        "header": "Resources",
+        "items": [
+          {
+            "label": "Status",
+            "href": "https://status.superserve.ai"
+          }
+        ]
+      }
+    ]
   },
   "integrations": {
     "posthog": {

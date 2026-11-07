@@ -5,6 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useUser } from "@/hooks/use-user"
 import { ApiError } from "@/lib/api/client"
 import { billingKeys, teamKeys } from "@/lib/api/query-keys"
+import { renameTeamAction } from "@/lib/api/team-rename-actions"
 import {
   createTeamAction,
   listTeamsAction,
@@ -25,13 +26,16 @@ export function useTeams() {
  * invalidate) so stale rows can never flash while the new team's data loads;
  * active queries refetch immediately, inactive ones on next mount. The team
  * directory is exempt — it is team-agnostic and already carries the new
- * selection.
+ * selection. A caller may also exempt one top-level key it refetches itself.
  */
 function resetTeamScopedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
+  keep?: string,
 ) {
   void queryClient.resetQueries({
-    predicate: (query) => query.queryKey[0] !== teamKeys.all[0],
+    predicate: (query) =>
+      query.queryKey[0] !== teamKeys.all[0] &&
+      !(keep && query.queryKey.length === 1 && query.queryKey[0] === keep),
   })
 }
 
@@ -43,9 +47,10 @@ function invalidateBillingSummary(
 
 export function refreshTeamScopedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
+  keep?: string,
 ) {
   invalidateBillingSummary(queryClient)
-  resetTeamScopedQueries(queryClient)
+  resetTeamScopedQueries(queryClient, keep)
 }
 
 // A team creation the user started. A conversion also records the account
@@ -195,6 +200,43 @@ export function useCreateTeam() {
       refreshTeamScopedQueries(queryClient)
       // Keep billing guarded through reconciliation. The returned selection
       // remains correct even if the directory refresh fails.
+      await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
+    },
+  })
+}
+
+export function useRenameTeam() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: async ({
+      team,
+      name,
+    }: {
+      team: { id: string; region: string }
+      name: string
+    }) => {
+      const result = await renameTeamAction(
+        { teamId: team.id, region: team.region },
+        name,
+      )
+      if (!result.ok) throw new Error(result.message)
+      return result.team
+    },
+    onSuccess: async (team) => {
+      // Update the label in place so the sidebar switcher changes at once,
+      // then reconcile with the server's directory.
+      queryClient.setQueryData<TeamDirectoryResponse>(
+        teamKeys.directory(),
+        (old) =>
+          old && {
+            ...old,
+            teams: old.teams.map((item) =>
+              item.id === team.id && item.region === team.region
+                ? { ...item, name: team.name }
+                : item,
+            ),
+          },
+      )
       await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
     },
   })

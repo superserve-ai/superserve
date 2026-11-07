@@ -77,14 +77,17 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    className,
     onClick,
   }: {
     children: React.ReactNode
     href: string
+    className?: string
     onClick?: React.MouseEventHandler<HTMLAnchorElement>
   }) => (
     <a
       href={href}
+      className={className}
       onClick={(e) => {
         e.preventDefault()
         onClick?.(e)
@@ -361,6 +364,20 @@ describe("SignInPage", () => {
     )
     expect(url.searchParams.get("next")).toBe("/yc/claim")
     expect(url.searchParams.get("offer")).toBe("yc_2026")
+    expect(link).not.toHaveClass("ph-no-capture")
+  })
+
+  it("keeps an invite destination in the signup link out of session replay", async () => {
+    searchParamsMap = { next: "/invite/ssinv_exampletoken" }
+    render(<SignInPage />)
+    const link = await screen.findByRole("link", { name: "Sign up" })
+    expect(
+      new URL(
+        link.getAttribute("href")!,
+        "https://console.example.test",
+      ).searchParams.get("next"),
+    ).toBe("/invite/ssinv_exampletoken")
+    expect(link).toHaveClass("ph-no-capture")
   })
 
   it("carries the offer through the signup link and Google signin", async () => {
