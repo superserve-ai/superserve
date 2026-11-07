@@ -1,7 +1,7 @@
 "use client"
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
-import { Button, Input } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -17,6 +17,7 @@ import {
   signInOfferDestination,
   isSelfServeSignupOffer,
 } from "@/lib/auth/signup-offer"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -270,7 +271,10 @@ function SignInContent() {
           Don&apos;t have an account?{" "}
           <Link
             href={signUpHref}
-            className="font-medium text-foreground hover:underline"
+            className={cn(
+              "font-medium text-foreground hover:underline",
+              inviteLinkReplayClass(signUpHref),
+            )}
           >
             Sign up
           </Link>
