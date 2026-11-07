@@ -108,13 +108,7 @@ function SignInContent() {
           method: "email",
           reason: error.message,
         })
-        // The password verification hook locks an account for 15 minutes
-        // after 10 failed passwords, and says so in its own message.
-        if (error.message.startsWith("Too many sign-in attempts")) {
-          setErrors({
-            form: "Too many sign-in attempts. Try again in 15 minutes or reset your password.",
-          })
-        } else if (error.message.includes("Invalid login credentials")) {
+        if (error.message.includes("Invalid login credentials")) {
           setErrors({ form: "Invalid email or password." })
         } else if (error.message.includes("Email not confirmed")) {
           setErrors({ form: "Please verify your email before signing in." })
