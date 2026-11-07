@@ -2,9 +2,18 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
-import type { BillingSummaryResponse } from "@/lib/api/billing"
+import type {
+  BillingSummaryResponse,
+  BillingTrialBalance,
+  BillingTrialBlock,
+} from "@/lib/api/billing"
+import type { AwaitingPlanState } from "@/lib/billing/signup-checkout-paths"
 
-import { TrialBillingBanner, trialStage } from "./trial-billing-banner"
+import {
+  TrialBillingBanner,
+  type TrialStage,
+  trialStage,
+} from "./trial-billing-banner"
 
 const mocks = vi.hoisted(() => ({
   summary: vi.fn(),
@@ -108,6 +117,35 @@ describe("TrialBillingBanner", () => {
       mount()
       expect(screen.getByRole("status")).toHaveClass("bg-yellow-100")
       expect(screen.getByRole("status")).not.toHaveTextContent("has run out")
+    },
+  )
+
+  it.each([
+    [
+      "trial_check_unavailable",
+      "We couldn't confirm the free trial for this account because a required check didn't complete. Add a payment method to run sandboxes.",
+    ],
+    [
+      "trial_unavailable",
+      "The free trial isn't available for this account. Add a payment method to run sandboxes.",
+    ],
+    [
+      "trial_exhausted",
+      "Your free trial credit has run out. Add a payment method to continue running sandboxes.",
+    ],
+  ] as const)(
+    "an explicit %s beats an exhausted balance without an entry state",
+    (trial_block, text) => {
+      mocks.summary.mockReturnValue({
+        data: summary({
+          trial: { state: "exhausted", remaining_usd: 0 },
+          trial_block,
+        }),
+      })
+      mount()
+      expect(screen.getByRole("status")).toHaveTextContent(text)
+      if (trial_block !== "trial_exhausted")
+        expect(screen.getByRole("status")).not.toHaveTextContent("run out")
     },
   )
 
@@ -441,12 +479,79 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.queryByRole("region", { name: "Free trial" })).toBeNull()
   })
 
-  it("says sandboxes are paused and nothing is deleted once the trial ends", () => {
+  it("says the trial isn't available only when the server reports it denied", () => {
     entry("trial_ended")
-    mocks.summary.mockReturnValue({ data: trial(0) })
+    mocks.summary.mockReturnValue({
+      data: summary({
+        trial: { state: "no_grant", remaining_usd: 0 },
+        trial_block: "trial_unavailable",
+      }),
+    })
     mount()
     expect(banner()).toHaveTextContent(
-      "Your free trial has ended. Your sandboxes are paused and nothing is deleted. Upgrade to resume.",
+      "The free trial isn't available for this account. Upgrade to run sandboxes.",
+    )
+    expect(banner()).not.toHaveTextContent(/ended|used up/)
+    expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
+  })
+
+  it.each([undefined, null])(
+    "claims nothing about the trial when trial_block is %s",
+    (block) => {
+      entry("trial_ended")
+      mocks.summary.mockReturnValue({
+        data: summary({
+          trial: { state: "no_grant", remaining_usd: 0 },
+          trial_block: block,
+        }),
+      })
+      mount()
+      // Labelled "No plan", not "Free trial": the banner claims nothing.
+      const neutral = screen.getByRole("region", { name: "No plan" })
+      expect(neutral).toHaveTextContent("Upgrade to run sandboxes.")
+      expect(neutral).not.toHaveTextContent(
+        /trial|ended|used up|isn't available|couldn't confirm/,
+      )
+    },
+  )
+
+  it("keeps the upgrade action for the neutral message", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({ data: summary({ trial: null }) })
+    mount()
+    expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
+  })
+
+  it("says the trial could not be confirmed, not denied or ended", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({
+      data: summary({
+        trial: { state: "no_grant", remaining_usd: 0 },
+        trial_block: "trial_check_unavailable",
+      }),
+    })
+    mount()
+    expect(banner()).toHaveTextContent(
+      "We couldn't confirm the free trial for this account because a required check didn't complete. Upgrade to run sandboxes.",
+    )
+    expect(banner()).not.toHaveTextContent(/ended|used up|isn't available/)
+  })
+
+  it("says nothing about the trial while the summary is unavailable", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({ data: undefined })
+    const { container } = mount()
+    expect(container.textContent).not.toMatch(/ended|used up/)
+  })
+
+  it("says sandboxes are paused, with the auto-delete caveat, once the trial ends", () => {
+    entry("trial_ended")
+    mocks.summary.mockReturnValue({
+      data: summary({ trial: { state: "exhausted", remaining_usd: 0 } }),
+    })
+    mount()
+    expect(banner()).toHaveTextContent(
+      "Your free trial has ended. Your sandboxes are paused. A sandbox set to auto-delete after a pause can still be deleted. Upgrade to resume.",
     )
     expect(banner()).toHaveClass("bg-red-100")
     expect(screen.getByRole("link", { name: "Upgrade" })).toHaveAttribute(
@@ -493,14 +598,68 @@ describe("TrialBillingBanner for a new team's trial", () => {
 })
 
 describe("trialStage", () => {
-  it.each([
-    ["trial", { state: "active", remaining_usd: 0.5 }, "trial"],
-    ["trial", { state: "exhausted", remaining_usd: 0.5 }, "ended"],
-    ["trial", { state: "active", remaining_usd: 0 }, "ended"],
-    ["trial_ended", { state: "active", remaining_usd: 0.5 }, "ended"],
-    ["payment_failed", undefined, "payment_failed"],
-    ["trial", undefined, "trial"],
-  ] as const)("%s with %o is %s", (entry, trial, stage) => {
-    expect(trialStage(entry, trial)).toBe(stage)
+  it.each<
+    [
+      AwaitingPlanState,
+      BillingTrialBalance | undefined,
+      TrialStage,
+      BillingTrialBlock | null | undefined,
+    ]
+  >([
+    ["trial", { state: "active", remaining_usd: 0.5 }, "trial", undefined],
+    ["trial", { state: "exhausted", remaining_usd: 0.5 }, "ended", undefined],
+    ["trial", { state: "active", remaining_usd: 0 }, "ended", undefined],
+    [
+      "trial_ended",
+      { state: "exhausted", remaining_usd: 0 },
+      "ended",
+      undefined,
+    ],
+    [
+      "trial_ended",
+      { state: "expired", remaining_usd: 0.5 },
+      "ended",
+      undefined,
+    ],
+    [
+      "trial_ended",
+      { state: "no_grant", remaining_usd: 0 },
+      "unknown",
+      undefined,
+    ],
+    [
+      "trial_ended",
+      { state: "active", remaining_usd: 0 },
+      "unknown",
+      undefined,
+    ],
+    ["trial_ended", undefined, "unknown", undefined],
+    ["trial_ended", undefined, "unknown", null],
+    ["trial_ended", undefined, "ended", "trial_exhausted"],
+    [
+      "trial",
+      { state: "exhausted", remaining_usd: 0 },
+      "check_unavailable",
+      "trial_check_unavailable",
+    ],
+    [
+      "trial",
+      { state: "active", remaining_usd: 0 },
+      "unavailable",
+      "trial_unavailable",
+    ],
+    ["trial", { state: "no_grant", remaining_usd: 0 }, "unknown", null],
+    ["trial_ended", undefined, "unavailable", "trial_unavailable"],
+    ["trial_ended", undefined, "check_unavailable", "trial_check_unavailable"],
+    [
+      "trial_ended",
+      { state: "exhausted", remaining_usd: 0 },
+      "check_unavailable",
+      "trial_check_unavailable",
+    ],
+    ["payment_failed", undefined, "payment_failed", undefined],
+    ["trial", undefined, "trial", undefined],
+  ])("%s with %o is %s", (entry, trial, stage, block) => {
+    expect(trialStage(entry, trial, block)).toBe(stage)
   })
 })
