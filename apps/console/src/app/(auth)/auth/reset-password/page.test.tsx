@@ -58,10 +58,16 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    className,
   }: {
     children: React.ReactNode
     href: string
-  }) => <a href={href}>{children}</a>,
+    className?: string
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }))
 
 let nextPath: string | null = null
@@ -121,6 +127,24 @@ describe("ResetPasswordPage", () => {
       },
       { timeout: 3000 },
     )
+  })
+
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}`,
+    "/sandboxes",
+    "https://example.com",
+  ])("keeps only a validated invite on Back to sign in (%s)", (next) => {
+    nextPath = next
+    render(<ResetPasswordPage />)
+    const link = screen.getByRole("link", { name: "Back to sign in" })
+    const isInvite = next.startsWith("/invite/ssinv_")
+    expect(
+      new URL(
+        link.getAttribute("href")!,
+        "https://console.example.com",
+      ).searchParams.get("next"),
+    ).toBe(isInvite ? next : null)
+    expect(link.classList.contains("ph-no-capture")).toBe(isInvite)
   })
 
   it.each([

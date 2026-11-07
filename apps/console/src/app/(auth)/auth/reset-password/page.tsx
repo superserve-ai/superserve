@@ -1,7 +1,7 @@
 "use client"
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
-import { Button, Input } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -12,6 +12,7 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -25,6 +26,9 @@ function ResetPasswordContent() {
   const [success, setSuccess] = useState(false)
   const router = useRouter()
   const invite = inviteReturnPath(useSearchParams().get("next"))
+  const signInHref = invite
+    ? `/auth/signin?${new URLSearchParams({ next: invite })}`
+    : "/auth/signin"
   const posthog = usePostHog()
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -155,8 +159,11 @@ function ResetPasswordContent() {
 
             <p className="mt-5 text-center text-xs text-muted">
               <Link
-                href="/auth/signin"
-                className="font-medium text-foreground hover:underline"
+                href={signInHref}
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Back to sign in
               </Link>
