@@ -10,11 +10,12 @@ import { PageHeader } from "@/components/page-header"
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
-import { useTeamPlan } from "@/hooks/use-billing-v2"
+import { useTeamEntry, useTeamPlan } from "@/hooks/use-billing-v2"
 import {
   useCatalogPlans,
   usePricingVersionState,
 } from "@/hooks/use-pricing-version"
+import { useUser } from "@/hooks/use-user"
 import { canStartPlan } from "@/lib/api/billing-capabilities"
 import {
   type CatalogPlan,
@@ -27,6 +28,10 @@ import {
 import { undoPlanChange } from "@/lib/api/plan-changes"
 import { billingKeys } from "@/lib/api/query-keys"
 import { planConcurrency } from "@/lib/billing/plans"
+import {
+  isAwaitingPlanState,
+  planPickerPath,
+} from "@/lib/billing/signup-checkout-paths"
 
 import { SupportContact, supportChannel } from "./plan-overview"
 
@@ -152,7 +157,10 @@ export function UpgradePage() {
   const version = usePricingVersionState()
   const v2 = version === "v2" && capabilities.data?.entry_open === true
   const { teamKey, ready, cacheScope } = useBillingContext()
+  const account = useUser().user?.id
+  const locator = account && teamKey ? { account, team: teamKey } : null
   const planQuery = useTeamPlan(true)
+  const { data: entry } = useTeamEntry(true)
   const catalogQuery = useCatalogPlans()
   const catalog = catalogQuery.isError ? [] : (catalogQuery.data ?? [])
   const summaryQuery = useBillingSummary()
@@ -167,8 +175,10 @@ export function UpgradePage() {
   }, [version, planQuery.data, router])
 
   if (
-    (version === "unknown" && !planQuery.data) ||
-    (version === "legacy" && planQuery.data === null)
+    !planQuery.isError &&
+    !capabilities.isError &&
+    ((version === "unknown" && !planQuery.data) ||
+      (version === "legacy" && planQuery.data === null))
   )
     return null
   const plan = planQuery.data
@@ -190,11 +200,55 @@ export function UpgradePage() {
       </PageHeader>
       <div className="flex-1 space-y-5 overflow-y-auto p-4 sm:p-6">
         {!plan ? (
-          <p className="text-sm text-muted">
-            {planQuery.isError
-              ? "Your plan couldn't be loaded. Try again shortly."
-              : "Loading your plan…"}
-          </p>
+          planQuery.isError || capabilities.isError ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                Your plan couldn&apos;t be loaded. Try again shortly.
+              </p>
+              <Button
+                size="sm"
+                variant="outline"
+                onClick={() => {
+                  planQuery.refetch()
+                  if (capabilities.isError) capabilities.refetch()
+                }}
+              >
+                Try again
+              </Button>
+            </div>
+          ) : plan === null ? (
+            <div className="space-y-3">
+              <p className="text-sm text-muted">
+                This team doesn&apos;t have a plan yet.
+              </p>
+              {canManage && v2 && locator && isAwaitingPlanState(entry) ? (
+                <Button
+                  size="sm"
+                  render={
+                    <Link
+                      href={planPickerPath("upgrade", undefined, locator)}
+                    />
+                  }
+                >
+                  Choose a plan
+                </Button>
+              ) : null}
+              {permissionsKnown &&
+              !canManage &&
+              v2 &&
+              isAwaitingPlanState(entry) ? (
+                <p className="text-sm text-muted">
+                  Only billing administrators can choose a plan.
+                </p>
+              ) : null}
+              <SupportContact
+                channel="email"
+                prompt="Need help choosing a plan?"
+              />
+            </div>
+          ) : (
+            <p className="text-sm text-muted">Loading your plan…</p>
+          )
         ) : (
           <>
             {plan.kind === "subscription" ? (

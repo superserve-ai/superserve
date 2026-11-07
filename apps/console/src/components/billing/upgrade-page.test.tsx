@@ -1,32 +1,33 @@
 vi.mock("@/hooks/use-billing-capabilities", () => ({
-  useBillingCapabilities: () => ({
-    data: {
-      pricing_version: mocks.version(),
-      entry_open: mocks.version() === "v2",
-      fresh_entry: {
-        starter: mocks.version() === "v2",
-        pro: mocks.version() === "v2",
-        choose_free: mocks.version() === "v2",
-      },
-    },
-  }),
+  useBillingCapabilities: mocks.capabilities,
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import type { ComponentProps } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { CatalogPlan, TeamPlan } from "@/lib/api/billing-v2"
+import { planPickerPath } from "@/lib/billing/signup-checkout-paths"
 
 const mocks = vi.hoisted(() => ({
   version: vi.fn(),
+  capabilities: vi.fn(),
+  capabilitiesRefetch: vi.fn(),
   catalog: vi.fn(),
   plan: vi.fn(),
+  entry: vi.fn(),
+  planRefetch: vi.fn(),
   summary: vi.fn(),
   replace: vi.fn(),
   preview: vi.fn(),
   schedule: vi.fn(),
   undo: vi.fn(),
   toast: vi.fn(),
+}))
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: ComponentProps<"a">) => (
+    <a {...props}>{children}</a>
+  ),
 }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mocks.replace }),
@@ -46,9 +47,15 @@ vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersionState: mocks.version,
   useCatalogPlans: mocks.catalog,
 }))
-vi.mock("@/hooks/use-billing-v2", () => ({ useTeamPlan: mocks.plan }))
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamPlan: mocks.plan,
+  useTeamEntry: mocks.entry,
+}))
 vi.mock("@/hooks/use-billing-summary", () => ({
   useBillingSummary: mocks.summary,
+}))
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: { id: "user-1" } }),
 }))
 vi.mock("@/lib/api/plan-changes", () => ({
   previewPlanChange: mocks.preview,
@@ -156,8 +163,26 @@ function mount() {
 beforeEach(() => {
   for (const mock of Object.values(mocks)) mock.mockReset()
   mocks.version.mockReturnValue("v2")
+  mocks.capabilities.mockImplementation(() => ({
+    data: {
+      pricing_version: mocks.version(),
+      entry_open: mocks.version() === "v2",
+      fresh_entry: {
+        starter: mocks.version() === "v2",
+        pro: mocks.version() === "v2",
+        choose_free: mocks.version() === "v2",
+      },
+    },
+    isError: false,
+    refetch: mocks.capabilitiesRefetch,
+  }))
   mocks.catalog.mockReturnValue({ data: catalog })
-  mocks.plan.mockReturnValue({ data: pro, isError: false })
+  mocks.plan.mockReturnValue({
+    data: pro,
+    isError: false,
+    refetch: mocks.planRefetch,
+  })
+  mocks.entry.mockReturnValue({ data: null })
   mocks.summary.mockReturnValue({
     data: { permissions: { can_view: true, can_manage: true } },
   })
@@ -225,6 +250,153 @@ describe("UpgradePage with pricing v2 off", () => {
   })
 })
 
+describe("UpgradePage without a plan", () => {
+  it("offers administrators a plan picker and support", () => {
+    mocks.plan.mockReturnValue({ data: null, isError: false })
+    mocks.entry.mockReturnValue({ data: "plan_required" })
+    mount()
+    expect(screen.getByText("This team doesn't have a plan yet.")).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Choose a plan" }).getAttribute("href"),
+    ).toBe(
+      planPickerPath("upgrade", undefined, {
+        account: "user-1",
+        team: "use:team-a",
+      }),
+    )
+    expect(
+      screen.getByText(/Need help choosing a plan\? Contact support/)
+        .textContent,
+    ).toBe(
+      "Need help choosing a plan? Contact support at support@superserve.ai.",
+    )
+    expect(
+      screen
+        .getByRole("link", { name: "support@superserve.ai" })
+        .getAttribute("href"),
+    ).toBe("mailto:support@superserve.ai")
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+  })
+
+  it.each([null, "activating"])(
+    "offers administrators only support when entry is %s",
+    (entry) => {
+      mocks.plan.mockReturnValue({ data: null, isError: false })
+      mocks.entry.mockReturnValue({ data: entry })
+      mount()
+      expect(screen.queryByRole("link", { name: "Choose a plan" })).toBeNull()
+      expect(
+        screen.getByText("This team doesn't have a plan yet."),
+      ).toBeTruthy()
+      expect(
+        screen.getByText(/Need help choosing a plan\? Contact support/)
+          .textContent,
+      ).toBe(
+        "Need help choosing a plan? Contact support at support@superserve.ai.",
+      )
+      expect(
+        screen
+          .getByRole("link", { name: "support@superserve.ai" })
+          .getAttribute("href"),
+      ).toBe("mailto:support@superserve.ai")
+    },
+  )
+
+  it("directs members to billing administrators and support", () => {
+    mocks.plan.mockReturnValue({ data: null, isError: false })
+    mocks.entry.mockReturnValue({ data: "plan_required" })
+    mocks.summary.mockReturnValue({
+      data: { permissions: { can_view: true, can_manage: false } },
+    })
+    mount()
+    expect(screen.queryByRole("link", { name: "Choose a plan" })).toBeNull()
+    expect(
+      screen.getByText("Only billing administrators can choose a plan."),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(/Need help choosing a plan\? Contact support/)
+        .textContent,
+    ).toBe(
+      "Need help choosing a plan? Contact support at support@superserve.ai.",
+    )
+  })
+
+  it.each([null, "activating"])(
+    "offers members only support when entry is %s",
+    (entry) => {
+      mocks.plan.mockReturnValue({ data: null, isError: false })
+      mocks.entry.mockReturnValue({ data: entry })
+      mocks.summary.mockReturnValue({
+        data: { permissions: { can_view: true, can_manage: false } },
+      })
+      mount()
+      expect(screen.queryByRole("link", { name: "Choose a plan" })).toBeNull()
+      expect(
+        screen.queryByText("Only billing administrators can choose a plan."),
+      ).toBeNull()
+      expect(
+        screen.getByText("This team doesn't have a plan yet."),
+      ).toBeTruthy()
+      expect(
+        screen.getByText(/Need help choosing a plan\? Contact support/)
+          .textContent,
+      ).toBe(
+        "Need help choosing a plan? Contact support at support@superserve.ai.",
+      )
+    },
+  )
+
+  it.each(["v2", "unknown"])(
+    "allows retrying a failed plan fetch with version %s",
+    (version) => {
+      mocks.version.mockReturnValue(version)
+      mocks.plan.mockReturnValue({
+        data: undefined,
+        isError: true,
+        refetch: mocks.planRefetch,
+      })
+      mount()
+      expect(
+        screen.getByText("Your plan couldn't be loaded. Try again shortly."),
+      ).toBeTruthy()
+      expect(screen.queryByText("Loading your plan…")).toBeNull()
+      fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+      expect(mocks.planRefetch).toHaveBeenCalledTimes(1)
+      expect(mocks.capabilitiesRefetch).not.toHaveBeenCalled()
+    },
+  )
+
+  it("allows retrying failed capabilities when the team has no plan", () => {
+    mocks.version.mockReturnValue("unknown")
+    mocks.plan.mockReturnValue({
+      data: null,
+      isError: false,
+      refetch: mocks.planRefetch,
+    })
+    mocks.capabilities.mockReturnValue({
+      data: undefined,
+      isError: true,
+      refetch: mocks.capabilitiesRefetch,
+    })
+    mount()
+    expect(
+      screen.getByText("Your plan couldn't be loaded. Try again shortly."),
+    ).toBeTruthy()
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+    expect(mocks.planRefetch).toHaveBeenCalledTimes(1)
+    expect(mocks.capabilitiesRefetch).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows loading while the plan is undefined", () => {
+    mocks.plan.mockReturnValue({ data: undefined, isError: false })
+    mount()
+    expect(screen.getByText("Loading your plan…")).toBeTruthy()
+    expect(screen.queryByText("This team doesn't have a plan yet.")).toBeNull()
+    expect(screen.queryByRole("button", { name: "Try again" })).toBeNull()
+  })
+})
+
 describe("UpgradePage with pricing v2 on", () => {
   it("shows every plan with the right action for a Pro team", () => {
     mount()
@@ -235,6 +407,11 @@ describe("UpgradePage with pricing v2 on", () => {
     expect(screen.queryByTestId("plan-card-free")).toBeNull()
     expect(screen.queryByTestId("plan-card-starter")).toBeNull()
     expect(screen.getByRole("link", { name: "Book a meeting" })).toBeTruthy()
+    expect(screen.queryByText("Loading your plan…")).toBeNull()
+    expect(
+      screen.queryByText("Your plan couldn't be loaded. Try again shortly."),
+    ).toBeNull()
+    expect(screen.queryByText("This team doesn't have a plan yet.")).toBeNull()
   })
 
   it("shows a scheduled downgrade and undoes it", async () => {
