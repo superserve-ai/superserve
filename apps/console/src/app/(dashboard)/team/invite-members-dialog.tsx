@@ -9,6 +9,11 @@ import {
   DialogPopup,
   DialogTitle,
   Input,
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
 } from "@superserve/ui"
 import { useEffect, useRef, useState } from "react"
 
@@ -269,7 +274,7 @@ export function InviteMembersDialog({
               const role = knownTeamRole(row.role)
               return (
                 <li key={row.id} data-status={row.status} className="px-3 py-3">
-                  <div className="flex items-center gap-3">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
                     <span
                       data-mask
                       className="min-w-0 flex-1 text-sm break-all"
@@ -298,45 +303,60 @@ export function InviteMembersDialog({
                         row.email
                       )}
                     </span>
-                    {rolesSupported && (
-                      <select
-                        aria-label={`Role for ${row.email}`}
-                        value={row.role ?? ""}
+                    <div className="flex min-w-0 items-center gap-3 sm:shrink-0">
+                      {rolesSupported && (
+                        <Select
+                          value={row.role ?? null}
+                          disabled={sending || complete}
+                          onValueChange={(value) =>
+                            update(row.id, {
+                              role: value ?? undefined,
+                              status: undefined,
+                              message: undefined,
+                            })
+                          }
+                        >
+                          <SelectTrigger
+                            aria-label={`Role for ${row.email}`}
+                            className="h-9 min-w-0 gap-3 border-dashed border-border px-3 sm:w-40"
+                          >
+                            <SelectValue className="truncate">
+                              {() =>
+                                role ? TEAM_ROLES[role].label : "Choose role"
+                              }
+                            </SelectValue>
+                          </SelectTrigger>
+                          <SelectPopup
+                            dropdown
+                            className="min-w-[var(--anchor-width)]"
+                          >
+                            {roles.map((role) => (
+                              <SelectItem
+                                key={role}
+                                value={role}
+                                className="px-3 py-2"
+                              >
+                                {TEAM_ROLES[role].label}
+                              </SelectItem>
+                            ))}
+                          </SelectPopup>
+                        </Select>
+                      )}
+                      <Button
+                        size="icon-sm"
+                        variant="ghost"
+                        className="shrink-0"
+                        aria-label={`Remove ${row.email}`}
                         disabled={sending || complete}
-                        onChange={(event) =>
-                          update(row.id, {
-                            role: event.target.value,
-                            status: undefined,
-                            message: undefined,
-                          })
+                        onClick={() =>
+                          setRows((previous) =>
+                            previous.filter((item) => item.id !== row.id),
+                          )
                         }
-                        className="h-9 max-w-40 border border-dashed border-border bg-background px-2 text-sm"
                       >
-                        {!row.role && (
-                          <option value="" disabled>
-                            Choose role
-                          </option>
-                        )}
-                        {roles.map((role) => (
-                          <option key={role} value={role}>
-                            {TEAM_ROLES[role].label}
-                          </option>
-                        ))}
-                      </select>
-                    )}
-                    <Button
-                      size="icon-sm"
-                      variant="ghost"
-                      aria-label={`Remove ${row.email}`}
-                      disabled={sending || complete}
-                      onClick={() =>
-                        setRows((previous) =>
-                          previous.filter((item) => item.id !== row.id),
-                        )
-                      }
-                    >
-                      <XIcon className="size-4" weight="light" />
-                    </Button>
+                        <XIcon className="size-4" weight="light" />
+                      </Button>
+                    </div>
                   </div>
                   {rolesSupported && role && (
                     <p className="mt-1 text-xs text-muted">

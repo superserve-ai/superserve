@@ -5,6 +5,11 @@ import {
   Button,
   ConfirmDialog,
   Field,
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
   Table,
   TableBody,
   TableCell,
@@ -107,36 +112,62 @@ function AssignRoleForm({
       onSubmit={onSubmit}
       className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]"
     >
-      <Field label="Select member">
-        <select
-          value={selectedUserId}
-          onChange={(event) => onSelectedUserIdChange(event.target.value)}
-          className="h-9 w-full border border-dashed border-border bg-background px-3 text-sm text-foreground outline-none focus:border-foreground"
-        >
-          {activeMembers.map((member) => (
-            <option key={member.user_id} value={member.user_id}>
-              {member.email}
-            </option>
-          ))}
-        </select>
+      <Field label="Select member" className="min-w-0">
+        <div>
+          <Select
+            value={selectedUserId}
+            onValueChange={(value) => onSelectedUserIdChange(value ?? "")}
+          >
+            <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
+              <SelectValue className="min-w-0 truncate">
+                {() =>
+                  activeMembers.find(
+                    (member) => member.user_id === selectedUserId,
+                  )?.email
+                }
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup
+              dropdown
+              className="max-w-[var(--available-width)] min-w-[var(--anchor-width)]"
+            >
+              {activeMembers.map((member) => (
+                <SelectItem
+                  key={member.user_id}
+                  value={member.user_id}
+                  className="px-3 py-2 break-all"
+                >
+                  {member.email}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </div>
       </Field>
-      <Field label="Assign role">
-        <select
-          value={selectedRoleName}
-          onChange={(event) => setRoleName(event.target.value)}
-          className="h-9 w-full border border-dashed border-border bg-background px-3 text-sm text-foreground outline-none focus:border-foreground"
-        >
-          {roles.map((role) => (
-            <option key={role} value={role}>
-              {roleLabel(role)}
-            </option>
-          ))}
-        </select>
+      <Field label="Assign role" className="min-w-0">
+        <div>
+          <Select
+            value={selectedRoleName}
+            onValueChange={(value) => setRoleName(value ?? "")}
+          >
+            <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
+              <SelectValue className="truncate">
+                {() => roleLabel(selectedRoleName)}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectPopup dropdown className="min-w-[var(--anchor-width)]">
+              {roles.map((role) => (
+                <SelectItem key={role} value={role} className="px-3 py-2">
+                  {roleLabel(role)}
+                </SelectItem>
+              ))}
+            </SelectPopup>
+          </Select>
+        </div>
       </Field>
       <div className="flex items-end">
         <Button
           type="submit"
-          size="sm"
           disabled={
             !selectedUserId || !selectedRoleName || assignRole.isPending
           }

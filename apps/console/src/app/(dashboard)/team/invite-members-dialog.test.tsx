@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -110,18 +111,20 @@ describe("InviteMembersDialog", () => {
     expect(screen.getByText("other@example.com")).toHaveAttribute("data-mask")
   })
 
-  it("defaults new rows to Team admin with allowed known options in display order", () => {
+  it("defaults new rows to Team admin with allowed known options in display order", async () => {
+    const user = userEvent.setup()
     setup()
     paste("one@example.com two@example.com")
     const select = screen.getByRole("combobox", {
       name: "Role for one@example.com",
     })
-    expect(select).toHaveValue("team_admin")
-    expect(screen.getByLabelText("Role for two@example.com")).toHaveValue(
-      "team_admin",
+    expect(select).toHaveTextContent("Team admin")
+    expect(screen.getByLabelText("Role for two@example.com")).toHaveTextContent(
+      "Team admin",
     )
+    await user.click(select)
     expect(
-      within(select)
+      within(screen.getByRole("listbox"))
         .getAllByRole("option")
         .map((option) => option.textContent),
     ).toEqual(["Team admin", "User admin", "Billing admin", "Viewer", "Owner"])
@@ -152,28 +155,80 @@ describe("InviteMembersDialog", () => {
     ).toBeInTheDocument()
   })
   it.each([
-    [["team_owner", "billing_admin", "user_admin", "viewer"], "viewer"],
-    [["team_owner", "billing_admin", "user_admin"], "billing_admin"],
-    [["team_owner", "user_admin"], "user_admin"],
-    [["team_owner", "team_admin"], "team_admin"],
-  ])("uses the preferred available role in %j", (roles, expected) => {
+    [["team_owner", "billing_admin", "user_admin", "viewer"], "Viewer"],
+    [["team_owner", "billing_admin", "user_admin"], "Billing admin"],
+    [["team_owner", "user_admin"], "User admin"],
+    [["team_owner", "team_admin"], "Team admin"],
+  ])("uses the preferred available role in %j", async (roles, expected) => {
+    const user = userEvent.setup()
     setup(roles)
     paste("one@example.com")
-    expect(screen.getByRole("combobox")).toHaveValue(expected)
+    const select = screen.getByRole("combobox")
+    expect(select).toHaveTextContent(expected)
+    await user.click(select)
     expect(screen.getAllByRole("option")).toHaveLength(roles.length)
   })
-  it("requires choosing Owner deliberately when it is the only role", () => {
+  it("requires choosing Owner deliberately when it is the only role", async () => {
+    const user = userEvent.setup()
     setup(["team_owner"])
     paste("one@example.com")
     const select = screen.getByRole("combobox")
-    expect(select).toHaveValue("")
-    expect(screen.getByRole("option", { name: "Choose role" })).toBeDisabled()
+    expect(select).toHaveTextContent("Choose role")
     expect(screen.getByRole("button", { name: "Send invites" })).toBeDisabled()
-    fireEvent.change(select, { target: { value: "team_owner" } })
+    await user.click(select)
+    expect(screen.getAllByRole("option")).toHaveLength(1)
+    await user.click(screen.getByRole("option", { name: "Owner" }))
+    expect(select).toHaveTextContent("Owner")
     expect(screen.getByRole("button", { name: "Send invites" })).toBeEnabled()
-    expect(
-      screen.queryByRole("option", { name: "Choose role" }),
-    ).not.toBeInTheDocument()
+    expect(select).not.toHaveTextContent("Choose role")
+    send()
+    await waitFor(() =>
+      expect(mocks.create).toHaveBeenCalledWith({
+        team,
+        email: "one@example.com",
+        role: "team_owner",
+      }),
+    )
+  })
+  it("opens the role select with the keyboard and chooses with Enter", async () => {
+    const user = userEvent.setup()
+    setup()
+    paste("one@example.com")
+    const select = screen.getByRole("combobox", {
+      name: "Role for one@example.com",
+    })
+    await waitFor(() =>
+      expect(screen.getByLabelText("Email addresses")).toHaveFocus(),
+    )
+    await user.tab()
+    expect(select).toHaveFocus()
+    await user.keyboard("{ArrowDown}")
+    expect(screen.getByRole("listbox")).toBeInTheDocument()
+    await user.keyboard("{ArrowDown}{Enter}")
+    expect(select).toHaveTextContent("User admin")
+    expect(screen.queryByRole("listbox")).not.toBeInTheDocument()
+  })
+  it("clears a failed row's message when its role changes and sends the new role", async () => {
+    const user = userEvent.setup()
+    mocks.create.mockRejectedValueOnce({ code: "invalid_role" })
+    setup()
+    paste("one@example.com")
+    send()
+    await screen.findByText("Role not allowed")
+    const select = screen.getByRole("combobox", {
+      name: "Role for one@example.com",
+    })
+    await user.click(select)
+    await user.click(screen.getByRole("option", { name: "Viewer" }))
+    expect(select).toHaveTextContent("Viewer")
+    expect(screen.queryByText("Role not allowed")).not.toBeInTheDocument()
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
+    await screen.findByText("Sent")
+    expect(mocks.create).toHaveBeenLastCalledWith({
+      team,
+      email: "one@example.com",
+      role: "viewer",
+    })
   })
   it("blocks sending with no known allowed roles", () => {
     setup(["future_role"])
@@ -226,6 +281,12 @@ describe("InviteMembersDialog", () => {
       screen.getByRole("button", { name: "Remove one@example.com" }),
     ).toBeDisabled()
     expect(screen.getByText("Invite created, email failed")).toBeInTheDocument()
+    expect(
+      screen.getByRole("combobox", { name: "Role for one@example.com" }),
+    ).toBeDisabled()
+    expect(
+      screen.getByRole("combobox", { name: "Role for two@example.com" }),
+    ).toBeDisabled()
     expect(screen.getByText("Already a member")).toBeInTheDocument()
     expect(mocks.create).toHaveBeenCalledTimes(3)
     expect(mocks.create.mock.calls[0][0]).toEqual({

@@ -6,6 +6,7 @@ import {
   waitFor,
   within,
 } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import type { ReactElement } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -19,6 +20,7 @@ const {
   mockUseTeamInvitations,
   mockUseTeams,
   mockCreateInvitation,
+  mockAssignRole,
   mockLeave,
   mockRemove,
   mockResend,
@@ -32,6 +34,7 @@ const {
   mockUseTeamInvitations: vi.fn(),
   mockUseTeams: vi.fn(),
   mockCreateInvitation: vi.fn(),
+  mockAssignRole: vi.fn(),
   mockLeave: vi.fn(),
   mockRemove: vi.fn(),
   mockResend: vi.fn(),
@@ -57,7 +60,7 @@ vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
   useLeaveScope: () => mockDisplayedTeam(),
   useTeamManagement: () => mockUseTeamManagement(),
   useTeamInvitations: () => mockUseTeamInvitations(),
-  useAssignTeamRole: () => mutation(),
+  useAssignTeamRole: () => mutation(mockAssignRole),
   useRevokeTeamRole: () => mutation(),
   useCreateInvitation: () => mutation(mockCreateInvitation),
   useResendInvitation: () => mutation(mockResend),
@@ -198,11 +201,20 @@ describe("TeamClient", () => {
     ).not.toBeInTheDocument()
   })
 
-  it("shows backend-advertised controls for capable staff", () => {
+  it("shows backend-advertised controls for capable staff and submits the chosen member and role", async () => {
+    const user = userEvent.setup()
     mockUser.mockReturnValue(staff)
     mockUseTeamManagement.mockReturnValue({
       data: {
         ...baseManagement,
+        members: [
+          ...baseManagement.members,
+          {
+            ...baseManagement.members[0],
+            user_id: "user-3",
+            email: "other@example.com",
+          },
+        ],
         capabilities: {
           can_view_role_assignments: true,
           can_invite_members: true,
@@ -228,9 +240,31 @@ describe("TeamClient", () => {
     expect(
       screen.getByRole("button", { name: /update role/i }),
     ).toBeInTheDocument()
-    expect(screen.getAllByRole("combobox")[0]).toHaveValue("user-1")
+    const memberSelect = screen.getByRole("combobox", {
+      name: "Select member",
+    })
+    const roleSelect = screen.getByRole("combobox", { name: "Assign role" })
+    expect(memberSelect).toHaveTextContent("owner@example.com")
+    expect(roleSelect).toHaveTextContent("Owner")
     expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /revoke/i })).toBeInTheDocument()
+    await user.click(memberSelect)
+    expect(screen.getAllByRole("option")).toHaveLength(2)
+    expect(
+      screen.queryByRole("option", { name: "invited@example.com" }),
+    ).not.toBeInTheDocument()
+    await user.click(screen.getByRole("option", { name: "other@example.com" }))
+    expect(memberSelect).toHaveTextContent("other@example.com")
+    await user.click(roleSelect)
+    expect(screen.getAllByRole("option")).toHaveLength(2)
+    await user.click(screen.getByRole("option", { name: "Viewer" }))
+    expect(roleSelect).toHaveTextContent("Viewer")
+    expect(mockAssignRole).not.toHaveBeenCalled()
+    await user.click(screen.getByRole("button", { name: "Update role" }))
+    expect(mockAssignRole).toHaveBeenCalledWith({
+      team: { teamId: "team-1", region: "use" },
+      data: { user_id: "user-3", role_name: "viewer" },
+    })
   })
 
   it.each([
