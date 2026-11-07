@@ -208,6 +208,32 @@ describe("TeamClient", () => {
     },
   )
 
+  it("shows the impersonated team's name in the header without a displayed team", () => {
+    mockUser.mockReturnValue(staff)
+    mockImpersonatedTeam.mockReturnValue({
+      teamId: "team-7",
+      region: "use",
+      name: "  Viewed team  ",
+    })
+    mockDisplayedTeam.mockReturnValue(null)
+    mockUseTeamManagement.mockReturnValue({
+      data: { ...baseManagement, team_id: "team-7" },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+
+    render(<TeamClient />)
+
+    const header = screen.getByRole("heading", {
+      name: "Team",
+    }).parentElement!
+    expect(within(header).getByText("Viewed team")).toHaveAttribute(
+      "title",
+      "Viewed team",
+    )
+  })
+
   it.each([undefined, { teams: [] }])(
     "omits the header subtitle when the team name is unknown: %j",
     (data) => {

@@ -328,9 +328,11 @@ export function TeamClient() {
   const removeMember = useRemoveTeamMember()
   const team = useDisplayedTeam()
   const leaveScope = useLeaveScope()
-  const teamName = useTeamName(team)
+  const dashboardTeam = useDashboardTeamContext()
+  const displayedTeamName = useTeamName(team)
+  const teamName = dashboardTeam?.name.trim() || displayedTeamName
   // Leaving acts on the operator's own membership, not the team being viewed.
-  const impersonating = useDashboardTeamContext() !== null
+  const impersonating = dashboardTeam !== null
   const { addToast } = useToast()
 
   useEffect(() => {
