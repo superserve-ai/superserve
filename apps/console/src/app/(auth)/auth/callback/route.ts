@@ -136,6 +136,7 @@ async function pendingSignupResponse(
 }
 
 export async function GET(request: Request) {
+  const callbackStartedAt = Date.now()
   const { searchParams, origin } = new URL(request.url)
   const requestedOffer = normalizeSignupRequestedOffer(
     searchParams.get("offer"),
@@ -224,6 +225,7 @@ export async function GET(request: Request) {
 
       let newSignup = false
       if (user) {
+        const createdInThisSignup = createdBefore(user, callbackStartedAt)
         if (code && searchParams.has("staff_google_nonce")) {
           const staffProof = await completeStaffGoogle(
             exchangedSession,
@@ -509,6 +511,7 @@ export async function GET(request: Request) {
             await markGoogleSignupAttempt(signupAttemptId, user.id)
           }
 
+          let googleEvidence = false
           if (isNewUser && signupAttemptId) {
             const original = await readGooglePromotionEvidence(
               signupAttemptId,
@@ -531,6 +534,7 @@ export async function GET(request: Request) {
               })
             }
             if (original) {
+              googleEvidence = true
               if (original.originalSignup) {
                 try {
                   signupEligibilitySnapshot =
@@ -555,6 +559,22 @@ export async function GET(request: Request) {
                   original.eventId,
                   original.visitor,
                 )
+            }
+          }
+          if (isNewUser && !googleEvidence && createdInThisSignup) {
+            // The signup proof was valid, but its capture evidence did not
+            // survive OAuth. Record it as a missing capture so the backend
+            // device policy decides; a recorded failure still withholds credit.
+            // A team-less account created earlier is not this signup.
+            try {
+              signupEligibilitySnapshot = await publishOriginalSignupEvidence(
+                user,
+                undefined,
+                true,
+                signupAttemptId,
+              )
+            } catch {
+              console.warn("Original signup promotion publication unavailable")
             }
           }
           if (isNewUser) {
@@ -604,8 +624,7 @@ export async function GET(request: Request) {
             }
           }
         } else {
-          const createdAt = new Date(user.created_at)
-          isNewUser = Date.now() - createdAt.getTime() < 30000
+          isNewUser = createdInThisSignup
         }
 
         if (type === "signup") {
@@ -831,4 +850,14 @@ export async function GET(request: Request) {
     }
   }
   return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+}
+
+// Auth creates the account just before this callback exchanges its code, so
+// only an account created shortly before the callback began belongs to this
+// signup. Later awaited work must not age it out.
+function createdBefore(
+  user: { created_at: string },
+  callbackStartedAt: number,
+): boolean {
+  return callbackStartedAt - Date.parse(user.created_at) < 30000
 }
