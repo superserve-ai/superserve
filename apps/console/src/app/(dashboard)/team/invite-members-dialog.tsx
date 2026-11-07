@@ -10,7 +10,7 @@ import {
   DialogTitle,
   Input,
 } from "@superserve/ui"
-import { useRef, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import {
   sameTeam,
@@ -69,10 +69,25 @@ export function InviteMembersDialog({
   const [sending, setSending] = useState(false)
   const [attempted, setAttempted] = useState(false)
   const nextId = useRef(0)
+  const rowsRef = useRef<HTMLUListElement>(null)
   const displayedTeam = useDisplayedTeam()
   const currentTeam = useRef(displayedTeam)
   currentTeam.current = displayedTeam
   const create = useCreateInvitation()
+  const sent = rows.filter((row) => row.status === "sent").length
+  const needsAttention = rows.filter(
+    (row) => row.status === "error" || row.status === "delivery_failed",
+  ).length
+
+  useEffect(() => {
+    if (attempted && !sending) {
+      rowsRef.current
+        ?.querySelector<HTMLLIElement>(
+          "[data-status=error], [data-status=delivery_failed]",
+        )
+        ?.scrollIntoView?.({ block: "nearest" })
+    }
+  }, [attempted, sending])
 
   const addAddresses = (text: string) => {
     const addresses = text
@@ -246,7 +261,10 @@ export function InviteMembersDialog({
               No invitation roles are available.
             </p>
           )}
-          <ul className="mt-4 max-h-[45vh] divide-y divide-dashed divide-border overflow-y-auto border border-dashed border-border empty:hidden">
+          <ul
+            ref={rowsRef}
+            className="mt-4 max-h-[45vh] divide-y divide-dashed divide-border overflow-y-auto border border-dashed border-border empty:hidden"
+          >
             {rows.map((row) => {
               const invalid =
                 !EMAIL_PATTERN.test(row.email) || row.email.length > 320
@@ -254,7 +272,7 @@ export function InviteMembersDialog({
               const duplicate = isDuplicate(row)
               const role = knownTeamRole(row.role)
               return (
-                <li key={row.id} className="px-3 py-3">
+                <li key={row.id} data-status={row.status} className="px-3 py-3">
                   <div className="flex items-center gap-3">
                     <span
                       data-mask
@@ -344,6 +362,15 @@ export function InviteMembersDialog({
               )
             })}
           </ul>
+          {attempted && !sending && sent + needsAttention > 0 && (
+            <output
+              className={`mt-2 block text-xs ${needsAttention > 0 ? "text-destructive" : "text-brand"}`}
+            >
+              {needsAttention > 0
+                ? `${sent > 0 ? `${sent} sent. ` : ""}${needsAttention} ${needsAttention === 1 ? "needs" : "need"} attention.`
+                : `${sent} sent.`}
+            </output>
+          )}
           <DialogFooter className="mt-6 p-0">
             <Button
               variant="outline"

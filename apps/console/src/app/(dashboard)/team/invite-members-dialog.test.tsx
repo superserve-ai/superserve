@@ -131,6 +131,17 @@ describe("InviteMembersDialog", () => {
       ),
     ).toHaveLength(2)
   })
+  it("summarizes sent invitations and rows needing attention", async () => {
+    mocks.create
+      .mockResolvedValueOnce({ delivery: "sent" })
+      .mockRejectedValueOnce({ code: "already_member" })
+    setup()
+    paste("one@example.com two@example.com")
+    send()
+    expect(
+      await screen.findByText("1 sent. 1 needs attention."),
+    ).toBeInTheDocument()
+  })
   it.each([
     [["team_owner", "billing_admin", "user_admin", "viewer"], "viewer"],
     [["team_owner", "billing_admin", "user_admin"], "billing_admin"],
