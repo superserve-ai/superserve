@@ -19,6 +19,7 @@ const PUBLIC_ROUTES = [
   "/auth/auth-code-error",
   "/auth/pending",
   "/device",
+  "/invite",
   "/yc/confirm",
   "/yc/claim",
 ]
@@ -33,6 +34,13 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url, 308)
   }
 
+  if (pathname === "/ingest" || pathname.startsWith("/ingest/")) {
+    // Invite tokens appear in auth page URLs; the rewrite would forward Referer to PostHog.
+    const headers = new Headers(request.headers)
+    headers.delete("referer")
+    return NextResponse.next({ request: { headers } })
+  }
+
   const client = createMiddlewareClient(request)
   if (!client.supabase) return client.response
 
@@ -41,6 +49,9 @@ export async function middleware(request: NextRequest) {
   } = await client.supabase.auth.getUser()
 
   const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
+  // The invite page is public so signed-out visitors can read it, but a
+  // signed-in account held for review must still be stopped before it can join.
+  const isInviteRoute = matchesRoute(pathname, ["/invite"])
 
   if (!user && !isPublicRoute) {
     const signinUrl = request.nextUrl.clone()
@@ -85,7 +96,11 @@ export async function middleware(request: NextRequest) {
 
   // Review state rides on the user getUser() already returned, so this adds
   // no Auth round trip for anyone else.
-  if (user && !isPublicRoute && isSignupReviewBlocked(user)) {
+  if (
+    user &&
+    (!isPublicRoute || isInviteRoute) &&
+    isSignupReviewBlocked(user)
+  ) {
     await client.supabase.auth.signOut().catch(() => {})
     const pendingUrl = request.nextUrl.clone()
     pendingUrl.pathname = "/auth/pending"
@@ -108,7 +123,8 @@ export const config = {
     // authenticates its own request (and answers JSON, not a redirect to the
     // signin page), so the middleware getUser() was a second Supabase auth
     // round-trip on every API call — including the 10s sandbox list poll.
-    // PostHog ingestion must reach the rewrite even before sign-in.
+    // PostHog uses its own matcher to strip Referer and bypass auth before the rewrite.
     "/((?!ingest(?:/|$)|api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
+    "/ingest/:path*",
   ],
 }

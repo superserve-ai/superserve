@@ -33,13 +33,19 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }))
 vi.mock("@superserve/ui", () => ({
+  cn: (...classes: (string | undefined)[]) => classes.filter(Boolean).join(" "),
   Button: ({
     render,
     children,
     ...props
   }: React.ComponentProps<"button"> & { render?: React.ReactElement }) =>
     render ? (
-      <a href={(render.props as { href: string }).href}>{children}</a>
+      <a
+        href={(render.props as { href: string }).href}
+        className={props.className}
+      >
+        {children}
+      </a>
     ) : (
       <button {...props}>{children}</button>
     ),
@@ -85,6 +91,27 @@ describe("auth-code-error page", () => {
     expect(
       screen.getByRole("link", { name: "Try Again" }).getAttribute("href"),
     ).toBe("/auth/signin")
+  })
+
+  it("keeps an invitation destination on the retry link", () => {
+    const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+    reason = "membership_lookup_degraded"
+    next = invite
+    render(<AuthCodeErrorPage />)
+    const retry = screen.getByRole("link", { name: "Try Again" })
+    expect(retry.getAttribute("href")).toBe(
+      `/auth/signin?${new URLSearchParams({ next: invite })}`,
+    )
+    expect(retry).toHaveClass("ph-no-capture")
+  })
+
+  it("drops an invitation destination that is not a bare invite path", () => {
+    reason = "membership_lookup_degraded"
+    next = `/invite/ssinv_use_${"A".repeat(43)}/extra`
+    render(<AuthCodeErrorPage />)
+    const retry = screen.getByRole("link", { name: "Try Again" })
+    expect(retry.getAttribute("href")).toBe("/auth/signin")
+    expect(retry).not.toHaveClass("ph-no-capture")
   })
 
   it.each([

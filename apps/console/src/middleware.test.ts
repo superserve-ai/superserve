@@ -96,6 +96,47 @@ describe("middleware", () => {
     expect(res).toBe(mockClient.response)
   })
 
+  it.each(["/ingest", "/ingest/i/v0/e/", "/ingest/static/array.js"])(
+    "strips Referer and bypasses auth for %s",
+    async (path) => {
+      const request = new NextRequest(
+        new URL(`https://console.superserve.ai${path}`),
+        {
+          headers: {
+            referer: `https://console.superserve.ai/auth/signin?next=/invite/ssinv_use_${"A".repeat(43)}`,
+            "user-agent": "test-browser",
+          },
+        },
+      )
+      const res = await middleware(request)
+
+      expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
+      expect(res.status).toBe(200)
+      expect(res.headers.has("location")).toBe(false)
+      const overrides = res.headers
+        .get("x-middleware-override-headers")!
+        .split(",")
+      expect(overrides).not.toContain("referer")
+      expect(res.headers.has("x-middleware-request-referer")).toBe(false)
+      expect(overrides).toContain("user-agent")
+      expect(res.headers.get("x-middleware-request-user-agent")).toBe(
+        "test-browser",
+      )
+    },
+  )
+
+  it.each(["/ingestion", "/ingest-private"])(
+    "still authenticates and redirects signed-out requests to %s",
+    async (path) => {
+      const res = await middleware(buildRequest(path))
+
+      expect(mockClient.supabase!.auth.getUser).toHaveBeenCalledOnce()
+      expect(new URL(res.headers.get("location")!).pathname).toBe(
+        "/auth/signin",
+      )
+    },
+  )
+
   it.each([
     ["/plan-usage", "/billing-usage"],
     ["/plan-usage/", "/billing-usage/"],
@@ -364,6 +405,52 @@ describe("middleware", () => {
   })
 })
 
+describe("middleware invite route", () => {
+  const invitePath = `/invite/ssinv_use_${"A".repeat(43)}`
+
+  beforeEach(() => {
+    vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
+    mockClient = {
+      supabase: {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+        },
+      },
+      response: buildResponse(),
+    }
+  })
+
+  it("lets a signed-out visitor read the invite page", async () => {
+    expect(await middleware(buildRequest(invitePath))).toBe(mockClient.response)
+  })
+
+  it("lets a signed-in account through the invite page", async () => {
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123", email: "u@e.com" } },
+      error: null,
+    })
+    expect(await middleware(buildRequest(invitePath))).toBe(mockClient.response)
+  })
+
+  it("still stops an account held for review on the invite page", async () => {
+    const signOut = vi.fn().mockResolvedValue({ error: null })
+    Object.assign(mockClient.supabase!.auth, { signOut })
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "u@e.com",
+          app_metadata: { signup_review: "pending" },
+        },
+      },
+      error: null,
+    })
+    const res = await middleware(buildRequest(invitePath))
+    expect(signOut).toHaveBeenCalled()
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/pending")
+  })
+})
+
 describe("middleware matcher", () => {
   it.each([
     "/plan-usage",
@@ -390,8 +477,8 @@ describe("middleware matcher", () => {
     "/ingest/i/v0/e/?ip=0",
     "/ingest/s/",
     "/ingest/static/array.js",
-  ])("bypasses auth for analytics request %s", (url) => {
-    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false)
+  ])("matches analytics request %s to strip Referer", (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
   })
 
   it.each(["/", "/sandboxes", "/settings", "/ingestion", "/ingest-private"])(

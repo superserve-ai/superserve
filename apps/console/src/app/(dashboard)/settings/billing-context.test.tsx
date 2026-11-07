@@ -51,6 +51,9 @@ vi.mock("@/hooks/use-user", () => ({
     loading: false,
   }),
 }))
+vi.mock("@/components/settings/team-details-section", () => ({
+  TeamDetailsSection: () => null,
+}))
 vi.mock("@/components/settings/teams-section", () => ({
   TeamsSection: () => null,
 }))
