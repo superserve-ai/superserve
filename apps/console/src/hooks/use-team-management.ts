@@ -25,6 +25,7 @@ import {
   type TeamScope,
 } from "@/lib/api/team-management"
 import type { TeamDirectoryResponse } from "@/lib/api/teams-actions"
+import { regionLabel } from "@/lib/format"
 
 // Not team-scoped: switching teams resets every non-"teams" query, which
 // includes these, so one team's members never show under another.
@@ -53,6 +54,17 @@ function unwrap<T extends { ok: true }>(
 
 const TEAM_NOT_READY_MESSAGE =
   "Your active team is still loading. Try again in a moment."
+
+export function useTeamName(scope: TeamScope | null): string | undefined {
+  const { data } = useTeams()
+  if (!scope) return undefined
+  const team = data?.teams.find(
+    (team) => team.id === scope.teamId && team.region === scope.region,
+  )
+  if (!team?.name.trim()) return undefined
+  const multiRegion = new Set(data?.teams.map((team) => team.region)).size > 1
+  return multiRegion ? `${team.name} · ${regionLabel(team.region)}` : team.name
+}
 
 /**
  * The team this page is showing: the one the loaded management data belongs

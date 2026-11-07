@@ -13,7 +13,9 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   refresh: vi.fn(),
   displayed: vi.fn(),
+  teams: vi.fn(),
 }))
+vi.mock("@/hooks/use-teams", () => ({ useTeams: mocks.teams }))
 vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/use-team-management")>()),
   useDisplayedTeam: mocks.displayed,
@@ -57,10 +59,96 @@ function send() {
 beforeEach(() => {
   vi.resetAllMocks()
   mocks.displayed.mockReturnValue(team)
+  mocks.teams.mockReturnValue({
+    data: {
+      teams: [{ id: team.teamId, name: "Project team", region: team.region }],
+    },
+  })
   mocks.create.mockResolvedValue({ ok: true, delivery: "sent" })
 })
 
 describe("InviteMembersDialog", () => {
+  it("names the invitation's team in the title and read-only team line", () => {
+    setup()
+    expect(
+      screen.getByRole("heading", { name: "Invite people to Project team" }),
+    ).toHaveAttribute("title", "Project team")
+    expect(screen.getByText("Team:").parentElement).toHaveTextContent(
+      "Team: Project team",
+    )
+    expect(screen.getByText("Project team")).toHaveAttribute(
+      "title",
+      "Project team",
+    )
+    expect(screen.getByRole("button", { name: "Close" })).toBeInTheDocument()
+  })
+
+  it.each([
+    [{ id: "team-2", name: "Other team", region: "use" }, "Project team"],
+    [
+      { id: "team-1", name: "Other team", region: "usw" },
+      "Project team · US East",
+    ],
+  ])(
+    "labels and sends to the prop's scope when the active team is %j",
+    async (other, label) => {
+      mocks.teams.mockReturnValue({
+        data: {
+          activeTeamId: other.id,
+          activeRegion: other.region,
+          teams: [
+            other,
+            { id: team.teamId, name: "Project team", region: team.region },
+          ],
+        },
+      })
+      setup()
+      expect(
+        screen.getByRole("heading", { name: `Invite people to ${label}` }),
+      ).toBeInTheDocument()
+      expect(screen.getByText("Team:").parentElement).toHaveTextContent(
+        `Team: ${label}`,
+      )
+      expect(screen.queryByText(/Other team/)).not.toBeInTheDocument()
+      paste("one@example.com")
+      send()
+      await waitFor(() =>
+        expect(mocks.create).toHaveBeenCalledWith({
+          team,
+          email: "one@example.com",
+          role: "team_admin",
+        }),
+      )
+    },
+  )
+
+  it.each([
+    undefined,
+    { teams: [] },
+    { teams: [{ id: "team-2", name: "Other team", region: "use" }] },
+    { teams: [{ id: "team-1", name: "Other region", region: "usw" }] },
+    { teams: [{ id: "team-1", name: " ", region: "use" }] },
+  ])("uses the generic title when the directory has no name: %j", (data) => {
+    mocks.teams.mockReturnValue({ data })
+    setup()
+    expect(
+      screen.getByRole("heading", { name: "Invite people" }),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Team:")).not.toBeInTheDocument()
+  })
+
+  it("keeps the full long team name available on the title and team line", () => {
+    const name = "Project team ".repeat(30).trim()
+    mocks.teams.mockReturnValue({
+      data: { teams: [{ id: team.teamId, name, region: team.region }] },
+    })
+    setup()
+    expect(screen.getAllByTitle(name)).toHaveLength(2)
+    expect(
+      screen.getByRole("heading", { name: `Invite people to ${name}` }),
+    ).toBeInTheDocument()
+  })
+
   it("splits pasted addresses, deduplicates, flags invalid rows and removes rows", () => {
     setup()
     paste(

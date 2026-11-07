@@ -35,6 +35,7 @@ import {
   useRemoveTeamMember,
   useRevokeTeamRole,
   useTeamManagement,
+  useTeamName,
 } from "@/hooks/use-team-management"
 import { useUser } from "@/hooks/use-user"
 import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
@@ -327,6 +328,7 @@ export function TeamClient() {
   const removeMember = useRemoveTeamMember()
   const team = useDisplayedTeam()
   const leaveScope = useLeaveScope()
+  const teamName = useTeamName(team)
   // Leaving acts on the operator's own membership, not the team being viewed.
   const impersonating = useDashboardTeamContext() !== null
   const { addToast } = useToast()
@@ -340,7 +342,7 @@ export function TeamClient() {
   if (isPending) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader title="Team">
+        <PageHeader title="Team" description={teamName}>
           <div className="h-9 w-28 border border-border bg-muted/30" />
         </PageHeader>
         <div className="flex-1 overflow-y-auto px-6 py-8">
@@ -353,7 +355,7 @@ export function TeamClient() {
   if (error) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader title="Team" />
+        <PageHeader title="Team" description={teamName} />
         <ErrorState message={error.message} onRetry={() => refetch()} />
         {/* Leaving needs no team-management permission. */}
         {!impersonating &&
@@ -372,7 +374,7 @@ export function TeamClient() {
   if (!data || data.members.length === 0) {
     return (
       <div className="flex h-full flex-col">
-        <PageHeader title="Team" />
+        <PageHeader title="Team" description={teamName} />
         <EmptyState
           icon={UsersIcon}
           title="No team members"
@@ -404,7 +406,7 @@ export function TeamClient() {
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
-      <PageHeader title="Team" />
+      <PageHeader title="Team" description={teamName} />
       <div className="flex-1 overflow-y-auto">
         <div className="mx-auto flex max-w-3xl flex-col gap-10 px-6 py-10 sm:px-8">
           <InviteMemberCard

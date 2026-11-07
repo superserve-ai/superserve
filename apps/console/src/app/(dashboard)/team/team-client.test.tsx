@@ -169,6 +169,57 @@ describe("TeamClient", () => {
     })
   })
 
+  it.each(["members", "loading", "error", "empty"])(
+    "shows the displayed team's name in the %s header",
+    (state) => {
+      if (state !== "members") {
+        mockUseTeamManagement.mockReturnValue({
+          data:
+            state === "empty" ? { ...baseManagement, members: [] } : undefined,
+          isPending: state === "loading",
+          error: state === "error" ? new Error("Request failed") : null,
+          refetch: vi.fn(),
+        })
+      }
+      mockDisplayedTeam.mockReturnValue({ teamId: "team-1", region: "usw" })
+      mockUseTeams.mockReturnValue({
+        data: {
+          activeTeamId: "team-2",
+          activeRegion: "use",
+          teams: [
+            { id: "team-2", name: "Other team", region: "use" },
+            { id: "team-1", name: "Same ID in East", region: "use" },
+            { id: "team-1", name: "Project team", region: "usw" },
+          ],
+        },
+      })
+
+      render(<TeamClient />)
+
+      const header = screen.getByRole("heading", {
+        name: "Team",
+      }).parentElement!
+      expect(
+        within(header).getByText("Project team · US West"),
+      ).toHaveAttribute("title", "Project team · US West")
+      expect(
+        within(header).queryByText(/Other team|Same ID in East/),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it.each([undefined, { teams: [] }])(
+    "omits the header subtitle when the team name is unknown: %j",
+    (data) => {
+      mockUseTeams.mockReturnValue({ data })
+      render(<TeamClient />)
+      const header = screen.getByRole("heading", {
+        name: "Team",
+      }).parentElement!
+      expect(header).toHaveTextContent(/^Team$/)
+    },
+  )
+
   it("shows members but hides mutation controls for viewers", () => {
     render(<TeamClient />)
 

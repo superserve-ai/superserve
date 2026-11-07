@@ -22,6 +22,7 @@ import {
   TEAM_CHANGED_MESSAGE,
   useCreateInvitation,
   useDisplayedTeam,
+  useTeamName,
 } from "@/hooks/use-team-management"
 import type { TeamScope } from "@/lib/api/team-management"
 import {
@@ -65,6 +66,7 @@ export function InviteMembersDialog({
   invitableRoles?: string[]
   onOpenChange: (open: boolean) => void
 }) {
+  const teamName = useTeamName(team)
   const rolesSupported = allowed !== undefined
   const roles = invitableRoles(allowed ?? [])
   const defaultRole = defaultInviteRole(roles)
@@ -207,9 +209,24 @@ export function InviteMembersDialog({
 
   return (
     <Dialog open onOpenChange={close}>
-      <DialogPopup className="w-full max-w-2xl">
+      <DialogPopup className="w-full max-w-[min(42rem,calc(100vw-2rem))]">
         <div className="p-6">
-          <DialogTitle>Invite people</DialogTitle>
+          <div className="min-w-0 pr-6">
+            <DialogTitle className="min-w-0 truncate" title={teamName}>
+              {teamName ? `Invite people to ${teamName}` : "Invite people"}
+            </DialogTitle>
+            {teamName && (
+              <p className="mt-2 flex min-w-0 gap-1 text-xs text-muted">
+                <span className="shrink-0">Team:</span>{" "}
+                <span
+                  className="min-w-0 truncate text-foreground"
+                  title={teamName}
+                >
+                  {teamName}
+                </span>
+              </p>
+            )}
+          </div>
           <DialogDescription className="mt-2">
             {rolesSupported
               ? "Add email addresses and choose their access. Invitations expire after 7 days."
