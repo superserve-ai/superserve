@@ -166,6 +166,10 @@ SUPERSERVE_API_KEY=ss_live_... bunx turbo run e2e --filter=@superserve/test-sdk-
 
 5. Push and open a Pull Request
 
+### API reference
+
+The API reference on docs.superserve.ai loads its OpenAPI spec from https://api.superserve.ai/openapi.yaml, which the [sandbox](https://github.com/superserve-ai/sandbox) repository serves from `api/openapi.yaml`. The spec is public. Review every change to it, and every docs page derived from it, as public: no internal endpoints (`/internal/**`), secrets, tokens, internal hostnames or IPs, infrastructure details, or other sensitive data.
+
 ### Commit Message Convention
 
 We follow [Conventional Commits](https://www.conventionalcommits.org/):
