@@ -3,7 +3,10 @@
 import { after } from "next/server"
 import * as z from "zod"
 
-import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
+import {
+  isSignupReviewBlocked,
+  signupReviewStatus,
+} from "@/lib/auth/signup-review"
 import { isPlanPickerPath } from "@/lib/billing/signup-checkout-paths"
 import { sendEmail } from "@/lib/email/send"
 import { SignInLinkEmail } from "@/lib/email/templates/sign-in-link"
@@ -68,10 +71,15 @@ async function deliverSignInLink(email: string, next: string | null) {
 
     // Verifying the link would confirm an unconfirmed address, so only
     // confirmed accounts that are not waiting for signup review get one.
+    // Staff approval already emails an unconfirmed account a confirming magic
+    // link, and the token generated above replaced it, so approved accounts
+    // get this link in its place.
     const user = data.user
     const banned =
       !!user.banned_until && new Date(user.banned_until).getTime() > Date.now()
-    if (!user.email_confirmed_at || banned || isSignupReviewBlocked(user)) {
+    const confirmedOrApproved =
+      !!user.email_confirmed_at || signupReviewStatus(user) === "approved"
+    if (!confirmedOrApproved || banned || isSignupReviewBlocked(user)) {
       await trackLinkFailure("not_eligible", user.id)
       return
     }

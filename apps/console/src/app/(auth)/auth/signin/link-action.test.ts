@@ -209,7 +209,19 @@ describe("sendSignInLink", () => {
     ["unconfirmed", { email_confirmed_at: null }],
     ["in review", { app_metadata: { signup_review: "pending" } }],
     ["rejected", { app_metadata: { signup_review: "rejected" } }],
+    [
+      "unconfirmed rejected",
+      { email_confirmed_at: null, app_metadata: { signup_review: "rejected" } },
+    ],
     ["banned", { banned_until: "2999-01-01T00:00:00Z" }],
+    [
+      "unconfirmed approved but banned",
+      {
+        email_confirmed_at: null,
+        app_metadata: { signup_review: "approved" },
+        banned_until: "2999-01-01T00:00:00Z",
+      },
+    ],
   ])("sends nothing to an %s account", async (_label, overrides) => {
     mockGenerateLink.mockResolvedValue(
       linkFor({ ...confirmedUser, ...overrides }),
@@ -223,6 +235,30 @@ describe("sendSignInLink", () => {
       "auth_sign_in_link_failed",
       "user-1",
       { method: "email_link", reason: "not_eligible" },
+    )
+  })
+
+  it("replaces the approval link of an approved but unconfirmed account", async () => {
+    // The recovery token replaces the confirming magic link from the staff
+    // approval email, so the account must get this link instead.
+    mockGenerateLink.mockResolvedValue(
+      linkFor({
+        ...confirmedUser,
+        email_confirmed_at: null,
+        app_metadata: { signup_review: "approved" },
+      }),
+    )
+
+    await sendSignInLink("user@example.com", "token")
+    await runAfter()
+
+    expect(mockSendEmail).toHaveBeenCalledTimes(1)
+    const url = new URL(mockSendEmail.mock.calls[0][0].react.signInUrl)
+    expect(url.searchParams.get("type")).toBe("magiclink")
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_sign_in_link_sent",
+      "user-1",
+      { method: "email_link" },
     )
   })
 
