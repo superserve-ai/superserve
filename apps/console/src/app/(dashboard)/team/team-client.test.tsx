@@ -753,6 +753,9 @@ describe("TeamClient", () => {
         "title",
         "A team needs at least one owner.",
       )
+      const revokeReason = document.getElementById("owner-reason-assignment-1")
+      expect(revokeReason).toBeVisible()
+      expect(revokeReason).not.toHaveClass("sr-only")
     })
 
     it("allows collapsing legacy roles to an already held role", async () => {

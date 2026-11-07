@@ -403,30 +403,32 @@ function ActiveAssignmentRows({
                 </TableCell>
                 {canRevoke && (
                   <TableCell>
-                    <Button
-                      size="sm"
-                      variant="outline"
-                      disabled={revokeRole.isPending || ownerBlocked}
-                      title={ownerBlocked ? LAST_OWNER_REASON : undefined}
-                      aria-describedby={
-                        ownerBlocked
-                          ? `owner-reason-${assignment.assignment_id}`
-                          : undefined
-                      }
-                      onClick={() => {
-                        if (team) setRevoking({ ...assignment, team })
-                      }}
-                    >
-                      Revoke
-                    </Button>
-                    {ownerBlocked && (
-                      <span
-                        id={`owner-reason-${assignment.assignment_id}`}
-                        className="sr-only"
+                    <div className="flex items-center gap-2">
+                      <Button
+                        size="sm"
+                        variant="outline"
+                        disabled={revokeRole.isPending || ownerBlocked}
+                        title={ownerBlocked ? LAST_OWNER_REASON : undefined}
+                        aria-describedby={
+                          ownerBlocked
+                            ? `owner-reason-${assignment.assignment_id}`
+                            : undefined
+                        }
+                        onClick={() => {
+                          if (team) setRevoking({ ...assignment, team })
+                        }}
                       >
-                        {LAST_OWNER_REASON}
-                      </span>
-                    )}
+                        Revoke
+                      </Button>
+                      {ownerBlocked && (
+                        <span
+                          id={`owner-reason-${assignment.assignment_id}`}
+                          className="text-xs text-muted"
+                        >
+                          {LAST_OWNER_REASON}
+                        </span>
+                      )}
+                    </div>
                   </TableCell>
                 )}
               </TableRow>
