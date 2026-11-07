@@ -228,7 +228,13 @@
               "DELETE /teams/{team_id}/members/{user_id}",
               "GET /teams/{team_id}/roles",
               "POST /teams/{team_id}/roles",
-              "DELETE /teams/{team_id}/roles/{assignment_id}"
+              "DELETE /teams/{team_id}/roles/{assignment_id}",
+              "GET /teams/{team_id}/invitations",
+              "POST /teams/{team_id}/invitations",
+              "POST /teams/{team_id}/invitations/{invitation_id}/resend",
+              "POST /teams/{team_id}/invitations/{invitation_id}/revoke",
+              "POST /teams/{team_id}/invitations/{invitation_id}/delivery",
+              "POST /teams/{team_id}/leave"
             ]
           },
           {
