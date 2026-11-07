@@ -28,6 +28,13 @@ export class GoogleSignupRecoveryRequiredError extends Error {
   }
 }
 
+export class GoogleSignupProofRequiredError extends Error {
+  constructor() {
+    super("Google signup verification required")
+    this.name = "GoogleSignupProofRequiredError"
+  }
+}
+
 export interface GooglePromotionEvidence {
   attemptId?: string
   eventId?: string
@@ -544,7 +551,7 @@ export async function requireGoogleSignupProof(
     // Treat cookie-store/configuration failures as a missing proof below.
   }
   await trackGoogleSignupBypass()
-  throw new Error("Google signup verification required")
+  throw new GoogleSignupProofRequiredError()
 }
 
 async function trackGoogleSignupBypass(): Promise<void> {
