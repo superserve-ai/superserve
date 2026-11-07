@@ -372,7 +372,7 @@ function ActiveAssignmentRows({
   }
 
   return (
-    <div className="overflow-hidden border border-dashed border-border bg-background/60">
+    <div className="overflow-x-auto border border-dashed border-border bg-background/60">
       <Table>
         <TableHeader>
           <TableRow>
@@ -403,7 +403,7 @@ function ActiveAssignmentRows({
                 </TableCell>
                 {canRevoke && (
                   <TableCell>
-                    <div className="flex items-center gap-2">
+                    <div className="flex flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
                       <Button
                         size="sm"
                         variant="outline"
@@ -424,7 +424,7 @@ function ActiveAssignmentRows({
                       {ownerBlocked && (
                         <span
                           id={`owner-reason-${assignment.assignment_id}`}
-                          className="text-xs text-muted"
+                          className="text-xs text-muted lg:whitespace-nowrap"
                         >
                           {LAST_OWNER_REASON}
                         </span>
