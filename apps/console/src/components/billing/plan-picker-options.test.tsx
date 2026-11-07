@@ -2,6 +2,7 @@ import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
+import type { TeamSummary } from "@/lib/api/teams-actions"
 import type { TeamCatalog } from "@/lib/billing/plan-offers-actions"
 import type { BillingOffer, PlanCard } from "@/lib/billing/plans"
 
@@ -12,8 +13,14 @@ const mocks = vi.hoisted(() => ({
   load: vi.fn(),
   canManage: null as boolean | null,
   signOut: vi.fn(),
+  teams: [] as TeamSummary[],
+  switchTeam: vi.fn(async (_teamId: string, _region: string) => {}),
 }))
 vi.mock("@/hooks/use-sign-out", () => ({ useSignOut: () => mocks.signOut }))
+vi.mock("@/lib/api/teams-actions", () => ({
+  listTeamsAction: async () => ({ teams: mocks.teams }),
+  setActiveTeamAction: mocks.switchTeam,
+}))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   canManageTeamBillingAction: async () => mocks.canManage,
   getTeamCatalogAction: async (locator: unknown) => {
@@ -77,6 +84,9 @@ afterEach(() => {
   cleanup()
   mocks.cards = []
   mocks.canManage = null
+  mocks.teams = []
+  mocks.switchTeam.mockClear()
+  vi.unstubAllGlobals()
 })
 
 describe("PlanPickerOptions", () => {
@@ -249,6 +259,53 @@ describe("PlanPickerOptions", () => {
     expect(mocks.signOut).toHaveBeenCalled()
   })
 
+  it("lets a member without billing access open another of their teams", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.canManage = false
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Side project" }))
+    expect(screen.queryByRole("button", { name: "Current" })).toBeNull()
+    expect(mocks.switchTeam).toHaveBeenCalledWith("team-2", "use")
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+  })
+
+  it("says so when another team can't be opened", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    mocks.switchTeam.mockRejectedValueOnce(new Error("not a member"))
+    render(
+      <PlanPickerOptions preselected={null} locator={locator} adminRequired />,
+    )
+    fireEvent.click(await screen.findByRole("button", { name: "Side project" }))
+    expect((await screen.findByRole("alert")).textContent).toMatch(
+      /couldn't open that team/,
+    )
+    expect(
+      screen
+        .getByRole("button", { name: "Side project" })
+        .hasAttribute("disabled"),
+    ).toBe(false)
+  })
+
+  it("offers no other team when the user has none", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.canManage = false
+    mocks.teams = [{ id: "team-1", name: "Current", region: "use" }]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(await screen.findByRole("button", { name: "Sign out" })).toBeTruthy()
+    await act(async () => {})
+    expect(screen.queryByText(/open another team/)).toBeNull()
+  })
+
   it("keeps plans hidden after checkout refused the user, even if access can't be read", async () => {
     mocks.offers = [offer("developer_monthly", "Builder")]
     mocks.canManage = null
@@ -299,6 +356,32 @@ describe("PlanPickerOptions", () => {
       screen.getByRole("link", { name: "Book a meeting" }),
     ).toHaveAttribute("href", ENTERPRISE_MEETING_URL)
     expect(screen.queryByRole("form", { name: "Team plan" })).toBeNull()
+  })
+
+  it("lets the user open another of their teams when no plan is sellable", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Side project" }))
+    expect(screen.getByText(/No plans are available/)).toBeTruthy()
+    expect(screen.queryByRole("button", { name: "Current" })).toBeNull()
+    expect(mocks.switchTeam).toHaveBeenCalledWith("team-2", "use")
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+  })
+
+  it("offers no other team when no plan is sellable and the user has none", async () => {
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.teams = [{ id: "team-1", name: "Current", region: "use" }]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(await screen.findByText(/No plans are available/)).toBeTruthy()
+    await act(async () => {})
+    expect(screen.queryByText(/open another team/)).toBeNull()
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy()
   })
 
   it("still asks a member without billing access to ask an administrator when no plan is sellable", async () => {

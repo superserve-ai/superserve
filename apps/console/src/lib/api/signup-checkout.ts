@@ -58,6 +58,28 @@ async function readEntryState(
   return isAwaitingPlanState(body.entry_state) ? body.entry_state : null
 }
 
+// Whether the user may manage the team's billing, or null when that can't be
+// read. A refusal for someone who can is not about access.
+async function readCanManageBilling(
+  backend: Awaited<ReturnType<typeof teamBackend>>,
+): Promise<boolean | null> {
+  try {
+    const summary = await fetch(`${backend.base}/billing/summary`, {
+      headers: backend.headers,
+      cache: "no-store",
+      signal: AbortSignal.timeout(BACKEND_TIMEOUT_MS),
+    })
+    if (!summary.ok) return null
+    const body = (await summary.json()) as {
+      permissions?: { can_manage?: unknown }
+    }
+    const canManage = body.permissions?.can_manage
+    return typeof canManage === "boolean" ? canManage : null
+  } catch {
+    return null
+  }
+}
+
 // Where a new signup lands: the console while its trial lasts, the plan picker
 // once it is used up. Null keeps the caller's destination, so a team that has
 // a plan, or a backend without trials, follows today's flow.
@@ -151,7 +173,10 @@ export async function startSignupCheckout(
   }
   if (response.status === 400 && result.error?.code === "invalid_offer")
     return planPickerPath("plan_unavailable", undefined, locator)
-  if (response.status === 403)
+  // The backend also refuses billing administrators, for example when the
+  // team's billing is managed outside self-serve checkout. Only a user who
+  // can't manage billing is told to ask an administrator.
+  if (response.status === 403 && (await readCanManageBilling(backend)) !== true)
     return planPickerPath("billing_admin_required", undefined, locator)
   if (!response.ok && result.error?.code === "payment_confirmation_pending")
     return paymentSettlingPath(locator)
