@@ -78,17 +78,16 @@ let cellClients: Record<string, ReturnType<typeof recordingCellClient>> = {}
 let existingRbacAssignment = false
 let unfinishedTeamId: string | null = null
 // Teams the current user owns through a legacy owner row or an RBAC owner
-// assignment, teams with an RBAC membership, and the outcome of a team rename.
+// assignment, teams with an RBAC membership, and the database's answer to an
+// owner-checked rename.
 let legacyOwnerTeamIds: string[] = []
 let rbacOwnerTeamIds: string[] = []
 let rbacMemberTeamIds: string[] = []
-let renameResult: {
-  data: Array<{ id: string }> | null
-  error: { code: string; message: string } | null
-} = { data: [{ id: "renamed" }], error: null }
+let renameOutcome: {
+  data: unknown
+  error: { message: string } | null
+} = { data: "renamed", error: null }
 let ownerRoleUnavailable = false
-// The team's name when a guarded rename matched no row.
-let nameAfterRace = "someone-else"
 
 // Records every write per table so tests can assert the full create chain
 // landed in one cell and nowhere else.
@@ -119,24 +118,6 @@ function recordingCellClient() {
               }),
             }
           },
-          update: (row: Record<string, unknown>) => {
-            record(table, row)
-            return {
-              eq() {
-                return this
-              },
-              select: async () => renameResult,
-            }
-          },
-          select: () => ({
-            eq() {
-              return this
-            },
-            limit: async () => ({
-              data: [{ name: nameAfterRace }],
-              error: null,
-            }),
-          }),
         }
       case "team_member":
       case "team_memberships":
@@ -218,7 +199,10 @@ function recordingCellClient() {
         throw new Error(`unexpected table ${table}`)
     }
   })
-  return { from, writes }
+  const rpc = vi.fn(
+    async (_name: string, _args: Record<string, unknown>) => renameOutcome,
+  )
+  return { from, writes, rpc }
 }
 
 vi.mock("@/lib/api/promotion-identity", () => ({
@@ -390,8 +374,7 @@ describe("createTeamAction", () => {
     legacyOwnerTeamIds = []
     rbacOwnerTeamIds = []
     rbacMemberTeamIds = []
-    renameResult = { data: [{ id: "team-me" }], error: null }
-    nameAfterRace = "someone-else"
+    renameOutcome = { data: "renamed", error: null }
     cellClients = {
       use: recordingCellClient(),
       usw: recordingCellClient(),
@@ -563,7 +546,6 @@ describe("createTeamAction", () => {
         degradedRegions: [],
       }
       existingRbacAssignment = true
-      legacyOwnerTeamIds = ["team-me"]
       cookieValue = "use:team-me"
     })
 
@@ -571,9 +553,20 @@ describe("createTeamAction", () => {
       const team = await convertAccount("acme")
 
       expect(team).toEqual({ id: "team-me", name: "acme", region: "use" })
-      expect(cellClients.use.writes).toEqual({
-        team: [{ name: "acme", updated_at: expect.any(String) }],
-      })
+      expect(cellClients.use.rpc.mock.calls).toEqual([
+        [
+          "rename_owned_team",
+          {
+            p_user: "u1",
+            p_team: "team-me",
+            p_from: directoryTeams[0].name,
+            p_to: "acme",
+          },
+        ],
+      ])
+      expect(cellClients.usw.rpc).not.toHaveBeenCalled()
+      expect(cellClients.usw.from).not.toHaveBeenCalled()
+      expect(cellClients.use.writes).toEqual({})
       expect(cellClients.usw.writes).toEqual({})
       expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
       expect(cookieSets).toEqual([
@@ -589,24 +582,8 @@ describe("createTeamAction", () => {
       expect(await convertAccount("acme")).toMatchObject({ id: "team-me" })
     })
 
-    it("converts an account owned through an RBAC owner assignment", async () => {
-      legacyOwnerTeamIds = []
-      rbacOwnerTeamIds = ["team-me"]
-
-      expect(await convertAccount("acme")).toMatchObject({
-        id: "team-me",
-        name: "acme",
-      })
-    })
-
-    it("refuses an owner whose RBAC owner grant was revoked", async () => {
-      rbacMemberTeamIds = ["team-me"]
-
-      expectUnavailable(await createTeamAction("acme", "use", "team-me"))
-    })
-
     it("refuses a member who does not own the account", async () => {
-      legacyOwnerTeamIds = []
+      renameOutcome = { data: "not_owner", error: null }
 
       expectUnavailable(await createTeamAction("acme", "use", "team-me"))
     })
@@ -664,7 +641,7 @@ describe("createTeamAction", () => {
     })
 
     it("refuses when the account is renamed concurrently", async () => {
-      renameResult = { data: [], error: null }
+      renameOutcome = { data: "changed", error: null }
 
       const result = await createTeamAction("acme", "use", "team-me")
 
@@ -672,24 +649,11 @@ describe("createTeamAction", () => {
       expect(cookieSets).toEqual([])
     })
 
-    it("accepts a concurrent conversion to the same name", async () => {
-      renameResult = { data: [], error: null }
-      nameAfterRace = "acme"
-
-      expect(await convertAccount("acme")).toEqual({
-        id: "team-me",
-        name: "acme",
-        region: "use",
-      })
-      expect(cookieSets).toEqual([
-        { name: "ss-active-team", value: "use:team-me" },
-      ])
-    })
-
     it("rejects a name longer than 256 bytes before renaming", async () => {
       await expect(
         createTeamAction("é".repeat(129), "use", "team-me"),
       ).rejects.toThrow("between 1 and 256 bytes")
+      expect(cellClients.use.rpc).not.toHaveBeenCalled()
       expect(cellClients.use.writes).toEqual({})
     })
 
@@ -699,19 +663,46 @@ describe("createTeamAction", () => {
       const team = await convertAccount("acme")
 
       expect(team).toEqual({ id: "team-me", name: "acme", region: "use" })
+      expect(cellClients.use.rpc.mock.calls).toEqual([
+        [
+          "rename_owned_team",
+          {
+            p_user: "u1",
+            p_team: "team-me",
+            p_from: "acme",
+            p_to: "acme",
+          },
+        ],
+      ])
       expect(cellClients.use.writes).toEqual({})
+      expect(cellClients.usw.writes).toEqual({})
     })
 
     it("reports a taken name without changing the selection", async () => {
-      renameResult = {
-        data: null,
-        error: { code: "23505", message: "duplicate key" },
-      }
+      renameOutcome = { data: "name_taken", error: null }
 
       expect(await createTeamAction("acme", "use", "team-me")).toEqual({
         code: "team_name_conflict",
         message: expect.stringContaining("already taken"),
       })
+      expect(cookieSets).toEqual([])
+    })
+
+    it("rejects when the rename RPC fails", async () => {
+      renameOutcome = { data: null, error: { message: "unavailable" } }
+
+      await expect(createTeamAction("acme", "use", "team-me")).rejects.toThrow(
+        "Failed to rename team: unavailable",
+      )
+      expect(cookieSets).toEqual([])
+    })
+
+    it("rejects an unknown rename outcome", async () => {
+      renameOutcome = { data: "unexpected", error: null }
+
+      await expect(createTeamAction("acme", "use", "team-me")).rejects.toThrow(
+        "Failed to rename team: unexpected outcome",
+      )
       expect(cookieSets).toEqual([])
     })
 
