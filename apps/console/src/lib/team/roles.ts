@@ -2,7 +2,7 @@ export const TEAM_ROLES = {
   team_admin: {
     label: "Team admin",
     description:
-      "Create sandboxes and API keys and manage settings. Can remove User admin, Billing admin, and Viewer members, but cannot invite or change roles.",
+      "Create sandboxes and API keys and manage settings. Can remove members who are not Owners or Team admins, but cannot invite or change roles.",
   },
   user_admin: {
     label: "User admin",
