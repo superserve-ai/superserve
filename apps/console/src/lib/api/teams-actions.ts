@@ -1,13 +1,9 @@
 "use server"
 
-import { cookies } from "next/headers"
-
 import {
-  ACTIVE_TEAM_COOKIE,
   pickActiveTeam,
   readTeamSelection,
-  serializeTeamSelection,
-  type TeamSelection,
+  writeTeamSelection,
 } from "@/lib/api/active-team"
 import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
 import { isPersonalTeam, ownsTeam, renameTeam } from "@/lib/api/team-conversion"
@@ -100,17 +96,6 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   }
 }
 
-async function storeTeamSelection(selection: TeamSelection): Promise<void> {
-  const store = await cookies()
-  store.set(ACTIVE_TEAM_COOKIE, serializeTeamSelection(selection), {
-    httpOnly: true,
-    sameSite: "lax",
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60 * 24 * 365,
-  })
-}
-
 export async function setActiveTeamAction(
   teamId: string,
   region: string,
@@ -134,7 +119,7 @@ export async function setActiveTeamAction(
     throw new Error("You are not a member of that team")
   }
 
-  await storeTeamSelection({ region, teamId })
+  await writeTeamSelection({ region, teamId })
 }
 
 export async function createTeamAction(
@@ -205,7 +190,7 @@ export async function createTeamAction(
       if (renamed === "changed") return teamConversionUnavailable()
     }
     invalidateMembershipDirectory(user.id)
-    await storeTeamSelection({ region: targetRegion, teamId: target.id })
+    await writeTeamSelection({ region: targetRegion, teamId: target.id })
     return { id: target.id, name: trimmed, region: targetRegion }
   }
 
@@ -233,7 +218,7 @@ export async function createTeamAction(
   }
 
   invalidateMembershipDirectory(user.id)
-  await storeTeamSelection({ region: targetRegion, teamId: team.id })
+  await writeTeamSelection({ region: targetRegion, teamId: team.id })
 
   return { id: team.id, name: team.name, region: targetRegion }
 }
