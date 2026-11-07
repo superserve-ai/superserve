@@ -271,6 +271,18 @@ describe("SignUpPage", () => {
     expect(url.searchParams.get("offer")).toBe("yc_2026")
   })
 
+  it("explains how to get a new link after an expired confirmation", async () => {
+    mockSearchParams = new URLSearchParams("error=link_expired")
+    render(<SignUpPage />)
+
+    expect(
+      await screen.findByText(
+        "This confirmation link expired or was already used. Sign up again with the same email and password to get a new link, or sign in if you already confirmed your email.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled()
+  })
+
   it("submits diagnostics and the YC return path together before showing email-sent state", async () => {
     mockSignUpWithEmail.mockResolvedValue({ success: true })
     mockSearchParams = new URLSearchParams({

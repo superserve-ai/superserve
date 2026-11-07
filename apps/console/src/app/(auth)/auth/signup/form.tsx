@@ -237,7 +237,9 @@ export default function SignUpContent() {
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
-      setErrors({ form: "Verification link expired or invalid." })
+      setErrors({
+        form: "This confirmation link expired or was already used. Sign up again with the same email and password to get a new link, or sign in if you already confirmed your email.",
+      })
     }
   }, [searchParams])
 
