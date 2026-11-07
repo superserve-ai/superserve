@@ -293,6 +293,10 @@
           {
             "group": "MCP & Tools",
             "pages": ["integrations/mcp"]
+          },
+          {
+            "group": "Computer Use",
+            "pages": ["integrations/computer-use/openai"]
           }
         ]
       }
