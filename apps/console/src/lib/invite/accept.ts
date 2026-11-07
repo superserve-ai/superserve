@@ -12,7 +12,6 @@ import {
   completeFirstSignup,
 } from "@/lib/api/team-provisioning"
 import {
-  GoogleSignupProofRequiredError,
   GoogleSignupRecoveryRequiredError,
   isGoogleUser,
 } from "@/lib/auth/google-signup-proof"
@@ -98,7 +97,6 @@ function isFirstSignupRefusal(error: unknown): boolean {
   return (
     error instanceof SignupRestrictedError ||
     error instanceof SignupReviewPendingError ||
-    error instanceof GoogleSignupProofRequiredError ||
     error instanceof GoogleSignupRecoveryRequiredError
   )
 }

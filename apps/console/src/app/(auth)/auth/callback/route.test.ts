@@ -1955,7 +1955,7 @@ describe("auth callback", () => {
       // This real guard cannot use an unbound scoped proof without completion.
       // After that gate binds the proof, the same actor's guard succeeds.
       await expect(proof.requireGoogleSignupProof("u1")).rejects.toThrow(
-        "Google signup verification required",
+        "Complete signup with Google to continue.",
       )
       await proof.markGoogleSignupAttempt("early-unbound-attempt", "u1")
       await expect(proof.requireGoogleSignupProof("u1")).resolves.toBe(

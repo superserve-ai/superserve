@@ -26,6 +26,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import {
   beginGoogleSignup,
   claimGoogleRecoveryContinuation,
+  googleRecoveryAccount,
   isCloudflareSignupObservationEnabled,
   resendSignupConfirmation,
   signUpWithEmail,
@@ -120,10 +121,14 @@ const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
 
 const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
+// A failed bot-check is a retry, not a dead end: say what the user can change.
+const CAPTCHA_FAILED_MESSAGE =
+  "We couldn't verify this browser. Turn off any VPN or ad blocker for this site and try again, or use another browser."
+
 // Copy for each reason the callback reports a first-time Google signup unchecked.
 const GOOGLE_RECOVERY_MESSAGES: Record<string, string> = {
   started_from_signin:
-    "Looks like you're new here. One quick check to finish creating your account.",
+    "This Google account is new to Superserve. One quick check to finish creating your account.",
   expired:
     "Your signup check timed out. One quick check to finish creating your account.",
   no_proof:
@@ -235,6 +240,19 @@ export default function SignUpContent() {
     ? GOOGLE_RECOVERY_MESSAGES[googleRecoveryReason]
     : undefined
   const autoContinued = useRef(false)
+  // The account this browser's blocked callback signed in with. The recovery
+  // trip asks Google for that account so the user does not pick again.
+  const [recoveryAccount, setRecoveryAccount] = useState<string>()
+  const recoveryAccountRequest = useRef<Promise<string | undefined>>(undefined)
+  const loadRecoveryAccount = () =>
+    (recoveryAccountRequest.current ??= googleRecoveryAccount().catch(
+      () => undefined,
+    ))
+
+  useEffect(() => {
+    if (!isCompleteGoogleSignup) return
+    void loadRecoveryAccount().then(setRecoveryAccount)
+  }, [isCompleteGoogleSignup])
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
@@ -430,7 +448,7 @@ export default function SignUpContent() {
     </>
   )
 
-  const handleGoogleSignIn = async () => {
+  const handleGoogleSignIn = async (chooseAccount = false) => {
     setIsGoogleLoading(true)
     setErrors({})
     try {
@@ -455,9 +473,18 @@ export default function SignUpContent() {
         fingerprintDiagnostics,
       )
       if (!proof.success) {
-        setErrors({ form: proof.error || "Google signup verification failed." })
+        setErrors({
+          form:
+            proof.errorCode === "captcha_failed"
+              ? CAPTCHA_FAILED_MESSAGE
+              : proof.error || "Google signup verification failed.",
+        })
         return
       }
+      const loginHint =
+        isCompleteGoogleSignup && !chooseAccount
+          ? await loadRecoveryAccount()
+          : undefined
 
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
@@ -472,7 +499,9 @@ export default function SignUpContent() {
         provider: "google",
         options: {
           redirectTo: callbackUrl.toString(),
-          queryParams: { prompt: "select_account" },
+          queryParams: loginHint
+            ? { login_hint: loginHint }
+            : { prompt: "select_account" },
         },
       })
       if (error) {
@@ -589,7 +618,7 @@ export default function SignUpContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={handleGoogleSignIn}
+              onClick={() => handleGoogleSignIn()}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
@@ -598,6 +627,23 @@ export default function SignUpContent() {
                 ? "Completing signup..."
                 : "Complete signup with Google"}
             </Button>
+            {recoveryAccount && (
+              <p className="mt-5 text-center text-xs text-muted">
+                Continuing as{" "}
+                <span data-mask className="text-foreground">
+                  {recoveryAccount}
+                </span>
+                .{" "}
+                <button
+                  type="button"
+                  onClick={() => handleGoogleSignIn(true)}
+                  disabled={isGoogleLoading || isLoading}
+                  className="font-medium text-foreground hover:underline disabled:opacity-50"
+                >
+                  Use a different Google account
+                </button>
+              </p>
+            )}
           </>
         ) : (
           <>
@@ -607,7 +653,7 @@ export default function SignUpContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={handleGoogleSignIn}
+              onClick={() => handleGoogleSignIn()}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
