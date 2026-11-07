@@ -257,19 +257,37 @@ describe("sendPasswordResetEmail", () => {
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
-  it("prefers the Cloudflare client IP header", async () => {
-    requestHeaders = {
-      "cf-connecting-ip": "198.51.100.4",
-      "x-forwarded-for": "203.0.113.7",
-    }
+  it("keeps one IP budget when a caller rotates cf-connecting-ip", async () => {
+    const used = new Map<string, number>()
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string; max: number }, key: string) => {
+        const id = `${limit.bucket}:${key}`
+        const count = (used.get(id) ?? 0) + 1
+        used.set(id, count)
+        return count <= limit.max
+      },
+    )
     mockGenerateLink.mockResolvedValue({ data: null, error: null })
 
-    await sendPasswordResetEmail("user@example.com", "token")
+    const results = []
+    for (let i = 1; i <= 11; i++) {
+      requestHeaders = {
+        "cf-connecting-ip": `198.51.100.${i}`,
+        "x-real-ip": "203.0.113.7",
+        "x-forwarded-for": "203.0.113.7",
+      }
+      results.push(
+        await sendPasswordResetEmail(`user${i}@example.com`, "token"),
+      )
+    }
 
-    expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
-      expect.objectContaining({ bucket: "password_reset_ip" }),
-      "198.51.100.4",
-    )
+    expect(results.slice(0, 10)).toEqual(Array(10).fill({ success: true }))
+    expect(results[10]).toEqual({
+      success: false,
+      error: "Too many reset requests. Try again in a few minutes.",
+      errorCode: "rate_limited",
+    })
+    expect(used.get("password_reset_ip:203.0.113.7")).toBe(11)
   })
 
   it("skips the IP limit when no client IP is known", async () => {
