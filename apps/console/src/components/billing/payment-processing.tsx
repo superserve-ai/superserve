@@ -8,10 +8,12 @@ export const SETTLE_TIMEOUT_MS = 120_000
 export function PaymentProcessing({
   waiting,
   canRetry = true,
+  retryLabel = "Try again",
   onRetry,
 }: {
   waiting: boolean
   canRetry?: boolean
+  retryLabel?: string
   onRetry: () => void
 }) {
   if (waiting)
@@ -28,7 +30,7 @@ export function PaymentProcessing({
         and your plan starts as soon as it’s confirmed.
       </output>
       <Button size="sm" disabled={!canRetry} onClick={onRetry}>
-        Try again
+        {retryLabel}
       </Button>
     </div>
   )
