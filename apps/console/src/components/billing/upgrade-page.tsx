@@ -10,7 +10,7 @@ import { PageHeader } from "@/components/page-header"
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
-import { useTeamPlan } from "@/hooks/use-billing-v2"
+import { useTeamEntry, useTeamPlan } from "@/hooks/use-billing-v2"
 import {
   useCatalogPlans,
   usePricingVersionState,
@@ -28,7 +28,10 @@ import {
 import { undoPlanChange } from "@/lib/api/plan-changes"
 import { billingKeys } from "@/lib/api/query-keys"
 import { planConcurrency } from "@/lib/billing/plans"
-import { planPickerPath } from "@/lib/billing/signup-checkout-paths"
+import {
+  isAwaitingPlanState,
+  planPickerPath,
+} from "@/lib/billing/signup-checkout-paths"
 
 import { SupportContact, supportChannel } from "./plan-overview"
 
@@ -157,6 +160,7 @@ export function UpgradePage() {
   const account = useUser().user?.id
   const locator = account && teamKey ? { account, team: teamKey } : null
   const planQuery = useTeamPlan(true)
+  const { data: entry } = useTeamEntry(true)
   const catalogQuery = useCatalogPlans()
   const catalog = catalogQuery.isError ? [] : (catalogQuery.data ?? [])
   const summaryQuery = useBillingSummary()
@@ -217,7 +221,7 @@ export function UpgradePage() {
               <p className="text-sm text-muted">
                 This team doesn&apos;t have a plan yet.
               </p>
-              {canManage && v2 && locator ? (
+              {canManage && v2 && locator && isAwaitingPlanState(entry) ? (
                 <Button
                   size="sm"
                   render={
@@ -229,7 +233,10 @@ export function UpgradePage() {
                   Choose a plan
                 </Button>
               ) : null}
-              {permissionsKnown && !canManage ? (
+              {permissionsKnown &&
+              !canManage &&
+              v2 &&
+              isAwaitingPlanState(entry) ? (
                 <p className="text-sm text-muted">
                   Only billing administrators can choose a plan.
                 </p>
