@@ -136,12 +136,24 @@ describe("InviteMembersDialog", () => {
     [["team_owner", "billing_admin", "user_admin"], "billing_admin"],
     [["team_owner", "user_admin"], "user_admin"],
     [["team_owner", "team_admin"], "team_admin"],
-    [["team_owner"], "team_owner"],
   ])("uses the preferred available role in %j", (roles, expected) => {
     setup(roles)
     paste("one@example.com")
     expect(screen.getByRole("combobox")).toHaveValue(expected)
     expect(screen.getAllByRole("option")).toHaveLength(roles.length)
+  })
+  it("requires choosing Owner deliberately when it is the only role", () => {
+    setup(["team_owner"])
+    paste("one@example.com")
+    const select = screen.getByRole("combobox")
+    expect(select).toHaveValue("")
+    expect(screen.getByRole("option", { name: "Choose role" })).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Send invites" })).toBeDisabled()
+    fireEvent.change(select, { target: { value: "team_owner" } })
+    expect(screen.getByRole("button", { name: "Send invites" })).toBeEnabled()
+    expect(
+      screen.queryByRole("option", { name: "Choose role" }),
+    ).not.toBeInTheDocument()
   })
   it("blocks sending with no known allowed roles", () => {
     setup(["future_role"])

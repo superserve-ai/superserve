@@ -45,15 +45,10 @@ export function invitableRoles(allowed: string[]): TeamRole[] {
   )
 }
 
+// Owner is never preselected: it must be chosen on purpose.
 export function defaultInviteRole(allowed: TeamRole[]): TeamRole | undefined {
   return (
-    [
-      "team_admin",
-      "viewer",
-      "billing_admin",
-      "user_admin",
-      "team_owner",
-    ] as const
+    ["team_admin", "viewer", "billing_admin", "user_admin"] as const
   ).find((role) => allowed.includes(role))
 }
 

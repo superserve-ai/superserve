@@ -1,6 +1,6 @@
 "use client"
 
-import { Button, Input } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -11,6 +11,7 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 import { sendPasswordResetEmail } from "./action"
@@ -78,7 +79,10 @@ function ForgotPasswordContent() {
             <p className="mt-5 text-center text-xs text-muted">
               <Link
                 href={signInHref}
-                className="font-medium text-foreground hover:underline"
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Back to sign in
               </Link>
@@ -111,7 +115,10 @@ function ForgotPasswordContent() {
             <p className="mt-5 text-center text-xs text-muted">
               <Link
                 href={signInHref}
-                className="font-medium text-foreground hover:underline"
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Back to sign in
               </Link>

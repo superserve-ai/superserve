@@ -298,6 +298,11 @@ export function InviteMembersDialog({
                         }
                         className="h-9 max-w-40 border border-dashed border-border bg-background px-2 text-sm"
                       >
+                        {!row.role && (
+                          <option value="" disabled>
+                            Choose role
+                          </option>
+                        )}
                         {roles.map((role) => (
                           <option key={role} value={role}>
                             {TEAM_ROLES[role].label}

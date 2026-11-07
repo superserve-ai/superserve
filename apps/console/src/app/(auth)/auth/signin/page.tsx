@@ -54,6 +54,9 @@ function SignInContent() {
     signUpParams.set(SIGNUP_OFFER_PARAM, rawOffer)
   if (nextUrl !== "/") signUpParams.set("next", nextUrl)
   const signUpHref = `/auth/signup${signUpParams.size ? `?${signUpParams}` : ""}`
+  const forgotPasswordHref = invite
+    ? `/auth/forgot-password?${new URLSearchParams({ next: invite })}`
+    : "/auth/forgot-password"
 
   useEffect(() => {
     const checkUser = async () => {
@@ -243,12 +246,11 @@ function SignInContent() {
           />
           <div className="flex justify-end">
             <Link
-              href={
-                invite
-                  ? `/auth/forgot-password?${new URLSearchParams({ next: invite })}`
-                  : "/auth/forgot-password"
-              }
-              className="text-xs text-muted/60 hover:text-muted"
+              href={forgotPasswordHref}
+              className={cn(
+                "text-xs text-muted/60 hover:text-muted",
+                inviteLinkReplayClass(forgotPasswordHref),
+              )}
             >
               Forgot password?
             </Link>

@@ -24,7 +24,7 @@ describe("defaultInviteRole", () => {
       expected: "billing_admin",
     },
     { allowed: ["team_owner", "user_admin"], expected: "user_admin" },
-    { allowed: ["team_owner"], expected: "team_owner" },
+    { allowed: ["team_owner"], expected: undefined },
     { allowed: [], expected: undefined },
   ])("returns $expected for $allowed", ({ allowed, expected }) => {
     expect(defaultInviteRole(allowed)).toBe(expected)

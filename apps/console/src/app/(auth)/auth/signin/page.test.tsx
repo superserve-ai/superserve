@@ -135,6 +135,9 @@ describe("SignInPage", () => {
     expect(url.searchParams.get("next")).toBe(
       next.startsWith("/invite/ssinv_") ? next : null,
     )
+    expect(link.classList.contains("ph-no-capture")).toBe(
+      next.startsWith("/invite/ssinv_"),
+    )
   })
 
   beforeEach(() => {

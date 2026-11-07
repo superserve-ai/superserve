@@ -38,11 +38,11 @@ describe("forgot-password invite return path", () => {
     expect(await screen.findByText("person@example.com")).toHaveAttribute(
       "data-mask",
     )
+    const back = screen.getByRole("link", { name: "Back to sign in" })
+    expect(back).toHaveClass("ph-no-capture")
     expect(
       new URL(
-        screen
-          .getByRole("link", { name: "Back to sign in" })
-          .getAttribute("href")!,
+        back.getAttribute("href")!,
         "https://console.example.com",
       ).searchParams.get("next"),
     ).toBe(invite)
