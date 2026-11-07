@@ -93,7 +93,7 @@ export function ProPaymentView({
           Switch to the team you used for checkout to check this payment. If
           this return link has no team, open Billing for that team.
         </p>
-        <Link href="/plan-usage/" className="text-sm underline">
+        <Link href="/billing-usage/" className="text-sm underline">
           Go to Billing
         </Link>
       </div>
@@ -105,7 +105,7 @@ export function ProPaymentView({
           Your team is on {paidPlan ?? "a paid plan"}. Manage it, your payment
           method and invoices in Billing.
         </p>
-        <Link href="/plan-usage/" className="text-sm underline">
+        <Link href="/billing-usage/" className="text-sm underline">
           Go to Billing
         </Link>
       </div>
@@ -153,7 +153,7 @@ export function ProPaymentView({
         <Button disabled={busy || !canRecover} onClick={onCheckPayment}>
           Check payment status
         </Button>
-        <Link href="/plan-usage/" className="text-sm underline">
+        <Link href="/billing-usage/" className="text-sm underline">
           View your plan
         </Link>
         {error ? (

@@ -22,7 +22,7 @@ vi.mock("@/lib/supabase/client", () => ({
 const first =
   "/billing/pro/?team=use:11111111-1111-4111-8111-111111111111&billing=success"
 const second =
-  "/plan-usage/buy-credit/?team=use:22222222-2222-4222-8222-222222222222&purchase=success"
+  "/billing-usage/buy-credit/?team=use:22222222-2222-4222-8222-222222222222&purchase=success"
 beforeEach(() => {
   state.assign.mockReset()
   vi.stubGlobal("location", {
