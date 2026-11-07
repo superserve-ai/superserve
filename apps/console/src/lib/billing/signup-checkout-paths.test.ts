@@ -82,8 +82,8 @@ it("sends a team that needs a plan to the picker with its own reason", () => {
 
 describe("trialOutcome", () => {
   it.each([
-    [{ trial: { state: "exhausted" } }, "used_up"],
-    [{ trial: { state: "expired" } }, "used_up"],
+    [{ trial: { state: "exhausted" } }, "ended"],
+    [{ trial: { state: "expired" } }, "ended"],
     [{ trial: { state: "no_grant" } }, "unknown"],
     [{ trial: { state: "active" } }, "unknown"],
     [{ trial: { state: "unknown" } }, "unknown"],
@@ -91,11 +91,11 @@ describe("trialOutcome", () => {
     [{}, "unknown"],
     [null, "unknown"],
     ["exhausted", "unknown"],
-    [{ trial_block: "trial_exhausted" }, "used_up"],
+    [{ trial_block: "trial_exhausted" }, "ended"],
     [{ trial_block: "trial_unavailable" }, "unavailable"],
     [{ trial_block: "trial_check_unavailable" }, "check_unavailable"],
     [{ trial_block: null, trial: { state: "no_grant" } }, "unknown"],
-    [{ trial_block: null, trial: { state: "exhausted" } }, "used_up"],
+    [{ trial_block: null, trial: { state: "exhausted" } }, "ended"],
     [
       { trial_block: "trial_unavailable", trial: { state: "exhausted" } },
       "unavailable",

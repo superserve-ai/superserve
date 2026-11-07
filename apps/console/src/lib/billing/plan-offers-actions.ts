@@ -95,7 +95,7 @@ export async function canManageTeamBillingAction(
   }
 }
 
-// Whether the picker's team used up its trial, was explicitly denied one, could
+// Whether the picker's team's trial ended, was explicitly denied, could
 // not be checked, or has no known reason, or null when the console itself can't
 // read the summary. Only the grant state and the server's trial block are read:
 // why a team was denied is never exposed.

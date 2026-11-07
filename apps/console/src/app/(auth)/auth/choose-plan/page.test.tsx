@@ -73,28 +73,28 @@ describe("plan picker", () => {
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
   })
 
-  it("says the trial is used up only when its balance shows it was", async () => {
-    trial.outcome = "used_up"
+  it("says the trial has ended only when its balance shows it did", async () => {
+    trial.outcome = "ended"
     params = new URLSearchParams({
       reason: "trial_ended",
       account: "u1",
       team: "use:team-1",
     })
     render(<ChoosePlanPage />)
-    expect(await screen.findByText(/Your free trial is used up/)).toBeTruthy()
+    expect(await screen.findByText(/Your free trial has ended/)).toBeTruthy()
     expect(screen.getByText(/can still be deleted/)).toBeTruthy()
     expect(screen.queryByText(/nothing is deleted/)).toBeNull()
   })
 
   it("drops the previous team's used-up message when the team changes", async () => {
-    trial.perTeam = { "use:t1": "used_up", "use:t2": "unavailable" }
+    trial.perTeam = { "use:t1": "ended", "use:t2": "unavailable" }
     params = new URLSearchParams({
       reason: "trial_ended",
       account: "u1",
       team: "use:t1",
     })
     const { rerender } = render(<ChoosePlanPage />)
-    expect(await screen.findByText(/Your free trial is used up/)).toBeTruthy()
+    expect(await screen.findByText(/Your free trial has ended/)).toBeTruthy()
     params = new URLSearchParams({
       reason: "trial_ended",
       account: "u1",
