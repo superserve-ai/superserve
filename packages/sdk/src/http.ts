@@ -307,7 +307,7 @@ async function retryableFetch(
 }
 
 async function readErrorBody(res: Response): Promise<{
-  error?: { code?: string; message?: string }
+  error?: { code?: string; message?: string; action_url?: string }
   code?: string
   message?: string
 }> {
@@ -319,7 +319,7 @@ async function readErrorBody(res: Response): Promise<{
   }
   try {
     return JSON.parse(text) as {
-      error?: { code?: string; message?: string }
+      error?: { code?: string; message?: string; action_url?: string }
       code?: string
       message?: string
     }
