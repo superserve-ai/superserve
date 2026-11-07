@@ -31,7 +31,6 @@ export function PlanUnavailableBanner() {
         <div className="flex items-center gap-3">
           <Button
             size="sm"
-            variant="outline"
             disabled={retrying}
             onClick={() => startRetry(() => router.refresh())}
           >

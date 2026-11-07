@@ -52,7 +52,12 @@ beforeEach(() => {
 it("reruns the server check when asked to try again", () => {
   mount()
   expect(screen.getByText(/Plan and usage: unavailable/)).toBeVisible()
-  fireEvent.click(screen.getByRole("button", { name: "Try again" }))
+  const retry = screen.getByRole("button", { name: "Try again" })
+  // The warning banner's dark text is unreadable on the outline button's dark
+  // background, so Try again uses the filled button like other warning banners.
+  expect(retry).toHaveClass("bg-primary")
+  expect(retry).not.toHaveClass("bg-background")
+  fireEvent.click(retry)
   expect(m.refresh).toHaveBeenCalledOnce()
 })
 
