@@ -578,6 +578,61 @@ describe("auth callback", () => {
     )
   })
 
+  it("returns an expired signup confirmation to signup with its offer and destination", async () => {
+    authVerifyOtpError = { message: "Email link is invalid or has expired" }
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=token&type=signup&signup_attempt_id=attempt-1&offer=pro_monthly&signup_offer=developer&next=%2Fyc%2Fclaim",
+      ),
+    )
+
+    const destination = new URL(response.headers.get("location")!)
+    expect(destination.pathname).toBe("/auth/signup")
+    expect(Object.fromEntries(destination.searchParams)).toEqual({
+      error: "link_expired",
+      offer: "pro_monthly",
+      signup_offer: "developer",
+      next: "/yc/claim",
+    })
+    expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+  })
+
+  it("preserves the invitation when an expired confirmation returns to signup", async () => {
+    authVerifyOtpError = { message: "Email link is invalid or has expired" }
+    const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+    const callback = new URL("https://console.superserve.ai/auth/callback")
+    callback.searchParams.set("token_hash", "expired-token")
+    callback.searchParams.set("type", "signup")
+    callback.searchParams.set("next", invite)
+
+    const response = await GET(new Request(callback))
+
+    const destination = new URL(response.headers.get("location")!)
+    expect(destination.pathname).toBe("/auth/signup")
+    expect(Object.fromEntries(destination.searchParams)).toEqual({
+      error: "link_expired",
+      next: invite,
+    })
+  })
+
+  it.each(["token_hash=token&type=magiclink", "code=abc&type=signup"])(
+    "keeps the generic error for a failed %s callback",
+    async (auth) => {
+      authVerifyOtpError = { message: "Email link is invalid or has expired" }
+      authExchangeError = { message: "invalid flow state" }
+
+      const response = await GET(
+        new Request(`https://console.superserve.ai/auth/callback?${auth}`),
+      )
+
+      const destination = new URL(response.headers.get("location")!)
+      expect(destination.pathname + destination.search).toBe(
+        "/auth/auth-code-error",
+      )
+    },
+  )
+
   it("uses unavailable for a pre-identity Google trigger rejection", async () => {
     authExchangeError = { message: "DATABASE ERROR SAVING NEW USER" }
     mockNotifySlackOfNewUser.mockRejectedValueOnce(new Error("webhook down"))
@@ -1935,11 +1990,11 @@ describe("auth callback", () => {
       expect(retry.searchParams.get("next")).toBe(invite)
     })
 
-    it("keeps an invitation destination when the link exchange fails", async () => {
+    it("keeps an invitation destination when a magic-link exchange fails", async () => {
       authVerifyOtpError = { message: "Email link is invalid or has expired" }
       const invite = `/invite/ssinv_use_${"A".repeat(43)}`
       const url = new URL(
-        "https://console.superserve.ai/auth/callback?token_hash=expired&type=signup",
+        "https://console.superserve.ai/auth/callback?token_hash=expired&type=magiclink",
       )
       url.searchParams.set("next", invite)
       const failure = new URL(

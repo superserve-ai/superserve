@@ -196,6 +196,20 @@ export async function GET(request: Request) {
         tokenHash: !!tokenHash,
         type,
       })
+      // An expired or used confirmation link cannot be retried. Signing up
+      // again with the same email sends a new link while the account is
+      // unconfirmed, so return there with the signup's offer and destination.
+      if (!code && type === "signup") {
+        const signup = new URLSearchParams({ error: "link_expired" })
+        for (const param of ["offer", SIGNUP_OFFER_PARAM]) {
+          const value = searchParams.get(param)
+          if (value) signup.set(param, value)
+        }
+        if (next !== "/") signup.set("next", next)
+        return NextResponse.redirect(
+          buildRedirectUrl(origin, `/auth/signup?${signup}`),
+        )
+      }
     }
 
     if (!error) {
