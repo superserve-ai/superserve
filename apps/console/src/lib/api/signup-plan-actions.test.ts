@@ -127,6 +127,7 @@ describe("authoritative signup plan read", () => {
       mocks.assignment.mockResolvedValue({ data: [{ id: "a1" }], error: null })
       const result = await getSignupPlanAction()
       expect(result.state).toBe("legacy")
+      expect(result.planAssigned).toBe(true)
       expect(needsPlanSelection(result)).toBe(false)
     },
   )
