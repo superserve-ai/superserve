@@ -1,3 +1,5 @@
+import type { TeamMember } from "@/lib/api/team-management"
+
 export const TEAM_ROLES = {
   team_admin: {
     label: "Team admin",
@@ -56,3 +58,24 @@ export function defaultInviteRole(allowed: TeamRole[]): TeamRole | undefined {
 export const LEGACY_INVITE_NOTICE =
   "Invites join as Owner with full access to this team."
 export const INVITE_UPGRADE_REASON = "Upgrade to invite members"
+
+export const LAST_OWNER_REASON = "A team needs at least one owner."
+export const LEAVE_LAST_OWNER_REASON =
+  "Make another member an owner before leaving."
+
+export function ownerRemovalBlocked(
+  members: TeamMember[] | undefined,
+  userId: string | undefined,
+): boolean {
+  if (!members) return true
+  const member = members.find(
+    (item) => item.user_id === userId && item.status === "active",
+  )
+  if (!member) return true
+  if (!(member.roles ?? []).includes("team_owner")) return false
+  const active = members.filter((item) => item.status === "active")
+  return (
+    active.filter((item) => (item.roles ?? []).includes("team_owner")).length <=
+    1
+  )
+}

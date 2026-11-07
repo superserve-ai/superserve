@@ -45,7 +45,11 @@ import type {
   TeamRoleAssignment,
   TeamScope,
 } from "@/lib/api/team-management"
-import { roleLabel } from "@/lib/team/roles"
+import {
+  LAST_OWNER_REASON,
+  ownerRemovalBlocked,
+  roleLabel,
+} from "@/lib/team/roles"
 
 import {
   InvitationsSection,
@@ -251,9 +255,11 @@ function MemberList({
 
 function ActiveAssignmentRows({
   assignments,
+  members,
   canRevoke,
 }: {
   assignments: TeamRoleAssignment[]
+  members: TeamMember[]
   canRevoke: boolean
 }) {
   const revokeRole = useRevokeTeamRole()
@@ -291,36 +297,55 @@ function ActiveAssignmentRows({
           </TableRow>
         </TableHeader>
         <TableBody>
-          {activeAssignments.map((assignment) => (
-            <TableRow key={assignment.assignment_id}>
-              <TableCell>
-                <div className="font-medium text-foreground">
-                  <span data-mask>{assignment.email}</span>
-                </div>
-              </TableCell>
-              <TableCell>{roleLabel(assignment.role_name)}</TableCell>
-              <TableCell
-                className="text-muted tabular-nums"
-                suppressHydrationWarning
-              >
-                {new Date(assignment.granted_at).toLocaleDateString()}
-              </TableCell>
-              {canRevoke && (
+          {activeAssignments.map((assignment) => {
+            const ownerBlocked =
+              assignment.role_name === "team_owner" &&
+              ownerRemovalBlocked(members, assignment.user_id)
+            return (
+              <TableRow key={assignment.assignment_id}>
                 <TableCell>
-                  <Button
-                    size="sm"
-                    variant="outline"
-                    disabled={revokeRole.isPending}
-                    onClick={() => {
-                      if (team) setRevoking({ ...assignment, team })
-                    }}
-                  >
-                    Revoke
-                  </Button>
+                  <div className="font-medium text-foreground">
+                    <span data-mask>{assignment.email}</span>
+                  </div>
                 </TableCell>
-              )}
-            </TableRow>
-          ))}
+                <TableCell>{roleLabel(assignment.role_name)}</TableCell>
+                <TableCell
+                  className="text-muted tabular-nums"
+                  suppressHydrationWarning
+                >
+                  {new Date(assignment.granted_at).toLocaleDateString()}
+                </TableCell>
+                {canRevoke && (
+                  <TableCell>
+                    <Button
+                      size="sm"
+                      variant="outline"
+                      disabled={revokeRole.isPending || ownerBlocked}
+                      title={ownerBlocked ? LAST_OWNER_REASON : undefined}
+                      aria-describedby={
+                        ownerBlocked
+                          ? `owner-reason-${assignment.assignment_id}`
+                          : undefined
+                      }
+                      onClick={() => {
+                        if (team) setRevoking({ ...assignment, team })
+                      }}
+                    >
+                      Revoke
+                    </Button>
+                    {ownerBlocked && (
+                      <span
+                        id={`owner-reason-${assignment.assignment_id}`}
+                        className="sr-only"
+                      >
+                        {LAST_OWNER_REASON}
+                      </span>
+                    )}
+                  </TableCell>
+                )}
+              </TableRow>
+            )
+          })}
         </TableBody>
       </Table>
       <ConfirmDialog
@@ -336,6 +361,13 @@ function ActiveAssignmentRows({
           if (!sameTeam(revoking.team, team)) {
             setRevoking(null)
             addToast(TEAM_CHANGED_MESSAGE, "error")
+            return
+          }
+          if (
+            revoking.role_name === "team_owner" &&
+            ownerRemovalBlocked(members, revoking.user_id)
+          ) {
+            addToast(LAST_OWNER_REASON, "error")
             return
           }
           await revokeRole
@@ -396,7 +428,8 @@ export function TeamClient() {
           error.status === 403 && (
             <div className="px-6 pb-8">
               <div className="mx-auto w-full max-w-3xl">
-                <LeaveTeamSection team={leaveScope} />
+                {/* Owners hold every management permission, so a 403 means the user is not an owner. */}
+                <LeaveTeamSection team={leaveScope} ownerBlocked={false} />
               </div>
             </div>
           )}
@@ -499,6 +532,7 @@ export function TeamClient() {
               )}
               <ActiveAssignmentRows
                 assignments={data.assignments}
+                members={data.members}
                 canRevoke={canRevokeRoles}
               />
             </section>
@@ -514,7 +548,14 @@ export function TeamClient() {
               <h2 className="text-base font-medium tracking-tight">
                 Danger zone
               </h2>
-              <LeaveTeamSection team={leaveScope} />
+              {/* Owners always hold roles:read, so hidden roles mean the user is not an owner. */}
+              <LeaveTeamSection
+                team={leaveScope}
+                ownerBlocked={
+                  capabilities.can_view_role_assignments &&
+                  ownerRemovalBlocked(data.members, user?.id)
+                }
+              />
             </section>
           )}
         </div>

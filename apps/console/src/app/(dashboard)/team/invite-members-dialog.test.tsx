@@ -406,6 +406,14 @@ describe("InviteMembersDialog", () => {
     paste("one@example.com")
     expect(screen.getByRole("button", { name: "Send invites" })).toBeDisabled()
   })
+  it("hides the legacy Owner notice when invitable roles are provided", () => {
+    setup()
+    expect(
+      screen.queryByText(
+        "Invites join as Owner with full access to this team.",
+      ),
+    ).not.toBeInTheDocument()
+  })
   it("omits selectors and role payloads on the old backend", async () => {
     render(<InviteMembersDialog team={team} onOpenChange={vi.fn()} />)
     paste("one@example.com two@example.com")

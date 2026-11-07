@@ -21,7 +21,11 @@ import type {
   TeamManagementCapabilities,
   TeamScope,
 } from "@/lib/api/team-management"
-import { INVITE_UPGRADE_REASON, roleLabel } from "@/lib/team/roles"
+import {
+  INVITE_UPGRADE_REASON,
+  LEAVE_LAST_OWNER_REASON,
+  roleLabel,
+} from "@/lib/team/roles"
 
 import { InviteMembersDialog } from "./invite-members-dialog"
 
@@ -269,7 +273,13 @@ export const LEAVE_BLOCKED_REASON =
 
 // The scope comes from the page: an extra observer of a failed management
 // query would refetch it on mount, sending the page back to its loading state.
-export function LeaveTeamSection({ team }: { team: TeamScope | null }) {
+export function LeaveTeamSection({
+  team,
+  ownerBlocked,
+}: {
+  team: TeamScope | null
+  ownerBlocked: boolean
+}) {
   const router = useRouter()
   const teams = useTeams()
   const leave = useLeaveTeam()
@@ -285,22 +295,27 @@ export function LeaveTeamSection({ team }: { team: TeamScope | null }) {
   const onlyTeam = teamCount === undefined || teamCount <= 1
   const blockedKnown = teamCount !== undefined && teamCount <= 1
 
+  const blockedReason = blockedKnown
+    ? LEAVE_BLOCKED_REASON
+    : ownerBlocked
+      ? LEAVE_LAST_OWNER_REASON
+      : undefined
+
   return (
     <section className="border border-dashed border-border/80 bg-background/75 p-6 backdrop-blur-sm">
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-lg font-medium text-foreground">Leave team</p>
           <p className="mt-1 text-sm text-muted">
-            {blockedKnown
-              ? LEAVE_BLOCKED_REASON
-              : "You will lose access to this team and switch to another one."}
+            {blockedReason ??
+              "You will lose access to this team and switch to another one."}
           </p>
         </div>
         <Button
           size="sm"
           variant="outline"
-          disabled={onlyTeam || leave.isPending}
-          title={blockedKnown ? LEAVE_BLOCKED_REASON : undefined}
+          disabled={onlyTeam || ownerBlocked || leave.isPending}
+          title={blockedReason}
           onClick={() => {
             if (team) setConfirming(team)
           }}
@@ -325,6 +340,7 @@ export function LeaveTeamSection({ team }: { team: TeamScope | null }) {
               addToast(TEAM_CHANGED_MESSAGE, "error")
               return
             }
+            if (onlyTeam || ownerBlocked) return
             await leave.mutateAsync({ team: confirming })
             addToast("You left the team", "success")
             router.replace("/sandboxes/")

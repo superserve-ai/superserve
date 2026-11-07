@@ -48,6 +48,9 @@ describe("TeamClient without team-management permission", () => {
     expect(
       await screen.findByRole("button", { name: /^leave team$/i }),
     ).toBeEnabled()
+    expect(
+      screen.queryByText("Make another member an owner before leaving."),
+    ).not.toBeInTheDocument()
     // A refetch on mount would show the loading state and unmount it again.
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.getByRole("button", { name: /^leave team$/i })).toBeEnabled()

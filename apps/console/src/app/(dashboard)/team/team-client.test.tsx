@@ -485,6 +485,14 @@ describe("TeamClient", () => {
   describe("role controls", () => {
     const withRoleCapabilities = {
       ...baseManagement,
+      members: [
+        ...baseManagement.members,
+        {
+          ...baseManagement.members[0],
+          user_id: "user-3",
+          email: "other@example.com",
+        },
+      ],
       capabilities: {
         ...baseManagement.capabilities,
         can_view_role_assignments: true,
@@ -611,6 +619,48 @@ describe("TeamClient", () => {
       },
     )
 
+    it.each(["inactive", "invited"] as const)(
+      "does not count a %s member as another active owner",
+      (status) => {
+        mockUser.mockReturnValue(staff)
+        mockUseTeamManagement.mockReturnValue({
+          data: {
+            ...withRoleCapabilities,
+            members: withRoleCapabilities.members.map((member) =>
+              member.user_id === "user-3" ? { ...member, status } : member,
+            ),
+          },
+          isPending: false,
+          error: null,
+          refetch: vi.fn(),
+        })
+        render(<TeamClient />)
+        expect(screen.getByRole("button", { name: "Revoke" })).toBeDisabled()
+      },
+    )
+
+    it("blocks Revoke for the sole owner", () => {
+      mockUser.mockReturnValue(staff)
+      mockUseTeamManagement.mockReturnValue({
+        data: {
+          ...withRoleCapabilities,
+          members: baseManagement.members,
+        },
+        isPending: false,
+        error: null,
+        refetch: vi.fn(),
+      })
+      render(<TeamClient />)
+      expect(screen.getByRole("button", { name: "Revoke" })).toBeDisabled()
+      expect(
+        screen.getByRole("button", { name: "Revoke" }),
+      ).toHaveAccessibleDescription("A team needs at least one owner.")
+      expect(screen.getByRole("button", { name: "Revoke" })).toHaveAttribute(
+        "title",
+        "A team needs at least one owner.",
+      )
+    })
+
     it("keeps staff read-only when the backend withholds the capability", () => {
       mockUser.mockReturnValue(staff)
       mockUseTeamManagement.mockReturnValue({
@@ -678,17 +728,11 @@ describe("TeamClient", () => {
         expect(leave).not.toBeInTheDocument()
         return
       }
-      fireEvent.click(leave!)
-      fireEvent.click(
-        within(screen.getByRole("dialog")).getByRole("button", {
-          name: "Leave team",
-        }),
-      )
-      await waitFor(() =>
-        expect(mockLeave).toHaveBeenCalledWith({
-          team: { teamId: "team-1", region: "use" },
-        }),
-      )
+      expect(leave).toBeEnabled()
+      expect(
+        screen.queryByText("Make another member an owner before leaving."),
+      ).not.toBeInTheDocument()
+      expect(mockLeave).not.toHaveBeenCalled()
     })
     it.each([
       ["a 403 error", new ApiError(403, "error", "Request failed")],
@@ -711,6 +755,46 @@ describe("TeamClient", () => {
         screen.queryByRole("button", { name: /^leave team$/i }),
       ).not.toBeInTheDocument()
     })
+  })
+
+  it("blocks leave for the sole active owner with an explanation", () => {
+    mockUseTeamManagement.mockReturnValue({
+      data: {
+        ...baseManagement,
+        capabilities: {
+          ...baseManagement.capabilities,
+          can_view_role_assignments: true,
+        },
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    render(<TeamClient />)
+    expect(screen.getByRole("button", { name: "Leave team" })).toBeDisabled()
+    expect(
+      screen.getByText("Make another member an owner before leaving."),
+    ).toBeInTheDocument()
+  })
+
+  it("allows a member to leave when roles are hidden", () => {
+    mockUseTeamManagement.mockReturnValue({
+      data: {
+        ...baseManagement,
+        members: baseManagement.members.map((member) => ({
+          ...member,
+          roles: undefined,
+        })),
+      },
+      isPending: false,
+      error: null,
+      refetch: vi.fn(),
+    })
+    render(<TeamClient />)
+    expect(screen.getByRole("button", { name: "Leave team" })).toBeEnabled()
+    expect(
+      screen.queryByText("Make another member an owner before leaving."),
+    ).not.toBeInTheDocument()
   })
 
   describe("customer capabilities", () => {
