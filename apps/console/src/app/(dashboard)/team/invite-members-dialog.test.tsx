@@ -218,7 +218,7 @@ describe("InviteMembersDialog", () => {
     ).toEqual(["Team admin", "User admin", "Billing admin", "Viewer", "Owner"])
     expect(
       screen.getAllByText(
-        "Create sandboxes and API keys, manage members and settings.",
+        "Create sandboxes and API keys and manage settings. Can remove User admin, Billing admin, and Viewer members, but cannot invite or change roles.",
       ),
     ).toHaveLength(2)
   })
