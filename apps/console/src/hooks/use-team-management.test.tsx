@@ -1,11 +1,12 @@
 import { ToastProvider } from "@superserve/ui"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook, screen, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
 import { teamKeys } from "@/lib/api/query-keys"
+import type { TeamRoleAssignment } from "@/lib/api/team-management"
 
 const mocks = vi.hoisted(() => ({
   remove: vi.fn(),
@@ -38,6 +39,7 @@ vi.mock("@/lib/api/team-invitations-actions", () => ({
 
 import {
   useAssignTeamRole,
+  useChangeTeamRole,
   useCreateInvitation,
   useDisplayedTeam,
   useLeaveScope,
@@ -265,5 +267,192 @@ describe("team mutation variables", () => {
       activeTeamId: next.teamId,
       activeRegion: next.region,
     })
+  })
+})
+
+describe("replace team role", () => {
+  const assignment = (
+    id: string,
+    role: string,
+    overrides: Partial<TeamRoleAssignment> = {},
+  ): TeamRoleAssignment => ({
+    assignment_id: id,
+    user_id: "user-1",
+    email: "member@example.com",
+    role_name: role,
+    team_id: team.teamId,
+    scope_type: "team",
+    granted_at: "2026-11-01T00:00:00Z",
+    created_at: "2026-11-01T00:00:00Z",
+    updated_at: "2026-11-01T00:00:00Z",
+    ...overrides,
+  })
+  const old = assignment("owner-role", "team_owner")
+  const data = { user_id: "user-1", role_name: "viewer" }
+
+  function setup() {
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    })
+    const management = { team_id: team.teamId, region: team.region }
+    const directory = { activeTeamId: team.teamId, activeRegion: team.region }
+    client.setQueryData(["team-management"], management)
+    client.setQueryData(teamKeys.directory(), directory)
+    mocks.management.mockResolvedValue(management)
+    mocks.directory.mockResolvedValue(directory)
+    const hook = renderHook(() => useChangeTeamRole(), {
+      wrapper: ({ children }) => (
+        <QueryClientProvider client={client}>
+          <ToastProvider>{children}</ToastProvider>
+        </QueryClientProvider>
+      ),
+    })
+    return { ...hook, client }
+  }
+
+  beforeEach(() => {
+    vi.resetAllMocks()
+    mocks.assign.mockResolvedValue(undefined)
+    mocks.revokeRole.mockResolvedValue(undefined)
+  })
+
+  it("waits for assignment before revoking every other active role, then refetches", async () => {
+    let finishAssign!: () => void
+    mocks.assign.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishAssign = resolve
+        }),
+    )
+    const { result } = setup()
+    let changing!: Promise<void>
+    act(() => {
+      changing = result.current.mutateAsync({
+        team,
+        data,
+        assignments: [
+          old,
+          assignment("admin-role", "team_admin"),
+          assignment("revoked-role", "billing_admin", {
+            revoked_at: "2026-11-02T00:00:00Z",
+          }),
+          assignment("other-user-role", "team_admin", { user_id: "user-2" }),
+          assignment("other-team-role", "team_admin", {
+            team_id: "other-team",
+          }),
+        ],
+      })
+    })
+    await waitFor(() => expect(mocks.assign).toHaveBeenCalledWith(team, data))
+    expect(mocks.revokeRole).not.toHaveBeenCalled()
+    expect(mocks.management).not.toHaveBeenCalled()
+    await waitFor(() => expect(result.current.isPending).toBe(true))
+    await act(async () => {
+      finishAssign()
+      await changing
+    })
+    expect(mocks.revokeRole.mock.calls).toEqual([
+      [team, "owner-role"],
+      [team, "admin-role"],
+    ])
+    expect(mocks.management).toHaveBeenCalledOnce()
+    expect(screen.getByText("Role changed")).toBeInTheDocument()
+  })
+
+  it("keeps an already held role and collapses legacy assignments without a duplicate POST", async () => {
+    const { result } = setup()
+    await act(() =>
+      result.current.mutateAsync({
+        team,
+        data,
+        assignments: [old, assignment("viewer-role", "viewer")],
+      }),
+    )
+    expect(mocks.assign).not.toHaveBeenCalled()
+    expect(mocks.revokeRole).toHaveBeenCalledWith(team, "owner-role")
+    expect(mocks.management).toHaveBeenCalledOnce()
+  })
+
+  it("shows the assignment error, revokes nothing and refetches", async () => {
+    mocks.assign.mockRejectedValue(
+      new ApiError(400, "invalid_role", "Role not allowed"),
+    )
+    const { result } = setup()
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ team, data, assignments: [old] }),
+      ).rejects.toThrow("Role not allowed")
+    })
+    expect(mocks.revokeRole).not.toHaveBeenCalled()
+    expect(screen.getByText("Role not allowed")).toBeInTheDocument()
+    expect(mocks.management).toHaveBeenCalledOnce()
+  })
+
+  it("reports partial failure clearly and refetches members and assignments", async () => {
+    mocks.revokeRole.mockRejectedValue(new Error("revoke failed"))
+    const { result } = setup()
+    const message =
+      "Viewer was added, but Owner could not be removed. Refresh and try again."
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ team, data, assignments: [old] }),
+      ).rejects.toThrow(message)
+    })
+    expect(mocks.assign).toHaveBeenCalledWith(team, data)
+    expect(screen.getByText(message)).toBeInTheDocument()
+    expect(mocks.management).toHaveBeenCalledOnce()
+  })
+
+  it("rejects a changed team before assignment", async () => {
+    const { result } = setup()
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({
+          team: { ...team, region: "usw" },
+          data,
+          assignments: [old],
+        }),
+      ).rejects.toThrow(
+        "Your active team changed. Reload the page and try again.",
+      )
+    })
+    expect(mocks.assign).not.toHaveBeenCalled()
+    expect(mocks.revokeRole).not.toHaveBeenCalled()
+    expect(mocks.management).toHaveBeenCalledOnce()
+  })
+
+  it("stops revocation if the displayed team changes while assignment is pending", async () => {
+    let finishAssign!: () => void
+    mocks.assign.mockImplementation(
+      () =>
+        new Promise<void>((resolve) => {
+          finishAssign = resolve
+        }),
+    )
+    const { result, client } = setup()
+    let changing!: Promise<void>
+    act(() => {
+      changing = result.current.mutateAsync({ team, data, assignments: [old] })
+      void changing.catch(() => {})
+    })
+    await waitFor(() => expect(mocks.assign).toHaveBeenCalledOnce())
+    act(() => {
+      client.setQueryData(["team-management"], {
+        team_id: "next-team",
+        region: "usw",
+      })
+      client.setQueryData(teamKeys.directory(), {
+        activeTeamId: "next-team",
+        activeRegion: "usw",
+      })
+    })
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 0))
+    })
+    await act(async () => {
+      finishAssign()
+      await expect(changing).rejects.toThrow("could not be removed")
+    })
+    expect(mocks.revokeRole).not.toHaveBeenCalled()
   })
 })

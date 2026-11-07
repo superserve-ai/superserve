@@ -29,7 +29,7 @@ import { TableSkeleton } from "@/components/table-skeleton"
 import {
   sameTeam,
   TEAM_CHANGED_MESSAGE,
-  useAssignTeamRole,
+  useChangeTeamRole,
   useDisplayedTeam,
   useLeaveScope,
   useRemoveTeamMember,
@@ -73,18 +73,21 @@ function RolePills({ roles }: { roles?: string[] }) {
   )
 }
 
-function AssignRoleForm({
+function ChangeRoleForm({
   members,
+  assignments,
   roles,
   selectedUserId,
   onSelectedUserIdChange,
 }: {
   members: TeamMember[]
+  assignments: TeamRoleAssignment[]
   roles: string[]
   selectedUserId: string
   onSelectedUserIdChange: (userId: string) => void
 }) {
-  const assignRole = useAssignTeamRole()
+  const changeRole = useChangeTeamRole()
+  const { addToast } = useToast()
   const team = useDisplayedTeam()
   const activeMembers = members.filter((member) => member.status === "active")
   const [roleName, setRoleName] = useState("")
@@ -93,14 +96,55 @@ function AssignRoleForm({
     ? roleName
     : (roles[0] ?? "")
 
+  const selectedMember = activeMembers.find(
+    (member) => member.user_id === selectedUserId,
+  )
+  const activeRoles = Array.from(
+    new Set([
+      ...(selectedMember?.roles ?? []),
+      ...assignments
+        .filter(
+          (assignment) =>
+            assignment.team_id === team?.teamId &&
+            assignment.user_id === selectedUserId &&
+            !assignment.revoked_at,
+        )
+        .map((assignment) => assignment.role_name),
+    ]),
+  )
+  const unchanged =
+    activeRoles.length === 1 && activeRoles[0] === selectedRoleName
+  const ownerBlocked =
+    selectedRoleName !== "team_owner" &&
+    ownerRemovalBlocked(members, selectedUserId)
+  const disabled =
+    !team ||
+    !selectedMember ||
+    !selectedRoleName ||
+    unchanged ||
+    ownerBlocked ||
+    changeRole.isPending
+  const [confirming, setConfirming] = useState<{
+    team: TeamScope
+    userId: string
+    email: string
+    oldRoles: string[]
+    roleName: string
+  } | null>(null)
+
+  useEffect(() => {
+    if (confirming && !sameTeam(confirming.team, team)) setConfirming(null)
+  }, [confirming, team])
+
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!selectedUserId || !selectedRoleName) {
-      return
-    }
-    assignRole.mutate({
+    if (disabled || !team || !selectedMember) return
+    setConfirming({
       team,
-      data: { user_id: selectedUserId, role_name: selectedRoleName },
+      userId: selectedUserId,
+      email: selectedMember.email,
+      oldRoles: activeRoles,
+      roleName: selectedRoleName,
     })
   }
 
@@ -113,75 +157,117 @@ function AssignRoleForm({
   }
 
   return (
-    <form
-      onSubmit={onSubmit}
-      className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]"
-    >
-      <Field label="Select member" className="min-w-0">
-        <div>
-          <Select
-            value={selectedUserId}
-            onValueChange={(value) => onSelectedUserIdChange(value ?? "")}
-          >
-            <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
-              <SelectValue className="min-w-0 truncate">
-                {() =>
-                  activeMembers.find(
-                    (member) => member.user_id === selectedUserId,
-                  )?.email
-                }
-              </SelectValue>
-            </SelectTrigger>
-            <SelectPopup
-              dropdown
-              className="max-w-[var(--available-width)] min-w-[var(--anchor-width)]"
+    <>
+      <form
+        onSubmit={onSubmit}
+        className="grid gap-4 xl:grid-cols-[minmax(0,1fr)_220px_auto]"
+      >
+        <Field label="Select member" className="min-w-0">
+          <div>
+            <Select
+              value={selectedUserId}
+              onValueChange={(value) => onSelectedUserIdChange(value ?? "")}
             >
-              {activeMembers.map((member) => (
-                <SelectItem
-                  key={member.user_id}
-                  value={member.user_id}
-                  className="px-3 py-2 break-all"
-                >
-                  {member.email}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
-        </div>
-      </Field>
-      <Field label="Assign role" className="min-w-0">
-        <div>
-          <Select
-            value={selectedRoleName}
-            onValueChange={(value) => setRoleName(value ?? "")}
+              <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
+                <SelectValue className="min-w-0 truncate">
+                  {() =>
+                    activeMembers.find(
+                      (member) => member.user_id === selectedUserId,
+                    )?.email
+                  }
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup
+                dropdown
+                className="max-w-[var(--available-width)] min-w-[var(--anchor-width)]"
+              >
+                {activeMembers.map((member) => (
+                  <SelectItem
+                    key={member.user_id}
+                    value={member.user_id}
+                    className="px-3 py-2 break-all"
+                  >
+                    {member.email}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          </div>
+        </Field>
+        <Field label="New role" className="min-w-0">
+          <div>
+            <Select
+              value={selectedRoleName}
+              onValueChange={(value) => setRoleName(value ?? "")}
+            >
+              <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
+                <SelectValue className="truncate">
+                  {() => roleLabel(selectedRoleName)}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectPopup dropdown className="min-w-[var(--anchor-width)]">
+                {roles.map((role) => (
+                  <SelectItem key={role} value={role} className="px-3 py-2">
+                    {roleLabel(role)}
+                  </SelectItem>
+                ))}
+              </SelectPopup>
+            </Select>
+          </div>
+        </Field>
+        <div className="flex items-end">
+          <Button
+            type="submit"
+            disabled={disabled}
+            aria-describedby={
+              ownerBlocked ? "change-role-owner-reason" : undefined
+            }
           >
-            <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
-              <SelectValue className="truncate">
-                {() => roleLabel(selectedRoleName)}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectPopup dropdown className="min-w-[var(--anchor-width)]">
-              {roles.map((role) => (
-                <SelectItem key={role} value={role} className="px-3 py-2">
-                  {roleLabel(role)}
-                </SelectItem>
-              ))}
-            </SelectPopup>
-          </Select>
+            <ShieldCheckIcon className="size-3.5" weight="light" />
+            {changeRole.isPending ? "Changing..." : "Change role"}
+          </Button>
         </div>
-      </Field>
-      <div className="flex items-end">
-        <Button
-          type="submit"
-          disabled={
-            !selectedUserId || !selectedRoleName || assignRole.isPending
+      </form>
+      {ownerBlocked && (
+        <p id="change-role-owner-reason" className="text-sm text-muted">
+          {LAST_OWNER_REASON}
+        </p>
+      )}
+      <ConfirmDialog
+        open={confirming !== null}
+        onOpenChange={(open) => {
+          if (!open) setConfirming(null)
+        }}
+        title="Change role"
+        description={`Change ${confirming?.email ?? "this member"} from ${confirming?.oldRoles.map(roleLabel).join(" + ") || "no role"} to ${confirming ? roleLabel(confirming.roleName) : "the new role"}?`}
+        confirmLabel="Change role"
+        onConfirm={async () => {
+          if (!confirming) return
+          if (!sameTeam(confirming.team, team)) {
+            setConfirming(null)
+            addToast(TEAM_CHANGED_MESSAGE, "error")
+            return
           }
-        >
-          <ShieldCheckIcon className="size-3.5" weight="light" />
-          {assignRole.isPending ? "Assigning..." : "Update role"}
-        </Button>
-      </div>
-    </form>
+          if (
+            confirming.roleName !== "team_owner" &&
+            ownerRemovalBlocked(members, confirming.userId)
+          ) {
+            addToast(LAST_OWNER_REASON, "error")
+            return
+          }
+          await changeRole
+            .mutateAsync({
+              team: confirming.team,
+              data: {
+                user_id: confirming.userId,
+                role_name: confirming.roleName,
+              },
+              assignments,
+            })
+            .catch(() => {})
+        }}
+      />
+    </>
   )
 }
 
@@ -453,7 +539,8 @@ export function TeamClient() {
   const capabilities = data.capabilities
   // Role changes are platform-staff tools; the proxy enforces the same rule.
   const isStaff = canViewOtherUsersAccount(user)
-  const canAssignRoles = isStaff && capabilities.can_assign_roles
+  const canAssignRoles =
+    isStaff && capabilities.can_assign_roles && capabilities.can_revoke_roles
   const canRevokeRoles = isStaff && capabilities.can_revoke_roles
   const assignableRoles = data.mutation_options?.assignable_roles ?? []
   const activeMembers = data.members.filter(
@@ -523,8 +610,9 @@ export function TeamClient() {
                 Role assignments
               </h2>
               {canAssignRoles && (
-                <AssignRoleForm
+                <ChangeRoleForm
                   members={data.members}
+                  assignments={data.assignments}
                   roles={assignableRoles}
                   selectedUserId={selectedManageRoleUserId}
                   onSelectedUserIdChange={setSelectedUserId}

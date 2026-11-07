@@ -2,7 +2,7 @@
 
 import { useToast } from "@superserve/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
-import { useEffect } from "react"
+import { useEffect, useRef } from "react"
 
 import { refreshTeamScopedQueries, useTeams } from "@/hooks/use-teams"
 import { ApiError } from "@/lib/api/client"
@@ -23,9 +23,11 @@ import {
   revokeTeamRole,
   type AssignTeamRoleRequest,
   type TeamScope,
+  type TeamRoleAssignment,
 } from "@/lib/api/team-management"
 import type { TeamDirectoryResponse } from "@/lib/api/teams-actions"
 import { regionLabel } from "@/lib/format"
+import { roleLabel } from "@/lib/team/roles"
 
 // Not team-scoped: switching teams resets every non-"teams" query, which
 // includes these, so one team's members never show under another.
@@ -186,6 +188,74 @@ export function useAssignTeamRole() {
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })
+    },
+  })
+}
+
+class PartialRoleChangeFailure extends Error {}
+
+export function useChangeTeamRole() {
+  const queryClient = useQueryClient()
+  const { addToast } = useToast()
+  const displayedTeam = useDisplayedTeam()
+  const currentTeam = useRef(displayedTeam)
+  currentTeam.current = displayedTeam
+
+  return useMutation({
+    mutationFn: async ({
+      team,
+      data,
+      assignments,
+    }: {
+      team: TeamScope
+      data: AssignTeamRoleRequest
+      assignments: TeamRoleAssignment[]
+    }) => {
+      const checkTeam = () => {
+        if (!sameTeam(team, currentTeam.current))
+          throw new Error(TEAM_CHANGED_MESSAGE)
+      }
+      checkTeam()
+      const active = assignments.filter(
+        (assignment) =>
+          assignment.team_id === team.teamId &&
+          assignment.scope_type === "team" &&
+          assignment.user_id === data.user_id &&
+          !assignment.revoked_at,
+      )
+      const alreadyAssigned = active.some(
+        (assignment) => assignment.role_name === data.role_name,
+      )
+      // The API rejects duplicate active assignments, including legacy multi-role members.
+      if (!alreadyAssigned) {
+        await assignTeamRole(team, data)
+      }
+      for (const assignment of active) {
+        if (assignment.role_name === data.role_name) continue
+        try {
+          checkTeam()
+          await revokeTeamRole(team, assignment.assignment_id)
+        } catch {
+          throw new PartialRoleChangeFailure(
+            `${roleLabel(data.role_name)} ${alreadyAssigned ? "is assigned" : "was added"}, but ${roleLabel(assignment.role_name)} could not be removed. Refresh and try again.`,
+          )
+        }
+      }
+    },
+    onSuccess: () => addToast("Role changed", "success"),
+    onError: (error) => {
+      addToast(
+        error instanceof PartialRoleChangeFailure
+          ? error.message
+          : friendlyRbacMessage(
+              error,
+              error.message || "Failed to change role.",
+            ),
+        "error",
+      )
+    },
+    onSettled: async () => {
+      await queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })
     },
   })
 }
