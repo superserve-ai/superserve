@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import posthog from "posthog-js"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
@@ -263,4 +264,74 @@ it("rechecks checkout after browser Back restores the previous page", async () =
     reads,
   )
   expect(startProCheckout).toHaveBeenCalledTimes(1)
+})
+
+describe("plan step analytics", () => {
+  const planActions = () =>
+    vi
+      .mocked(posthog.capture)
+      .mock.calls.filter(([event]) => event === "signup_plan_action")
+      .map(([, properties]) => properties)
+
+  it("records a skipped step, not a Free completion, for a legacy team", async () => {
+    render(
+      <PlanSelection
+        initial={{
+          ...selecting,
+          state: "legacy",
+          requestedOffer: "pro_annual",
+          entryState: "trial_ended",
+        }}
+      />,
+    )
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+    const actions = planActions()
+    expect(actions).toContainEqual({
+      action: "skipped",
+      requested_offer: "pro_annual",
+      entry_state: "trial_ended",
+    })
+    expect(actions).not.toContainEqual(
+      expect.objectContaining({ action: "completed" }),
+    )
+  })
+
+  it("records a skipped step once when a payment check finds a legacy team", async () => {
+    vi.mocked(getSignupPlanAction).mockResolvedValue({
+      ...selecting,
+      state: "legacy",
+      paymentSettling: true,
+    })
+    render(<PlanSelection initial={pending} billingReturn="success" />)
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+    const skipped = planActions().filter(
+      (properties) => properties?.action === "skipped",
+    )
+    expect(skipped).toEqual([
+      {
+        action: "skipped",
+        requested_offer: "not_specified",
+        entry_state: "activating",
+        billing_return: "success",
+      },
+    ])
+    expect(planActions()).not.toContainEqual(
+      expect.objectContaining({ action: "completed" }),
+    )
+  })
+
+  it("keeps the completion event for a team that chose a plan", async () => {
+    render(
+      <PlanSelection
+        initial={{ ...selecting, state: "committed", offer: "pro_monthly" }}
+      />,
+    )
+    await waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+    expect(planActions()).toContainEqual({
+      action: "completed",
+      requested_offer: "not_specified",
+      selected_offer: "pro_monthly",
+      billing_cadence: "monthly",
+    })
+  })
 })

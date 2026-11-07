@@ -11,7 +11,7 @@ import {
   recoverProPayment,
   startProCheckout,
 } from "@/lib/api/plan-checkout"
-import type { SignupPlanContext } from "@/lib/api/signup-plan"
+import { skippedPlanEvent, type SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
 import { getTeamOffersAction } from "@/lib/billing/plan-offers-actions"
@@ -84,6 +84,24 @@ export function PlanSelection({
     [track, navigate],
   )
 
+  const skip = useCallback(
+    (latest: SignupPlanContext) => {
+      if (!completionSent.current) {
+        try {
+          posthog.capture(
+            "signup_plan_action",
+            skippedPlanEvent(latest, billingReturn),
+          )
+        } catch {
+          /* Analytics never controls onboarding. */
+        }
+        completionSent.current = true
+      }
+      navigate("/sandboxes")
+    },
+    [billingReturn, navigate],
+  )
+
   const refresh = useCallback(async () => {
     const next = await getSignupPlanAction(
       initial.teamKey,
@@ -147,11 +165,12 @@ export function PlanSelection({
             setFreeBilling(false)
             track("payment_retryable")
           }
-        } else if (latest.state === "committed" || latest.state === "legacy") {
+        } else if (latest.state === "legacy") skip(latest)
+        else if (latest.state === "committed") {
           if (latest.offer !== "free" || !freeBilling) finish(latest.offer)
         }
       }),
-    [run, refresh, initial.teamKey, finish, freeBilling, track, navigate],
+    [run, refresh, initial.teamKey, finish, skip, freeBilling, track, navigate],
   )
 
   useEffect(() => {
@@ -205,16 +224,17 @@ export function PlanSelection({
   }, [checkPayment])
 
   useEffect(() => {
+    if (context.state === "legacy") skip(context)
+  }, [context, skip])
+
+  useEffect(() => {
     if (context.state === "yc_claim") {
       navigate("/yc/claim/")
       return
     }
     if (
-      context.state === "legacy" ||
-      (context.state === "committed" &&
-        (context.offer !== "free" ||
-          !freeBilling ||
-          billingReturn === "success"))
+      context.state === "committed" &&
+      (context.offer !== "free" || !freeBilling || billingReturn === "success")
     )
       finish(context.offer)
   }, [
