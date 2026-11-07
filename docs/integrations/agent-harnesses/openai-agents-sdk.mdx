@@ -13,13 +13,17 @@ The OpenAI Agents SDK is OpenAI's framework for building agents with tool-use lo
 ```bash TypeScript
 npm install @superserve/sdk @openai/agents zod
 export SUPERSERVE_API_KEY=ss_live_...
+export OPENAI_API_KEY=sk-...
 ```
 
 ```bash Python
 pip install superserve openai-agents
 export SUPERSERVE_API_KEY=ss_live_...
+export OPENAI_API_KEY=sk-...
 ```
 </CodeGroup>
+
+The agent loop runs on your machine, so the OpenAI Agents SDK reads `OPENAI_API_KEY` from your local environment. Only the commands that the agent runs go to the sandbox.
 
 ## Wire the sandbox into the agent
 
@@ -49,13 +53,15 @@ const agent = new Agent({
   tools: [bash],
 })
 
-const result = await run(
-  agent,
-  "List the files in /tmp and tell me how many there are.",
-)
-console.log(result.finalOutput)
-
-await sandbox.kill()
+try {
+  const result = await run(
+    agent,
+    "List the files in /tmp and tell me how many there are.",
+  )
+  console.log(result.finalOutput)
+} finally {
+  await sandbox.kill() // delete the sandbox even if the agent run fails
+}
 ```
 
 ```python Python {7-11}
@@ -78,12 +84,14 @@ agent = Agent(
 )
 
 async def main():
-    result = await Runner.run(
-        agent,
-        "List the files in /tmp and tell me how many there are.",
-    )
-    print(result.final_output)
-    sandbox.kill()
+    try:
+        result = await Runner.run(
+            agent,
+            "List the files in /tmp and tell me how many there are.",
+        )
+        print(result.final_output)
+    finally:
+        sandbox.kill()  # delete the sandbox even if the agent run fails
 
 asyncio.run(main())
 ```
