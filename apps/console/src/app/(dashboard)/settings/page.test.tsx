@@ -12,7 +12,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
     },
   }),
 }))
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
@@ -52,12 +52,14 @@ vi.mock("@/components/settings/teams-section", () => ({
   TeamsSection: () => null,
 }))
 
+const { signInWithPassword, updateUser } = vi.hoisted(() => ({
+  signInWithPassword: vi.fn(),
+  updateUser: vi.fn(),
+}))
+
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
-    auth: {
-      updateUser: vi.fn(),
-      signInWithPassword: vi.fn(),
-    },
+    auth: { updateUser, signInWithPassword },
   }),
 }))
 
@@ -346,5 +348,109 @@ describe("Settings billing", () => {
 
     expect(screen.getByText("Billed")).toBeInTheDocument()
     expect(screen.getAllByText("Unavailable")).toHaveLength(3)
+  })
+})
+
+describe("Settings change password", () => {
+  const hint =
+    "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number."
+
+  beforeEach(() => {
+    signInWithPassword.mockReset().mockResolvedValue({ error: null })
+    updateUser.mockReset().mockResolvedValue({ error: null })
+    useUser.mockReturnValue({
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        user_metadata: {},
+        app_metadata: {},
+      },
+      loading: false,
+    })
+    useBillingSettings.mockReturnValue({
+      data: pricing,
+      isPending: false,
+      error: null,
+    })
+    useBillingSummary.mockReturnValue({
+      data: summary(false),
+      isPending: false,
+      error: null,
+    })
+  })
+
+  function submitPasswords(next: string) {
+    fireEvent.change(screen.getByLabelText("Current Password"), {
+      target: { value: "Current-value-1" },
+    })
+    fireEvent.change(screen.getByLabelText("New Password"), {
+      target: { value: next },
+    })
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), {
+      target: { value: next },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Update Password" }))
+  }
+
+  it("shows the password rule under the new password", () => {
+    renderPage()
+
+    expect(screen.getByText(hint).id).toBe("settings-password-rule")
+    expect(
+      screen.getByLabelText("New Password").getAttribute("aria-describedby"),
+    ).toBe("settings-password-rule")
+  })
+
+  it("names the missing part of a weak password without calling the server", () => {
+    renderPage()
+
+    submitPasswords("sandbox12345")
+
+    const error = screen.getByText("Add an uppercase letter.")
+    const input = screen.getByLabelText("New Password")
+    expect(input.getAttribute("aria-invalid")).toBe("true")
+    expect(input.getAttribute("aria-describedby")).toBe(error.id)
+    expect(screen.queryByText(hint)).toBeNull()
+    expect(signInWithPassword).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("rejects a password over 72 bytes without calling the server", () => {
+    renderPage()
+
+    submitPasswords("Sandbox42".padEnd(73, "x"))
+
+    expect(screen.getByText("Use 72 characters or fewer.")).toBeTruthy()
+    expect(signInWithPassword).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("clears the rule error once a corrected password is submitted", async () => {
+    renderPage()
+
+    submitPasswords("sandbox12345")
+    expect(screen.getByText("Add an uppercase letter.")).toBeTruthy()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith({ password: "Sandbox12345" }),
+    )
+    expect(screen.queryByText("Add an uppercase letter.")).toBeNull()
+    expect(screen.getByText(hint)).toBeTruthy()
+  })
+
+  it("updates a password that meets the rule", async () => {
+    renderPage()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith({ password: "Sandbox12345" }),
+    )
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: "user@example.com",
+      password: "Current-value-1",
+    })
   })
 })
