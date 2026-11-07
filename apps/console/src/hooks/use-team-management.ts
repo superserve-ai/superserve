@@ -211,22 +211,25 @@ export function useTeamInvitations() {
 
 export function useCreateInvitation() {
   const queryClient = useQueryClient()
-
-  return useMutation({
+  const mutation = useMutation({
     mutationFn: async ({
       team,
       email,
+      role,
     }: {
       team: TeamScope | null
       email: string
+      role?: string
     }) =>
       unwrap<Extract<SendInvitationResult, { ok: true }>>(
-        await createInvitationAction(requireTeam(team), email),
+        await createInvitationAction(requireTeam(team), email, role),
       ),
-    onSettled: () => {
-      queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })
-    },
   })
+  return {
+    ...mutation,
+    refreshInvitations: () =>
+      queryClient.invalidateQueries({ queryKey: teamManagementKeys.all }),
+  }
 }
 
 export function useResendInvitation() {

@@ -48,6 +48,7 @@ const mutation = (mutate = vi.fn()) => ({
   mutateAsync: mutate,
   isPending: false,
   reset: vi.fn(),
+  refreshInvitations: vi.fn(),
 })
 
 vi.mock("@/hooks/use-team-management", async (importOriginal) => ({
@@ -75,7 +76,7 @@ vi.mock("next/navigation", () => ({
   useRouter: () => ({ replace: mockRouterReplace }),
 }))
 
-import { UserManagementClient } from "./user-management-client"
+import { TeamClient } from "./team-client"
 
 const customer = { id: "user-1", app_metadata: {} }
 const staff = {
@@ -137,7 +138,7 @@ const baseManagement: TeamManagementResponse = {
   },
 }
 
-describe("UserManagementClient", () => {
+describe("TeamClient", () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockDisplayedTeam.mockReturnValue({ teamId: "team-1", region: "use" })
@@ -166,26 +167,25 @@ describe("UserManagementClient", () => {
   })
 
   it("shows members but hides mutation controls for viewers", () => {
-    render(<UserManagementClient />)
+    render(<TeamClient />)
 
-    expect(screen.getByRole("link", { name: /audit log/i })).toBeInTheDocument()
+    expect(screen.getByRole("heading", { name: "Team" })).toBeInTheDocument()
+    expect(
+      screen.queryByRole("link", { name: /audit log/i }),
+    ).not.toBeInTheDocument()
+    expect(screen.queryByRole("tab")).not.toBeInTheDocument()
+    expect(
+      screen.queryByPlaceholderText(/search by name/i),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText("Owner")).toBeInTheDocument()
+    expect(screen.getByText("owner@example.com")).toHaveAttribute("data-mask")
     expect(screen.getByText("owner@example.com")).toBeInTheDocument()
     expect(
       screen.getByText("You have read-only access to team membership."),
     ).toBeInTheDocument()
-    expect(
-      screen.getByRole("tab", { name: /^active members\s+1$/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole("tab", { name: /^invited members\s+1$/i }),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByRole("tab", { name: /^inactive members\s+0$/i }),
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("tab", { name: /^invited members\s+1$/i }))
     expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(
-      screen.queryByRole("button", { name: /invite member/i }),
+      screen.queryByRole("button", { name: /^invite$/i }),
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole("button", { name: /remove member/i }),
@@ -222,29 +222,51 @@ describe("UserManagementClient", () => {
       refetch: vi.fn(),
     })
 
-    render(<UserManagementClient />)
+    render(<TeamClient />)
 
-    expect(
-      screen.getByRole("button", { name: /^invite member$/i }),
-    ).toBeEnabled()
+    expect(screen.getByRole("button", { name: /^invite$/i })).toBeEnabled()
     expect(
       screen.getByRole("button", { name: /update role/i }),
     ).toBeInTheDocument()
-    expect(
-      screen.getAllByRole("button", { name: /manage roles/i }),
-    ).toHaveLength(1)
-    expect(
-      screen.getByRole("button", { name: /manage roles/i }),
-    ).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: /manage roles/i }))
     expect(screen.getAllByRole("combobox")[0]).toHaveValue("user-1")
-    expect(
-      screen.getAllByRole("button", { name: /manage roles/i }),
-    ).toHaveLength(1)
-    fireEvent.click(screen.getByRole("tab", { name: /^invited members\s+1$/i }))
     expect(screen.getByText("invited@example.com")).toBeInTheDocument()
     expect(screen.getByRole("button", { name: /revoke/i })).toBeInTheDocument()
   })
+
+  it.each([
+    ["team_admin", "Team admin"],
+    ["viewer", "Viewer"],
+  ])(
+    "keeps removed members in a closed disclosure and shows %s invitations",
+    (role, label) => {
+      mockUseTeamManagement.mockReturnValue({
+        data: {
+          ...baseManagement,
+          members: [
+            ...baseManagement.members,
+            {
+              ...baseManagement.members[0],
+              user_id: "removed",
+              email: "removed@example.com",
+              status: "inactive",
+            },
+          ],
+        },
+        isPending: false,
+      })
+      mockUseTeamInvitations.mockReturnValue({
+        data: { invitations: [{ ...pendingInvitation, role }] },
+        isPending: false,
+      })
+      render(<TeamClient />)
+      const summary = screen.getByText("Removed members (1)")
+      expect(summary.parentElement).not.toHaveAttribute("open")
+      fireEvent.click(summary)
+      expect(screen.getByText("removed@example.com")).toBeInTheDocument()
+      expect(screen.getByText(label)).toBeInTheDocument()
+      expect(screen.getByText("Danger zone")).toBeInTheDocument()
+    },
+  )
 
   describe("invitations list visibility", () => {
     beforeEach(() => {
@@ -258,7 +280,7 @@ describe("UserManagementClient", () => {
 
     it("shows the list to a viewer without Resend or Revoke", () => {
       // baseManagement is a viewer: no invite capabilities at all.
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(screen.getByText("pending@example.com")).toBeInTheDocument()
       expect(
@@ -286,7 +308,7 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(screen.getByText("pending@example.com")).toBeInTheDocument()
       expect(
@@ -313,7 +335,7 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.getByRole("button", { name: /^resend$/i }),
@@ -348,12 +370,9 @@ describe("UserManagementClient", () => {
     it("shows roles read-only to a customer whose capabilities allow changes", () => {
       mockUser.mockReturnValue(customer)
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
-      expect(screen.getByText("Role assignments")).toBeInTheDocument()
-      expect(
-        screen.getByText(/you can view role assignments, but cannot change/i),
-      ).toBeInTheDocument()
+      expect(screen.queryByText("Role assignments")).not.toBeInTheDocument()
       expect(
         screen.queryByRole("button", { name: /update role/i }),
       ).not.toBeInTheDocument()
@@ -368,7 +387,7 @@ describe("UserManagementClient", () => {
     it("offers Update role and Revoke to staff", () => {
       mockUser.mockReturnValue(staff)
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.getByRole("button", { name: /update role/i }),
@@ -394,7 +413,7 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.queryByRole("button", { name: /update role/i }),
@@ -405,7 +424,7 @@ describe("UserManagementClient", () => {
     })
   })
 
-  it("counts pending email invitations as pending invites", () => {
+  it("counts open email invitations without accepted ones", () => {
     mockUseTeamInvitations.mockReturnValue({
       data: {
         invitations: [
@@ -418,9 +437,12 @@ describe("UserManagementClient", () => {
       error: null,
       refetch: vi.fn(),
     })
-    render(<UserManagementClient />)
+    render(<TeamClient />)
 
-    expect(screen.getByText("2 pending invites")).toBeInTheDocument()
+    expect(
+      screen.getByRole("heading", { name: "Pending invitations" })
+        .parentElement,
+    ).toHaveTextContent("2")
   })
 
   describe("without team-management permission", () => {
@@ -435,7 +457,7 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
       mockLeave.mockResolvedValue(undefined)
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       const leave = screen.queryByRole("button", { name: /^leave team$/i })
       if (!offered) {
@@ -469,7 +491,7 @@ describe("UserManagementClient", () => {
         error,
         refetch: vi.fn(),
       })
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.queryByRole("button", { name: /^leave team$/i }),
@@ -550,14 +572,14 @@ describe("UserManagementClient", () => {
       ])(
         "closes without mutation when the displayed scope becomes %j",
         async (next) => {
-          const view = render(<UserManagementClient />)
+          const view = render(<TeamClient />)
           fireEvent.click(screen.getByRole("button", { name: open }))
           expect(screen.getByRole("dialog")).toBeInTheDocument()
 
           mockDisplayedTeam.mockReturnValue(next)
           view.rerender(
             <ToastProvider>
-              <UserManagementClient />
+              <TeamClient />
             </ToastProvider>,
           )
 
@@ -571,12 +593,12 @@ describe("UserManagementClient", () => {
       it("confirms with the scope captured when opened", async () => {
         const captured = { teamId: "team-1", region: "use" }
         mockDisplayedTeam.mockReturnValue(captured)
-        const view = render(<UserManagementClient />)
+        const view = render(<TeamClient />)
         fireEvent.click(screen.getByRole("button", { name: open }))
         mockDisplayedTeam.mockReturnValue({ ...captured })
         view.rerender(
           <ToastProvider>
-            <UserManagementClient />
+            <TeamClient />
           </ToastProvider>,
         )
         fireEvent.click(
@@ -592,7 +614,7 @@ describe("UserManagementClient", () => {
 
       it("does not open without a displayed scope", () => {
         mockDisplayedTeam.mockReturnValue(null)
-        render(<UserManagementClient />)
+        render(<TeamClient />)
         fireEvent.click(screen.getByRole("button", { name: open }))
         expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
         expect(mutate).not.toHaveBeenCalled()
@@ -600,16 +622,18 @@ describe("UserManagementClient", () => {
     })
 
     it("explains full Owner access before an invitation is sent", () => {
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
-      fireEvent.click(screen.getByRole("button", { name: /^invite member$/i }))
+      fireEvent.click(screen.getByRole("button", { name: /^invite$/i }))
 
       expect(
-        screen.getByText(/everyone you invite joins as an owner/i),
+        screen.getByText(
+          "Invites join as Owner with full access to this team.",
+        ),
       ).toBeInTheDocument()
       expect(screen.getByLabelText(/email address/i)).toBeEnabled()
       expect(
-        screen.getByRole("button", { name: /send invitation/i }),
+        screen.getByRole("button", { name: /send invites/i }),
       ).toBeInTheDocument()
     })
 
@@ -620,10 +644,8 @@ describe("UserManagementClient", () => {
     ])(
       "closes and resets the invite when the scope becomes %j",
       async (next) => {
-        const view = render(<UserManagementClient />)
-        fireEvent.click(
-          screen.getByRole("button", { name: /^invite member$/i }),
-        )
+        const view = render(<TeamClient />)
+        fireEvent.click(screen.getByRole("button", { name: /^invite$/i }))
         fireEvent.change(screen.getByLabelText(/email address/i), {
           target: { value: "new-owner@example.com" },
         })
@@ -631,7 +653,7 @@ describe("UserManagementClient", () => {
         mockDisplayedTeam.mockReturnValue(next)
         view.rerender(
           <ToastProvider>
-            <UserManagementClient />
+            <TeamClient />
           </ToastProvider>,
         )
 
@@ -643,15 +665,13 @@ describe("UserManagementClient", () => {
         mockDisplayedTeam.mockReturnValue({ teamId: "team-2", region: "usw" })
         view.rerender(
           <ToastProvider>
-            <UserManagementClient />
+            <TeamClient />
           </ToastProvider>,
         )
-        fireEvent.click(
-          screen.getByRole("button", { name: /^invite member$/i }),
-        )
+        fireEvent.click(screen.getByRole("button", { name: /^invite$/i }))
         expect(screen.getByLabelText(/email address/i)).toHaveValue("")
         expect(
-          screen.getByRole("button", { name: /send invitation/i }),
+          screen.getByRole("button", { name: /send invites/i }),
         ).toBeDisabled()
       },
     )
@@ -659,24 +679,28 @@ describe("UserManagementClient", () => {
     it("sends the invitation with the scope captured when opened", () => {
       const captured = { teamId: "team-1", region: "use" }
       mockDisplayedTeam.mockReturnValue(captured)
-      const view = render(<UserManagementClient />)
-      fireEvent.click(screen.getByRole("button", { name: /^invite member$/i }))
+      const view = render(<TeamClient />)
+      fireEvent.click(screen.getByRole("button", { name: /^invite$/i }))
 
       mockDisplayedTeam.mockReturnValue({ ...captured })
       view.rerender(
         <ToastProvider>
-          <UserManagementClient />
+          <TeamClient />
         </ToastProvider>,
       )
       fireEvent.change(screen.getByLabelText(/email address/i), {
         target: { value: "new-owner@example.com" },
       })
-      fireEvent.click(screen.getByRole("button", { name: /send invitation/i }))
+      fireEvent.keyDown(screen.getByLabelText(/email address/i), {
+        key: "Enter",
+      })
+      mockCreateInvitation.mockResolvedValue({ delivery: "sent" })
+      fireEvent.click(screen.getByRole("button", { name: /send invites/i }))
 
-      expect(mockCreateInvitation).toHaveBeenCalledWith(
-        { team: captured, email: "new-owner@example.com" },
-        expect.any(Object),
-      )
+      expect(mockCreateInvitation).toHaveBeenCalledWith({
+        team: captured,
+        email: "new-owner@example.com",
+      })
       expect(mockCreateInvitation.mock.calls[0][0].team).toBe(captured)
     })
 
@@ -695,13 +719,13 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
-      const invite = screen.getByRole("button", { name: /^invite member$/i })
+      const invite = screen.getByRole("button", { name: /^invite$/i })
       expect(invite).toBeDisabled()
-      expect(invite).toHaveAttribute("title", "Upgrade to invite owners")
+      expect(invite).toHaveAttribute("title", "Upgrade to invite members")
       expect(
-        screen.getAllByText("Upgrade to invite owners").length,
+        screen.getAllByText("Upgrade to invite members").length,
       ).toBeGreaterThan(0)
       fireEvent.click(invite)
       expect(screen.queryByLabelText(/email address/i)).not.toBeInTheDocument()
@@ -722,10 +746,10 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
-        screen.queryByRole("button", { name: /^invite member$/i }),
+        screen.queryByRole("button", { name: /^invite$/i }),
       ).not.toBeInTheDocument()
     })
 
@@ -756,7 +780,7 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(screen.getByText("pending@example.com")).toBeInTheDocument()
       expect(screen.getByText(/email not sent/i)).toBeInTheDocument()
@@ -780,7 +804,7 @@ describe("UserManagementClient", () => {
         refetch: vi.fn(),
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.getByText("Invitations could not be loaded."),
@@ -788,7 +812,7 @@ describe("UserManagementClient", () => {
     })
 
     it("lets members remove others but never themselves", () => {
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.getAllByRole("button", { name: /remove member/i }),
@@ -796,7 +820,7 @@ describe("UserManagementClient", () => {
     })
 
     it("allows leaving when the user belongs to another team", () => {
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.getByRole("button", { name: /^leave team$/i }),
@@ -808,7 +832,7 @@ describe("UserManagementClient", () => {
         data: { teams: [{ id: "team-1", name: "Acme", region: "use" }] },
       })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.getByRole("button", { name: /^leave team$/i }),
@@ -819,7 +843,7 @@ describe("UserManagementClient", () => {
     it("blocks leaving until the team list is known", () => {
       mockUseTeams.mockReturnValue({ data: undefined })
 
-      render(<UserManagementClient />)
+      render(<TeamClient />)
 
       expect(
         screen.getByRole("button", { name: /^leave team$/i }),

@@ -64,9 +64,11 @@ vi.mock("next/link", () => ({
   }) => <a href={href}>{children}</a>,
 }))
 
+let nextPath: string | null = null
 const mockPush = vi.fn()
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => ({ get: () => nextPath }),
 }))
 
 const mockCapture = vi.fn()
@@ -85,6 +87,7 @@ import ResetPasswordPage from "./page"
 
 describe("ResetPasswordPage", () => {
   beforeEach(() => {
+    nextPath = null
     mockPush.mockReset()
     mockUpdateUser.mockReset()
     mockCapture.mockReset()
@@ -116,6 +119,24 @@ describe("ResetPasswordPage", () => {
       () => {
         expect(mockPush).toHaveBeenCalledWith("/auth/signin")
       },
+      { timeout: 3000 },
+    )
+  })
+
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}`,
+    "/sandboxes",
+    "https://example.com",
+  ])("only returns to a validated invite path (%s)", async (next) => {
+    nextPath = next
+    mockUpdateUser.mockResolvedValue({ error: null })
+    render(<ResetPasswordPage />)
+    await fillAndSubmit()
+    await waitFor(
+      () =>
+        expect(mockPush).toHaveBeenCalledWith(
+          next.startsWith("/invite/") ? next : "/auth/signin",
+        ),
       { timeout: 3000 },
     )
   })

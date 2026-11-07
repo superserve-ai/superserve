@@ -37,6 +37,26 @@ describe("sendPasswordResetEmail", () => {
     mockSendEmail.mockReset()
   })
 
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}/`,
+    "/sandboxes",
+    "https://example.com",
+    "/invite/invalid",
+  ])("validates the invite destination again (%s)", async (next) => {
+    mockGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: "hash" } },
+      error: null,
+    })
+    await sendPasswordResetEmail("user@example.com", next)
+    const redirect = new URL(
+      mockGenerateLink.mock.calls[0][0].options.redirectTo,
+    )
+    expect(redirect.searchParams.get("next")).toBe("/auth/reset-password")
+    expect(redirect.searchParams.get("invite")).toBe(
+      next.startsWith("/invite/ssinv_") ? next.replace(/\/$/, "") : null,
+    )
+  })
+
   it("returns success for a valid email + happy path", async () => {
     mockGenerateLink.mockResolvedValue({
       data: { properties: { hashed_token: "token-abc" } },

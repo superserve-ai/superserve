@@ -4,13 +4,14 @@ import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
 import { Button, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
-import { useRouter } from "next/navigation"
+import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useEffect, useRef, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -23,6 +24,7 @@ function ResetPasswordContent() {
   const [errors, setErrors] = useState<Record<string, string>>({})
   const [success, setSuccess] = useState(false)
   const router = useRouter()
+  const invite = inviteReturnPath(useSearchParams().get("next"))
   const posthog = usePostHog()
   const redirectTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
 
@@ -56,7 +58,7 @@ function ResetPasswordContent() {
       posthog.capture(AUTH_EVENTS.PASSWORD_RESET_COMPLETED)
       setSuccess(true)
       redirectTimerRef.current = setTimeout(
-        () => router.push("/auth/signin"),
+        () => router.push(invite ?? "/auth/signin"),
         2000,
       )
     } catch {
@@ -90,7 +92,9 @@ function ResetPasswordContent() {
               Password Updated
             </h1>
             <p className="mt-2 text-center text-xs text-muted">
-              Redirecting to sign in...
+              {invite
+                ? "Returning to your invitation..."
+                : "Redirecting to sign in..."}
             </p>
           </>
         ) : (

@@ -228,7 +228,11 @@ describe("team mutation variables", () => {
       await result.current.revoke.mutateAsync({ team, invitationId: "inv-1" })
       await result.current.leave.mutateAsync({ team })
     })
-    expect(mocks.create).toHaveBeenCalledWith(team, "owner@example.com")
+    expect(mocks.create).toHaveBeenCalledWith(
+      team,
+      "owner@example.com",
+      undefined,
+    )
     expect(mocks.resend).toHaveBeenCalledWith(team, "inv-1")
     expect(mocks.revoke).toHaveBeenCalledWith(team, "inv-1")
     expect(mocks.leave).toHaveBeenCalledWith(team)

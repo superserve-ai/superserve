@@ -11,6 +11,7 @@ import { Suspense, useEffect, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   SIGNUP_OFFER_PARAM,
@@ -46,6 +47,7 @@ function SignInContent() {
       ? rawNext
       : "/"
 
+  const invite = inviteReturnPath(nextUrl)
   const signUpParams = new URLSearchParams()
   if (requestedOffer) signUpParams.set("offer", requestedOffer)
   if (rawOffer && rawOffer !== requestedOffer)
@@ -241,7 +243,11 @@ function SignInContent() {
           />
           <div className="flex justify-end">
             <Link
-              href="/auth/forgot-password"
+              href={
+                invite
+                  ? `/auth/forgot-password?${new URLSearchParams({ next: invite })}`
+                  : "/auth/forgot-password"
+              }
               className="text-xs text-muted/60 hover:text-muted"
             >
               Forgot password?
