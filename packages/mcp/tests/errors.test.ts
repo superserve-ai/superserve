@@ -87,9 +87,55 @@ describe("formatSdkError", () => {
     const msg = formatSdkError(
       new BillingError("unavailable", "billing_ineligible"),
     )
-    expect(msg).toMatch(/Billing does not allow this request/)
+    expect(msg).toMatch(/^unavailable\./)
     expect(msg).not.toMatch(/trial|deleted|card/i)
   })
+  it("billing_ineligible keeps the server message without an action URL", () => {
+    const msg = formatSdkError(
+      new BillingError("Billing is not active", "billing_ineligible"),
+    )
+    expect(msg).toBe(
+      "Billing is not active. Do not retry. Ask the user to check their billing in the Superserve console.",
+    )
+  })
+  it("unknown billing codes keep the server message and action URL", () => {
+    const msg = formatSdkError(
+      new BillingError(
+        "Billing needs review",
+        "unknown_billing_code",
+        "https://console.example.com/plan-usage",
+      ),
+    )
+    expect(msg).toBe(
+      "Billing needs review. Do not retry. Ask the user to check their billing at https://console.example.com/plan-usage.",
+    )
+  })
+  it.each([".", "!", "?"])(
+    "billing messages ending with %s do not add another period",
+    (punctuation) => {
+      const msg = formatSdkError(
+        new BillingError(
+          `Billing is not active${punctuation}`,
+          "billing_ineligible",
+        ),
+      )
+      expect(msg).toBe(
+        `Billing is not active${punctuation} Do not retry. Ask the user to check their billing in the Superserve console.`,
+      )
+      expect(msg).not.toContain("..")
+    },
+  )
+  it.each(["", " \t\n "])(
+    "empty billing message %j uses generic fallback text",
+    (message) => {
+      const msg = formatSdkError(
+        new BillingError(message, "billing_ineligible"),
+      )
+      expect(msg).toBe(
+        "Billing does not allow this request. Do not retry. Ask the user to check their billing in the Superserve console.",
+      )
+    },
+  )
   it("plan-limit billing errors keep the server message", () => {
     expect(
       formatSdkError(

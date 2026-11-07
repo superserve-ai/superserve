@@ -37,8 +37,9 @@ function formatBillingError(err: BillingError): string {
   ) {
     return err.message
   }
-  // Generic code (also used by older servers): claim nothing specific.
-  return `Billing does not allow this request. Do not retry. Ask the user to check their billing ${where}.`
+  // Preserve the server's explanation; add guidance without specific claims.
+  const message = err.message.trim() || "Billing does not allow this request."
+  return `${message}${/[.!?]$/.test(message) ? "" : "."} Do not retry. Ask the user to check their billing ${where}.`
 }
 
 export function formatSdkError(err: unknown): string {
