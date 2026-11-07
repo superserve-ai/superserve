@@ -533,6 +533,28 @@ describe("TeamClient", () => {
       ).toBeInTheDocument()
     })
 
+    it("only mentions invites in the hidden invite explanation when staff can change roles", () => {
+      mockUser.mockReturnValue(staff)
+
+      render(<TeamClient />)
+
+      expect(
+        screen.queryByRole("button", { name: /^invite$/i }),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: /update role/i }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByRole("button", { name: /^revoke$/i }),
+      ).toBeInTheDocument()
+      expect(
+        screen.getByText("Only Owners can invite people."),
+      ).toBeInTheDocument()
+      expect(
+        screen.queryByText("Only Owners can invite people or change roles."),
+      ).not.toBeInTheDocument()
+    })
+
     it("confirms the role and member before revoking the assignment", async () => {
       mockUser.mockReturnValue(staff)
       mockRevokeRole.mockResolvedValue(undefined)

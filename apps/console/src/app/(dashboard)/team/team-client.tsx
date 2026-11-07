@@ -445,6 +445,7 @@ export function TeamClient() {
           <InviteMemberCard
             state={inviteControlState(capabilities)}
             invitableRoles={capabilities.invitable_roles}
+            canChangeRoles={canAssignRoles || canRevokeRoles}
           />
           <section aria-labelledby="members-title">
             <div className="flex items-baseline gap-2">

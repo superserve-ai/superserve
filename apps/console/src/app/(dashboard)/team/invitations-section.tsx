@@ -50,9 +50,11 @@ export const UPGRADE_REASON = INVITE_UPGRADE_REASON
 export function InviteMemberCard({
   state,
   invitableRoles,
+  canChangeRoles,
 }: {
   state: InviteControlState
   invitableRoles?: string[]
+  canChangeRoles?: boolean
 }) {
   const [inviting, setInviting] = useState<TeamScope | null>(null)
   const team = useDisplayedTeam()
@@ -65,7 +67,9 @@ export function InviteMemberCard({
     return (
       <section>
         <p className="text-sm text-muted">
-          Only Owners can invite people or change roles.
+          {canChangeRoles
+            ? "Only Owners can invite people."
+            : "Only Owners can invite people or change roles."}
         </p>
       </section>
     )
