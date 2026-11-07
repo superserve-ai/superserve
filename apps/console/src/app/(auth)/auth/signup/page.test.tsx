@@ -715,10 +715,10 @@ describe("SignUpPage", () => {
         "Test User",
       )
       await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-      await user.type(screen.getByPlaceholderText("Password"), "password123")
+      await user.type(screen.getByPlaceholderText("Password"), "Password123")
       await user.type(
         screen.getByPlaceholderText("Confirm Password"),
-        "password123",
+        "Password123",
       )
       await user.click(screen.getByRole("button", { name: "Sign Up" }))
     }
