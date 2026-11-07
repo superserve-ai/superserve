@@ -207,14 +207,16 @@ function MemberList({
           </span>
           <div className="min-w-0 flex-1">
             <div className="flex items-center gap-2 text-sm">
-              {member.full_name || "Team member"}
+              <span className="min-w-0 break-all">
+                {member.full_name || "Team member"}
+              </span>
               {member.user_id === currentUserId && (
-                <span className="border border-dashed border-brand/30 px-1.5 font-mono text-[11px] text-brand uppercase">
+                <span className="shrink-0 border border-dashed border-brand/30 px-1.5 font-mono text-[11px] text-brand uppercase">
                   You
                 </span>
               )}
               {member.status === "invited" && (
-                <span className="font-mono text-[11px] text-muted uppercase">
+                <span className="shrink-0 font-mono text-[11px] text-muted uppercase">
                   Invited
                 </span>
               )}
