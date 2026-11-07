@@ -344,7 +344,7 @@ describe("TrialBillingBanner", () => {
     },
   )
 
-  it.each(["/plan-usage", "/plan-usage/"])(
+  it.each(["/billing-usage", "/billing-usage/"])(
     "leaves return handling to the billing page on %s",
     (path) => {
       window.history.replaceState({}, "", `${path}?billing=cancel`)
