@@ -47,6 +47,14 @@ const ERROR_MESSAGES: Record<string, string> = {
   free_plan: INVITE_UPGRADE_REASON,
   team_changed: TEAM_CHANGED_MESSAGE,
 }
+const NON_RETRYABLE_ERRORS = new Set([
+  "already_member",
+  "invitation_pending",
+  "bad_request",
+  "invalid_role",
+  "free_plan",
+  "pending_limit",
+])
 
 type InviteRow = {
   id: number
@@ -55,6 +63,7 @@ type InviteRow = {
   editing?: boolean
   status?: "sent" | "delivery_failed" | "error"
   message?: string
+  retryable?: boolean
 }
 
 export function InviteMembersDialog({
@@ -131,6 +140,7 @@ export function InviteMembersDialog({
     )
   const sendable = (row: InviteRow) =>
     !isComplete(row) &&
+    row.retryable !== false &&
     !isDuplicate(row) &&
     EMAIL_PATTERN.test(row.email) &&
     row.email.length <= 320 &&
@@ -177,6 +187,7 @@ export function InviteMembersDialog({
             update(row.id, {
               status: "error",
               message: ERROR_MESSAGES[code ?? ""] ?? GENERIC_ERROR,
+              retryable: !NON_RETRYABLE_ERRORS.has(code ?? ""),
             })
           }
         }
@@ -185,6 +196,7 @@ export function InviteMembersDialog({
             update(remaining.id, {
               status: "error",
               message: TEAM_CHANGED_MESSAGE,
+              retryable: true,
             })
           break
         }
@@ -295,6 +307,7 @@ export function InviteMembersDialog({
                               email: event.target.value.trim(),
                               status: undefined,
                               message: undefined,
+                              retryable: undefined,
                               editing: true,
                             })
                           }
@@ -318,6 +331,7 @@ export function InviteMembersDialog({
                               role: value ?? undefined,
                               status: undefined,
                               message: undefined,
+                              retryable: undefined,
                             })
                           }
                         >

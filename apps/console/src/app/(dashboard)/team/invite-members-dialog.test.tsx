@@ -189,6 +189,9 @@ describe("InviteMembersDialog", () => {
     paste("one@example.com")
     send()
     await screen.findByText("Already a member")
+    expect(
+      screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
+    ).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("Email for one@example.com"), {
       target: { value: "other@example.c" },
     })
@@ -197,6 +200,16 @@ describe("InviteMembersDialog", () => {
     fireEvent.change(input, { target: { value: "other@example.com" } })
     fireEvent.blur(input)
     expect(screen.getByText("other@example.com")).toHaveAttribute("data-mask")
+    expect(screen.queryByText("Already a member")).not.toBeInTheDocument()
+    expect(screen.getByRole("button", { name: "Send invites" })).toBeEnabled()
+    send()
+    await screen.findByText("Sent")
+    expect(mocks.create).toHaveBeenCalledTimes(2)
+    expect(mocks.create).toHaveBeenLastCalledWith({
+      team,
+      email: "other@example.com",
+      role: "team_admin",
+    })
   })
 
   it("defaults new rows to Team admin with allowed known options in display order", async () => {
@@ -222,7 +235,7 @@ describe("InviteMembersDialog", () => {
       ),
     ).toHaveLength(2)
   })
-  it("summarizes sent invitations and rows needing attention", async () => {
+  it("summarizes a partial send and hides the primary button when errors are permanent", async () => {
     mocks.create
       .mockResolvedValueOnce({ delivery: "sent" })
       .mockRejectedValueOnce({ code: "already_member" })
@@ -232,7 +245,37 @@ describe("InviteMembersDialog", () => {
     expect(
       await screen.findByText("1 sent. 1 needs attention."),
     ).toBeInTheDocument()
+    expect(screen.getByText("Already a member")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
+    ).not.toBeInTheDocument()
+    expect(screen.getByText("Close", { selector: "button" })).toBeEnabled()
+  })
+  it("retries only the retryable row when permanent and generic errors are mixed", async () => {
+    mocks.create
+      .mockRejectedValueOnce({ code: "already_member" })
+      .mockRejectedValueOnce({ status: 500 })
+    setup()
+    paste("one@example.com two@example.com")
+    send()
+    await screen.findByText("2 need attention.")
+    expect(screen.getByText("Already a member")).toBeInTheDocument()
+    expect(
+      screen.getByText("Something went wrong. Please try again."),
+    ).toBeInTheDocument()
     expect(screen.getByRole("button", { name: "Retry failed" })).toBeEnabled()
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
+    await screen.findByText("1 sent. 1 needs attention.")
+    expect(mocks.create).toHaveBeenCalledTimes(3)
+    expect(mocks.create).toHaveBeenLastCalledWith({
+      team,
+      email: "two@example.com",
+      role: "team_admin",
+    })
+    expect(screen.getByText("Already a member")).toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
+    ).not.toBeInTheDocument()
   })
   it("hides the primary button after every invitation was sent", async () => {
     setup()
@@ -377,7 +420,7 @@ describe("InviteMembersDialog", () => {
       { team, email: "two@example.com" },
     ])
   })
-  it("sends sequentially, locks controls, keeps results, refreshes after the loop and retries failures", async () => {
+  it("sends sequentially, locks controls, keeps results, refreshes after the loop and sends edited failures", async () => {
     let resolveFirst!: (value: unknown) => void
     mocks.create
       .mockImplementationOnce(
@@ -422,7 +465,9 @@ describe("InviteMembersDialog", () => {
       email: "one@example.com",
       role: "team_admin",
     })
-    expect(screen.getByRole("button", { name: "Retry failed" })).toBeEnabled()
+    expect(
+      screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
+    ).not.toBeInTheDocument()
     fireEvent.change(screen.getByLabelText("Email for three@example.com"), {
       target: { value: "fixed@example.com" },
     })
@@ -432,22 +477,31 @@ describe("InviteMembersDialog", () => {
     expect(screen.getAllByText("Sent")).toHaveLength(2)
   })
   it.each([
-    ["invitation_pending", "Already invited"],
-    ["invalid_role", "Role not allowed"],
-    ["rate_limited", "Too many invites sent. Try again later."],
-    ["bad_request", "Invalid email"],
-    ["pending_limit", "Too many pending invites"],
-    ["free_plan", "Upgrade to invite members"],
-    ["unavailable", "Something went wrong. Please try again."],
-  ])("maps %s and retries", async (code, message) => {
+    ["already_member", "Already a member", false],
+    ["invitation_pending", "Already invited", false],
+    ["invalid_role", "Role not allowed", false],
+    ["rate_limited", "Too many invites sent. Try again later.", true],
+    ["bad_request", "Invalid email", false],
+    ["pending_limit", "Too many pending invites", false],
+    ["free_plan", "Upgrade to invite members", false],
+    ["unavailable", "Something went wrong. Please try again.", true],
+  ])("maps %s and respects retryability", async (code, message, retryable) => {
     mocks.create.mockRejectedValueOnce({ code })
     setup()
     paste("one@example.com")
     send()
     expect(await screen.findByText(message)).toBeInTheDocument()
-    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
-    expect(await screen.findByText("Sent")).toBeInTheDocument()
-    expect(mocks.create).toHaveBeenCalledTimes(2)
+    if (retryable) {
+      fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
+      expect(await screen.findByText("Sent")).toBeInTheDocument()
+      expect(mocks.create).toHaveBeenCalledTimes(2)
+    } else {
+      await screen.findByText("1 needs attention.")
+      expect(
+        screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
+      ).not.toBeInTheDocument()
+      expect(mocks.create).toHaveBeenCalledOnce()
+    }
   })
   it("stops on team_changed and marks remaining rows", async () => {
     mocks.create.mockRejectedValueOnce({ code: "team_changed" })
@@ -459,6 +513,9 @@ describe("InviteMembersDialog", () => {
     )
     expect(mocks.create).toHaveBeenCalledTimes(1)
     expect(mocks.refresh).toHaveBeenCalledOnce()
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
+    await screen.findByText("3 sent.")
+    expect(mocks.create).toHaveBeenCalledTimes(4)
   })
   it.each([20, 22])(
     "shows one limit message after pasting %s addresses",
