@@ -60,8 +60,8 @@ function billingHint(err: BillingError): string | undefined {
       ? "Add a card and choose a plan, then retry."
       : `Add a card and choose a plan at ${err.actionUrl}, then retry.`
   }
-  // Not a denial and not a used-up trial: a required check did not complete,
-  // so retrying the same request does not help.
+  // A required check did not complete. Fresh signups retry while setup may
+  // still be in progress; otherwise, or after that deadline, show this hint.
   if (err.code === "trial_check_unavailable") {
     const where =
       err.actionUrl && !err.message.includes(err.actionUrl)
