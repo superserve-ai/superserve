@@ -16,6 +16,7 @@ import {
   isGoogleUser,
   issueGoogleSignupProof,
 } from "@/lib/auth/google-signup-proof"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
@@ -27,6 +28,11 @@ import {
   isSelfServeSignupOffer,
   SIGNUP_OFFER_PARAM,
 } from "@/lib/auth/signup-offer"
+import {
+  clearSignupResendTicket,
+  readSignupResendTicket,
+  saveSignupResendTicket,
+} from "@/lib/auth/signup-resend"
 import {
   evaluateSignupRestriction,
   SignupRestrictedError,
@@ -346,6 +352,45 @@ export const beginGoogleSignup = async (
   }
 }
 
+const CONFIRMATION_NOT_SENT_MESSAGE =
+  "Your account was created, but we couldn't send the confirmation email."
+const RESEND_COOLDOWN_SECONDS = 60
+
+function confirmationUrl(
+  redirectTo: string,
+  tokenHash: string,
+  type: string,
+  signupAttemptId: string,
+  binding?: { user: string; device: string },
+): string {
+  const confirmation = new URL(redirectTo)
+  confirmation.searchParams.set("token_hash", tokenHash)
+  confirmation.searchParams.set("type", type)
+  confirmation.searchParams.set("signup_attempt_id", signupAttemptId)
+  confirmation.searchParams.set("utm_source", "email")
+  confirmation.searchParams.set("utm_medium", "signup_confirmation")
+  if (binding) {
+    const proof = signSignupDeviceBinding(binding.user, binding.device)
+    if (proof) {
+      confirmation.searchParams.set("device_attempt_id", binding.device)
+      confirmation.searchParams.set("device_bind_proof", proof)
+    }
+  }
+  return confirmation.toString()
+}
+
+async function sendConfirmationEmail(
+  to: string,
+  confirmationUrl: string,
+): Promise<boolean> {
+  const result = await sendEmail({
+    to,
+    subject: "Confirm your Superserve account",
+    react: ConfirmationEmail({ confirmationUrl }),
+  })
+  return result.success
+}
+
 export const signUpWithEmail = async (
   email: string,
   password: string,
@@ -494,7 +539,8 @@ export const signUpWithEmail = async (
       proAuthReturnPath(ycNext ?? null) ??
       starterAuthReturnPath(ycNext ?? null) ??
       ycReturnPath(ycNext) ??
-      deviceReturnPath(ycNext)
+      deviceReturnPath(ycNext) ??
+      inviteReturnPath(ycNext)
     if (next) callbackUrl.searchParams.set("next", next)
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
     const offerIntent = rawSignupOffer ?? offer
@@ -636,28 +682,31 @@ export const signUpWithEmail = async (
     const tokenHash = data?.properties?.hashed_token
     if (!tokenHash)
       return { success: false, error: "Failed to generate confirmation link." }
-    const confirmation = new URL(redirectTo)
-    confirmation.searchParams.set("token_hash", tokenHash)
-    confirmation.searchParams.set(
-      "type",
-      awaitingEnterpriseSetup ? data.properties.verification_type : "signup",
+    const linkType = awaitingEnterpriseSetup
+      ? data.properties.verification_type
+      : "signup"
+    const device =
+      originalSignup && deviceVerified && capture
+        ? capture.attemptId
+        : undefined
+    if (data.user && (linkType === "signup" || linkType === "magiclink"))
+      await saveSignupResendTicket({
+        user: data.user.id,
+        type: linkType,
+        redirect: redirectTo,
+        attempt: signupAttemptId,
+        ...(device ? { device } : {}),
+      })
+    const emailSent = await sendConfirmationEmail(
+      parsed.data.email,
+      confirmationUrl(
+        redirectTo,
+        tokenHash,
+        linkType,
+        signupAttemptId,
+        device && data.user ? { user: data.user.id, device } : undefined,
+      ),
     )
-    confirmation.searchParams.set("signup_attempt_id", signupAttemptId)
-    confirmation.searchParams.set("utm_source", "email")
-    confirmation.searchParams.set("utm_medium", "signup_confirmation")
-    if (originalSignup && deviceVerified && capture) {
-      const proof = signSignupDeviceBinding(data.user.id, capture.attemptId)
-      if (proof) {
-        confirmation.searchParams.set("device_attempt_id", capture.attemptId)
-        confirmation.searchParams.set("device_bind_proof", proof)
-      }
-    }
-    const confirmationUrl = confirmation.toString()
-    await sendEmail({
-      to: parsed.data.email,
-      subject: "Confirm your Superserve account",
-      react: ConfirmationEmail({ confirmationUrl }),
-    })
     notifySlackOfNewUser(
       parsed.data.email,
       parsed.data.fullName,
@@ -666,6 +715,12 @@ export const signUpWithEmail = async (
       requestedOffer,
       ...(awaitingEnterpriseSetup ? [true] : []),
     ).catch(() => {})
+    if (!emailSent)
+      return {
+        success: false,
+        error: CONFIRMATION_NOT_SENT_MESSAGE,
+        errorCode: "email_not_sent" as const,
+      }
     return { success: true }
   } catch (err) {
     emitFingerprintObservation()
@@ -673,6 +728,150 @@ export const signUpWithEmail = async (
     return {
       success: false,
       error: "Error creating account. Please try again.",
+    }
+  }
+}
+
+export type ResendSignupConfirmationResult =
+  | { success: true }
+  | {
+      success: false
+      error: string
+      errorCode:
+        | "captcha_failed"
+        | "resend_unavailable"
+        | "already_confirmed"
+        | "cooldown"
+        | "email_not_sent"
+      retryAfterSeconds?: number
+    }
+
+const RESEND_UNAVAILABLE: ResendSignupConfirmationResult = {
+  success: false,
+  error:
+    "We can't resend from this page. Sign up again with the same email and password to get a new link.",
+  errorCode: "resend_unavailable",
+}
+
+/**
+ * Sends the signup confirmation again through the app email path. Only the
+ * browser that just signed up holds the signed ticket, so the result cannot
+ * reveal whether another account exists. The page sends the email it shows,
+ * and a mismatch gets the no-ticket answer: a newer signup in another tab
+ * replaced the ticket, and this page must not send that signup's email.
+ */
+export const resendSignupConfirmation = async (
+  recaptchaToken?: string,
+  shownEmail?: string,
+): Promise<ResendSignupConfirmationResult> => {
+  const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_resend")
+  if (!recaptcha.verified)
+    return {
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+      errorCode: "captcha_failed",
+    }
+  const ticket = await readSignupResendTicket()
+  if (!ticket) return RESEND_UNAVAILABLE
+  try {
+    const supabase = createAdminClient()
+    const { data, error } = await supabase.auth.admin.getUserById(ticket.user)
+    const user = data?.user
+    if (error || !user?.email) {
+      await clearSignupResendTicket()
+      return RESEND_UNAVAILABLE
+    }
+    if (
+      typeof shownEmail !== "string" ||
+      shownEmail.trim().toLowerCase() !== user.email.toLowerCase()
+    )
+      return RESEND_UNAVAILABLE
+    if (user.email_confirmed_at) {
+      await clearSignupResendTicket()
+      return {
+        success: false,
+        error: "Your email is already confirmed. Sign in to continue.",
+        errorCode: "already_confirmed",
+      }
+    }
+    // Auth records when it last issued this link type; the cooldown uses that
+    // server-side time, so a new browser request cannot reset it.
+    const lastSentAt = Date.parse(
+      (ticket.type === "magiclink"
+        ? user.recovery_sent_at
+        : user.confirmation_sent_at) ?? "",
+    )
+    const waitSeconds = Number.isNaN(lastSentAt)
+      ? 0
+      : Math.ceil(RESEND_COOLDOWN_SECONDS - (Date.now() - lastSentAt) / 1000)
+    if (waitSeconds > 0)
+      return {
+        success: false,
+        error: `Please wait ${waitSeconds} seconds before you request another email.`,
+        errorCode: "cooldown",
+        retryAfterSeconds: Math.min(waitSeconds, RESEND_COOLDOWN_SECONDS),
+      }
+    // For an existing unconfirmed user, a signup link only issues a new
+    // token; Auth ignores the password and keeps the original one.
+    const { data: link, error: linkError } =
+      await supabase.auth.admin.generateLink(
+        ticket.type === "magiclink"
+          ? {
+              type: "magiclink",
+              email: user.email,
+              options: { redirectTo: ticket.redirect },
+            }
+          : {
+              type: "signup",
+              email: user.email,
+              password: "",
+              options: { redirectTo: ticket.redirect },
+            },
+      )
+    const tokenHash = link?.properties?.hashed_token
+    if (linkError || !tokenHash || link.user?.id !== ticket.user) {
+      if (linkError?.message.includes("already registered")) {
+        await clearSignupResendTicket()
+        return {
+          success: false,
+          error: "Your email is already confirmed. Sign in to continue.",
+          errorCode: "already_confirmed",
+        }
+      }
+      console.error("Signup confirmation resend failed", {
+        reason: linkError?.message ?? "missing_link",
+      })
+      return {
+        success: false,
+        error: CONFIRMATION_NOT_SENT_MESSAGE,
+        errorCode: "email_not_sent",
+      }
+    }
+    const sent = await sendConfirmationEmail(
+      user.email,
+      confirmationUrl(
+        ticket.redirect,
+        tokenHash,
+        ticket.type,
+        ticket.attempt,
+        ticket.device
+          ? { user: ticket.user, device: ticket.device }
+          : undefined,
+      ),
+    )
+    if (!sent)
+      return {
+        success: false,
+        error: CONFIRMATION_NOT_SENT_MESSAGE,
+        errorCode: "email_not_sent",
+      }
+    return { success: true }
+  } catch (err) {
+    console.error("Signup confirmation resend error:", err)
+    return {
+      success: false,
+      error: CONFIRMATION_NOT_SENT_MESSAGE,
+      errorCode: "email_not_sent",
     }
   }
 }

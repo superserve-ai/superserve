@@ -120,10 +120,20 @@ Creating or resuming a sandbox fails with `402 Payment Required` when the team's
 
 | Code | Meaning | What to do |
 |---|---|---|
-| `billing_ineligible` | The team has no active billing, for example because its trial credit ran out or a payment failed. The message is `Sandbox usage is unavailable until billing is active`. | Add a payment method or choose a plan on the [Billing & Usage](https://console.superserve.ai/plan-usage) page, then retry. |
+| `billing_ineligible` | The team has no active billing, for example because its trial credit ran out or an invoice is unpaid (see [Unpaid invoices](#unpaid-invoices)). The message is `Sandbox usage is unavailable until billing is active`. | Add a payment method or choose a plan on the [Billing & Usage](https://console.superserve.ai/plan-usage) page, then retry. |
 | `free_allowance_exhausted` | The team is on the Free plan and has used its daily compute allowance. Running sandboxes are paused too. | Wait until the allowance resets, or upgrade on the [Billing & Usage](https://console.superserve.ai/plan-usage) page for unlimited runtime. |
 
 The API response for `free_allowance_exhausted` also includes `resets_at`, the UTC time (RFC 3339) when sandboxes can start again. The SDK error does not carry `resets_at`, so read it from the raw API response if you need it.
+
+### Unpaid invoices
+
+An unpaid invoice also returns `billing_ineligible`, on every plan. There is no separate code. When a card payment for an invoice is declined:
+
+1. Billing members get one email for that invoice. It shows when sandboxes will be paused and has links to pay the invoice and to update the payment method.
+2. A temporary decline, such as insufficient funds, is retried once. A permanent decline, such as an expired, lost, or fraudulent card, is not retried.
+3. If the invoice is still unpaid 24 hours after the first payment attempt, running sandboxes are paused, and new creates and resumes fail with `billing_ineligible`.
+
+Pay the invoice from the link in the email. Sandboxes can start again once the invoice is paid.
 
 ## `BuildError`
 

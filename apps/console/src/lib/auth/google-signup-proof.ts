@@ -501,6 +501,7 @@ export async function requireGoogleSignupProof(
   actor: string,
   expectedSignupAttemptId?: string,
 ): Promise<string | undefined> {
+  let setupError: unknown
   try {
     const store = await cookies()
     expectedSignupAttemptId ||= store.get(PENDING_ATTEMPT_COOKIE)?.value
@@ -541,9 +542,12 @@ export async function requireGoogleSignupProof(
     }
   } catch (error) {
     if (error instanceof GoogleSignupRecoveryRequiredError) throw error
-    // Treat cookie-store/configuration failures as a missing proof below.
+    // Cookie-store/configuration failures still block provisioning below.
+    setupError = error
   }
   await trackGoogleSignupBypass()
+  // Another Google round trip cannot fix a setup failure, so surface it.
+  if (setupError) throw setupError
   // Send the user back through the proof step instead of a setup error page.
   throw new GoogleSignupRecoveryRequiredError()
 }

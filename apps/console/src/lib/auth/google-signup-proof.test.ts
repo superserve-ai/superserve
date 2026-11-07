@@ -577,6 +577,23 @@ describe("google-signup-proof", () => {
       { reason: "missing_or_invalid_proof", scope: "first_team_provisioning" },
     )
   })
+
+  it("surfaces a setup failure instead of another Google round trip", async () => {
+    await issueGoogleSignupProof("attempt-a")
+    delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
+
+    const error = await requireGoogleSignupProof("user-123").catch((e) => e)
+    expect(error).not.toBeInstanceOf(GoogleSignupRecoveryRequiredError)
+    expect(error).toHaveProperty(
+      "message",
+      "Google signup proof signing secret is not configured",
+    )
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_bypass_blocked",
+      expect.any(String),
+      { reason: "missing_or_invalid_proof", scope: "first_team_provisioning" },
+    )
+  })
   it("retains original signup evidence across sign-in -> signup recovery without authorizing CAPTCHA", async () => {
     vi.useFakeTimers()
     const start = Date.now()
