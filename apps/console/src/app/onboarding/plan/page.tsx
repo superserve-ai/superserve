@@ -7,6 +7,7 @@ import {
   getSignupPlanPage,
   type SignupPlanPageParams,
 } from "@/lib/api/signup-plan-page"
+import { PAYMENT_ACTIVATING } from "@/lib/billing/signup-checkout-paths"
 import { trackEvent } from "@/lib/posthog/actions"
 import { ycOnboardingDestination } from "@/lib/yc/onboarding"
 
@@ -52,6 +53,21 @@ export default async function PlanSelectionPage({
           params.billing === "success")))
   ) {
     after(async () => {
+      if (context.state === "legacy") {
+        await trackEvent("signup_plan_action", context.userId, {
+          action: "skipped",
+          requested_offer: context.requestedOffer ?? "not_specified",
+          entry_state:
+            context.entryState ??
+            (context.paymentSettling
+              ? PAYMENT_ACTIVATING
+              : context.planAssigned
+                ? "plan_assigned"
+                : "legacy"),
+          ...(params.billing ? { billing_return: params.billing } : {}),
+        })
+        return
+      }
       const properties = {
         requested_offer: context.requestedOffer ?? "not_specified",
         selected_offer: context.offer ?? "free",

@@ -28,6 +28,8 @@ export interface SignupPlanContext {
   requestedOffer?: RequestedOffer
   entryState?: AwaitingPlanState
   paymentSettling?: boolean
+  // The team already has a pricing v2 plan and skips the legacy picker.
+  planAssigned?: boolean
 }
 
 export function parseSignupChoice(
