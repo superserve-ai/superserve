@@ -61,7 +61,7 @@ The timeout is a wall-clock limit, also for streamed commands. Output does not r
 
 <CodeGroup>
 ```typescript TypeScript
-const session = await sandbox.commands.spawn("python -i", {
+const session = await sandbox.commands.spawn("python3 -i", {
   onStdout: (data) => process.stdout.write(data),
 })
 session.stdin.write("print(2 + 2)\n")
@@ -70,9 +70,9 @@ const result = await session.wait()
 ```
 
 ```python Python
-# async only, so use AsyncSandbox
+# async only: run inside an async function on an AsyncSandbox
 session = await sandbox.commands.spawn(
-    "python -i",
+    "python3 -i",
     on_stdout=lambda data: print(data, end=""),
 )
 await session.stdin.write("print(2 + 2)\n")
