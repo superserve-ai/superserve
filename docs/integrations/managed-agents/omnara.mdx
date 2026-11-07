@@ -1,0 +1,323 @@
+---
+title: "Run Omnara agents on Superserve"
+sidebarTitle: Omnara
+description: "Give every Omnara pool machine its own Superserve sandbox. Omnara creates the sandbox from your template, runs agent commands in it, and deletes it when the agent is archived."
+icon: "/logos/integrations/omnara.svg"
+---
+
+[Omnara](https://omnara.com) runs agents in a control plane you reach from its dashboard, CLI, or API. The agent loop and the model calls stay in Omnara. Commands, file edits, and processes run on **machines**, and a [machine pool](https://docs.omnara.com/machines/pools) creates those machines on demand.
+
+Omnara has a built-in Superserve provider. Point a pool at your Superserve API key, and every machine the pool creates is a Superserve sandbox in your team. Each sandbox is a Firecracker microVM that boots from a template you choose. You see it in your console, you can restrict its egress, and Omnara deletes it when the agent that owns it is archived.
+
+This is for you if:
+
+- You want agent commands to run in an isolated VM per machine, in an account you control and can audit.
+- Your agents need a toolchain that you would rather build into a template once than install on every run.
+- You want a per-connection network log and an egress allowlist for the machines your agents use.
+
+## How it works
+
+- **Omnara** runs the agent and decides when it needs a machine. It reads the pool's Superserve API key from an Omnara secret and calls the Superserve API to create and delete sandboxes. The key stays in Omnara and never enters a sandbox.
+- **You** create the pool, choose the template, and set the size and capacity limits. You grant the pool to a project, and agents in that project use it through `machine_sources`.
+- **Superserve** runs the machines. Each pool machine is one sandbox named `omnara-mch-...`, tagged with `omnara-installation` and `omnara-machine` metadata. Omnara starts the `omnarad` daemon in the sandbox, and the daemon connects out to Omnara over HTTPS. Omnara sends the agent's commands over that connection.
+
+No inbound ports are required. Superserve reaches the sandbox through its own control plane.
+
+## Prerequisites
+
+- A [Superserve account](https://console.superserve.ai) and API key
+- An Omnara account on [app.omnara.com](https://app.omnara.com), or a self-hosted Omnara installation
+- Node.js 22+ for the Omnara CLI (`npx omnara`)
+- A model your Omnara project can use. See Omnara's [model providers](https://docs.omnara.com/organization/model-providers).
+
+<Steps>
+  <Step title="Create a Superserve API key">
+    In the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), open **Settings → API keys** and click **Create key**. Export it in the shell where you run the Omnara CLI:
+
+    ```bash
+    export SUPERSERVE_API_KEY="ss_live_..."
+    ```
+
+    Omnara selects the Superserve region from the key prefix, so no API URL is needed.
+  </Step>
+
+  <Step title="Log in to Omnara">
+    ```bash
+    npx omnara login
+    ```
+
+    The CLI opens a browser to confirm a device code. On a host with no browser, run `npx omnara login --no-browser`, then open the printed approval page on another device. For scripts and CI, set `OMNARA_API_KEY` to an Omnara API key instead of logging in.
+
+    Check the session, then point the CLI at your organization and project:
+
+    ```bash
+    npx omnara whoami          # lists your organizations
+    npx omnara projects list --org org_...
+    export OMNARA_ORG_ID="org_..."
+    export OMNARA_PROJECT_ID="proj_..."
+    ```
+
+    You can also pass `--org` and `--project` to each command, or save defaults with `npx omnara config`.
+  </Step>
+
+  <Step title="Store the key as an Omnara secret">
+    Pools belong to the organization, so store the key as an organization secret:
+
+    ```bash
+    npx omnara secrets create \
+      --owner-kind org \
+      --name superserve-api-key \
+      --material-kind generic \
+      --material-value "$SUPERSERVE_API_KEY"
+    ```
+
+    Note the secret id (`sec_...`) in the output. The pool uses it to authenticate to Superserve.
+  </Step>
+
+  <Step title="Choose a template">
+    A template sets each machine's vCPU, memory, and disk. Omnara cannot override them per machine.
+
+    | Template | Shape (vCPU · mem · disk) | Use it for |
+    |---|---|---|
+    | `superserve/omnara` | 2 · 4096 MiB · 8192 MiB | The default. Omnara's default machine environment (Python, Node.js, Go, PostgreSQL, Redis, Playwright). Commands start in `/workspace`. |
+    | `superserve/base` | 2 · 4096 MiB · 8192 MiB | Ubuntu 24.04 with Python and Node.js, for agents that only run shell commands. |
+    | Your own | Set in the build spec | A [team template](/templates/create) with your runtimes, package caches, and certificates built in. Use its name, for example `acme/agent-box`. |
+
+    The template must have the status `ready` before a pool can use it. See [System templates](/templates/overview#system-templates) for the full contents of each template.
+  </Step>
+
+  <Step title="Create the pool">
+    ```bash
+    npx omnara pools create \
+      --name superserve-pool \
+      --provider '"superserve"' \
+      --provider-auth-secret-id sec_... \
+      --default-machine-provider-options '{"template": "superserve/omnara"}' \
+      --max-machine-cpu 2 \
+      --max-machine-memory-mb 4096 \
+      --max-total-machines 2 \
+      --max-total-cpu 4 \
+      --max-total-memory-mb 8192
+    ```
+
+    The JSON flags take JSON values, so the provider name is the quoted string `'"superserve"'`. The per-machine maximums must be at least the template's size: 2 vCPU and 4096 MiB for the system templates. The `--max-total-*` flags cap the whole pool. Note the pool id (`mpo_...`) in the output.
+
+    See Omnara's [Superserve provider](https://docs.omnara.com/machines/providers/superserve) page for `startup_script`, `allowed_templates`, and other fields.
+
+    To use the dashboard instead, open **Machines**, click **New pool**, and choose **Superserve**.
+  </Step>
+
+  <Step title="Grant the pool to a project">
+    ```bash
+    npx omnara grant pools add --machine-pool-id mpo_...
+    ```
+
+    The grant can also set stricter limits and project environment variables. Run `npx omnara grant pools add --help` for the overlay flags.
+  </Step>
+
+  <Step title="Launch an agent">
+    Save an agent config that uses the pool as a machine source:
+
+    ```yaml agent.yaml
+    version: v1
+    instruction: |
+      You are an engineering assistant. Use your machine to run commands.
+    model:
+      provider_config: omnara-openrouter   # npx omnara model-providers list
+      name: anthropic/claude-sonnet-5.5
+    machine_sources:
+      - machine_pool_name: superserve-pool
+    ```
+
+    Launch it with a first message:
+
+    ```bash
+    npx omnara agents launch \
+      --file agent.yaml \
+      --name superserve-check \
+      --message "Run uname -a and df -h on your machine, then report the output."
+    ```
+
+    The agent creates a machine from the pool and runs the commands on it. Machine creation takes a few seconds, and the agent waits for the machine to come online before its first command. Note the agent id (`agt_...`) in the output.
+
+    To follow the run, read the agent's event log, or send another message to the same agent:
+
+    ```bash
+    npx omnara agents events list agt_...
+    npx omnara agents input agt_... \
+      --content-blocks '[{"type": "text", "text": "Run uptime on your machine."}]'
+    ```
+  </Step>
+</Steps>
+
+## Find the sandbox
+
+A sandbox named `omnara-mch-...` appears in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link) while Omnara provisions the machine. Its hostname is `sandbox-` followed by the first part of the sandbox id, so `uname -a` from the agent tells you which sandbox ran the command. Open the sandbox terminal to inspect the machine. The daemon binary is at `/home/user/.omnarad/bin/omnarad`.
+
+The `omnara-machine` tag holds the Omnara machine id (`mch_...`). Run `npx omnara machines list` to get it, then find the sandbox from code:
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const [machine] = await Sandbox.list({
+  metadata: { "omnara-machine": "mch_..." },
+})
+console.log(machine.id, machine.name, machine.status)
+```
+
+```python Python
+from superserve import Sandbox
+
+machine = Sandbox.list(metadata={"omnara-machine": "mch_..."})[0]
+print(machine.id, machine.name, machine.status)
+```
+</CodeGroup>
+
+The [network log](/sandbox/network-log) for the sandbox shows the machine's HTTP and HTTPS connections on ports 80 and 443, including the daemon's connection to Omnara and connections from the agent's commands.
+
+## Pause and resume a machine
+
+Omnara does not pause or resume Superserve sandboxes. When a pool machine's sandbox is paused, for example from the console or the SDK, the daemon stops. About two minutes later, when the daemon's lease expires, Omnara marks the machine `offline` with the reason `daemon_lease_expired`. Commands for that machine then fail with `machine_id_unavailable`, and the sandbox stays paused.
+
+Resume the sandbox to bring the machine back:
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+// connect() resumes a paused sandbox.
+await Sandbox.connect(machine.id)
+```
+
+```python Python
+from superserve import Sandbox
+
+# connect() resumes a paused sandbox.
+Sandbox.connect(machine.id)
+```
+</CodeGroup>
+
+The daemon reconnects, usually within half a minute, and Omnara marks the machine `online` again. The agent continues on the same machine. The workspace and background processes are restored from the checkpoint as the agent left them. See [Pause, resume, and delete](/sandbox/lifecycle).
+
+<Warning>
+  Do not set `timeoutSeconds` or `idleTimeoutSeconds` on a pool machine's
+  sandbox. An automatic pause takes the machine offline in the same way, and
+  Omnara does not resume it. Also keep the `omnara-installation` and
+  `omnara-machine` metadata as it is: Omnara uses it to find the sandboxes it
+  owns.
+</Warning>
+
+## Lock down egress
+
+Omnara creates pool sandboxes with open egress: they can reach any public IP. To restrict a machine, update the network rules on its sandbox while it is `active`. The machine needs outbound HTTPS to:
+
+- The Omnara API: `api.omnara.com` for app.omnara.com, or your installation's public API host if you self-host
+- The DNS resolvers `1.1.1.1/32` and `8.8.8.8/32`, without which nothing resolves
+- The git hosts, package registries, and internal services the agent's work needs
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.connect(machine.id)
+await sandbox.update({
+  network: {
+    allowOut: ["1.1.1.1/32", "8.8.8.8/32", "api.omnara.com", "pypi.org", "files.pythonhosted.org"],
+    denyOut: ["0.0.0.0/0"],
+  },
+})
+```
+
+```python Python
+from superserve import NetworkConfig, Sandbox
+
+sandbox = Sandbox.connect(machine.id)
+sandbox.update(
+    network=NetworkConfig(
+        allow_out=["1.1.1.1/32", "8.8.8.8/32", "api.omnara.com", "pypi.org", "files.pythonhosted.org"],
+        deny_out=["0.0.0.0/0"],
+    ),
+)
+```
+</CodeGroup>
+
+The rules apply immediately to new connections. The daemon stays connected as long as the Omnara API host is allowed, and requests from the agent's commands to any other host fail. Blocked HTTP and HTTPS connections show as denied in the [network log](/sandbox/network-log). See [Network rules](/sandbox/networking) for the rule format. The rules stay on the sandbox through pause and resume, and the daemon reconnects under them after a resume.
+
+<Note>
+  The rules belong to one sandbox. Omnara does not set network rules when it
+  creates a machine, so apply them to each new machine the pool creates. At
+  boot, before you can apply rules, the daemon downloads its binary from
+  Omnara's release host, `releases.omnara.com` on app.omnara.com.
+</Note>
+
+## Credentials for agent commands
+
+Omnara does not bind Superserve [secrets](/secrets/overview) when it creates a machine, and a secret attached later reaches only processes started after the attach call, not the daemon that runs the agent's commands.
+
+To give the agent's commands a credential, such as a `GH_TOKEN` for `gh` and `git`, use Omnara's secret environment variables: `--default-machine-secret-env` on the pool, `--default-machine-secret-env-overlay` on the grant, or `secret_env_overlay` in the agent config. See Omnara's [agent configuration](https://docs.omnara.com/agents/configuration#machines). Omnara resolves the value into the machine's environment, so any process on the machine can read it. Scope these tokens to what the agent needs.
+
+## Archive the agent
+
+```bash
+npx omnara agents archive agt_...
+```
+
+Archiving an agent deletes the machines it created from pools. The sandbox is deleted within seconds and returns `404`, and `npx omnara machines list` no longer shows the machine.
+
+## Clean up
+
+Delete the pool before the secret it uses. Deleting the pool also removes its project grants. Omnara rejects the secret deletion with `error: API 409 [conflict]: conflict` while a pool still references it.
+
+```bash
+npx omnara pools delete mpo_...
+npx omnara secrets delete sec_...
+```
+
+To delete the Superserve API key, open **Settings → API keys** in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link).
+
+## Troubleshooting
+
+<AccordionGroup>
+  <Accordion title="The first command fails with no_active_agent_machine_binding">
+    The sandbox is up, but the daemon has not connected to Omnara yet. The agent retries on its own. If the error continues, open the sandbox terminal and check that the machine can reach the Omnara API host and the daemon download host.
+  </Accordion>
+  <Accordion title="The pool cannot create machines: template not found or not ready">
+    Omnara reports `superserve template "<name>" was not found` or `is not ready`. Check the template name and its status in the console. A team template must belong to the same team as the API key.
+  </Accordion>
+  <Accordion title="pools create fails with a JSON or validation error">
+    `--provider superserve` fails with `expects valid JSON`; pass `--provider '"superserve"'`. Leaving out `--default-machine-provider-options` gives `expected record, received undefined`, and leaving out `--max-total-machines` gives `expected number`. Pass both, as in the pool step.
+  </Accordion>
+  <Accordion title="agents launch fails with does not have an active project grant">
+    The model in the config is not granted to the project. Grant it with `npx omnara grant models add --configured-model-id <model-id>`, or pick a model the project already has.
+  </Accordion>
+  <Accordion title="A machine is offline and commands fail with machine_id_unavailable">
+    The sandbox is paused. Resume it with `Sandbox.connect()` as in [Pause and resume a machine](#pause-and-resume-a-machine). If the sandbox is active, check that its network rules allow the Omnara API host.
+  </Accordion>
+  <Accordion title="Sandboxes stay in the console after the agents are gone">
+    Archive the agents that own them. Every pool sandbox carries `omnara-machine` metadata, so filter `Sandbox.list()` by it to find them.
+  </Accordion>
+</AccordionGroup>
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Omnara Superserve provider" icon="book" href="https://docs.omnara.com/machines/providers/superserve">
+    Pool fields, provider options, and template allowlists.
+  </Card>
+  <Card title="Omnara machine pools" icon="server" href="https://docs.omnara.com/machines/pools">
+    Pools, grants, and how machine settings combine.
+  </Card>
+  <Card title="Templates" icon="layer-group" href="/templates/overview">
+    Build reusable images with your toolchains built in.
+  </Card>
+  <Card title="Pause, resume, and delete" icon="pause" href="/sandbox/lifecycle">
+    Checkpoint a sandbox and restore it on demand.
+  </Card>
+  <Card title="Network rules" icon="shield" href="/sandbox/networking">
+    Allow and deny outbound traffic per sandbox.
+  </Card>
+  <Card title="Network log" icon="list" href="/sandbox/network-log">
+    Every connection a sandbox made, allowed or blocked.
+  </Card>
+</CardGroup>
