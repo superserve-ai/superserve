@@ -43,6 +43,8 @@ function Limit({ children }: { children: string }) {
   )
 }
 
+const SUPPORT_EMAIL = "support@superserve.ai"
+
 function EnterpriseOption({
   card,
   className,
@@ -224,11 +226,28 @@ export function PlanPickerOptions({
       : asked
   const highlighted = (offer: SignupCheckoutOffer) =>
     !chosen || chosen === offer
+  const enterprise = catalog?.cards.find((card) => card.kind === "custom")
+  // Nothing is sellable to this team now, so offer every other way forward.
   if (plans.length === 0)
     return (
-      <p className="mt-5 text-center text-xs text-muted">
-        No plans are available right now. Please try again later.
-      </p>
+      <div className="mt-5 flex w-full flex-col items-center gap-4">
+        <p className="max-w-sm text-center text-xs text-muted">
+          No plans are available for this team right now. Contact{" "}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="text-foreground underline underline-offset-4 hover:text-primary"
+          >
+            {SUPPORT_EMAIL}
+          </a>{" "}
+          to choose a plan.
+        </p>
+        {enterprise ? (
+          <EnterpriseOption card={enterprise} className="w-full max-w-sm" />
+        ) : null}
+        <Button variant="outline" size="sm" onClick={() => void signOut()}>
+          Sign out
+        </Button>
+      </div>
     )
   const listed = plans.filter(
     (plan): plan is PickerPlan & { catalog: BillingOffer } =>
@@ -257,7 +276,6 @@ export function PlanPickerOptions({
         ))}
       </div>
     )
-  const enterprise = catalog?.cards.find((card) => card.kind === "custom")
   return (
     <div
       className={cn(
