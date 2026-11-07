@@ -48,8 +48,8 @@ const MESSAGES: Record<PlanPickerReason, string> = {
 }
 
 const TRIAL_COPY: Record<TrialOutcome, string> = {
-  used_up:
-    "Your free trial is used up. Your sandboxes are paused. A sandbox set to auto-delete after a pause can still be deleted. Choose a plan to continue.",
+  ended:
+    "Your free trial has ended. Your sandboxes are paused. A sandbox set to auto-delete after a pause can still be deleted. Choose a plan to continue.",
   unavailable:
     "The free trial isn't available for this account. Choose a plan to run sandboxes.",
   check_unavailable:
