@@ -30,6 +30,20 @@ export function serializeTeamSelection(selection: TeamSelection): string {
   return `${selection.region}:${selection.teamId}`
 }
 
+/** Stores the selection; callable only from a server action or route handler. */
+export async function writeTeamSelection(
+  selection: TeamSelection,
+): Promise<void> {
+  const store = await cookies()
+  store.set(ACTIVE_TEAM_COOKIE, serializeTeamSelection(selection), {
+    httpOnly: true,
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: 60 * 60 * 24 * 365,
+  })
+}
+
 /** The stored selection for this request, or null when none was ever set. */
 export async function readTeamSelection(): Promise<TeamSelection | null> {
   const store = await cookies()
