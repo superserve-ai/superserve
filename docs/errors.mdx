@@ -120,8 +120,8 @@ Creating or resuming a sandbox fails with `402 Payment Required` when the team's
 
 | Code | Meaning | What to do |
 |---|---|---|
-| `billing_ineligible` | The team has no active billing, for example because its trial credit ran out or an invoice is unpaid (see [Unpaid invoices](#unpaid-invoices)). The message is `Sandbox usage is unavailable until billing is active`. | Add a payment method or choose a plan on the [Billing & Usage](https://console.superserve.ai/plan-usage) page, then retry. |
-| `free_allowance_exhausted` | The team is on the Free plan and has used its daily compute allowance. Running sandboxes are paused too. | Wait until the allowance resets, or upgrade on the [Billing & Usage](https://console.superserve.ai/plan-usage) page for unlimited runtime. |
+| `billing_ineligible` | The team has no active billing, for example because its trial credit ran out or an invoice is unpaid (see [Unpaid invoices](#unpaid-invoices)). The message is `Sandbox usage is unavailable until billing is active`. | Add a payment method or choose a plan on the [Billing & Usage](https://console.superserve.ai/billing-usage) page, then retry. |
+| `free_allowance_exhausted` | The team is on the Free plan and has used its daily compute allowance. Running sandboxes are paused too. | Wait until the allowance resets, or upgrade on the [Billing & Usage](https://console.superserve.ai/billing-usage) page for unlimited runtime. |
 
 The API response for `free_allowance_exhausted` also includes `resets_at`, the UTC time (RFC 3339) when sandboxes can start again. The SDK error does not carry `resets_at`, so read it from the raw API response if you need it.
 
