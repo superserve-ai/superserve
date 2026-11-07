@@ -12,6 +12,7 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
@@ -250,9 +251,8 @@ export default function SignUpContent() {
     const newErrors: Record<string, string> = {}
     if (!fullName) newErrors.fullName = "Name is required."
     if (!email) newErrors.email = "Email is required."
-    if (!password) newErrors.password = "Password is required."
-    else if (password.length < 8)
-      newErrors.password = "Must be at least 8 characters."
+    const passwordError = passwordRuleError(password)
+    if (passwordError) newErrors.password = passwordError
     if (password && password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match."
     if (Object.keys(newErrors).length > 0) {
@@ -643,6 +643,9 @@ export default function SignUpContent() {
                 value={password}
                 onChange={(e) => setFormValue("password", e.target.value)}
                 error={errors.password}
+                aria-describedby={
+                  errors.password ? undefined : "signup-password-rule"
+                }
                 suffix={
                   <button
                     type="button"
@@ -657,6 +660,14 @@ export default function SignUpContent() {
                   </button>
                 }
               />
+              {!errors.password && (
+                <p
+                  id="signup-password-rule"
+                  className="-mt-1 text-xs text-muted"
+                >
+                  {PASSWORD_RULE_HINT}
+                </p>
+              )}
               <Input
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm Password"
