@@ -375,6 +375,30 @@ describe("degradation visibility", () => {
     expect(cellClients.use.from).toHaveBeenCalledTimes(4)
     expect(cellClients.usw.from).toHaveBeenCalledTimes(4)
   })
+
+  it("strict reads keep a degraded region marked when a healthy empty read is cached", async () => {
+    regions = ["use", "usw"]
+    cellClients.use = cellClient([])
+    cellClients.usw = cellClient([])
+    await listTeamMembershipsForUserDetailed("u1")
+
+    // One fetch is already in flight when the strict read starts, and the
+    // strict read's own usw lookup fails.
+    cellClients.use = cellClient([])
+    cellClients.usw = queuedMembershipCellClient([
+      { kind: "resolve", data: [] },
+      { kind: "resolve", data: [] },
+      { kind: "reject", message: "usw down" },
+      { kind: "resolve", data: [] },
+    ])
+
+    const [, strict] = await Promise.all([
+      listTeamMembershipsForUserDetailed("u1", { maxAgeMs: 0 }),
+      listTeamMembershipsForUserDetailed("u1", { strict: true }),
+    ])
+
+    expect(strict).toEqual({ memberships: [], degradedRegions: ["usw"] })
+  })
 })
 
 describe("RBAC-authoritative membership", () => {

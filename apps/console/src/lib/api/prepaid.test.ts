@@ -15,7 +15,7 @@ vi.mock("./client", async (original) => ({
   ...(await original<typeof import("./client")>()),
   apiClient: (...args: unknown[]) => api(...args),
 }))
-const route = "https://console.test/plan-usage/buy-credit/"
+const route = "https://console.test/billing-usage/buy-credit/"
 const body = (index: number) => JSON.parse(api.mock.calls[index]![1].body)
 beforeEach(() => {
   api.mockReset()
