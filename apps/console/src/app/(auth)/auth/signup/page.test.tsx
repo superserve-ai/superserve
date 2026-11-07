@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -78,6 +78,7 @@ vi.mock("@/lib/fingerprint/client", () => ({
 }))
 
 const mockSignUpWithEmail = vi.fn()
+const mockResendSignupConfirmation = vi.fn()
 const mockBeginGoogleSignup = vi.fn<
   (
     token?: string,
@@ -101,6 +102,8 @@ vi.mock("./action", () => ({
   claimGoogleRecoveryContinuation: (reason: string) =>
     mockClaimGoogleRecoveryContinuation(reason),
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
+  resendSignupConfirmation: (...args: unknown[]) =>
+    mockResendSignupConfirmation(...args),
   beginGoogleSignup: (...args: Parameters<typeof mockBeginGoogleSignup>) =>
     mockBeginGoogleSignup(...args),
   isCloudflareSignupObservationEnabled: () => Promise.resolve(false),
@@ -151,6 +154,7 @@ describe("SignUpPage", () => {
 
   beforeEach(async () => {
     mockSignUpWithEmail.mockReset()
+    mockResendSignupConfirmation.mockReset()
     mockBeginGoogleSignup.mockReset()
     mockBeginGoogleSignup.mockResolvedValue({
       success: true,
@@ -648,6 +652,219 @@ describe("SignUpPage", () => {
           ),
         },
       })
+    })
+  })
+
+  describe("confirmation email status", () => {
+    const submit = async () => {
+      await user.type(
+        await screen.findByPlaceholderText("Full Name"),
+        "Test User",
+      )
+      await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+      await user.type(screen.getByPlaceholderText("Password"), "password123")
+      await user.type(
+        screen.getByPlaceholderText("Confirm Password"),
+        "password123",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign Up" }))
+    }
+    const notSent = {
+      success: false,
+      error:
+        "Your account was created, but we couldn't send the confirmation email.",
+      errorCode: "email_not_sent",
+    }
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("does not claim an email was sent when it was not", async () => {
+      mockSignUpWithEmail.mockResolvedValue(notSent)
+      mockSearchParams = new URLSearchParams({
+        signup_offer: "enterprise",
+        next: "/yc/claim",
+      })
+      render(<SignUpPage />)
+
+      await submit()
+
+      expect(
+        await screen.findByText("We couldn't send your confirmation email"),
+      ).toBeInTheDocument()
+      expect(screen.queryByText("Check Your Email")).not.toBeInTheDocument()
+      expect(
+        screen.getByRole("link", { name: "support@superserve.ai" }),
+      ).toHaveAttribute("href", "mailto:support@superserve.ai")
+      expect(
+        screen.getByRole("button", { name: /Resend confirmation email/ }),
+      ).toBeDisabled()
+      expect(screen.getByRole("link", { name: "Sign in" })).toHaveAttribute(
+        "href",
+        "/auth/signin?signup_offer=enterprise&next=%2Fyc%2Fclaim",
+      )
+    })
+
+    it("resends after the cooldown and then shows the sent state", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSignUpWithEmail.mockResolvedValue(notSent)
+      mockResendSignupConfirmation.mockResolvedValue({ success: true })
+      render(<SignUpPage />)
+      await submit()
+      const resend = await screen.findByRole("button", {
+        name: "Resend confirmation email (60s)",
+      })
+      expect(resend).toBeDisabled()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+      expect(mockResendSignupConfirmation).toHaveBeenCalledWith(
+        undefined,
+        "test@test.com",
+      )
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "We sent a new confirmation email.",
+      )
+      expect(
+        screen.getByRole("button", { name: "Resend confirmation email (60s)" }),
+      ).toBeDisabled()
+    })
+
+    it("offers a resend from the sent state and shows server errors", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSignUpWithEmail.mockResolvedValue({ success: true })
+      mockResendSignupConfirmation.mockResolvedValue({
+        success: false,
+        error: "Please wait 12 seconds before you request another email.",
+        errorCode: "cooldown",
+        retryAfterSeconds: 12,
+      })
+      render(<SignUpPage />)
+      await submit()
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+
+      expect(await screen.findByRole("alert")).toHaveTextContent(
+        "Please wait 12 seconds",
+      )
+      expect(
+        screen.getByRole("button", { name: "Resend confirmation email (12s)" }),
+      ).toBeDisabled()
+    })
+
+    it("switches to the not-sent view when a resend fails", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSignUpWithEmail.mockResolvedValue({ success: true })
+      mockResendSignupConfirmation.mockResolvedValue(notSent)
+      render(<SignUpPage />)
+      await submit()
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+
+      expect(
+        await screen.findByText("We couldn't send your confirmation email"),
+      ).toBeInTheDocument()
+      expect(screen.queryByText("Check Your Email")).not.toBeInTheDocument()
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        "we couldn't send the confirmation email",
+      )
+    })
+
+    it("blocks start over while a resend is in flight", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSignUpWithEmail.mockResolvedValue(notSent)
+      let finishResend: (value: { success: true }) => void = () => {}
+      mockResendSignupConfirmation.mockReturnValue(
+        new Promise((resolve) => {
+          finishResend = resolve
+        }),
+      )
+      render(<SignUpPage />)
+      await submit()
+      await screen.findByText("We couldn't send your confirmation email")
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+      const startOverButton = screen.getByRole("button", { name: "Start over" })
+      expect(startOverButton).toBeDisabled()
+      await user.click(startOverButton)
+      expect(screen.queryByRole("button", { name: "Sign Up" })).toBeNull()
+
+      await act(async () => {
+        finishResend({ success: true })
+      })
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+      expect(screen.getByRole("button", { name: "Start over" })).toBeEnabled()
+    })
+
+    it("keeps the submitted email if the field changes during signup", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      let finishSignup: (value: typeof notSent) => void = () => {}
+      mockSignUpWithEmail.mockReturnValue(
+        new Promise((resolve) => {
+          finishSignup = resolve
+        }),
+      )
+      mockResendSignupConfirmation.mockResolvedValue({ success: true })
+      render(<SignUpPage />)
+      await submit()
+      await waitFor(() => expect(mockSignUpWithEmail).toHaveBeenCalled())
+
+      const emailInput = screen.getByPlaceholderText("Email")
+      await user.clear(emailInput)
+      await user.type(emailInput, "changed@test.com")
+      await act(async () => {
+        finishSignup(notSent)
+      })
+
+      expect(await screen.findByText("test@test.com")).toBeInTheDocument()
+      expect(screen.queryByText("changed@test.com")).toBeNull()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      await user.click(
+        screen.getByRole("button", { name: "Resend confirmation email" }),
+      )
+      expect(mockResendSignupConfirmation).toHaveBeenCalledWith(
+        undefined,
+        "test@test.com",
+      )
+    })
+
+    it("lets the user start over with the entered details", async () => {
+      mockSignUpWithEmail.mockResolvedValue(notSent)
+      render(<SignUpPage />)
+      await submit()
+
+      await user.click(
+        await screen.findByRole("button", { name: "Start over" }),
+      )
+
+      expect(screen.getByPlaceholderText("Email")).toHaveValue("test@test.com")
+      expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled()
     })
   })
 

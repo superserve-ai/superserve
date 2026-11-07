@@ -26,6 +26,7 @@ import {
   beginGoogleSignup,
   claimGoogleRecoveryContinuation,
   isCloudflareSignupObservationEnabled,
+  resendSignupConfirmation,
   signUpWithEmail,
 } from "./action"
 
@@ -137,6 +138,11 @@ const GOOGLE_RECOVERY_MESSAGES: Record<string, string> = {
 const GOOGLE_RECOVERY_AUTO_KEY = "superserve-google-signup-auto-continue"
 const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
 
+// Matches the server-side cooldown between confirmation emails.
+const RESEND_COOLDOWN_SECONDS = 60
+const BOT_CHECK_UNAVAILABLE =
+  "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
+
 const getRecaptchaToken = async (
   action: string,
 ): Promise<string | undefined> => {
@@ -184,7 +190,24 @@ export default function SignUpContent() {
     setFormValues((current) => ({ ...current, [key]: value }))
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [emailSent, setEmailSent] = useState(false)
+  // The address the account was created with. The field stays editable while
+  // signup is pending, so the confirmation views and resend use this copy.
+  const [submittedEmail, setSubmittedEmail] = useState("")
+  // Only "sent" means a confirmation email actually went out.
+  const [emailStatus, setEmailStatus] = useState<"sent" | "not_sent" | null>(
+    null,
+  )
+  const [resendAvailableAt, setResendAvailableAt] = useState(0)
+  const [now, setNow] = useState(0)
+  const resendCooldown = Math.max(
+    0,
+    Math.ceil((resendAvailableAt - now) / 1000),
+  )
+  const [isResending, setIsResending] = useState(false)
+  const [resendNotice, setResendNotice] = useState<{
+    text: string
+    error: boolean
+  } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
   const router = useRouter()
@@ -271,6 +294,13 @@ export default function SignUpContent() {
           router.push("/auth/auth-code-error?reason=signup_blocked")
           return
         }
+        if ("errorCode" in result && result.errorCode === "email_not_sent") {
+          setResendNotice(null)
+          startResendCooldown(RESEND_COOLDOWN_SECONDS)
+          setSubmittedEmail(email)
+          setEmailStatus("not_sent")
+          return
+        }
         setErrors({ form: result.error || "Error creating account." })
         return
       }
@@ -279,13 +309,122 @@ export default function SignUpContent() {
         ...(requestedOffer ? { requested_offer: requestedOffer } : {}),
       })
       clearFingerprintSignupCapture()
-      setEmailSent(true)
+      setResendNotice(null)
+      startResendCooldown(RESEND_COOLDOWN_SECONDS)
+      setSubmittedEmail(email)
+      setEmailStatus("sent")
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
     } finally {
       setIsLoading(false)
     }
   }
+
+  const startResendCooldown = (seconds: number) => {
+    const current = Date.now()
+    setNow(current)
+    setResendAvailableAt(current + seconds * 1000)
+  }
+
+  useEffect(() => {
+    if (resendAvailableAt <= Date.now()) return
+    const timer = setInterval(() => {
+      const current = Date.now()
+      setNow(current)
+      if (current >= resendAvailableAt) clearInterval(timer)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendAvailableAt])
+
+  const handleResend = async () => {
+    setIsResending(true)
+    setResendNotice(null)
+    try {
+      const recaptchaToken = await getRecaptchaToken("signup_resend")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setResendNotice({ text: BOT_CHECK_UNAVAILABLE, error: true })
+        return
+      }
+      const result = await resendSignupConfirmation(
+        recaptchaToken,
+        submittedEmail,
+      )
+      if (result.success) {
+        setEmailStatus("sent")
+        startResendCooldown(RESEND_COOLDOWN_SECONDS)
+        setResendNotice({
+          text: "We sent a new confirmation email. Links in earlier emails no longer work.",
+          error: false,
+        })
+        return
+      }
+      if (
+        result.errorCode === "cooldown" ||
+        result.errorCode === "email_not_sent"
+      )
+        startResendCooldown(result.retryAfterSeconds ?? RESEND_COOLDOWN_SECONDS)
+      // A failed resend may already have replaced the earlier link.
+      if (result.errorCode === "email_not_sent") setEmailStatus("not_sent")
+      setResendNotice({ text: result.error, error: true })
+    } catch {
+      setResendNotice({
+        text: "We couldn't resend the email. Please try again.",
+        error: true,
+      })
+    } finally {
+      setIsResending(false)
+    }
+  }
+
+  const startOver = () => {
+    setEmailStatus(null)
+    setResendNotice(null)
+  }
+
+  const resendControls = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleResend}
+        disabled={isResending || resendCooldown > 0}
+        className="mt-5 w-full gap-2"
+      >
+        {isResending && <Spinner />}
+        {isResending
+          ? "Sending..."
+          : resendCooldown > 0
+            ? `Resend confirmation email (${resendCooldown}s)`
+            : "Resend confirmation email"}
+      </Button>
+      {resendNotice && (
+        <p
+          role={resendNotice.error ? "alert" : "status"}
+          className={`mt-3 text-center text-xs ${resendNotice.error ? "text-destructive" : "text-muted"}`}
+        >
+          {resendNotice.text}
+        </p>
+      )}
+      <p className="mt-5 text-center text-xs text-muted">
+        Wrong email?{" "}
+        <button
+          type="button"
+          onClick={startOver}
+          disabled={isResending}
+          className="font-medium text-foreground hover:underline disabled:opacity-50"
+        >
+          Start over
+        </button>
+        {" · "}Already verified?{" "}
+        <Link
+          href={signInHref}
+          className="font-medium text-foreground hover:underline"
+        >
+          Sign in
+        </Link>
+      </p>
+    </>
+  )
 
   const handleGoogleSignIn = async () => {
     setIsGoogleLoading(true)
@@ -399,25 +538,37 @@ export default function SignUpContent() {
             />
           </Link>
         </div>
-        {emailSent ? (
+        {emailStatus === "sent" ? (
           <>
             <h1 className="text-center text-sm font-medium text-foreground">
               Check Your Email
             </h1>
             <p className="mt-2 text-center text-xs leading-relaxed text-muted">
               We&apos;ve sent a verification link to{" "}
-              <strong className="text-foreground">{email}</strong>. Check your
-              inbox and click the link to verify your account.
+              <strong className="text-foreground">{submittedEmail}</strong>.
+              Check your inbox and click the link to verify your account.
             </p>
-            <p className="mt-5 text-center text-xs text-muted">
-              Already verified?{" "}
-              <Link
-                href={signInHref}
+            {resendControls}
+          </>
+        ) : emailStatus === "not_sent" ? (
+          <>
+            <h1 className="text-center text-sm font-medium text-foreground">
+              We couldn&apos;t send your confirmation email
+            </h1>
+            <p className="mt-2 text-center text-xs leading-relaxed text-muted">
+              Your account for{" "}
+              <strong className="text-foreground">{submittedEmail}</strong> was
+              created, but the confirmation email did not go out. Send it again
+              below. If it still fails, contact{" "}
+              <a
+                href="mailto:support@superserve.ai"
                 className="font-medium text-foreground hover:underline"
               >
-                Sign in
-              </Link>
+                support@superserve.ai
+              </a>
+              .
             </p>
+            {resendControls}
           </>
         ) : isCompleteGoogleSignup ? (
           <>
