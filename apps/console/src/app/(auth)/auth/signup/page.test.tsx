@@ -120,10 +120,16 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    className,
   }: {
     children: React.ReactNode
     href: string
-  }) => <a href={href}>{children}</a>,
+    className?: string
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }))
 
 const mockCapture = vi.fn()
@@ -269,6 +275,22 @@ describe("SignUpPage", () => {
     )
     expect(url.searchParams.get("next")).toBe("/yc/claim")
     expect(url.searchParams.get("offer")).toBe("yc_2026")
+    expect(link).not.toHaveClass("ph-no-capture")
+  })
+
+  it("keeps an invite destination in the sign-in link out of session replay", async () => {
+    mockSearchParams = new URLSearchParams({
+      next: "/invite/ssinv_exampletoken",
+    })
+    render(<SignUpPage />)
+    const link = await screen.findByRole("link", { name: "Sign in" })
+    expect(
+      new URL(
+        link.getAttribute("href")!,
+        "https://console.example.test",
+      ).searchParams.get("next"),
+    ).toBe("/invite/ssinv_exampletoken")
+    expect(link).toHaveClass("ph-no-capture")
   })
 
   it("explains how to get a new link after an expired confirmation", async () => {
@@ -679,6 +701,41 @@ describe("SignUpPage", () => {
     afterEach(() => {
       vi.useRealTimers()
     })
+
+    it.each(["sent", "not_sent"])(
+      "keeps one protected invite sign-in link in the %s view",
+      async (status) => {
+        const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+        mockSignUpWithEmail.mockResolvedValue(
+          status === "sent" ? { success: true } : notSent,
+        )
+        mockSearchParams = new URLSearchParams({ next: invite })
+        render(<SignUpPage />)
+
+        await submit()
+
+        expect(
+          await screen.findByText(
+            status === "sent"
+              ? "Check Your Email"
+              : "We couldn't send your confirmation email",
+          ),
+        ).toBeInTheDocument()
+        const links = screen.getAllByRole("link", { name: "Sign in" })
+        expect(links).toHaveLength(1)
+        expect(
+          new URL(
+            links[0].getAttribute("href")!,
+            "https://console.example.test",
+          ).searchParams.get("next"),
+        ).toBe(invite)
+        expect(links[0]).toHaveClass("ph-no-capture")
+        expect(
+          screen.getByRole("button", { name: /Resend confirmation email/ }),
+        ).toBeDisabled()
+        expect(screen.getByRole("button", { name: "Start over" })).toBeEnabled()
+      },
+    )
 
     it("does not claim an email was sent when it was not", async () => {
       mockSignUpWithEmail.mockResolvedValue(notSent)

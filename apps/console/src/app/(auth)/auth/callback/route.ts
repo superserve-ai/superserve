@@ -29,6 +29,7 @@ import {
   retainOriginalGoogleSignup,
   revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
@@ -379,11 +380,24 @@ export async function GET(request: Request) {
               ),
             )
           }
+          // An invitee retries toward the invitation instead of first-team
+          // setup; an unproven Google invitee needs signup's proof gate first.
+          const invite = inviteReturnPath(next)
+          if (googleProofRecovery && invite && !paidSetupRecovery)
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                `/auth/signup?${new URLSearchParams({ complete_google: "1", next: invite })}`,
+              ),
+            )
           return NextResponse.redirect(
             buildRedirectUrl(
               origin,
               paidSetupRecovery ??
-                "/auth/auth-code-error?reason=membership_lookup_degraded",
+                `/auth/auth-code-error?${new URLSearchParams({
+                  reason: "membership_lookup_degraded",
+                  ...(invite ? { next: invite } : {}),
+                })}`,
             ),
           )
         }
@@ -730,6 +744,7 @@ export async function GET(request: Request) {
 
         const proNext = proAuthReturnPath(next) ?? starterAuthReturnPath(next)
         const preparationNext = signupPreparationReturnPath(next)
+        const inviteNext = inviteReturnPath(next)
         const ycNext =
           ycReturnPath(next) ??
           (process.env.YC_STAFF_UI_ENABLED === "true"
@@ -744,10 +759,12 @@ export async function GET(request: Request) {
           !isPlanPickerPath(next) &&
           !ycNext &&
           !proNext &&
-          !preparationNext
+          !preparationNext &&
+          !inviteNext
         ) {
           next = "/sandboxes"
         }
+        if (inviteNext) next = inviteNext
         if (ycNext) next = ycNext
         if (proNext) next = proNext
         if (preparationNext) next = preparationNext
@@ -830,5 +847,9 @@ export async function GET(request: Request) {
       return response
     }
   }
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+  // A failed exchange keeps the invitation, so its retry can still join it.
+  const invite = inviteReturnPath(next)
+  return NextResponse.redirect(
+    `${origin}/auth/auth-code-error${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
+  )
 }

@@ -476,6 +476,35 @@ describe("signUpWithEmail", () => {
       ).toBeNull()
     })
 
+    it.each([
+      `/invite/ssinv_use_${"A".repeat(43)}`,
+      `/invite/ssinv_usw_${"a1_-".repeat(10)}abc`,
+    ])(
+      "keeps an invite link through the emailed confirmation: %s",
+      async (next) => {
+        await signUp(undefined, next)
+        const redirect = new URL(
+          mockGenerateLink.mock.lastCall![0].options.redirectTo,
+        )
+        expect(redirect.searchParams.get("next")).toBe(next)
+      },
+    )
+    it.each([
+      `/invite/ssinv_use_${"A".repeat(42)}`,
+      `/invite/ssinv_eu_${"A".repeat(43)}`,
+      `/invite/ssinv_use_${"A".repeat(43)}/extra`,
+      `/invite/ssinv_use_${"A".repeat(43)}?next=https%3A%2F%2Foutside.test`,
+      `//invite/ssinv_use_${"A".repeat(43)}`,
+      "/invite/",
+    ])("rejects an invalid invite return: %s", async (next) => {
+      await signUp(undefined, next)
+      expect(
+        new URL(
+          mockGenerateLink.mock.lastCall![0].options.redirectTo,
+        ).searchParams.get("next"),
+      ).toBeNull()
+    })
+
     it("does not ask for the switch without an offer", async () => {
       await signUp(undefined)
       expect(mockPricingVersion).not.toHaveBeenCalled()
@@ -1202,6 +1231,41 @@ describe("confirmation email delivery", () => {
   })
 
   describe("resendSignupConfirmation", () => {
+    it("preserves the invitation through signup and resend with the same attempt", async () => {
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      expect(
+        await signUpWithEmail(
+          SHOWN_EMAIL,
+          "password123",
+          "Name",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          invite,
+        ),
+      ).toEqual({ success: true })
+      const original = confirmationUrl()
+      const saved = mockSaveResendTicket.mock.lastCall![0]
+      expect(original.searchParams.get("next")).toBe(invite)
+      expect(new URL(saved.redirect).searchParams.get("next")).toBe(invite)
+      mockReadResendTicket.mockResolvedValue(saved)
+
+      expect(await resendSignupConfirmation(undefined, SHOWN_EMAIL)).toEqual({
+        success: true,
+      })
+
+      const resent = confirmationUrl()
+      expect(resent.searchParams.get("next")).toBe(invite)
+      expect(resent.searchParams.get("signup_attempt_id")).toBe(
+        original.searchParams.get("signup_attempt_id"),
+      )
+      expect(mockGenerateLink.mock.lastCall![0].options.redirectTo).toBe(
+        saved.redirect,
+      )
+    })
+
     it("sends a new link through the app email path with the original params", async () => {
       const result = await resendSignupConfirmation("resend-token", SHOWN_EMAIL)
 

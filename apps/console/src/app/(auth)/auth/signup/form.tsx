@@ -1,7 +1,7 @@
 "use client"
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
-import { Button, Input } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -19,6 +19,7 @@ import {
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -418,7 +419,10 @@ export default function SignUpContent() {
         {" · "}Already verified?{" "}
         <Link
           href={signInHref}
-          className="font-medium text-foreground hover:underline"
+          className={cn(
+            "font-medium text-foreground hover:underline",
+            inviteLinkReplayClass(signInHref),
+          )}
         >
           Sign in
         </Link>
@@ -691,7 +695,10 @@ export default function SignUpContent() {
               Already have an account?{" "}
               <Link
                 href={signInHref}
-                className="font-medium text-foreground hover:underline"
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Sign in
               </Link>

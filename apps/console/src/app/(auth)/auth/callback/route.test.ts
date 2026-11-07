@@ -40,6 +40,8 @@ vi.mock("@/app/(auth)/auth/signin/google-action", () => ({
   beginGoogleSignIn: async () => "retry-origin",
 }))
 vi.mock("@superserve/ui", () => ({
+  cn: (...classes: Array<string | undefined | false>) =>
+    classes.filter(Boolean).join(" "),
   Button: ({
     render: element,
     children,
@@ -594,6 +596,24 @@ describe("auth callback", () => {
       next: "/yc/claim",
     })
     expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+  })
+
+  it("preserves the invitation when an expired confirmation returns to signup", async () => {
+    authVerifyOtpError = { message: "Email link is invalid or has expired" }
+    const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+    const callback = new URL("https://console.superserve.ai/auth/callback")
+    callback.searchParams.set("token_hash", "expired-token")
+    callback.searchParams.set("type", "signup")
+    callback.searchParams.set("next", invite)
+
+    const response = await GET(new Request(callback))
+
+    const destination = new URL(response.headers.get("location")!)
+    expect(destination.pathname).toBe("/auth/signup")
+    expect(Object.fromEntries(destination.searchParams)).toEqual({
+      error: "link_expired",
+      next: invite,
+    })
   })
 
   it.each(["token_hash=token&type=magiclink", "code=abc&type=signup"])(
@@ -1152,6 +1172,43 @@ describe("auth callback", () => {
         )
         expect(response.headers.get("location")).toBe(
           `https://console.superserve.ai${next}`,
+        )
+      })
+    })
+
+    describe("invite return path", () => {
+      const token = `ssinv_use_${"A".repeat(43)}`
+
+      it.each([`/invite/${token}`, `/invite/${token}/`])(
+        "returns to the invite page after sign-in: %s",
+        async (next) => {
+          const response = await GET(
+            new Request(
+              `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+            ),
+          )
+          expect(response.headers.get("location")).toBe(
+            `https://console.superserve.ai/invite/${token}`,
+          )
+        },
+      )
+
+      it.each([
+        `/invite/${token}/extra`,
+        `/invite/${token}?next=https://outside.test`,
+        `/invite/${token}#x`,
+        `/invite/ssinv_eu_${"A".repeat(43)}`,
+        `/invite/${"A".repeat(43)}`,
+        `//outside.test/invite/${token}`,
+        `/invite/..%2F..%2Fadmin`,
+      ])("drops %s", async (next) => {
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+          ),
+        )
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
         )
       })
     })
@@ -1822,6 +1879,24 @@ describe("auth callback", () => {
       },
     )
 
+    it("sends a Google invitee back through the signup proof gate on a degraded lookup", async () => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?code=abc",
+      )
+      url.searchParams.set("next", invite)
+      const response = await GET(new Request(url))
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.pathname).toBe("/auth/signup")
+      expect(failure.searchParams.get("complete_google")).toBe("1")
+      expect(failure.searchParams.get("next")).toBe(invite)
+      expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+    })
+
     it("retains the existing preparation account and pinned team on a degraded Google lookup", async () => {
       googleMembershipState = {
         kind: "indeterminate",
@@ -1886,6 +1961,52 @@ describe("auth callback", () => {
       await expect(proof.requireGoogleSignupProof("u1")).resolves.toBe(
         "early-unbound-attempt",
       )
+    })
+
+    it("keeps an invitation destination through a degraded lookup and its retry", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      directoryState = { memberships: [], degradedRegions: ["use"] }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=official&type=signup",
+      )
+      url.searchParams.set("next", invite)
+      const response = await GET(new Request(url))
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.pathname).toBe("/auth/auth-code-error")
+      expect(failure.searchParams.get("reason")).toBe(
+        "membership_lookup_degraded",
+      )
+      expect(failure.searchParams.get("next")).toBe(invite)
+      retrySearch = failure.searchParams
+      const ErrorPage = (await import("../auth-code-error/page")).default
+      render(createElement(ErrorPage))
+      const retry = new URL(
+        screen.getByRole("link", { name: "Try Again" }).getAttribute("href")!,
+        url,
+      )
+      cleanup()
+      expect(retry.pathname).toBe("/auth/signin")
+      expect(retry.searchParams.get("next")).toBe(invite)
+    })
+
+    it("keeps an invitation destination when a magic-link exchange fails", async () => {
+      authVerifyOtpError = { message: "Email link is invalid or has expired" }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=expired&type=magiclink",
+      )
+      url.searchParams.set("next", invite)
+      const failure = new URL(
+        (await GET(new Request(url))).headers.get("location")!,
+      )
+      expect(failure.pathname).toBe("/auth/auth-code-error")
+      expect(failure.searchParams.get("next")).toBe(invite)
+      url.searchParams.set("next", "/billing")
+      const plain = new URL(
+        (await GET(new Request(url))).headers.get("location")!,
+      )
+      expect(plain.search).toBe("")
     })
 
     it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(
