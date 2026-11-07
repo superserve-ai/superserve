@@ -52,6 +52,10 @@ Prefer the **Release SDKs** GitHub Actions workflow (`workflow_dispatch`). For m
 - TS: `bunx turbo run build --filter=@superserve/sdk && cd packages/sdk && bun publish --access public`
 - Python: run `uv build --package superserve && uv publish dist/superserve-*` from repo root (uv workspaces put artifacts there)
 
+## API reference docs
+
+The docs API reference (`docs/docs.json` → `openapi`) loads the spec from https://api.superserve.ai/openapi.yaml. That file is `api/openapi.yaml` in the sandbox repo, served without credentials, so it is public. Review every change to it, and every docs page or snippet derived from it, as public: no internal endpoints (`/internal/**`), secrets, tokens, internal hostnames/IPs, infra details, or other sensitive data. `bun run docs:check-nav` checks the docs nav against that URL.
+
 ## Console architecture
 
 **API Proxy** (`apps/console/src/app/api/[...path]/route.ts`): All browser sandbox API calls route through a Next.js proxy that authenticates via Supabase session, generates a server-side `X-API-Key`, and forwards to `SANDBOX_API_URL`. Proxy keys use the name `__console_proxy__` and are hidden from the UI.
