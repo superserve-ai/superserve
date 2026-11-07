@@ -249,6 +249,7 @@
           {
             "group": "Coding Agents",
             "pages": [
+              "integrations/coding-agents/amp",
               "integrations/coding-agents/claude",
               "integrations/coding-agents/codex",
               "integrations/coding-agents/kilocode",
