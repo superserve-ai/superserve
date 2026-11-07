@@ -1,14 +1,17 @@
 "use client"
 
-import { Button, Input } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 import { sendPasswordResetEmail } from "./action"
@@ -19,6 +22,10 @@ function ForgotPasswordContent() {
   const [emailSent, setEmailSent] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
+  const invite = inviteReturnPath(useSearchParams().get("next"))
+  const signInHref = invite
+    ? `/auth/signin?${new URLSearchParams({ next: invite })}`
+    : "/auth/signin"
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -29,7 +36,7 @@ function ForgotPasswordContent() {
     }
     setIsLoading(true)
     try {
-      await sendPasswordResetEmail(email)
+      await sendPasswordResetEmail(email, invite ?? undefined)
       posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
     } catch {
@@ -64,13 +71,18 @@ function ForgotPasswordContent() {
             </h1>
             <p className="mt-2 text-center text-xs leading-relaxed text-muted">
               We&apos;ve sent a password reset link to{" "}
-              <strong className="text-foreground">{email}</strong>. Check your
-              inbox and click the link to reset your password.
+              <span data-mask className="font-semibold text-foreground">
+                {email}
+              </span>
+              . Check your inbox and click the link to reset your password.
             </p>
             <p className="mt-5 text-center text-xs text-muted">
               <Link
-                href="/auth/signin"
-                className="font-medium text-foreground hover:underline"
+                href={signInHref}
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Back to sign in
               </Link>
@@ -84,6 +96,7 @@ function ForgotPasswordContent() {
 
             <form onSubmit={handleResetPassword} className="space-y-3">
               <Input
+                disabled={isLoading}
                 type="email"
                 placeholder="Email"
                 value={email}
@@ -101,8 +114,11 @@ function ForgotPasswordContent() {
 
             <p className="mt-5 text-center text-xs text-muted">
               <Link
-                href="/auth/signin"
-                className="font-medium text-foreground hover:underline"
+                href={signInHref}
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Back to sign in
               </Link>

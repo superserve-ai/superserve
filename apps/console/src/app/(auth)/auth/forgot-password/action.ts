@@ -2,6 +2,7 @@
 
 import * as z from "zod"
 
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
@@ -11,7 +12,7 @@ const resetSchema = z.object({
   email: z.string().email(),
 })
 
-export const sendPasswordResetEmail = async (email: string) => {
+export const sendPasswordResetEmail = async (email: string, next?: string) => {
   const parsed = resetSchema.safeParse({ email })
   if (!parsed.success) {
     return { success: true } // Always return success to prevent email enumeration
@@ -22,7 +23,8 @@ export const sendPasswordResetEmail = async (email: string) => {
 
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
-    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password`
+    const invite = inviteReturnPath(next)
+    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password${invite ? `&${new URLSearchParams({ invite })}` : ""}`
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "recovery",

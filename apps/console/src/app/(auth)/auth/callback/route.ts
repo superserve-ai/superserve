@@ -214,8 +214,12 @@ export async function GET(request: Request) {
 
     if (!error) {
       if (next === "/auth/reset-password" || type === "recovery") {
+        const invite = inviteReturnPath(searchParams.get("invite"))
         return NextResponse.redirect(
-          buildRedirectUrl(origin, "/auth/reset-password"),
+          buildRedirectUrl(
+            origin,
+            `/auth/reset-password${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
+          ),
         )
       }
 

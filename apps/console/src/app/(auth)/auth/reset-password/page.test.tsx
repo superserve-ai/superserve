@@ -58,15 +58,23 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    className,
   }: {
     children: React.ReactNode
     href: string
-  }) => <a href={href}>{children}</a>,
+    className?: string
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }))
 
+let nextPath: string | null = null
 const mockPush = vi.fn()
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: mockPush }),
+  useSearchParams: () => ({ get: () => nextPath }),
 }))
 
 const mockCapture = vi.fn()
@@ -85,6 +93,7 @@ import ResetPasswordPage from "./page"
 
 describe("ResetPasswordPage", () => {
   beforeEach(() => {
+    nextPath = null
     mockPush.mockReset()
     mockUpdateUser.mockReset()
     mockCapture.mockReset()
@@ -116,6 +125,42 @@ describe("ResetPasswordPage", () => {
       () => {
         expect(mockPush).toHaveBeenCalledWith("/auth/signin")
       },
+      { timeout: 3000 },
+    )
+  })
+
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}`,
+    "/sandboxes",
+    "https://example.com",
+  ])("keeps only a validated invite on Back to sign in (%s)", (next) => {
+    nextPath = next
+    render(<ResetPasswordPage />)
+    const link = screen.getByRole("link", { name: "Back to sign in" })
+    const isInvite = next.startsWith("/invite/ssinv_")
+    expect(
+      new URL(
+        link.getAttribute("href")!,
+        "https://console.example.com",
+      ).searchParams.get("next"),
+    ).toBe(isInvite ? next : null)
+    expect(link.classList.contains("ph-no-capture")).toBe(isInvite)
+  })
+
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}`,
+    "/sandboxes",
+    "https://example.com",
+  ])("only returns to a validated invite path (%s)", async (next) => {
+    nextPath = next
+    mockUpdateUser.mockResolvedValue({ error: null })
+    render(<ResetPasswordPage />)
+    await fillAndSubmit()
+    await waitFor(
+      () =>
+        expect(mockPush).toHaveBeenCalledWith(
+          next.startsWith("/invite/") ? next : "/auth/signin",
+        ),
       { timeout: 3000 },
     )
   })

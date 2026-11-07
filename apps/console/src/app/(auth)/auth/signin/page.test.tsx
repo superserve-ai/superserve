@@ -119,6 +119,27 @@ import SignInPage from "./page"
 describe("SignInPage", () => {
   const user = userEvent.setup()
 
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}`,
+    "/sandboxes",
+    "/invite/invalid",
+  ])("keeps only a validated invite on Forgot password (%s)", (next) => {
+    searchParamsMap = { next }
+    render(<SignInPage />)
+    const link = screen.getByRole("link", { name: "Forgot password?" })
+    const url = new URL(
+      link.getAttribute("href")!,
+      "https://console.example.com",
+    )
+    expect(url.pathname).toBe("/auth/forgot-password")
+    expect(url.searchParams.get("next")).toBe(
+      next.startsWith("/invite/ssinv_") ? next : null,
+    )
+    expect(link.classList.contains("ph-no-capture")).toBe(
+      next.startsWith("/invite/ssinv_"),
+    )
+  })
+
   beforeEach(() => {
     mockReplace = vi
       .spyOn(window.location, "replace")
