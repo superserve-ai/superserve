@@ -142,6 +142,15 @@ describe("InviteMembersDialog", () => {
       await screen.findByText("1 sent. 1 needs attention."),
     ).toBeInTheDocument()
   })
+  it("counts rows skipped for invalid addresses as needing attention", async () => {
+    mocks.create.mockResolvedValueOnce({ delivery: "sent" })
+    setup()
+    paste("one@example.com not-an-email")
+    send()
+    expect(
+      await screen.findByText("1 sent. 1 needs attention."),
+    ).toBeInTheDocument()
+  })
   it.each([
     [["team_owner", "billing_admin", "user_admin", "viewer"], "viewer"],
     [["team_owner", "billing_admin", "user_admin"], "billing_admin"],

@@ -75,16 +75,12 @@ export function InviteMembersDialog({
   currentTeam.current = displayedTeam
   const create = useCreateInvitation()
   const sent = rows.filter((row) => row.status === "sent").length
-  const needsAttention = rows.filter(
-    (row) => row.status === "error" || row.status === "delivery_failed",
-  ).length
+  const needsAttention = rows.length - sent
 
   useEffect(() => {
     if (attempted && !sending) {
       rowsRef.current
-        ?.querySelector<HTMLLIElement>(
-          "[data-status=error], [data-status=delivery_failed]",
-        )
+        ?.querySelector<HTMLLIElement>("li:not([data-status=sent])")
         ?.scrollIntoView?.({ block: "nearest" })
     }
   }, [attempted, sending])
@@ -362,7 +358,7 @@ export function InviteMembersDialog({
               )
             })}
           </ul>
-          {attempted && !sending && sent + needsAttention > 0 && (
+          {attempted && !sending && rows.length > 0 && (
             <output
               className={`mt-2 block text-xs ${needsAttention > 0 ? "text-destructive" : "text-brand"}`}
             >
