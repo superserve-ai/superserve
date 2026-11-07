@@ -516,7 +516,12 @@ export function PlanOverview({
             />
             {funded ? <PrepaidPanel prepaid={prepaid} funded /> : null}
             {funded && canManage ? (
-              <div className="px-5 pb-5 sm:px-6 sm:pb-6">
+              <div className="flex flex-wrap gap-3 px-5 pb-5 sm:px-6 sm:pb-6">
+                {canPurchase ? (
+                  <Button size="sm" render={<Link href={BUY_CREDIT_PATH} />}>
+                    Buy credit
+                  </Button>
+                ) : null}
                 <Button
                   size="sm"
                   variant="outline"
