@@ -1,4 +1,4 @@
-import { apiClient } from "./client"
+import { apiClient, apiClientWithHeaders } from "./client"
 
 export type TeamMemberStatus = "active" | "inactive" | "invited"
 
@@ -8,6 +8,33 @@ export interface TeamManagementCapabilities {
   can_deactivate_members: boolean
   can_assign_roles: boolean
   can_revoke_roles: boolean
+  // Newer backends only; absent means the action is not offered.
+  can_invite_owners?: boolean
+  invite_blocked_reason?: "free_plan" | null
+  can_rename_team?: boolean
+}
+
+export type TeamInvitationStatus =
+  | "pending"
+  | "accepted"
+  | "revoked"
+  | "expired"
+
+export type TeamInvitationDelivery = "pending" | "sent" | "failed"
+
+export interface TeamInvitation {
+  id: string
+  email: string
+  status: TeamInvitationStatus
+  invited_by?: string | null
+  created_at: string
+  expires_at: string
+  last_sent_at?: string | null
+  delivery_status: TeamInvitationDelivery
+}
+
+export interface TeamInvitationsResponse {
+  invitations: TeamInvitation[]
 }
 
 export interface TeamMember {
@@ -41,6 +68,7 @@ export interface TeamManagementMutationOptions {
 
 export interface TeamManagementResponse {
   team_id: string
+  region: string | null
   members: TeamMember[]
   assignments: TeamRoleAssignment[]
   capabilities: TeamManagementCapabilities
@@ -58,7 +86,21 @@ export interface AssignTeamRoleRequest {
 }
 
 export async function getTeamManagement(): Promise<TeamManagementResponse> {
-  return apiClient<TeamManagementResponse>("/team-management")
+  const { data, headers } =
+    await apiClientWithHeaders<Omit<TeamManagementResponse, "region">>(
+      "/team-management",
+    )
+  const scope = headers
+    .get("X-Superserve-Team-Scope")
+    ?.match(/^([^:]+):([^:]+)$/)
+  return {
+    ...data,
+    region: scope && scope[2] === data.team_id ? scope[1] : null,
+  }
+}
+
+export async function getTeamInvitations(): Promise<TeamInvitationsResponse> {
+  return apiClient<TeamInvitationsResponse>("/team-management/invitations")
 }
 
 export async function addTeamMember(data: AddTeamMemberRequest): Promise<void> {
@@ -68,29 +110,52 @@ export async function addTeamMember(data: AddTeamMemberRequest): Promise<void> {
   })
 }
 
-export async function deactivateTeamMember(userId: string): Promise<void> {
+/**
+ * The active team is a cookie another tab can move, so every mutation names
+ * the team the page was showing and the proxy refuses a mismatch.
+ */
+export interface TeamScope {
+  teamId: string
+  region: string
+}
+
+function scopeHeaders(scope: TeamScope): HeadersInit {
+  return { "X-Superserve-Team-Scope": `${scope.region}:${scope.teamId}` }
+}
+
+export async function deactivateTeamMember(
+  scope: TeamScope,
+  userId: string,
+): Promise<void> {
   await apiClient<void>(
     `/team-management/members/${encodeURIComponent(userId)}`,
     {
       method: "DELETE",
+      headers: scopeHeaders(scope),
     },
   )
 }
 
 export async function assignTeamRole(
+  scope: TeamScope,
   data: AssignTeamRoleRequest,
 ): Promise<void> {
   await apiClient<void>("/team-management/roles", {
     method: "POST",
+    headers: scopeHeaders(scope),
     body: JSON.stringify(data),
   })
 }
 
-export async function revokeTeamRole(assignmentId: string): Promise<void> {
+export async function revokeTeamRole(
+  scope: TeamScope,
+  assignmentId: string,
+): Promise<void> {
   await apiClient<void>(
     `/team-management/roles/${encodeURIComponent(assignmentId)}`,
     {
       method: "DELETE",
+      headers: scopeHeaders(scope),
     },
   )
 }

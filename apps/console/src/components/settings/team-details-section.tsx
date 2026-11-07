@@ -4,7 +4,8 @@ import { CheckIcon, CopyIcon } from "@phosphor-icons/react"
 import { Button, Field, Input, Separator, useToast } from "@superserve/ui"
 import { useState } from "react"
 
-import { useCanRenameTeam, useRenameTeam, useTeams } from "@/hooks/use-teams"
+import { useTeamManagement } from "@/hooks/use-team-management"
+import { useRenameTeam, useTeams } from "@/hooks/use-teams"
 import { teamNameProblem } from "@/lib/api/team-name"
 import { regionLabel } from "@/lib/format"
 
@@ -60,7 +61,12 @@ function DetailRow({
 }
 
 function TeamDetailsForm({ team }: { team: ActiveTeam }) {
-  const { data: canRename = false } = useCanRenameTeam(team)
+  // The capability belongs to the team the management data was read for, so
+  // it only counts while that is the team this form edits.
+  const { data: management } = useTeamManagement()
+  const canRename =
+    management?.team_id === team.id &&
+    management.capabilities.can_rename_team === true
   const rename = useRenameTeam()
   const { addToast } = useToast()
 

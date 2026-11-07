@@ -245,6 +245,4 @@ export const quotaKeys = {
 export const teamKeys = {
   all: ["teams"] as const,
   directory: () => [...teamKeys.all, "directory"] as const,
-  renameAccess: (region: string, teamId: string) =>
-    [...teamKeys.all, "rename-access", region, teamId] as const,
 }
