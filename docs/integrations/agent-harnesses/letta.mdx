@@ -23,7 +23,7 @@ The examples use Anthropic. To use OpenAI, set `OPENAI_API_KEY` and pass `model:
 
 The highlighted block defines a `bash` tool backed by the sandbox. Letta runs the tool's `execute` function in your process, so the command goes to the sandbox through the Superserve SDK.
 
-```typescript {6-23,32}
+```typescript {6-23,30,35}
 import { LettaAgentClient, type AnyAgentTool } from "@letta-ai/letta-agent-sdk"
 import { Sandbox } from "@superserve/sdk"
 
@@ -51,7 +51,10 @@ const bash = {
 await using client = new LettaAgentClient({ backend: "local" })
 
 try {
-  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  const agentId = await client.createAgent({
+    model: "anthropic/claude-sonnet-5-5",
+    baseTools: [], // No server-side tools, such as web search.
+  })
   const result = await client.prompt(
     "List the files in /tmp and tell me how many there are.",
     agentId,
@@ -63,9 +66,10 @@ try {
 }
 ```
 
-Two session options matter:
+Three options matter:
 
-- `allowedTools` is the exact list of tools the agent can call. Letta agents also have built-in tools, such as `Bash`, `Read`, and `Write`, that run on the machine that hosts the agent runtime. List only your sandbox tools so the agent cannot use them.
+- `allowedTools` is the exact list of client-side tools the agent can call. Letta agents also have built-in client-side tools, such as `Bash`, `Read`, and `Write`, that run on the machine that hosts the agent runtime. List only your sandbox tools so the agent cannot use them.
+- `baseTools: []` attaches no server-side tools to the agent. By default, `createAgent` asks for the `web_search` and `fetch_webpage` tools, which run outside the sandbox and its network rules.
 - Letta asks for approval before each tool call by default. `permissionMode: "unrestricted"` approves every call. To decide per call, see [Approve tool calls](#approve-tool-calls).
 
 The tool returns `stdout`, `stderr`, and `exitCode`, so the agent sees failed commands as well as their output.
@@ -134,7 +138,7 @@ export function sandboxTools(sandbox: Sandbox): AnyAgentTool[] {
 
 Pass the tools and their names to the session:
 
-```typescript {15-17}
+```typescript {18-20}
 import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
 import { Sandbox } from "@superserve/sdk"
 import { sandboxTools } from "./sandbox-tools"
@@ -143,7 +147,10 @@ const sandbox = await Sandbox.create({ name: "code-runner" })
 await using client = new LettaAgentClient({ backend: "local" })
 
 try {
-  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  const agentId = await client.createAgent({
+    model: "anthropic/claude-sonnet-5-5",
+    baseTools: [],
+  })
   const result = await client.prompt(
     "Write a Python script under /home/user that prints the first 10 prime " +
       "numbers, run it with python3, and show me the output.",
@@ -174,7 +181,7 @@ I wrote the script to `/home/user/primes.py` and ran it with `python3`. This is 
 
 `client.prompt` returns only the final result. Open a session and read `session.stream()` to show each tool call and its output while the agent works.
 
-```typescript {16-26}
+```typescript {20-29}
 import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
 import { Sandbox } from "@superserve/sdk"
 import { sandboxTools } from "./sandbox-tools"
@@ -183,7 +190,10 @@ const sandbox = await Sandbox.create({ name: "agent-runtime" })
 await using client = new LettaAgentClient({ backend: "local" })
 
 try {
-  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  const agentId = await client.createAgent({
+    model: "anthropic/claude-sonnet-5-5",
+    baseTools: [],
+  })
   await using session = client.createSession(agentId, {
     tools: sandboxTools(sandbox),
     allowedTools: ["bash", "write_file", "read_file"],
@@ -253,7 +263,10 @@ async function runTurn(agentId: string, message: string) {
   }
 }
 
-const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+const agentId = await client.createAgent({
+  model: "anthropic/claude-sonnet-5-5",
+  baseTools: [],
+})
 
 try {
   await runTurn(agentId, "Create /home/user/todo.txt with three short items.")
@@ -300,7 +313,10 @@ await using client = new LettaAgentClient({
 })
 
 try {
-  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  const agentId = await client.createAgent({
+    model: "anthropic/claude-sonnet-5-5",
+    baseTools: [],
+  })
   const result = await client.prompt("What is the hostname of this machine?", agentId, {
     tools: sandboxTools(sandbox),
     allowedTools: ["bash", "write_file", "read_file"],
@@ -343,32 +359,58 @@ Without `permissionMode: "unrestricted"` or `canUseTool`, the turn stops and wai
 
 To let the agent create and manage sandboxes itself, connect the [Superserve MCP server](/integrations/mcp) instead of defining tools. MCP tools are named `mcp__<server>__<tool>`. List the ones the agent can call in `allowedTools`.
 
-```typescript {7-18}
+```typescript {13-39,49-51}
 import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
+import { Sandbox } from "@superserve/sdk"
 
 await using client = new LettaAgentClient({ backend: "local" })
 
-const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
-await using session = client.createSession(agentId, {
-  mcpServers: {
-    superserve: {
-      type: "http",
-      url: "https://mcp.superserve.ai",
-      headers: { Authorization: `Bearer ${process.env.SUPERSERVE_API_KEY}` },
-    },
-  },
-  allowedTools: [
-    "mcp__superserve__sandbox_create",
-    "mcp__superserve__sandbox_exec",
-    "mcp__superserve__sandbox_kill",
-  ],
-  permissionMode: "unrestricted",
+const agentId = await client.createAgent({
+  model: "anthropic/claude-sonnet-5-5",
+  baseTools: [],
 })
+const tag = { letta_agent_id: agentId }
 
-await session.send("Create a sandbox, run `python3 --version` in it, then delete the sandbox.")
-for await (const message of session.stream()) {
-  if (message.type === "tool_result") console.log(message.content)
-  if (message.type === "result") console.log(message.result)
+try {
+  await using session = client.createSession(agentId, {
+    mcpServers: {
+      superserve: {
+        type: "http",
+        url: "https://mcp.superserve.ai",
+        headers: { Authorization: `Bearer ${process.env.SUPERSERVE_API_KEY}` },
+      },
+    },
+    allowedTools: [
+      "mcp__superserve__sandbox_create",
+      "mcp__superserve__sandbox_exec",
+      "mcp__superserve__sandbox_kill",
+    ],
+    // Tag every sandbox the agent creates, and pause and delete it if it is left behind.
+    canUseTool: async (toolName, input) => {
+      if (toolName !== "mcp__superserve__sandbox_create") return { behavior: "allow" }
+      return {
+        behavior: "allow",
+        updatedInput: {
+          ...input,
+          metadata: tag,
+          timeout_seconds: 3600,
+          auto_delete_seconds: 600,
+        },
+      }
+    },
+  })
+
+  await session.send(
+    "Create a sandbox, run `python3 --version` in it, then delete the sandbox.",
+  )
+  for await (const message of session.stream()) {
+    if (message.type === "tool_result") console.log(message.content)
+    if (message.type === "result") console.log(message.result)
+  }
+} finally {
+  // Delete any sandbox the agent did not, even if the turn failed.
+  const leftover = await Sandbox.list({ metadata: tag })
+  await Promise.all(leftover.map(({ id }) => Sandbox.killById(id)))
 }
 ```
 
@@ -383,11 +425,11 @@ deleted <sandbox-id>
 I created a sandbox, ran `python3 --version` in it, and deleted it. The command returned `Python 3.12.3`.
 ```
 
-With MCP, the agent owns the sandbox lifecycle. A sandbox the agent creates keeps running until the agent or your app kills it, so tell the agent to delete sandboxes when it is done.
+With MCP, the agent owns the sandbox lifecycle, so do not rely on the model to delete what it creates. The `canUseTool` callback changes each `sandbox_create` call before it runs: it tags the sandbox with the agent ID, pauses it after one hour of active time, and deletes it 10 minutes after it pauses. The `finally` block deletes every tagged sandbox that is left, even if the turn fails. See [Auto-delete](/sandbox/lifecycle#auto-delete).
 
 ## Good to know
 
-- The agent can call only the tools in `allowedTools`. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
+- The agent can call only the client-side tools in `allowedTools` and the server-side tools in `baseTools`. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
 - To limit what agent-written code can reach, create the sandbox with [network rules](/sandbox/networking).
 - Pass `timeoutMs` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
 - The default sandbox has `python3` but no `python`. Tell the agent in the prompt, or use a [template](/templates/overview) with the tools you need.
