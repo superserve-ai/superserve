@@ -1,7 +1,7 @@
 ---
 title: "Run CI jobs in sandboxes"
 sidebarTitle: Run CI jobs
-description: Run each CI job in its own sandbox with the Superserve CLI. Includes a GitHub Actions workflow, sharding and egress lockdown.
+description: Run each CI job in its own sandbox with the Superserve CLI. Includes a GitHub Actions workflow, sharding and network isolation for untrusted code.
 ---
 
 A CI job fits a sandbox well: create a sandbox, run the build and tests in it, then delete it. Each job gets a clean microVM, so jobs can't leave files, processes or credentials behind for the next job.
@@ -125,7 +125,7 @@ A [snapshot](/sandbox/snapshots) saves a sandbox's memory and disk, including in
 superserve sandbox create --name ci-1234-base --template superserve/node-22 --timeout 30m --auto-delete 0
 # send the checkout to /w as above, then:
 superserve exec ci-1234-base --timeout 10m -- 'cd /w && npm ci'
-SNAPSHOT=$(superserve snapshot create ci-1234-base --name ci-1234 --json | jq -r .id)
+SNAPSHOT=$(superserve snapshot create ci-1234-base --name ci-1234 --json | jq -er .id)
 superserve sandbox delete ci-1234-base --yes
 
 superserve sandbox create --name ci-1234-job --snapshot "$SNAPSHOT" --timeout 30m --auto-delete 0
@@ -165,7 +165,9 @@ jobs:
           superserve exec "$RUN-base" --timeout 10m -- 'cd /w && npm ci'
       - name: Take a snapshot
         id: snap
-        run: echo "id=$(superserve snapshot create "$RUN-base" --name "$RUN" --json | jq -r .id)" >> "$GITHUB_OUTPUT"
+        run: |
+          SNAPSHOT=$(superserve snapshot create "$RUN-base" --name "$RUN" --json | jq -er .id)
+          echo "id=$SNAPSHOT" >> "$GITHUB_OUTPUT"
       - name: Delete the sandbox
         if: always()
         run: superserve sandbox delete "$RUN-base" --yes
@@ -206,6 +208,10 @@ jobs:
 
 Each shard is one active sandbox. Past your team's active sandbox limit, `sandbox create` fails with [`too_many_sandboxes`](/errors#ratelimiterror). Set `strategy.max-parallel` to stay under the limit when several runs can overlap. Snapshots have their own [limits](/sandbox/snapshots#limits), so delete them when the run ends, as the `cleanup` job does.
 
+<Note>
+To retry a failed run of this workflow, use **Re-run all jobs**. **Re-run failed jobs** reuses the snapshot ID from the first `prepare` job, but the `cleanup` job already deleted that snapshot, so the shards fail when they fork it.
+</Note>
+
 ## Run untrusted code
 
 Pull requests from outside contributors can run any code in their build scripts and tests. Running that code in a sandbox keeps it off the CI runner:
@@ -214,24 +220,32 @@ Pull requests from outside contributors can run any code in their build scripts 
 - The Superserve API key and the runner's other credentials stay on the runner. Only the files and env vars you send go into the sandbox.
 - Bind credentials the tests need as [secrets](/secrets/overview), so the sandbox only holds stand-in tokens. A stand-in token hides the real value, but code in the sandbox can still use it on the secret's hosts, so bind only narrowly scoped test credentials.
 
-Also limit what the code can reach on the network. Create the sandbox with a [network allowlist](/sandbox/networking) that permits only the DNS resolvers and the package registry. After the install, block all new outbound connections before the tests run:
+Also limit what the code can reach on the network. The install needs the package registry, and it can run project code even with `--ignore-scripts`: npm still reads the repository's `.npmrc`, which can point the `git` setting at a script in the repository. So install in one sandbox that has a [network allowlist](/sandbox/networking), then run the tests in a second sandbox that has no outbound access:
 
 ```bash
-superserve sandbox create --name ci-1234 --template superserve/node-22 --timeout 30m --auto-delete 0 \
+# Install sandbox: DNS and the registry only
+superserve sandbox create --name ci-1234-install --template superserve/node-22 --timeout 30m --auto-delete 0 \
   --deny-out 0.0.0.0/0 \
   --allow-out 1.1.1.1/32 --allow-out 8.8.8.8/32 \
   --allow-out registry.npmjs.org
 
 # send the checkout to /w as above, then:
-superserve exec ci-1234 --timeout 10m -- 'cd /w && npm ci --ignore-scripts'
+superserve exec ci-1234-install --timeout 10m -- 'cd /w && npm ci --ignore-scripts'
 
-superserve sandbox update ci-1234 --deny-out 0.0.0.0/0
-superserve exec ci-1234 --timeout 20m -- 'cd /w && npm test'
+# Test sandbox: no outbound access
+superserve sandbox create --name ci-1234-test --template superserve/node-22 --timeout 30m --auto-delete 0 \
+  --deny-out 0.0.0.0/0
+superserve exec ci-1234-test -- mkdir -p /w
+superserve exec ci-1234-install -- tar cz -C /w . | superserve exec -i ci-1234-test -- tar xz -C /w
+superserve sandbox delete ci-1234-install --yes
+
+superserve exec ci-1234-test --timeout 20m -- 'cd /w && npm test'
 ```
 
-- `npm ci --ignore-scripts` stops package install scripts from running while the registry is still reachable.
-- `sandbox update` replaces all the rules, so `--deny-out 0.0.0.0/0` alone removes the allowlist. You can only change rules while the sandbox is active.
-- The new rules apply to new connections. With `--ignore-scripts`, no project code runs while the registry is allowed, so nothing can hold a connection open. If your job must run project code while the allowlist is in place, that code can reach the allowed hosts and keep its connections after the update.
+- Treat the install sandbox as untrusted. Code that runs during the install can reach the DNS resolvers and the registry, so don't bind secrets or send credentials to it.
+- Only files go from the install sandbox to the test sandbox. A process that the install starts stays in the install sandbox, and the test sandbox never has outbound access.
+- Don't use `sandbox update --deny-out 0.0.0.0/0` on the install sandbox as a replacement. New rules apply only to new connections, and a process that the install starts keeps running and keeps its open connections.
+- If the tests need a host, such as a test database, add only that host with `--allow-out` on the test sandbox.
 - The [network log](/sandbox/network-log) shows the HTTP and HTTPS connections on ports 80 and 443 that the sandbox made or tried to make, allowed or blocked. It doesn't record DNS or other ports.
 
 Keep the GitHub side safe too. Don't run untrusted pull requests with `pull_request_target` and a checkout of the pull request's code: that gives the code access to your repository secrets on the runner itself.
