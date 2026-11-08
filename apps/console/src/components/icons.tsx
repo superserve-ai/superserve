@@ -1,7 +1,5 @@
 "use client"
 
-import { motion, useReducedMotion } from "motion/react"
-
 export function GoogleIcon() {
   return (
     <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -30,17 +28,9 @@ export function Spinner({
 }: {
   className?: string
 }) {
-  const shouldReduceMotion = useReducedMotion()
-
   return (
-    <motion.div
-      className={`h-5 w-5 rounded-full border-2 border-t-transparent ${className}`}
-      animate={shouldReduceMotion ? undefined : { rotate: 360 }}
-      transition={
-        shouldReduceMotion
-          ? undefined
-          : { duration: 0.8, repeat: Infinity, ease: "linear" }
-      }
+    <div
+      className={`h-5 w-5 rounded-full border-2 border-t-transparent motion-safe:animate-[spin_0.8s_linear_infinite] ${className}`}
     />
   )
 }

@@ -9,7 +9,9 @@ const sourceRoot = path.resolve("src")
 function unguardedAnimations(source: string) {
   return source.split("\n").flatMap((line, index) =>
     Array.from(
-      line.matchAll(/(?:[\w-]+:)*\banimate-(?:pulse|ping|spin|bounce)\b/g),
+      line.matchAll(
+        /(?:[\w-]+:)*\banimate-(?:(?:pulse|ping|spin|bounce)\b|\[[^\]\r\n]+\])/g,
+      ),
     )
       .filter((match) => !match[0].split(":").includes("motion-safe"))
       .map((match) => `${index + 1}: ${match[0]}`),
@@ -40,17 +42,19 @@ describe("reduced motion guards", () => {
   it("detects unguarded utilities in conditional and template strings", () => {
     expect(
       unguardedAnimations(
-        '`${fetching ? "animate-spin" : ""}`\nconnecting ? "animate-pulse bg-orange-400" : "bg-red-500"\n"hover:animate-ping animate-bounce"',
+        '`${fetching ? "animate-spin" : ""}`\nconnecting ? "animate-pulse bg-orange-400" : "bg-red-500"\n"hover:animate-ping animate-bounce"\n"animate-[spin_0.8s_linear_infinite] hover:animate-[pulse_2s_ease-in-out_infinite]"',
       ),
     ).toEqual([
       "1: animate-spin",
       "2: animate-pulse",
       "3: hover:animate-ping",
       "3: animate-bounce",
+      "4: animate-[spin_0.8s_linear_infinite]",
+      "4: hover:animate-[pulse_2s_ease-in-out_infinite]",
     ])
     expect(
       unguardedAnimations(
-        "motion-safe:animate-spin hover:motion-safe:animate-pulse motion-safe:hover:animate-ping motion-safe:animate-bounce motion-reduce:animate-none",
+        "motion-safe:animate-spin hover:motion-safe:animate-pulse motion-safe:hover:animate-ping motion-safe:animate-bounce motion-reduce:animate-none motion-safe:animate-[spin_0.8s_linear_infinite] hover:motion-safe:animate-[pulse_2s_ease-in-out_infinite]",
       ),
     ).toEqual([])
   })
