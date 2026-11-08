@@ -39,14 +39,18 @@ vi.mock("./sidebar-user-menu", () => ({
 
 vi.mock("./sidebar-nav", () => ({
   SidebarNav: ({ items }: { items: Array<{ label: string }> }) => (
-    <nav>{items.map((item) => item.label).join(" | ")}</nav>
+    <nav>
+      {items.map((item) => (
+        <span key={item.label}>{item.label}</span>
+      ))}
+    </nav>
   ),
 }))
 
 import { Sidebar } from "./sidebar"
 
 describe("Sidebar", () => {
-  it("does not show the billing nav item", () => {
+  it("shows Billing & Usage without a separate Billing nav item", () => {
     const queryClient = new QueryClient({
       defaultOptions: {
         queries: { retry: false },
@@ -59,6 +63,11 @@ describe("Sidebar", () => {
       </QueryClientProvider>,
     )
 
-    expect(screen.queryByText(/Billing/)).not.toBeInTheDocument()
+    expect(
+      screen.getByText("Billing & Usage", { exact: true }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText("Billing", { exact: true }),
+    ).not.toBeInTheDocument()
   })
 })

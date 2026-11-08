@@ -30,12 +30,14 @@ type MockClient = {
 let mockClient: MockClient
 
 vi.mock("@/lib/supabase/middleware", () => ({
-  createMiddlewareClient: () => mockClient,
+  createMiddlewareClient: vi.fn(() => mockClient),
   matchesRoute: (pathname: string, routes: string[]) =>
     routes.some((r) => pathname === r || pathname.startsWith(`${r}/`)),
 }))
 
 // Import AFTER mocks so the module picks them up.
+import { createMiddlewareClient } from "@/lib/supabase/middleware"
+
 import { config, middleware } from "./middleware"
 
 function buildRequest(path: string): NextRequest {
@@ -74,6 +76,7 @@ describe("middleware", () => {
   })
   beforeEach(() => {
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
+    vi.mocked(createMiddlewareClient).mockClear()
     mockClient = {
       supabase: {
         auth: {
@@ -91,6 +94,120 @@ describe("middleware", () => {
     const res = await middleware(buildRequest("/sandboxes"))
     // With no supabase, we should just pass client.response through.
     expect(res).toBe(mockClient.response)
+  })
+
+  it.each(["/ingest", "/ingest/i/v0/e/", "/ingest/static/array.js"])(
+    "strips Referer and bypasses auth for %s",
+    async (path) => {
+      const request = new NextRequest(
+        new URL(`https://console.superserve.ai${path}`),
+        {
+          headers: {
+            referer: `https://console.superserve.ai/auth/signin?next=/invite/ssinv_use_${"A".repeat(43)}`,
+            "user-agent": "test-browser",
+          },
+        },
+      )
+      const res = await middleware(request)
+
+      expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
+      expect(res.status).toBe(200)
+      expect(res.headers.has("location")).toBe(false)
+      const overrides = res.headers
+        .get("x-middleware-override-headers")!
+        .split(",")
+      expect(overrides).not.toContain("referer")
+      expect(res.headers.has("x-middleware-request-referer")).toBe(false)
+      expect(overrides).toContain("user-agent")
+      expect(res.headers.get("x-middleware-request-user-agent")).toBe(
+        "test-browser",
+      )
+    },
+  )
+
+  it.each(["/ingestion", "/ingest-private"])(
+    "still authenticates and redirects signed-out requests to %s",
+    async (path) => {
+      const res = await middleware(buildRequest(path))
+
+      expect(mockClient.supabase!.auth.getUser).toHaveBeenCalledOnce()
+      expect(new URL(res.headers.get("location")!).pathname).toBe(
+        "/auth/signin",
+      )
+    },
+  )
+
+  it.each([
+    ["/plan-usage", "/billing-usage"],
+    ["/plan-usage/", "/billing-usage/"],
+    [
+      "/plan-usage/buy-credit/?purchase=success&team=use:22222222-2222-4222-8222-222222222222&purchase_id=33333333-3333-4333-8333-333333333333",
+      "/billing-usage/buy-credit/?purchase=success&team=use:22222222-2222-4222-8222-222222222222&purchase_id=33333333-3333-4333-8333-333333333333",
+    ],
+    ["/plan-usage/upgrade/", "/billing-usage/upgrade/"],
+    [
+      "/plan-usage/?a=1&b=2&a=3&v=%2F&q=a+b&team=use:x",
+      "/billing-usage/?a=1&b=2&a=3&v=%2F&q=a+b&team=use:x",
+    ],
+    [
+      "/plan-usage/?v=%2f&space=a%20b&empty=&flag&escape=%252F",
+      "/billing-usage/?v=%2f&space=a%20b&empty=&flag&escape=%252F",
+    ],
+    ["/plan-usage/receipt.json", "/billing-usage/receipt.json"],
+    ["/plan-usage/receipt.js", "/billing-usage/receipt.js"],
+    [
+      "/plan-usage/buy-credit/receipt/details/",
+      "/billing-usage/buy-credit/receipt/details/",
+    ],
+  ])(
+    "permanently redirects signed-out legacy request %s before auth",
+    async (path, destination) => {
+      const response = await middleware(buildRequest(path))
+
+      expect(response.status).toBe(308)
+      expect(response.headers.get("location")).toBe(
+        `https://console.superserve.ai${destination}`,
+      )
+      expect(createMiddlewareClient).not.toHaveBeenCalled()
+      expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
+    },
+  )
+
+  it("redirects legacy requests when Supabase is not configured", async () => {
+    mockClient.supabase = null
+    const response = await middleware(buildRequest("/plan-usage/upgrade/"))
+
+    expect(response.status).toBe(308)
+    expect(response.headers.get("location")).toBe(
+      "https://console.superserve.ai/billing-usage/upgrade/",
+    )
+    expect(createMiddlewareClient).not.toHaveBeenCalled()
+  })
+
+  it.each(["/plan-usage-old/", "/billing-usage/", "/other/plan-usage/"])(
+    "does not apply the legacy redirect to %s",
+    async (path) => {
+      mockClient.supabase!.auth.getUser.mockResolvedValue({
+        data: { user: { id: "user-123" } },
+      })
+
+      const response = await middleware(buildRequest(path))
+
+      expect(response).toBe(mockClient.response)
+      expect(response.headers.get("location")).toBeNull()
+      expect(mockClient.supabase!.auth.getUser).toHaveBeenCalledOnce()
+    },
+  )
+
+  it("sends signed-out Billing & Usage requests to sign-in with the current path", async () => {
+    const response = await middleware(buildRequest("/billing-usage/"))
+
+    expect(response.headers.get("location")).toBe(
+      "https://console.superserve.ai/auth/signin/?next=%2Fbilling-usage%2F",
+    )
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("next"),
+    ).toBe("/billing-usage/")
   })
 
   it.each([
@@ -201,6 +318,21 @@ describe("middleware", () => {
     expect(refreshCookie?.value).toBe("refreshed-refresh")
   })
 
+  it.each(["/billing-usage/buy-credit/", "/plan-usage/buy-credit/"])(
+    "preserves the Starter checkout return through anonymous sign-in at %s",
+    async (pathname) => {
+      const path = `${pathname}?purchase=success&team=use%3Aoriginal&purchase_id=22222222-2222-4222-8222-222222222222`
+      const initial = await middleware(buildRequest(path))
+      const billingPath = path.replace(/^\/plan-usage\//, "/billing-usage/")
+      const response = pathname.startsWith("/plan-usage/")
+        ? await middleware(new NextRequest(initial.headers.get("location")!))
+        : initial
+      const destination = new URL(response.headers.get("location")!)
+      expect(destination.pathname.replace(/\/$/, "")).toBe("/auth/signin")
+      expect(destination.searchParams.get("next")).toBe(billingPath)
+    },
+  )
+
   it("lets unauthenticated users through on public routes", async () => {
     for (const path of [
       "/auth/signin",
@@ -273,15 +405,80 @@ describe("middleware", () => {
   })
 })
 
+describe("middleware invite route", () => {
+  const invitePath = `/invite/ssinv_use_${"A".repeat(43)}`
+
+  beforeEach(() => {
+    vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
+    mockClient = {
+      supabase: {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
+        },
+      },
+      response: buildResponse(),
+    }
+  })
+
+  it("lets a signed-out visitor read the invite page", async () => {
+    expect(await middleware(buildRequest(invitePath))).toBe(mockClient.response)
+  })
+
+  it("lets a signed-in account through the invite page", async () => {
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: { user: { id: "user-123", email: "u@e.com" } },
+      error: null,
+    })
+    expect(await middleware(buildRequest(invitePath))).toBe(mockClient.response)
+  })
+
+  it("still stops an account held for review on the invite page", async () => {
+    const signOut = vi.fn().mockResolvedValue({ error: null })
+    Object.assign(mockClient.supabase!.auth, { signOut })
+    mockClient.supabase!.auth.getUser.mockResolvedValue({
+      data: {
+        user: {
+          id: "user-123",
+          email: "u@e.com",
+          app_metadata: { signup_review: "pending" },
+        },
+      },
+      error: null,
+    })
+    const res = await middleware(buildRequest(invitePath))
+    expect(signOut).toHaveBeenCalled()
+    expect(new URL(res.headers.get("location")!).pathname).toBe("/auth/pending")
+  })
+})
+
 describe("middleware matcher", () => {
+  it.each([
+    "/plan-usage",
+    "/plan-usage/",
+    "/plan-usage/buy-credit/",
+    "/plan-usage/upgrade/",
+    "/plan-usage/receipt.json",
+    "/plan-usage/receipt.js",
+    "/plan-usage/nested/logo.svg",
+  ])("includes legacy path %s for the redirect", (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
+  })
+
+  it.each(["/billing-usage/receipt.js", "/settings/logo.svg"])(
+    "still bypasses auth for static asset %s",
+    (url) => {
+      expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false)
+    },
+  )
+
   it.each([
     "/ingest",
     "/ingest/",
     "/ingest/i/v0/e/?ip=0",
     "/ingest/s/",
     "/ingest/static/array.js",
-  ])("bypasses auth for analytics request %s", (url) => {
-    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(false)
+  ])("matches analytics request %s to strip Referer", (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
   })
 
   it.each(["/", "/sandboxes", "/settings", "/ingestion", "/ingest-private"])(
@@ -292,35 +489,39 @@ describe("middleware matcher", () => {
   )
 })
 
-it.each(["/billing/pro/", "/plan-usage/buy-credit/"])(
-  "fails closed for invalid generic return at %s",
-  async (path) => {
-    for (const marker of [
-      "unknown",
-      "success&billing_flow=cancel",
-      "success&approved=true",
-    ]) {
-      mockClient = {
-        supabase: {
-          auth: {
-            getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
-          },
+it.each([
+  "/billing/pro/",
+  "/billing-usage/buy-credit/",
+  "/plan-usage/buy-credit/",
+])("fails closed for invalid generic return at %s", async (path) => {
+  for (const marker of [
+    "unknown",
+    "success&billing_flow=cancel",
+    "success&approved=true",
+  ]) {
+    mockClient = {
+      supabase: {
+        auth: {
+          getUser: vi.fn().mockResolvedValue({ data: { user: null } }),
         },
-        response: buildResponse(),
-      }
-      const response = await middleware(
-        buildRequest(`${path}?team=original&billing_flow=${marker}`),
-      )
-      expect(
-        new URL(response.headers.get("location")!).searchParams.get("next"),
-      ).toBe("/auth/auth-code-error/")
-      const errorPage = await middleware(buildRequest("/auth/auth-code-error/"))
-      expect(errorPage).toBe(mockClient.response)
-      expect(errorPage.headers.get("location")).toBeNull()
-      const signin = await middleware(
-        buildRequest("/auth/signin/?next=%2Fauth%2Fauth-code-error%2F"),
-      )
-      expect(signin).toBe(mockClient.response)
+      },
+      response: buildResponse(),
     }
-  },
-)
+    const initial = await middleware(
+      buildRequest(`${path}?team=original&billing_flow=${marker}`),
+    )
+    const response = path.startsWith("/plan-usage/")
+      ? await middleware(new NextRequest(initial.headers.get("location")!))
+      : initial
+    expect(
+      new URL(response.headers.get("location")!).searchParams.get("next"),
+    ).toBe("/auth/auth-code-error/")
+    const errorPage = await middleware(buildRequest("/auth/auth-code-error/"))
+    expect(errorPage).toBe(mockClient.response)
+    expect(errorPage.headers.get("location")).toBeNull()
+    const signin = await middleware(
+      buildRequest("/auth/signin/?next=%2Fauth%2Fauth-code-error%2F"),
+    )
+    expect(signin).toBe(mockClient.response)
+  }
+})
