@@ -230,7 +230,7 @@ See [Streaming](/commands/streaming) to stream a single command's output.
 
 A Letta agent keeps its memory across conversations, so give it a sandbox that lasts as long. Tag the sandbox with the agent ID, find it on each turn, and pause it between turns so files and installed packages stay available without paying for an idle VM.
 
-```typescript {7-12,27-30}
+```typescript {7-12,27-31}
 import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
 import { Sandbox } from "@superserve/sdk"
 import { sandboxTools } from "./sandbox-tools"
@@ -258,8 +258,9 @@ async function runTurn(agentId: string, message: string) {
       if (event.type === "result") return event.result
     }
   } finally {
-    // Pause between turns. Files and memory are kept until the next connect.
-    await sandbox.pause()
+    // Pause between turns and wait until the pause finishes, so the next
+    // turn's connect() resumes a paused sandbox. Files and memory are kept.
+    await sandbox.pause({ wait: true })
   }
 }
 
@@ -288,7 +289,7 @@ I added a fourth item. The file now reads:
 4. Water the plants
 ```
 
-`client.prompt` starts a new conversation on each call. `resumeSession` continues the agent's default conversation, so the second turn knows about the file from the first. `Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Metadata](/sandbox/metadata).
+`client.prompt` starts a new conversation on each call. `resumeSession` continues the agent's default conversation, so the second turn knows about the file from the first. `Sandbox.connect()` resumes a paused sandbox before it returns. It waits up to 30 seconds for a pause that is still in progress, so `pause({ wait: true })` makes sure the pause is done before the next turn. See [Lifecycle](/sandbox/lifecycle) and [Metadata](/sandbox/metadata).
 
 ## Use a self-hosted App Server
 
