@@ -16,6 +16,9 @@ import {
   TableHead,
   TableHeader,
   TableRow,
+  Tooltip,
+  TooltipPopup,
+  TooltipTrigger,
   useToast,
 } from "@superserve/ui"
 import { useEffect, useState } from "react"
@@ -389,10 +392,19 @@ function ActiveAssignmentRows({
               ownerRemovalBlocked(members, assignment.user_id)
             return (
               <TableRow key={assignment.assignment_id}>
-                <TableCell>
-                  <div className="font-medium text-foreground">
-                    <span data-mask>{assignment.email}</span>
-                  </div>
+                <TableCell className="lg:w-full lg:max-w-0">
+                  <Tooltip>
+                    <TooltipTrigger
+                      render={
+                        <div className="truncate font-medium text-foreground" />
+                      }
+                    >
+                      <span data-mask>{assignment.email}</span>
+                    </TooltipTrigger>
+                    <TooltipPopup>
+                      <span data-mask>{assignment.email}</span>
+                    </TooltipPopup>
+                  </Tooltip>
                 </TableCell>
                 <TableCell className="whitespace-nowrap">
                   {roleLabel(assignment.role_name)}
