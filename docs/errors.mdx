@@ -116,7 +116,7 @@ The error `message` already includes the cap and a contact-support hint, so surf
 
 ## Billing errors (`402`)
 
-Creating or resuming a sandbox fails with `402 Payment Required` when the team's billing or plan does not allow it. This includes the automatic resume when you connect to a paused sandbox. There is no `402` subclass: the SDK raises the base `SandboxError` with `statusCode` / `status_code` set to `402`. Branch on `code`:
+Creating or resuming a sandbox fails with `402 Payment Required` when the team's billing or plan does not allow it. This includes the automatic resume when you connect to a paused sandbox. In SDK 0.11.6 and earlier, there is no `402` subclass: the SDK raises the base `SandboxError` with `statusCode` / `status_code` set to `402`. Branch on `code`:
 
 | Code | Meaning | What to do |
 |---|---|---|
@@ -129,7 +129,7 @@ Creating or resuming a sandbox fails with `402 Payment Required` when the team's
 
 A team whose free trial was refused by an abuse or account check, for example because the creator's email domain is restricted, gets `billing_ineligible`, not `trial_unavailable`.
 
-Some codes add a field to the `error` object of the API response. The SDK error does not carry these fields, so read them from the raw API response if you need them:
+Some codes add a field to the `error` object of the API response. In SDK 0.11.6 and earlier, the SDK error does not carry these fields, so read them from the raw API response if you need them:
 
 - `action_url` (`trial_exhausted`, `trial_unavailable`, `trial_check_unavailable`): the console page where the team adds a card and chooses a plan. The `message` ends with the same URL, so a user who sees the message also gets the link.
 - `resets_at` (`free_allowance_exhausted`): the UTC time (RFC 3339) when sandboxes can start again.
