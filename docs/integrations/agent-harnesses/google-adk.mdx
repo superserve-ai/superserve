@@ -320,9 +320,9 @@ See [Events](https://adk.dev/events/) in the ADK docs, and [Streaming](/commands
 
 ## One sandbox per session
 
-To serve many conversations, create one sandbox for each ADK session, and keep its ID in the session state. On each turn, connect to the sandbox, run the agent, and pause the sandbox afterwards. Files and installed packages stay available, and you do not pay for an idle VM between turns.
+To serve many conversations, create one sandbox for each ADK session, and keep its ID in the session state. On each turn, resume the sandbox, run the agent, and pause the sandbox afterwards. Files and installed packages stay available, and you do not pay for an idle VM between turns.
 
-```python {16,21,37-46,61-64,74-77,82}
+```python {16,21,37-47,60-69,74,84-86,92-97}
 import asyncio
 from typing import Any
 
@@ -337,7 +337,7 @@ from superserve import AsyncSandbox
 APP_NAME = "chat_app"
 
 
-# Sandbox handles by ID. The session state holds only the ID.
+# One sandbox handle for each chat, by ID. The session state holds only the ID.
 sandboxes: dict[str, AsyncSandbox] = {}
 
 
@@ -369,6 +369,7 @@ async def start_chat(user_id: str) -> str:
         # Delete the sandbox if setup fails, so it does not keep running.
         await sandbox.kill()
         raise
+    sandboxes[sandbox.id] = sandbox
     return session.id
 
 
@@ -381,12 +382,21 @@ async def get_chat(user_id: str, session_id: str) -> Session:
     return session
 
 
+async def resume_sandbox(sandbox_id: str) -> AsyncSandbox:
+    sandbox = sandboxes.get(sandbox_id)
+    if sandbox is None:
+        # No handle in this process, for example after a restart.
+        # connect() resumes the sandbox if it is paused.
+        sandbox = await AsyncSandbox.connect(sandbox_id)
+        sandboxes[sandbox_id] = sandbox
+    else:
+        await sandbox.resume()
+    return sandbox
+
+
 async def send(user_id: str, session_id: str, text: str) -> str:
     session = await get_chat(user_id, session_id)
-    sandbox_id = session.state["sandbox_id"]
-    # Resumes the sandbox if it is paused. The tools use this handle.
-    sandbox = await AsyncSandbox.connect(sandbox_id)
-    sandboxes[sandbox_id] = sandbox
+    sandbox = await resume_sandbox(session.state["sandbox_id"])
     try:
         reply = ""
         message = types.Content(role="user", parts=[types.Part(text=text)])
@@ -397,14 +407,19 @@ async def send(user_id: str, session_id: str, text: str) -> str:
                 reply = event.content.parts[0].text or ""
         return reply
     finally:
-        del sandboxes[sandbox_id]
-        # Pause between turns. Files and memory are kept until the next connect.
+        # Pause between turns. Files and memory are kept until the next resume.
         await sandbox.pause()
 
 
 async def end_chat(user_id: str, session_id: str) -> None:
     session = await get_chat(user_id, session_id)
-    await AsyncSandbox.kill_by_id(session.state["sandbox_id"])
+    sandbox_id = session.state["sandbox_id"]
+    sandbox = sandboxes.pop(sandbox_id, None)
+    if sandbox is None:
+        await AsyncSandbox.kill_by_id(sandbox_id)
+    else:
+        # kill() also closes the HTTP connection of the handle.
+        await sandbox.kill()
     await session_service.delete_session(
         app_name=APP_NAME, user_id=user_id, session_id=session_id
     )
@@ -430,7 +445,7 @@ asyncio.run(main())
 
 The session keeps the conversation history and the sandbox ID. The second turn understands "that file" because of the session history, and finds the file because it lives in the sandbox.
 
-`AsyncSandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. `send` connects once for each turn, and the tools use that handle. Connect again on the next turn: a handle does not resume the sandbox after `pause()`. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
+`start_chat` keeps the handle from `create()` in `sandboxes`, and every turn of the chat uses that one handle. A handle does not resume the sandbox by itself after `pause()`, so `resume_sandbox` calls `resume()` before each turn. If the process has no handle for the chat, for example after a restart, `AsyncSandbox.connect()` makes one and resumes the sandbox. `end_chat` calls `kill()` on the handle, which deletes the sandbox and closes the HTTP connection of the handle. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
 
 If `create_session()` or `pause()` fails, `start_chat` deletes the sandbox, so no sandbox runs without a session. Run one turn at a time for each session. If two turns overlap, the first turn to finish pauses the sandbox while the other turn still uses it.
 
@@ -440,7 +455,7 @@ If `create_session()` or `pause()` fails, `start_chat` deletes the sandbox, so n
 
 ## Good to know
 
-- Each `AsyncSandbox` handle opens its own HTTP connection, which stays open until `kill()` or until Python frees the handle. Share one handle with the tools, and do not call `connect()` in each tool call.
+- Each `AsyncSandbox` handle opens its own HTTP connection, which stays open until `kill()` or until Python frees the handle. `pause()` does not close it. Keep one handle for each sandbox, share it with the tools, and do not call `connect()` in each tool call or each turn.
 - The model can call only the tools you define. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
 - To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
 - Pass `timeout_seconds` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
