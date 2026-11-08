@@ -202,7 +202,7 @@ describe("CustomerBillingSection", () => {
     createStripeCustomerPortalSession.mockReset()
     publishBillingPromotionEvidence.mockReset().mockResolvedValue("published")
     useCustomerBillingPeriods.mockReset()
-    window.history.replaceState({}, "", "/plan-usage")
+    window.history.replaceState({}, "", "/billing-usage")
     useCustomerBillingPeriods.mockReturnValue({
       data: {
         periods: [
@@ -476,7 +476,7 @@ describe("CustomerBillingSection", () => {
   })
 
   it("shows a refresh notice when returning from Stripe", () => {
-    window.history.replaceState({}, "", "/plan-usage?billing=success")
+    window.history.replaceState({}, "", "/billing-usage?billing=success")
 
     renderSection()
 
