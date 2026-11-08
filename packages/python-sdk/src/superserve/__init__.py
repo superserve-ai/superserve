@@ -22,6 +22,7 @@ from .desktop import (
 )
 from .errors import (
     AuthenticationError,
+    BillingError,
     BuildError,
     ConflictError,
     NotFoundError,
@@ -91,6 +92,7 @@ __all__ = [
     "AsyncTemplate",
     "async_connection_pool",
     "AuthenticationError",
+    "BillingError",
     "BuildError",
     "BuildLogEvent",
     "BuildLogStream",
