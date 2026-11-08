@@ -141,7 +141,7 @@ sandbox3 = Sandbox.create(
 
 </CodeGroup>
 
-The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape).
+The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape). To let sandboxes grow memory while running, build the template with `memoryMaxMib`; see [Growing memory](/templates/build-spec#growing-memory).
 
 ## Related
 

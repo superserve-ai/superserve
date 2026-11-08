@@ -184,7 +184,7 @@ interface SnapshotInfo {
   status: "creating" | "ready" | "failed" | "deleting"
   name?: string
   sizeBytes: number // 0 until ready
-  resources: { vcpuCount: number; memoryMib: number; diskMib: number }
+  resources: { vcpuCount: number; memoryMib: number; diskMib: number; memoryMaxMib?: number }
   createdAt: Date
   readyAt?: Date
 }
@@ -199,7 +199,7 @@ class SnapshotInfo(BaseModel):
     status: SnapshotStatus  # creating | ready | failed | deleting
     name: str | None = None
     size_bytes: int  # 0 until ready
-    resources: SnapshotResources  # vcpu_count, memory_mib, disk_mib
+    resources: SnapshotResources  # vcpu_count, memory_mib, disk_mib, memory_max_mib
     created_at: datetime
     ready_at: datetime | None = None
 ```
