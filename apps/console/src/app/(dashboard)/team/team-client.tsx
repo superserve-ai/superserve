@@ -416,8 +416,8 @@ function ActiveAssignmentRows({
                   {new Date(assignment.granted_at).toLocaleDateString()}
                 </TableCell>
                 {canRevoke && (
-                  <TableCell>
-                    <div className="flex flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-2">
+                  <TableCell className="lg:pl-2">
+                    <div className="flex flex-col items-start gap-1 lg:flex-row lg:items-center lg:gap-1.5">
                       <Button
                         size="sm"
                         variant="outline"
