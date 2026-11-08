@@ -44,6 +44,7 @@ interface SandboxItem {
   status: string
   vcpu_count?: number
   memory_mib?: number
+  memory_max_mib?: number
   snapshot_id?: string
   source_snapshot_id?: string
   created_at?: string
@@ -139,9 +140,16 @@ function limitQuery(limit: string | undefined): string | undefined {
     : String(parseInteger(limit, "--limit", { min: 1, max: 200 }))
 }
 
-function shape(s: { vcpu_count?: number; memory_mib?: number }): string {
+function shape(s: {
+  vcpu_count?: number
+  memory_mib?: number
+  memory_max_mib?: number
+}): string {
   if (s.vcpu_count === undefined || s.memory_mib === undefined) return "-"
-  return `${s.vcpu_count} vCPU, ${formatBytes(s.memory_mib * 1024 * 1024)}`
+  const mem = formatBytes(s.memory_mib * 1024 * 1024)
+  return s.memory_max_mib === undefined
+    ? `${s.vcpu_count} vCPU, ${mem}`
+    : `${s.vcpu_count} vCPU, ${mem}-${formatBytes(s.memory_max_mib * 1024 * 1024)}`
 }
 
 function keyValues(m: Record<string, string> | undefined): string | undefined {

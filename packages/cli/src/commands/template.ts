@@ -35,6 +35,7 @@ interface TemplateRow {
   status: string
   vcpu: number
   memory_mib: number
+  memory_max_mib?: number
   disk_mib: number
   size_bytes?: number
   error_message?: string
@@ -69,6 +70,7 @@ const SPEC_KEYS = [
   "ready_cmd",
   "vcpu",
   "memory_mib",
+  "memory_max_mib",
   "disk_mib",
 ]
 
@@ -120,6 +122,13 @@ function checkRange(v: unknown, what: string, min: number, max: number) {
 function fmtMib(mib: number | undefined): string {
   if (mib === undefined) return "-"
   return mib % 1024 === 0 ? `${mib / 1024}G` : `${mib}M`
+}
+
+function fmtMemory(t: TemplateRow): string {
+  const min = fmtMib(t.memory_mib)
+  return t.memory_max_mib === undefined
+    ? min
+    : `${min}-${fmtMib(t.memory_max_mib)}`
 }
 
 function validateStep(step: unknown, i: number): Step {
@@ -190,6 +199,7 @@ interface CreateOpts {
   readyCmd?: string
   vcpu?: string
   memory?: string
+  memoryMax?: string
   disk?: string
   wait: boolean
 }
@@ -243,6 +253,10 @@ async function buildCreateBody(
     opts.memory !== undefined
       ? parseMib(opts.memory, "--memory")
       : file.memory_mib
+  const memoryMax =
+    opts.memoryMax !== undefined
+      ? parseMib(opts.memoryMax, "--memory-max")
+      : file.memory_max_mib
   const disk =
     opts.disk !== undefined ? parseMib(opts.disk, "--disk") : file.disk_mib
   if (vcpu !== undefined) {
@@ -252,6 +266,18 @@ async function buildCreateBody(
   if (memory !== undefined) {
     checkRange(memory, "Memory (MiB)", 256, 131_072)
     body.memory_mib = memory
+  }
+  if (memoryMax !== undefined) {
+    checkRange(memoryMax, "Max memory (MiB)", 256, 131_072)
+    // 1024 is the API's default memory; plan limits and the 128 MiB step
+    // are left to the API.
+    const boot = (memory as number | undefined) ?? 1024
+    if ((memoryMax as number) <= boot || (memoryMax as number) > 4 * boot) {
+      throw usageError(
+        `Max memory must be greater than memory (${fmtMib(boot)}) and at most 4 times it.`,
+      )
+    }
+    body.memory_max_mib = memoryMax
   }
   if (disk !== undefined) {
     checkRange(disk, "Disk (MiB)", 1024, 131_072)
@@ -491,7 +517,7 @@ export function register(program: Command): void {
     .argument("<name>", "Template name, unique in your team")
     .option(
       "-f, --file <path>",
-      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, disk_mib (- for stdin)",
+      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, memory_max_mib, disk_mib (- for stdin)",
     )
     .option("--from <image>", "Base OCI image, e.g. python:3.11 (linux/amd64)")
     .option("--run <cmd>", "Build step: run a shell command (repeatable)")
@@ -520,6 +546,10 @@ export function register(program: Command): void {
     .option(
       "--memory <size>",
       "Memory in MiB or with a unit, e.g. 2G; 256M-128G (default 1G)",
+    )
+    .option(
+      "--memory-max <size>",
+      "Let sandboxes grow memory while running, up to this size; above --memory, at most 4x it",
     )
     .option(
       "--disk <size>",
@@ -596,8 +626,7 @@ Examples:
           },
           {
             header: "cpu/mem/disk",
-            value: (t) =>
-              `${t.vcpu}/${fmtMib(t.memory_mib)}/${fmtMib(t.disk_mib)}`,
+            value: (t) => `${t.vcpu}/${fmtMemory(t)}/${fmtMib(t.disk_mib)}`,
           },
           { header: "size", value: (t) => formatBytes(t.size_bytes) },
           { header: "built", value: (t) => formatDate(t.built_at) },
@@ -623,7 +652,7 @@ Examples:
         ["ID", t.id],
         ["Status", t.status, statusColor],
         ["vCPU", String(t.vcpu)],
-        ["Memory", fmtMib(t.memory_mib)],
+        ["Memory", fmtMemory(t)],
         ["Disk", fmtMib(t.disk_mib)],
         [
           "Size",
