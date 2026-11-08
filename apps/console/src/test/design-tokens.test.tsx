@@ -15,7 +15,7 @@ import {
   Textarea,
 } from "@superserve/ui"
 import { fireEvent, render, screen } from "@testing-library/react"
-import { useState } from "react"
+import { createRef, useState } from "react"
 import { describe, expect, it } from "vitest"
 
 import { inputMeta } from "../../../ui-docs/src/examples/input"
@@ -269,6 +269,36 @@ describe("control state regressions", () => {
     expect(screen.getByRole("textbox", { name: "Notes" })).toBeDisabled()
   })
 
+  it("forwards the Textarea ref and keeps uncontrolled edits", () => {
+    const ref = createRef<HTMLTextAreaElement>()
+    render(<Textarea aria-label="Notes" ref={ref} defaultValue="Draft" />)
+    const control = screen.getByRole("textbox", { name: "Notes" })
+    expect(ref.current).toBe(control)
+    fireEvent.change(control, { target: { value: "Edited" } })
+    expect(control).toHaveValue("Edited")
+  })
+
+  it("keeps controlled Textarea edits inside a Field", () => {
+    function InField() {
+      const [value, setValue] = useState("")
+      return (
+        <Field label="Bio" error={value.length < 3 ? "Too short" : undefined}>
+          <Textarea
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+          />
+        </Field>
+      )
+    }
+    render(<InField />)
+    const control = screen.getByRole("textbox", { name: "Bio" })
+    expect(control).toHaveAttribute("aria-invalid", "true")
+    fireEvent.change(control, { target: { value: "Long enough" } })
+    expect(control).toHaveValue("Long enough")
+    expect(control).not.toHaveAttribute("data-invalid")
+    expect(control).not.toHaveAttribute("aria-invalid")
+  })
+
   it("keeps a Field label on a Textarea with its own id", () => {
     render(
       <Field label="Notes">
@@ -310,6 +340,11 @@ const consoleControls = [
   ["app/yc/claim/page.tsx", 4, 1],
 ] as const
 
+const buttonRing =
+  "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+const inputRing =
+  "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
+
 describe("console control borders and focus", () => {
   it.each(consoleControls)(
     "uses accessible control classes in %s",
@@ -323,7 +358,7 @@ describe("console control borders and focus", () => {
         .slice(1)
         .map((part) => part.split('"')[0])
       const controls = classes.filter((value) =>
-        value.split(" ").includes("border-control"),
+        value.split(/\s+/).includes("border-control"),
       )
       const existing =
         path === "app/admin/yc/decision-form.tsx"
@@ -332,22 +367,17 @@ describe("console control borders and focus", () => {
             ? 2
             : 0
       expect(controls).toHaveLength(buttons + inputs + existing)
+      // Compare class tokens, not substrings, so reordering classes is fine.
+      const hasAll = (value: string, ring: string) =>
+        ring.split(" ").every((token) => value.split(/\s+/).includes(token))
       expect(
-        controls.filter((value) =>
-          value.includes(
-            "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
-          ),
-        ),
+        controls.filter((value) => hasAll(value, buttonRing)),
       ).toHaveLength(buttons)
-      expect(
-        controls.filter((value) =>
-          value.includes(
-            "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
-          ),
-        ),
-      ).toHaveLength(inputs)
+      expect(controls.filter((value) => hasAll(value, inputRing))).toHaveLength(
+        inputs,
+      )
       for (const control of controls)
-        expect(control.split(" ")).not.toContain("rounded")
+        expect(control.split(/\s+/)).not.toContain("rounded")
       expect(source).not.toContain("border-foreground/30")
       expect(source).not.toContain(
         "border border-dashed border-border px-4 py-2",
