@@ -1,13 +1,11 @@
 ---
 title: "Run Omnara agents on Superserve"
 sidebarTitle: Omnara
-description: "Give every Omnara pool machine its own Superserve sandbox. Omnara creates the sandbox from your template, runs agent commands in it, and deletes it when the agent is archived."
+description: "Omnara deploys and runs AI agents for you. Use Superserve sandboxes as the isolated machines where those agents run commands and edit files."
 icon: "/logos/integrations/omnara.svg"
 ---
 
-[Omnara](https://omnara.com) runs agents in a control plane you reach from its dashboard, CLI, or API. The agent loop and the model calls stay in Omnara. Commands, file edits, and processes run on **machines**, and a [machine pool](https://docs.omnara.com/machines/pools) creates those machines on demand.
-
-Omnara has a built-in Superserve provider. Point a pool at your Superserve API key, and every machine the pool creates is a Superserve sandbox in your team. Each sandbox is a Firecracker microVM that boots from a template you choose. You see it in your console, you can restrict its egress, and Omnara deletes it when the agent that owns it is archived.
+[Omnara](https://omnara.com) is an open-source platform to deploy and run AI agents for your users and team, such as a coding agent in Slack or a support agent in your product. It runs the agent loop and the model calls, so you do not have to build and operate that platform yourself. The agent's commands, file edits, and processes run on **machines** from a [machine pool](https://docs.omnara.com/machines/pools). With Omnara's built-in Superserve provider, each machine is a Superserve sandbox in your team: an isolated Firecracker microVM that boots from your template and is deleted when the agent is archived.
 
 This is for you if:
 
