@@ -5,15 +5,20 @@ import { fileURLToPath } from "node:url"
 import {
   Button,
   Checkbox,
+  Field,
   Input,
   RadioGroup,
   RadioGroupItem,
   Select,
   SelectTrigger,
+  Switch,
   Textarea,
 } from "@superserve/ui"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
+import { useState } from "react"
 import { describe, expect, it } from "vitest"
+
+import { inputMeta } from "../../../ui-docs/src/examples/input"
 
 const css = readFileSync(
   resolve(
@@ -140,9 +145,10 @@ describe("component token classes", () => {
     )
     const destructive = screen.getByRole("button", { name: "Delete" })
     expect(destructive).toHaveClass(
-      "bg-destructive-fill text-foreground hover:bg-destructive-fill-hover focus-visible:ring-destructive/20",
+      "bg-destructive-fill text-foreground hover:bg-destructive-fill-hover focus-visible:ring-border-focus",
     )
     expect(destructive).not.toHaveClass("bg-destructive")
+    expect(destructive).not.toHaveClass("focus-visible:ring-destructive/20")
     expect(screen.getByRole("button", { name: "Cancel" })).toHaveClass(
       "border border-dashed border-control",
     )
@@ -180,4 +186,175 @@ describe("component token classes", () => {
     expect(input).not.toHaveClass("border-control")
     expect(screen.getByText("Name is required")).toHaveClass("text-destructive")
   })
+})
+
+describe("control state regressions", () => {
+  it.each(["checkbox", "radio", "switch"])(
+    "styles disabled %s and its label",
+    (role) => {
+      render(
+        <>
+          {role === "checkbox" && (
+            <Checkbox id="disabled-choice" disabled label="Choice" />
+          )}
+          {role === "radio" && (
+            <RadioGroup disabled>
+              <RadioGroupItem
+                id="disabled-choice"
+                value="choice"
+                label="Choice"
+              />
+            </RadioGroup>
+          )}
+          {role === "switch" && (
+            <Switch id="disabled-choice" disabled label="Choice" />
+          )}
+        </>,
+      )
+      const control = screen.getByRole(role)
+      expect(control).toHaveAttribute("data-disabled")
+      expect(control).toHaveClass(
+        "data-[disabled]:cursor-not-allowed data-[disabled]:opacity-30",
+      )
+      expect(control).not.toHaveClass("disabled:opacity-30")
+      expect(screen.getByText("Choice")).toHaveClass(
+        "peer-data-[disabled]:cursor-not-allowed peer-data-[disabled]:opacity-30",
+      )
+    },
+  )
+
+  it.each(["Input", "Textarea"])("connects %s to Field errors", (kind) => {
+    render(
+      <Field label="Bio" error="Too short">
+        {kind === "Input" ? <Input /> : <Textarea />}
+      </Field>,
+    )
+    const control = screen.getByRole("textbox", { name: "Bio" })
+    expect(control).toHaveAttribute("data-invalid")
+    expect(control).toHaveAttribute("aria-invalid", "true")
+    expect(control).toHaveClass("data-[invalid]:border-destructive")
+    expect(control).not.toHaveClass("focus:ring-destructive/20")
+    expect(control).toHaveAccessibleDescription("Too short")
+  })
+
+  it("keeps standalone Textarea controlled changes and native props", () => {
+    function Standalone() {
+      const [value, setValue] = useState("Initial")
+      return (
+        <>
+          <Textarea
+            aria-label="Notes"
+            value={value}
+            onChange={(event) => setValue(event.target.value)}
+            name="notes"
+            required
+            rows={5}
+          />
+          <output>{value}</output>
+        </>
+      )
+    }
+    const { rerender } = render(<Standalone />)
+    const control = screen.getByRole("textbox", { name: "Notes" })
+    fireEvent.change(control, { target: { value: "Updated" } })
+    expect(control).toHaveValue("Updated")
+    expect(screen.getByRole("status")).toHaveTextContent("Updated")
+    expect(control).toHaveAttribute("name", "notes")
+    expect(control).toHaveAttribute("rows", "5")
+    expect(control).toBeRequired()
+    rerender(<Textarea aria-label="Notes" defaultValue="Default" disabled />)
+    expect(screen.getByRole("textbox", { name: "Notes" })).toHaveValue(
+      "Default",
+    )
+    expect(screen.getByRole("textbox", { name: "Notes" })).toBeDisabled()
+  })
+
+  it("keeps a Field label on a Textarea with its own id", () => {
+    render(
+      <Field label="Notes">
+        <Textarea id="notes" disabled />
+      </Field>,
+    )
+    const control = screen.getByRole("textbox", { name: "Notes" })
+    expect(control).toHaveAttribute("id", "notes")
+    expect(control).toBeDisabled()
+  })
+
+  it("renders the input docs error exactly once in preview and code", () => {
+    const example = inputMeta.examples.find(
+      (example) => example.title === "With Error",
+    )!
+    render(example.preview)
+    expect(
+      screen.getAllByText("Please enter a valid email address."),
+    ).toHaveLength(1)
+    expect(
+      example.code.split("Please enter a valid email address."),
+    ).toHaveLength(2)
+    expect(screen.getByRole("textbox")).toHaveClass(
+      "data-[invalid]:border-destructive",
+    )
+  })
+})
+
+const consoleControls = [
+  ["components/templates/build-log-viewer.tsx", 1, 0],
+  ["components/sidebar/sidebar.tsx", 1, 0],
+  ["components/sandboxes/terminal.tsx", 2, 1],
+  ["components/sandboxes/terminal-tabs.tsx", 0, 1],
+  ["app/(dashboard)/admin/admin-teams-table.tsx", 1, 0],
+  ["app/admin/yc/page.tsx", 2, 0],
+  ["app/admin/yc/decision-form.tsx", 2, 0],
+  ["app/yc/claim/review-form.tsx", 1, 0],
+  ["app/yc/renewal/renewal-form.tsx", 2, 0],
+  ["app/yc/claim/page.tsx", 4, 1],
+] as const
+
+describe("console control borders and focus", () => {
+  it.each(consoleControls)(
+    "uses accessible control classes in %s",
+    (path, buttons, inputs) => {
+      const source = readFileSync(
+        resolve(dirname(fileURLToPath(import.meta.url)), "..", path),
+        "utf8",
+      )
+      const classes = source
+        .split('className="')
+        .slice(1)
+        .map((part) => part.split('"')[0])
+      const controls = classes.filter((value) =>
+        value.split(" ").includes("border-control"),
+      )
+      const existing =
+        path === "app/admin/yc/decision-form.tsx"
+          ? 7
+          : path === "app/yc/claim/review-form.tsx"
+            ? 2
+            : 0
+      expect(controls).toHaveLength(buttons + inputs + existing)
+      expect(
+        controls.filter((value) =>
+          value.includes(
+            "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
+          ),
+        ),
+      ).toHaveLength(buttons)
+      expect(
+        controls.filter((value) =>
+          value.includes(
+            "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
+          ),
+        ),
+      ).toHaveLength(inputs)
+      for (const control of controls)
+        expect(control.split(" ")).not.toContain("rounded")
+      expect(source).not.toContain("border-foreground/30")
+      expect(source).not.toContain(
+        "border border-dashed border-border px-4 py-2",
+      )
+      expect(source).not.toContain('className="rounded border px-4 py-2')
+      expect(source).not.toContain('className="mt-3 rounded border px-4 py-2')
+      expect(source).not.toContain("mt-2 block w-full rounded border p-2")
+    },
+  )
 })

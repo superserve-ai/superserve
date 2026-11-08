@@ -38,7 +38,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           id={inputId}
           className={cn(
             "h-9 w-full border border-control bg-background px-3 text-sm text-foreground",
-            "placeholder:text-muted",
+            "placeholder:text-muted data-[invalid]:border-destructive",
             "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
             "disabled:cursor-not-allowed disabled:opacity-30",
             error && "border-destructive focus:ring-destructive/20",
@@ -46,8 +46,10 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
               "[appearance:textfield] pr-10 [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none",
             className,
           )}
-          aria-invalid={!!error}
-          aria-describedby={describedByFinal}
+          {...(error ? { "aria-invalid": true as const } : {})}
+          {...(describedByFinal
+            ? { "aria-describedby": describedByFinal }
+            : {})}
           {...props}
         />
         {suffix && (

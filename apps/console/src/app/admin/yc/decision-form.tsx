@@ -184,7 +184,7 @@ export function DecisionForm({
           </p>
           <button
             type="submit"
-            className="border border-dashed border-border px-4 py-2 font-mono text-xs uppercase"
+            className="border border-dashed border-control px-4 py-2 font-mono text-xs uppercase focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
           >
             Save decision
           </button>
@@ -195,7 +195,7 @@ export function DecisionForm({
         <button
           disabled={pending}
           onClick={() => void send(attempt)}
-          className="border border-dashed border-border px-4 py-2"
+          className="border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
         >
           {pending ? "Saving…" : "Retry same decision"}
         </button>
