@@ -269,6 +269,7 @@
               "integrations/agent-harnesses/crewai",
               "integrations/agent-harnesses/flue",
               "integrations/agent-harnesses/langchain",
+              "integrations/agent-harnesses/mastra",
               "integrations/agent-harnesses/openai-agents-sdk",
               "integrations/agent-harnesses/pydantic-ai",
               "integrations/agent-harnesses/vercel-ai-sdk"
