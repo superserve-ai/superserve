@@ -103,6 +103,28 @@ const surfaces = [
 ]
 
 describe("design token contrast (WCAG 2.x)", () => {
+  it("removes the obsolete input token", () => {
+    expect(tokens["--color-input"]).toBeUndefined()
+  })
+
+  it.each(surfaces.slice(0, 2))(
+    "unchecked switch tracks and thumbs have at least 3:1 on %s",
+    (surface) => {
+      expect(contrast("--color-control", surface)).toBeGreaterThanOrEqual(3)
+      const track = color("--color-control")
+      const base = color(surface).rgb
+      const trackLuminance = luminance(
+        track.rgb.map(
+          (channel, i) => track.alpha * channel + (1 - track.alpha) * base[i],
+        ),
+      )
+      const thumbLuminance = luminance(color("--color-background").rgb)
+      expect(
+        (trackLuminance + 0.05) / (thumbLuminance + 0.05),
+      ).toBeGreaterThanOrEqual(3)
+    },
+  )
+
   it.each(surfaces)("destructive text has at least 4.5:1 on %s", (surface) => {
     expect(contrast("--color-destructive", surface)).toBeGreaterThanOrEqual(4.5)
   })
@@ -136,6 +158,34 @@ describe("design token contrast (WCAG 2.x)", () => {
 })
 
 describe("component token classes", () => {
+  it("uses the control track and respects reduced motion on an unchecked switch", () => {
+    render(<Switch aria-label="Alerts" />)
+    const control = screen.getByRole("switch", { name: "Alerts" })
+    expect(control).toHaveAttribute("data-unchecked")
+    expect(control).toHaveClass("data-[unchecked]:bg-control")
+    expect(control).not.toHaveClass("data-[unchecked]:bg-input")
+    expect(control.querySelector(":scope > span")).toHaveClass(
+      "motion-reduce:transition-none",
+    )
+  })
+
+  it.each(["Input", "Textarea"])(
+    "keeps the red border and the mint ring on focused %s errors",
+    (kind) => {
+      render(
+        kind === "Input" ? (
+          <Input aria-label="Name" error="Required" />
+        ) : (
+          <Textarea aria-label="Name" error="Required" />
+        ),
+      )
+      const control = screen.getByRole("textbox", { name: "Name" })
+      expect(control).toHaveClass("border-destructive focus:border-destructive")
+      expect(control).not.toHaveClass("focus:ring-destructive/20")
+      expect(control).toHaveClass("focus:ring-border-focus")
+    },
+  )
+
   it("uses the dark destructive fill and the control outline", () => {
     render(
       <>
@@ -346,6 +396,22 @@ const inputRing =
   "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
 
 describe("console control borders and focus", () => {
+  it("uses the full muted token for the pagination placeholder", () => {
+    const source = readFileSync(
+      resolve(
+        dirname(fileURLToPath(import.meta.url)),
+        "../components/pagination.tsx",
+      ),
+      "utf8",
+    )
+    const classes = source
+      .split('className="')
+      .slice(1)
+      .flatMap((part) => part.split('"')[0].split(/\s+/))
+    expect(classes).toContain("placeholder:text-muted")
+    expect(classes).not.toContain("placeholder:text-muted/60")
+  })
+
   it.each(consoleControls)(
     "uses accessible control classes in %s",
     (path, buttons, inputs) => {

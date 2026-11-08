@@ -30,7 +30,7 @@ const Textarea = forwardRef<HTMLTextAreaElement, TextareaProps>(
           "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-30",
           "data-[invalid]:border-destructive",
-          error && "border-destructive focus:ring-destructive/20",
+          error && "border-destructive focus:border-destructive",
           className,
         )}
         {...(error ? { "aria-invalid": true as const } : {})}
