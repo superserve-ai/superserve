@@ -26,6 +26,7 @@ import {
   isSignupReviewBlocked,
   SIGNUP_REVIEW_PENDING_MESSAGE,
 } from "@/lib/auth/signup-review"
+import { isBuyCreditPath } from "@/lib/billing/buy-credit-path"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -208,11 +209,7 @@ function setImpersonationDebugHeaders(
   headers.set("x-console-impersonated-team", impersonatedTeamId ?? "")
 }
 
-function validPaymentReturn(
-  value: unknown,
-  origin: string,
-  path: string,
-): boolean {
+function validPaymentReturn(value: unknown, origin: string): boolean {
   if (typeof value !== "string") return false
   try {
     const url = new URL(value)
@@ -220,7 +217,7 @@ function validPaymentReturn(
       url.origin === origin &&
       !url.username &&
       !url.password &&
-      url.pathname.replace(/\/$/, "") === path
+      isBuyCreditPath(url.pathname)
     )
   } catch {
     return false
@@ -464,16 +461,8 @@ async function proxyRequest(
     const purchase = input as Record<string, unknown>
     if (
       joinedPath === "billing/prepaid/checkout" &&
-      (!validPaymentReturn(
-        purchase.success_url,
-        request.nextUrl.origin,
-        "/plan-usage/buy-credit",
-      ) ||
-        !validPaymentReturn(
-          purchase.cancel_url,
-          request.nextUrl.origin,
-          "/plan-usage/buy-credit",
-        ))
+      (!validPaymentReturn(purchase.success_url, request.nextUrl.origin) ||
+        !validPaymentReturn(purchase.cancel_url, request.nextUrl.origin))
     ) {
       return NextResponse.json(
         {
