@@ -1,7 +1,7 @@
 "use client"
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
-import { Button, Input } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
@@ -19,13 +19,16 @@ import {
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import {
   beginGoogleSignup,
   claimGoogleRecoveryContinuation,
+  googleRecoveryAccount,
   isCloudflareSignupObservationEnabled,
+  resendSignupConfirmation,
   signUpWithEmail,
 } from "./action"
 
@@ -118,10 +121,14 @@ const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
 
 const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
+// A failed bot-check is a retry, not a dead end: say what the user can change.
+const CAPTCHA_FAILED_MESSAGE =
+  "We couldn't verify this browser. Turn off any VPN or ad blocker for this site and try again, or use another browser."
+
 // Copy for each reason the callback reports a first-time Google signup unchecked.
 const GOOGLE_RECOVERY_MESSAGES: Record<string, string> = {
   started_from_signin:
-    "Looks like you're new here. One quick check to finish creating your account.",
+    "This Google account is new to Superserve. One quick check to finish creating your account.",
   expired:
     "Your signup check timed out. One quick check to finish creating your account.",
   no_proof:
@@ -136,6 +143,11 @@ const GOOGLE_RECOVERY_MESSAGES: Record<string, string> = {
 // window, so a check that keeps failing falls back to the button.
 const GOOGLE_RECOVERY_AUTO_KEY = "superserve-google-signup-auto-continue"
 const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
+
+// Matches the server-side cooldown between confirmation emails.
+const RESEND_COOLDOWN_SECONDS = 60
+const BOT_CHECK_UNAVAILABLE =
+  "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
 
 const getRecaptchaToken = async (
   action: string,
@@ -184,7 +196,24 @@ export default function SignUpContent() {
     setFormValues((current) => ({ ...current, [key]: value }))
   const [showPassword, setShowPassword] = useState(false)
   const [showConfirmPassword, setShowConfirmPassword] = useState(false)
-  const [emailSent, setEmailSent] = useState(false)
+  // The address the account was created with. The field stays editable while
+  // signup is pending, so the confirmation views and resend use this copy.
+  const [submittedEmail, setSubmittedEmail] = useState("")
+  // Only "sent" means a confirmation email actually went out.
+  const [emailStatus, setEmailStatus] = useState<"sent" | "not_sent" | null>(
+    null,
+  )
+  const [resendAvailableAt, setResendAvailableAt] = useState(0)
+  const [now, setNow] = useState(0)
+  const resendCooldown = Math.max(
+    0,
+    Math.ceil((resendAvailableAt - now) / 1000),
+  )
+  const [isResending, setIsResending] = useState(false)
+  const [resendNotice, setResendNotice] = useState<{
+    text: string
+    error: boolean
+  } | null>(null)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
   const router = useRouter()
@@ -211,10 +240,25 @@ export default function SignUpContent() {
     ? GOOGLE_RECOVERY_MESSAGES[googleRecoveryReason]
     : undefined
   const autoContinued = useRef(false)
+  // The account this browser's blocked callback signed in with. The recovery
+  // trip asks Google for that account so the user does not pick again.
+  const [recoveryAccount, setRecoveryAccount] = useState<string>()
+  const recoveryAccountRequest = useRef<Promise<string | undefined>>(undefined)
+  const loadRecoveryAccount = () =>
+    (recoveryAccountRequest.current ??= googleRecoveryAccount().catch(
+      () => undefined,
+    ))
+
+  useEffect(() => {
+    if (!isCompleteGoogleSignup) return
+    void loadRecoveryAccount().then(setRecoveryAccount)
+  }, [isCompleteGoogleSignup])
 
   useEffect(() => {
     if (searchParams.get("error") === "link_expired") {
-      setErrors({ form: "Verification link expired or invalid." })
+      setErrors({
+        form: "This confirmation link expired or was already used. Sign up again with the same email and password to get a new link, or sign in if you already confirmed your email.",
+      })
     }
   }, [searchParams])
 
@@ -269,6 +313,13 @@ export default function SignUpContent() {
           router.push("/auth/auth-code-error?reason=signup_blocked")
           return
         }
+        if ("errorCode" in result && result.errorCode === "email_not_sent") {
+          setResendNotice(null)
+          startResendCooldown(RESEND_COOLDOWN_SECONDS)
+          setSubmittedEmail(email)
+          setEmailStatus("not_sent")
+          return
+        }
         setErrors({ form: result.error || "Error creating account." })
         return
       }
@@ -277,7 +328,10 @@ export default function SignUpContent() {
         ...(requestedOffer ? { requested_offer: requestedOffer } : {}),
       })
       clearFingerprintSignupCapture()
-      setEmailSent(true)
+      setResendNotice(null)
+      startResendCooldown(RESEND_COOLDOWN_SECONDS)
+      setSubmittedEmail(email)
+      setEmailStatus("sent")
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
     } finally {
@@ -285,7 +339,116 @@ export default function SignUpContent() {
     }
   }
 
-  const handleGoogleSignIn = async () => {
+  const startResendCooldown = (seconds: number) => {
+    const current = Date.now()
+    setNow(current)
+    setResendAvailableAt(current + seconds * 1000)
+  }
+
+  useEffect(() => {
+    if (resendAvailableAt <= Date.now()) return
+    const timer = setInterval(() => {
+      const current = Date.now()
+      setNow(current)
+      if (current >= resendAvailableAt) clearInterval(timer)
+    }, 1000)
+    return () => clearInterval(timer)
+  }, [resendAvailableAt])
+
+  const handleResend = async () => {
+    setIsResending(true)
+    setResendNotice(null)
+    try {
+      const recaptchaToken = await getRecaptchaToken("signup_resend")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setResendNotice({ text: BOT_CHECK_UNAVAILABLE, error: true })
+        return
+      }
+      const result = await resendSignupConfirmation(
+        recaptchaToken,
+        submittedEmail,
+      )
+      if (result.success) {
+        setEmailStatus("sent")
+        startResendCooldown(RESEND_COOLDOWN_SECONDS)
+        setResendNotice({
+          text: "We sent a new confirmation email. Links in earlier emails no longer work.",
+          error: false,
+        })
+        return
+      }
+      if (
+        result.errorCode === "cooldown" ||
+        result.errorCode === "email_not_sent"
+      )
+        startResendCooldown(result.retryAfterSeconds ?? RESEND_COOLDOWN_SECONDS)
+      // A failed resend may already have replaced the earlier link.
+      if (result.errorCode === "email_not_sent") setEmailStatus("not_sent")
+      setResendNotice({ text: result.error, error: true })
+    } catch {
+      setResendNotice({
+        text: "We couldn't resend the email. Please try again.",
+        error: true,
+      })
+    } finally {
+      setIsResending(false)
+    }
+  }
+
+  const startOver = () => {
+    setEmailStatus(null)
+    setResendNotice(null)
+  }
+
+  const resendControls = (
+    <>
+      <Button
+        type="button"
+        variant="outline"
+        onClick={handleResend}
+        disabled={isResending || resendCooldown > 0}
+        className="mt-5 w-full gap-2"
+      >
+        {isResending && <Spinner />}
+        {isResending
+          ? "Sending..."
+          : resendCooldown > 0
+            ? `Resend confirmation email (${resendCooldown}s)`
+            : "Resend confirmation email"}
+      </Button>
+      {resendNotice && (
+        <p
+          role={resendNotice.error ? "alert" : "status"}
+          className={`mt-3 text-center text-xs ${resendNotice.error ? "text-destructive" : "text-muted"}`}
+        >
+          {resendNotice.text}
+        </p>
+      )}
+      <p className="mt-5 text-center text-xs text-muted">
+        Wrong email?{" "}
+        <button
+          type="button"
+          onClick={startOver}
+          disabled={isResending}
+          className="font-medium text-foreground hover:underline disabled:opacity-50"
+        >
+          Start over
+        </button>
+        {" · "}Already verified?{" "}
+        <Link
+          href={signInHref}
+          className={cn(
+            "font-medium text-foreground hover:underline",
+            inviteLinkReplayClass(signInHref),
+          )}
+        >
+          Sign in
+        </Link>
+      </p>
+    </>
+  )
+
+  const handleGoogleSignIn = async (chooseAccount = false) => {
     setIsGoogleLoading(true)
     setErrors({})
     try {
@@ -310,9 +473,18 @@ export default function SignUpContent() {
         fingerprintDiagnostics,
       )
       if (!proof.success) {
-        setErrors({ form: proof.error || "Google signup verification failed." })
+        setErrors({
+          form:
+            proof.errorCode === "captcha_failed"
+              ? CAPTCHA_FAILED_MESSAGE
+              : proof.error || "Google signup verification failed.",
+        })
         return
       }
+      const loginHint =
+        isCompleteGoogleSignup && !chooseAccount
+          ? await loadRecoveryAccount()
+          : undefined
 
       const supabase = createBrowserClient()
       const callbackUrl = new URL("/auth/callback", window.location.origin)
@@ -327,7 +499,9 @@ export default function SignUpContent() {
         provider: "google",
         options: {
           redirectTo: callbackUrl.toString(),
-          queryParams: { prompt: "select_account" },
+          queryParams: loginHint
+            ? { login_hint: loginHint }
+            : { prompt: "select_account" },
         },
       })
       if (error) {
@@ -397,25 +571,37 @@ export default function SignUpContent() {
             />
           </Link>
         </div>
-        {emailSent ? (
+        {emailStatus === "sent" ? (
           <>
             <h1 className="text-center text-sm font-medium text-foreground">
               Check Your Email
             </h1>
             <p className="mt-2 text-center text-xs leading-relaxed text-muted">
               We&apos;ve sent a verification link to{" "}
-              <strong className="text-foreground">{email}</strong>. Check your
-              inbox and click the link to verify your account.
+              <strong className="text-foreground">{submittedEmail}</strong>.
+              Check your inbox and click the link to verify your account.
             </p>
-            <p className="mt-5 text-center text-xs text-muted">
-              Already verified?{" "}
-              <Link
-                href={signInHref}
+            {resendControls}
+          </>
+        ) : emailStatus === "not_sent" ? (
+          <>
+            <h1 className="text-center text-sm font-medium text-foreground">
+              We couldn&apos;t send your confirmation email
+            </h1>
+            <p className="mt-2 text-center text-xs leading-relaxed text-muted">
+              Your account for{" "}
+              <strong className="text-foreground">{submittedEmail}</strong> was
+              created, but the confirmation email did not go out. Send it again
+              below. If it still fails, contact{" "}
+              <a
+                href="mailto:support@superserve.ai"
                 className="font-medium text-foreground hover:underline"
               >
-                Sign in
-              </Link>
+                support@superserve.ai
+              </a>
+              .
             </p>
+            {resendControls}
           </>
         ) : isCompleteGoogleSignup ? (
           <>
@@ -432,7 +618,7 @@ export default function SignUpContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={handleGoogleSignIn}
+              onClick={() => handleGoogleSignIn()}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
@@ -441,6 +627,23 @@ export default function SignUpContent() {
                 ? "Completing signup..."
                 : "Complete signup with Google"}
             </Button>
+            {recoveryAccount && (
+              <p className="mt-5 text-center text-xs text-muted">
+                Continuing as{" "}
+                <span data-mask className="text-foreground">
+                  {recoveryAccount}
+                </span>
+                .{" "}
+                <button
+                  type="button"
+                  onClick={() => handleGoogleSignIn(true)}
+                  disabled={isGoogleLoading || isLoading}
+                  className="font-medium text-foreground hover:underline disabled:opacity-50"
+                >
+                  Use a different Google account
+                </button>
+              </p>
+            )}
           </>
         ) : (
           <>
@@ -450,7 +653,7 @@ export default function SignUpContent() {
             <Button
               type="button"
               variant="outline"
-              onClick={handleGoogleSignIn}
+              onClick={() => handleGoogleSignIn()}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
@@ -538,7 +741,10 @@ export default function SignUpContent() {
               Already have an account?{" "}
               <Link
                 href={signInHref}
-                className="font-medium text-foreground hover:underline"
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Sign in
               </Link>

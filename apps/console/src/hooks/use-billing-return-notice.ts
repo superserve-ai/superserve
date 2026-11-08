@@ -18,7 +18,7 @@ export function useBillingReturnNotice() {
     const genericState = genericBillingReturnState(url.searchParams)
     if (url.searchParams.has("billing_flow") && genericState === null) return
     const inlineOwnsBilling =
-      pathname === "/plan-usage" || pathname === "/plan-usage/"
+      pathname === "/billing-usage" || pathname === "/billing-usage/"
     const proOwnsBilling =
       (pathname === "/billing/pro" || pathname === "/billing/pro/") &&
       (url.searchParams.has("team") ||

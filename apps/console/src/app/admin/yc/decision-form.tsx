@@ -113,7 +113,7 @@ export function DecisionForm({
             Decision
             <select
               name="decision"
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             >
               <option value="approve">Approve for offer acceptance</option>
               <option value="reject">Reject</option>
@@ -127,7 +127,7 @@ export function DecisionForm({
               name="user_id"
               readOnly={!!preferred}
               defaultValue={preferred?.user_id ?? claim.claimed_user_id ?? ""}
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             />
           </label>
           <label>
@@ -136,7 +136,7 @@ export function DecisionForm({
               name="team_id"
               readOnly={!!preferred}
               defaultValue={preferred?.team_id ?? claim.team_id ?? ""}
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             />
           </label>
           <label>
@@ -144,7 +144,7 @@ export function DecisionForm({
             <select
               name="region"
               defaultValue={claim.home_region ?? regions[0]}
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             >
               {regions.map((region) => (
                 <option key={region}>{region}</option>
@@ -156,7 +156,7 @@ export function DecisionForm({
               Company directory URL (if correcting the match)
               <input
                 name="company_identity"
-                className="block w-full border border-dashed p-2"
+                className="block w-full border border-dashed border-control p-2"
               />
             </label>
           )}
@@ -166,7 +166,7 @@ export function DecisionForm({
               name="reason"
               required
               maxLength={1000}
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             />
           </label>
           <label>
@@ -175,7 +175,7 @@ export function DecisionForm({
               name="evidence_reference"
               required
               maxLength={1000}
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             />
           </label>
           <p>

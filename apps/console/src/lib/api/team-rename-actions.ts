@@ -38,43 +38,6 @@ async function currentUser() {
 }
 
 /**
- * Whether the signed-in user may rename their active team. The backend is the
- * authority (`settings:write`); a failed read is reported as "cannot rename"
- * so the UI falls back to read-only rather than offering a doomed edit.
- */
-export async function getTeamRenameAccessAction(expected: {
-  teamId: string
-  region: string
-}): Promise<boolean> {
-  try {
-    const user = await currentUser()
-    if (!user) return false
-    const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
-    if (team.teamId !== expected.teamId || team.region !== expected.region) {
-      return false
-    }
-    const response = await fetch(
-      new URL(
-        `/teams/${encodeURIComponent(team.teamId)}/management`,
-        cellFor(team.region).apiBaseUrl,
-      ),
-      {
-        headers: { "X-API-Key": apiKey },
-        cache: "no-store",
-        signal: AbortSignal.timeout(5000),
-      },
-    )
-    if (!response.ok) return false
-    const body = (await response.json()) as {
-      capabilities?: { can_rename_team?: unknown }
-    }
-    return body.capabilities?.can_rename_team === true
-  } catch {
-    return false
-  }
-}
-
-/**
  * Rename the active team through the customer API with the user's own team
  * key, so the backend enforces `settings:write` and writes the audit trail.
  * `expected` pins the team the form was showing: a cookie switched in another

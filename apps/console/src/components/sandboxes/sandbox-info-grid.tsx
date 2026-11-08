@@ -105,6 +105,7 @@ export function NetworkSection({ sandbox }: { sandbox: SandboxResponse }) {
                     variant="ghost"
                     size="icon-sm"
                     className="shrink-0"
+                    aria-label={`Remove allow rule ${i + 1}`}
                     onClick={() =>
                       setAllowRules(allowRules.filter((_, j) => j !== i))
                     }
@@ -143,6 +144,7 @@ export function NetworkSection({ sandbox }: { sandbox: SandboxResponse }) {
                     variant="ghost"
                     size="icon-sm"
                     className="shrink-0"
+                    aria-label={`Remove deny rule ${i + 1}`}
                     onClick={() =>
                       setDenyRules(denyRules.filter((_, j) => j !== i))
                     }
@@ -171,7 +173,12 @@ export function NetworkSection({ sandbox }: { sandbox: SandboxResponse }) {
     <div>
       <div className="flex h-10 items-center justify-between px-4">
         <h2 className="text-sm font-semibold text-foreground">Network</h2>
-        <Button variant="ghost" size="icon-sm" onClick={startEdit}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Edit network rules"
+          onClick={startEdit}
+        >
           <PencilSimpleIcon className="size-3.5 text-muted" weight="light" />
         </Button>
       </div>
@@ -302,6 +309,7 @@ export function MetadataSection({ sandbox }: { sandbox: SandboxResponse }) {
                 variant="ghost"
                 size="icon-sm"
                 className="shrink-0"
+                aria-label={`Remove metadata entry ${i + 1}`}
                 onClick={() => setEntries(entries.filter((_, j) => j !== i))}
               >
                 <TrashIcon className="size-3.5 text-muted" weight="light" />
@@ -326,7 +334,12 @@ export function MetadataSection({ sandbox }: { sandbox: SandboxResponse }) {
     <div>
       <div className="flex h-10 items-center justify-between px-4">
         <h2 className="text-sm font-semibold text-foreground">Metadata</h2>
-        <Button variant="ghost" size="icon-sm" onClick={startEdit}>
+        <Button
+          variant="ghost"
+          size="icon-sm"
+          aria-label="Edit metadata"
+          onClick={startEdit}
+        >
           <PencilSimpleIcon className="size-3.5 text-muted" weight="light" />
         </Button>
       </div>
