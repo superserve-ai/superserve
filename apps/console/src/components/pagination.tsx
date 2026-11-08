@@ -78,7 +78,7 @@ function JumpToPage({ current, pageCount, onPageChange }: JumpToPageProps) {
         onBlur={commit}
         placeholder={String(current)}
         aria-label={`Jump to page, 1 to ${pageCount}`}
-        className="h-8 w-12 border border-dashed border-border bg-background px-1.5 text-center font-mono text-xs text-foreground tabular-nums placeholder:text-muted/60 focus:border-border-focus focus:outline-none"
+        className="h-8 w-12 border border-dashed border-control bg-background px-1.5 text-center font-mono text-xs text-foreground tabular-nums placeholder:text-muted/60 focus:border-border-focus focus:outline-none"
       />
     </div>
   )
