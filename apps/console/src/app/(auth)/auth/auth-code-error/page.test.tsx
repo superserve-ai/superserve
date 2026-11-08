@@ -211,7 +211,7 @@ describe("auth-code-error page", () => {
     ).toBeNull()
   })
 
-  it("keeps Enterprise intent and an invitation on expired-link signup and sign-in links", () => {
+  it("keeps an invitation on expired-link signup and sign-in links but Enterprise intent only on sign-in", () => {
     const invite = `/invite/ssinv_use_${"A".repeat(43)}`
     next = invite
     intent = "enterprise"
@@ -225,7 +225,7 @@ describe("auth-code-error page", () => {
     })
     expect(confirmation).toHaveAttribute(
       "href",
-      `/auth/signup?${new URLSearchParams({ error: "link_expired", signup_offer: "enterprise", next: invite })}`,
+      `/auth/signup?${new URLSearchParams({ error: "link_expired", next: invite })}`,
     )
     expect(confirmation).toHaveClass("ph-no-capture")
     const signin = screen.getByRole("link", { name: "Back to sign in" })

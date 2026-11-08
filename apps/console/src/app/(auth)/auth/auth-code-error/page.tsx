@@ -62,7 +62,8 @@ function AuthCodeErrorContent() {
   const expiredMessage = recoveryLinkExpired
     ? "This password reset link expired or was already used. Request a new link to reset your password."
     : "This link expired or was already used. To reset your password, request a new reset link. To confirm a new account, sign up again with the same email and password to get a new confirmation link."
-  const confirmationHref = `/auth/signup?error=link_expired${retryParams.size ? `&${retryParams}` : ""}`
+  // Enterprise signup cannot resend confirmation for an existing unconfirmed account.
+  const confirmationHref = `/auth/signup?error=link_expired${invite ? `&${new URLSearchParams({ next: invite })}` : ""}`
   const setupRetry =
     [
       "account_setup",
