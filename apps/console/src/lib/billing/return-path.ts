@@ -9,6 +9,6 @@ export function safeReturnPath(value: string | undefined): string {
         character.charCodeAt(0) <= 31 || character.charCodeAt(0) === 127,
     )
   )
-    return "/plan-usage/"
+    return "/billing-usage/"
   return value
 }

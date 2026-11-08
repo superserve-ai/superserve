@@ -1,3 +1,4 @@
+import { isBuyCreditPath } from "./buy-credit-path"
 import { genericBillingReturnState } from "./generic-return"
 import { proAuthReturnPath, starterAuthReturnPath } from "./pro-auth-return"
 import { safeReturnPath } from "./return-path"
@@ -14,7 +15,7 @@ export function checkoutTeamReference(value: string | null | undefined) {
 export function checkoutRecoveryPath(path: string): string | null {
   if (safeReturnPath(path) !== path) return null
   const url = new URL(path, "https://console.invalid")
-  const starter = url.pathname === "/plan-usage/buy-credit/"
+  const starter = isBuyCreditPath(url.pathname) && url.pathname.endsWith("/")
   if (!starter && url.pathname !== "/billing/pro/") return null
   if (url.hash) return null
   const params = url.searchParams

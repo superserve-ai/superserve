@@ -68,9 +68,13 @@ export interface MembershipDirectory {
  */
 export async function listTeamMembershipsForUserDetailed(
   userId: string,
-  opts?: { maxAgeMs?: number },
+  opts?: { maxAgeMs?: number; strict?: boolean },
 ): Promise<MembershipDirectory> {
-  const maxAgeMs = opts?.maxAgeMs ?? DIRECTORY_CACHE_TTL_MS
+  // Strict reads are for decisions that must fail closed: they never take a
+  // cached or in-flight result, and a degraded cell is never papered over
+  // with another read's answer.
+  const strict = opts?.strict === true
+  const maxAgeMs = strict ? 0 : (opts?.maxAgeMs ?? DIRECTORY_CACHE_TTL_MS)
   const cached = directoryCache.get(userId)
   // Strict inequality so maxAgeMs 0 can never hit cache, even for a read in
   // the same millisecond as the fill.
@@ -114,6 +118,7 @@ export async function listTeamMembershipsForUserDetailed(
     // must not replace a concurrent healthy empty response. Otherwise callers
     // can observe different answers for the same read burst.
     if (
+      !strict &&
       hadConcurrentFetch &&
       items.length === 0 &&
       degradedRegions.length > 0 &&

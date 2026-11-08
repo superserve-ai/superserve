@@ -10,7 +10,11 @@ import {
   type PlanCard,
   planCardsSchema,
 } from "./plans"
-import type { CheckoutLocator } from "./signup-checkout-paths"
+import {
+  type CheckoutLocator,
+  type TrialOutcome,
+  trialOutcome,
+} from "./signup-checkout-paths"
 
 export interface TeamCatalog {
   offers: BillingOffer[]
@@ -86,6 +90,35 @@ export async function canManageTeamBillingAction(
     }
     const canManage = body.permissions?.can_manage
     return typeof canManage === "boolean" ? canManage : null
+  } catch {
+    return null
+  }
+}
+
+// Whether the picker's team's trial ended, was explicitly denied, could
+// not be checked, or has no known reason, or null when the console itself can't
+// read the summary. Only the grant state and the server's trial block are read:
+// why a team was denied is never exposed.
+export async function getTrialOutcomeAction(
+  locator: CheckoutLocator,
+): Promise<TrialOutcome | null> {
+  try {
+    const {
+      data: { user },
+    } = await (await createServerClient()).auth.getUser()
+    if (!user || locator.account !== user.id) return null
+    const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
+    if (locator.team !== `${team.region}:${team.teamId}`) return null
+    const response = await fetch(
+      new URL("/billing/summary", cellFor(team.region).apiBaseUrl),
+      {
+        headers: { "X-API-Key": apiKey },
+        cache: "no-store",
+        signal: AbortSignal.timeout(5000),
+      },
+    )
+    if (!response.ok) return null
+    return trialOutcome(await response.json())
   } catch {
     return null
   }

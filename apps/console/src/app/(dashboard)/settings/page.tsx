@@ -261,6 +261,27 @@ export default function SettingsPage() {
             team is the user's own account and can become a team */}
         <TeamsSection />
 
+        {/* Members */}
+        <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
+          <div>
+            <h2 className="text-base font-medium text-foreground">Members</h2>
+            <p className="mt-1 text-xs text-muted">
+              Invite owners and manage who has access to this team.
+            </p>
+          </div>
+          <div className="max-w-xl">
+            <Button
+              size="sm"
+              variant="outline"
+              render={<Link href="/user-management" />}
+            >
+              Manage members
+            </Button>
+          </div>
+        </div>
+
+        <Separator />
+
         {billingVisible && (
           <>
             {/* Billing */}
@@ -331,9 +352,9 @@ export default function SettingsPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  render={<Link href="/plan-usage" />}
+                  render={<Link href="/billing-usage" />}
                 >
-                  Plan & Usage
+                  Billing & Usage
                 </Button>
               </div>
             </div>
