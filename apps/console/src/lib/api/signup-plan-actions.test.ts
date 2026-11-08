@@ -310,7 +310,7 @@ describe("authoritative signup plan read", () => {
 
 it.each([
   "/billing/pro/?team=usw%3Awest-team&billing=success",
-  "/plan-usage/buy-credit/",
+  "/billing-usage/buy-credit/",
 ])(
   "retains account-bound paid setup after session expiration and Google proof recovery: %s",
   async (next) => {

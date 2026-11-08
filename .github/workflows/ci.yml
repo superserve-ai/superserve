@@ -20,6 +20,11 @@ on:
   # "Expected" and the PR can never merge. GitHub tests the merge of the PR into
   # its own base, so a stacked run covers the parent's changes too.
   pull_request:
+  # The merge queue tests each queued PR merged onto main (and any PRs ahead of
+  # it) and waits for the same required check, so the job must keep its name.
+  # merge_group supports no `paths` filter, so every queue entry runs it.
+  merge_group:
+    types: [checks_requested]
 
 jobs:
   ci:

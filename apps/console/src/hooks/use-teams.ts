@@ -5,10 +5,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useUser } from "@/hooks/use-user"
 import { ApiError } from "@/lib/api/client"
 import { billingKeys, teamKeys } from "@/lib/api/query-keys"
-import {
-  getTeamRenameAccessAction,
-  renameTeamAction,
-} from "@/lib/api/team-rename-actions"
+import { renameTeamAction } from "@/lib/api/team-rename-actions"
 import {
   createTeamAction,
   listTeamsAction,
@@ -29,17 +26,16 @@ export function useTeams() {
  * invalidate) so stale rows can never flash while the new team's data loads;
  * active queries refetch immediately, inactive ones on next mount. The team
  * directory is exempt — it is team-agnostic and already carries the new
- * selection.
+ * selection. A caller may also exempt one top-level key it refetches itself.
  */
 function resetTeamScopedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
+  keep?: string,
 ) {
-  // The directory spans every team; everything else, rename access included,
-  // was read for the previous cookie team.
   void queryClient.resetQueries({
     predicate: (query) =>
-      query.queryKey[0] !== teamKeys.all[0] ||
-      query.queryKey[1] !== teamKeys.directory()[1],
+      query.queryKey[0] !== teamKeys.all[0] &&
+      !(keep && query.queryKey.length === 1 && query.queryKey[0] === keep),
   })
 }
 
@@ -51,9 +47,10 @@ function invalidateBillingSummary(
 
 export function refreshTeamScopedQueries(
   queryClient: ReturnType<typeof useQueryClient>,
+  keep?: string,
 ) {
   invalidateBillingSummary(queryClient)
-  resetTeamScopedQueries(queryClient)
+  resetTeamScopedQueries(queryClient, keep)
 }
 
 // A team creation the user started. A conversion also records the account
@@ -205,19 +202,6 @@ export function useCreateTeam() {
       // remains correct even if the directory refresh fails.
       await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
     },
-  })
-}
-
-/** Whether the user may rename the given (active) team; false until known. */
-export function useCanRenameTeam(team: { id: string; region: string } | null) {
-  return useQuery({
-    queryKey: teamKeys.renameAccess(team?.region ?? "", team?.id ?? ""),
-    queryFn: () =>
-      team
-        ? getTeamRenameAccessAction({ teamId: team.id, region: team.region })
-        : false,
-    enabled: !!team,
-    staleTime: 60_000,
   })
 }
 

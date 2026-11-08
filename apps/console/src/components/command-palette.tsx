@@ -82,9 +82,9 @@ export function CommandPalette() {
       onSelect: () => navigate("/api-keys"),
     },
     {
-      label: "Plan & Usage",
+      label: "Billing & Usage",
       icon: ChartBarIcon,
-      onSelect: () => navigate("/plan-usage"),
+      onSelect: () => navigate("/billing-usage"),
     },
     {
       label: "Settings",

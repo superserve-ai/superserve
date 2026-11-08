@@ -4,6 +4,7 @@ import { canViewOtherUsersAccount } from "@/lib/admin/permissions"
 import {
   getApiBaseUrlForUser,
   getAuthApiKeyForUser,
+  getRegionForUser,
   getTeamIdForUser,
 } from "@/lib/api/proxy-auth"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
@@ -23,10 +24,39 @@ const FORWARD_REQUEST_HEADERS = new Set([
   "user-agent",
 ])
 
+// Path IDs are forwarded and compared verbatim, so only the canonical form is
+// accepted. Hyphenless, braced, URN and uppercase spellings all parse as the
+// same UUID upstream and would slip past the self-removal check below.
+const CANONICAL_UUID =
+  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/
+
+// Mutations carry the team the page was showing as "<region>:<teamId>"; the
+// active team is a cookie another tab can move.
+const TEAM_SCOPE_HEADER = "x-superserve-team-scope"
+
 type RouteContext = { params: Promise<{ path?: string[] }> }
 
 function notFound(): NextResponse {
   return NextResponse.json({ error: "Not found" }, { status: 404 })
+}
+
+function invalidId(): NextResponse {
+  return NextResponse.json(
+    { error: { code: "invalid_id", message: "Invalid identifier" } },
+    { status: 400 },
+  )
+}
+
+function teamChanged(): NextResponse {
+  return NextResponse.json(
+    {
+      error: {
+        code: "team_changed",
+        message: "Your active team changed. Reload the page and try again.",
+      },
+    },
+    { status: 409 },
+  )
 }
 
 function signupDenied(): NextResponse {
@@ -52,17 +82,31 @@ function upstreamPath(
   method: string,
   teamId: string,
   path: string[],
+  { staff, userId }: { staff: boolean; userId: string },
 ): string | null {
   if (method === "GET" && path.length === 0) {
     return `/teams/${encodeURIComponent(teamId)}/management`
   }
 
-  if (method === "POST" && path.length === 1 && path[0] === "members") {
-    return `/teams/${encodeURIComponent(teamId)}/members`
+  // Read-only on purpose. Invitation create/resend responses carry the
+  // plaintext token, which only the recipient's email may contain, so those
+  // run in server actions and are not reachable through this proxy.
+  if (method === "GET" && path.length === 1 && path[0] === "invitations") {
+    return `/teams/${encodeURIComponent(teamId)}/invitations`
   }
 
+  // Customers can remove other members. Removing yourself goes through the
+  // leave-team action, which enforces the only-team rule.
   if (method === "DELETE" && path.length === 2 && path[0] === "members") {
+    if (!staff && path[1] === userId.toLowerCase()) return null
     return `/teams/${encodeURIComponent(teamId)}/members/${encodeURIComponent(path[1])}`
+  }
+
+  // Direct member adds and role assignment remain platform-staff tools.
+  if (!staff) return null
+
+  if (method === "POST" && path.length === 1 && path[0] === "members") {
+    return `/teams/${encodeURIComponent(teamId)}/members`
   }
 
   if (method === "POST" && path.length === 1 && path[0] === "roles") {
@@ -91,9 +135,6 @@ async function proxyTeamManagementRequest(
       { status: 401 },
     )
   }
-  if (!canViewOtherUsersAccount(user)) {
-    return notFound()
-  }
 
   let teamId: string
   try {
@@ -105,9 +146,40 @@ async function proxyTeamManagementRequest(
     throw error
   }
   const { path = [] } = await params
-  const targetPath = upstreamPath(request.method, teamId, path)
+  if (
+    request.method === "DELETE" &&
+    path.length === 2 &&
+    (path[0] === "members" || path[0] === "roles") &&
+    !CANONICAL_UUID.test(path[1])
+  ) {
+    return invalidId()
+  }
+  const targetPath = upstreamPath(request.method, teamId, path, {
+    staff: canViewOtherUsersAccount(user),
+    userId: user.id,
+  })
   if (!targetPath) {
     return notFound()
+  }
+  const isManagementRead = request.method === "GET" && path.length === 0
+  let region: string | null = null
+  if (
+    isManagementRead ||
+    (request.method !== "GET" && request.method !== "HEAD")
+  ) {
+    try {
+      region = await getRegionForUser(user)
+    } catch (error) {
+      if (error instanceof GoogleSignupRecoveryRequiredError)
+        return googleRecovery()
+      if (error instanceof SignupRestrictedError) return signupDenied()
+      throw error
+    }
+  }
+  if (request.method !== "GET" && request.method !== "HEAD") {
+    if (request.headers.get(TEAM_SCOPE_HEADER) !== `${region}:${teamId}`) {
+      return teamChanged()
+    }
   }
 
   let apiKey: string | null
@@ -166,6 +238,9 @@ async function proxyTeamManagementRequest(
       continue
     }
     responseHeaders.set(key, value)
+  }
+  if (isManagementRead) {
+    responseHeaders.set(TEAM_SCOPE_HEADER, `${region}:${teamId}`)
   }
 
   if (
