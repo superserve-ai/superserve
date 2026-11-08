@@ -37,7 +37,10 @@ export interface SandboxInfo {
   name: string
   status: SandboxStatus
   vcpuCount: number
+  /** Boot memory size. */
   memoryMib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memoryMaxMib?: number
   createdAt: Date
   timeoutSeconds?: number
   /** Pause the sandbox after this many seconds with no activity. */
@@ -131,6 +134,8 @@ export interface SnapshotResources {
   vcpuCount: number
   memoryMib: number
   diskMib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memoryMaxMib?: number
 }
 
 export interface SnapshotInfo {
@@ -371,6 +376,7 @@ export interface ApiSandboxResponse {
   status?: string
   vcpu_count?: number
   memory_mib?: number
+  memory_max_mib?: number | null
   access_token?: string
   routing_hint?: string
   created_at?: string
@@ -398,7 +404,12 @@ export interface ApiSnapshotResponse {
   status?: string
   name?: string | null
   size_bytes?: number
-  resources?: { vcpu_count?: number; memory_mib?: number; disk_mib?: number }
+  resources?: {
+    vcpu_count?: number
+    memory_mib?: number
+    disk_mib?: number
+    memory_max_mib?: number | null
+  }
   created_at?: string
   ready_at?: string | null
 }
@@ -457,6 +468,7 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
     status: raw.status as SandboxStatus,
     vcpuCount: raw.vcpu_count ?? 0,
     memoryMib: raw.memory_mib ?? 0,
+    memoryMaxMib: raw.memory_max_mib ?? undefined,
     createdAt: new Date(raw.created_at),
     timeoutSeconds: raw.timeout_seconds ?? undefined,
     idleTimeoutSeconds: raw.idle_timeout_seconds ?? undefined,
@@ -495,6 +507,7 @@ export function toSnapshotInfo(raw: ApiSnapshotResponse): SnapshotInfo {
       vcpuCount: raw.resources?.vcpu_count ?? 0,
       memoryMib: raw.resources?.memory_mib ?? 0,
       diskMib: raw.resources?.disk_mib ?? 0,
+      memoryMaxMib: raw.resources?.memory_max_mib ?? undefined,
     },
     createdAt: new Date(raw.created_at),
     readyAt: raw.ready_at ? new Date(raw.ready_at) : undefined,
@@ -523,7 +536,10 @@ export interface TemplateInfo {
   teamId: string
   status: TemplateStatus
   vcpu: number
+  /** Boot memory size. */
   memoryMib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memoryMaxMib?: number
   diskMib: number
   sizeBytes?: number
   errorMessage?: string
@@ -562,6 +578,13 @@ export interface TemplateCreateOptions extends ConnectionOptions {
   name: string
   vcpu?: number
   memoryMib?: number
+  /**
+   * Ceiling memory can grow to while a sandbox runs; `memoryMib` stays the
+   * boot size. Must exceed `memoryMib`, be at most 4 times it and within the
+   * team's memory limit, and differ from it by a multiple of 128. Omit for a
+   * fixed memory size.
+   */
+  memoryMaxMib?: number
   diskMib?: number
   from: string
   steps?: BuildStep[]
@@ -601,6 +624,7 @@ export interface ApiTemplateResponse {
   status?: string
   vcpu?: number
   memory_mib?: number
+  memory_max_mib?: number | null
   disk_mib?: number
   size_bytes?: number
   error_message?: string
@@ -666,6 +690,7 @@ export function toTemplateInfo(
     status: raw.status as TemplateStatus,
     vcpu: raw.vcpu ?? 0,
     memoryMib: raw.memory_mib ?? 0,
+    memoryMaxMib: raw.memory_max_mib ?? undefined,
     diskMib: raw.disk_mib ?? 0,
     sizeBytes: raw.size_bytes,
     errorMessage: raw.error_message,
