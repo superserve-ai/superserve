@@ -1,5 +1,6 @@
 import {
   AuthenticationError,
+  BillingError,
   BuildError,
   ConflictError,
   NotFoundError,
@@ -48,6 +49,31 @@ interface Described {
   hint?: string
   code?: string
   status?: number
+  actionUrl?: string
+}
+
+function billingHint(err: BillingError): string | undefined {
+  if (err.code === "trial_exhausted" || err.code === "trial_unavailable") {
+    if (!err.actionUrl) return "Add a card and choose a plan, then retry."
+    // The server message already carries the URL; do not print it twice.
+    return err.message.includes(err.actionUrl)
+      ? "Add a card and choose a plan, then retry."
+      : `Add a card and choose a plan at ${err.actionUrl}, then retry.`
+  }
+  // A required check did not complete. Fresh signups retry while setup may
+  // still be in progress; otherwise, or after that deadline, show this hint.
+  if (err.code === "trial_check_unavailable") {
+    const where =
+      err.actionUrl && !err.message.includes(err.actionUrl)
+        ? ` at ${err.actionUrl}`
+        : ""
+    return `We could not confirm the free trial. Add a card and choose a plan${where}, or contact support@superserve.ai.`
+  }
+  // Older servers send only the generic code; claim nothing specific.
+  if (err.code === "billing_ineligible") {
+    return "Check your billing status in the Superserve console."
+  }
+  return undefined
 }
 
 function describe(err: unknown): Described {
@@ -60,8 +86,9 @@ function describe(err: unknown): Described {
     }
   }
   if (err instanceof SandboxError) {
-    const base = {
+    const base: Described = {
       message: err.message,
+      exitCode: EXIT.ERROR,
       code: err.code,
       status: err.statusCode,
     }
@@ -73,6 +100,13 @@ function describe(err: unknown): Described {
           err.statusCode === 403
             ? "Your API key does not have access to this resource."
             : "Run `superserve login`, or set SUPERSERVE_API_KEY.",
+      }
+    }
+    if (err instanceof BillingError) {
+      return {
+        ...base,
+        hint: billingHint(err),
+        actionUrl: err.actionUrl,
       }
     }
     if (err instanceof NotFoundError)
@@ -144,7 +178,12 @@ export function reportBatch(
     if (!isJson()) printError(`${labels[i]}: ${d.message}`, d.hint)
     return {
       id: ids[i],
-      error: { message: d.message, code: d.code, status: d.status },
+      error: {
+        message: d.message,
+        code: d.code,
+        status: d.status,
+        action_url: d.actionUrl,
+      },
     }
   })
   if (isJson()) printJson(rows)
@@ -160,7 +199,12 @@ export function handleError(err: unknown): number {
   const d = describe(err)
   if (isJson()) {
     printError({
-      error: { message: d.message, code: d.code, status: d.status },
+      error: {
+        message: d.message,
+        code: d.code,
+        status: d.status,
+        action_url: d.actionUrl,
+      },
     })
   } else {
     printError(d.message, d.hint)
