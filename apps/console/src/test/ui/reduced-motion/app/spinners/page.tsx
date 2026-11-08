@@ -12,7 +12,7 @@ export default function Page() {
       <div className="flex items-center gap-12 p-8">
         <div className="flex items-center gap-3" data-testid="console-spinner">
           <Spinner className="border-foreground" />
-          <span className="text-sm">Console Spinner (motion rotate)</span>
+          <span className="text-sm">Console Spinner (CSS spin)</span>
         </div>
         <div className="flex items-center gap-3" data-testid="ui-spinner">
           <UiSpinner size="lg" />
