@@ -163,7 +163,7 @@ export function UpgradePage() {
 
   useEffect(() => {
     if (version === "legacy" && planQuery.data === null)
-      router.replace("/plan-usage")
+      router.replace("/billing-usage")
   }, [version, planQuery.data, router])
 
   if (
@@ -184,7 +184,11 @@ export function UpgradePage() {
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Change plan">
-        <Button size="sm" variant="ghost" render={<Link href="/plan-usage" />}>
+        <Button
+          size="sm"
+          variant="ghost"
+          render={<Link href="/billing-usage" />}
+        >
           Back to billing
         </Button>
       </PageHeader>

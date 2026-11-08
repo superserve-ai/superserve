@@ -348,9 +348,9 @@ export default function SettingsPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  render={<Link href="/plan-usage" />}
+                  render={<Link href="/billing-usage" />}
                 >
-                  Plan & Usage
+                  Billing & Usage
                 </Button>
               </div>
             </div>

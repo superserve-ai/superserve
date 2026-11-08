@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   awaitingPlanRedirect,
   isPaymentActivating,
+  trialOutcome,
 } from "./signup-checkout-paths"
 
 const team = {
@@ -76,5 +77,34 @@ it("sends a team that needs a plan to the picker with its own reason", () => {
     reason: "plan_required",
     account: "owner",
     team: "usw:team",
+  })
+})
+
+describe("trialOutcome", () => {
+  it.each([
+    [{ trial: { state: "exhausted" } }, "ended"],
+    [{ trial: { state: "expired" } }, "ended"],
+    [{ trial: { state: "no_grant" } }, "unknown"],
+    [{ trial: { state: "active" } }, "unknown"],
+    [{ trial: { state: "unknown" } }, "unknown"],
+    [{ trial: null }, "unknown"],
+    [{}, "unknown"],
+    [null, "unknown"],
+    ["exhausted", "unknown"],
+    [{ trial_block: "trial_exhausted" }, "ended"],
+    [{ trial_block: "trial_unavailable" }, "unavailable"],
+    [{ trial_block: "trial_check_unavailable" }, "check_unavailable"],
+    [{ trial_block: null, trial: { state: "no_grant" } }, "unknown"],
+    [{ trial_block: null, trial: { state: "exhausted" } }, "ended"],
+    [
+      { trial_block: "trial_unavailable", trial: { state: "exhausted" } },
+      "unavailable",
+    ],
+    [
+      { trial_block: "trial_check_unavailable", trial: { state: "exhausted" } },
+      "check_unavailable",
+    ],
+  ])("%j is %s", (summary, outcome) => {
+    expect(trialOutcome(summary)).toBe(outcome)
   })
 })
