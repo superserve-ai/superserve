@@ -325,7 +325,7 @@ describe("Settings billing context isolation", () => {
     expect(screen.queryByText("Custom templates")).not.toBeInTheDocument()
     expect(screen.getByRole("link", { name: "Change plan" })).toHaveAttribute(
       "href",
-      "/plan-usage/upgrade",
+      "/billing-usage/upgrade",
     )
     expect(screen.queryByText("Usage-based billing")).not.toBeInTheDocument()
     expect(screen.queryByText("Usage limits")).not.toBeInTheDocument()

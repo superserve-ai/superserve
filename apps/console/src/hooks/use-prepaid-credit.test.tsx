@@ -80,7 +80,7 @@ it("updates an initially empty snapshot when checkout saves an intent without ch
       startPrepaidCheckout(
         "use:team",
         500,
-        "https://console.test/plan-usage/buy-credit",
+        "https://console.test/billing-usage/buy-credit",
         "actor",
       ),
     ).rejects.toThrow("lost response")
@@ -98,7 +98,7 @@ it("updates an initially empty snapshot when checkout saves an intent without ch
     await startPrepaidCheckout(
       "use:team",
       500,
-      "https://console.test/plan-usage/buy-credit",
+      "https://console.test/billing-usage/buy-credit",
       "actor",
       retained.id,
     )

@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 const mutate = vi.fn()
 let canRename = true
 let teamName = "Example Team"
+let managedTeamId = "team-1"
 
 vi.mock("@superserve/ui", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@superserve/ui")>()),
@@ -18,8 +19,16 @@ vi.mock("@/hooks/use-teams", () => ({
       activeRegion: "use",
     },
   }),
-  useCanRenameTeam: () => ({ data: canRename }),
   useRenameTeam: () => ({ mutate, isPending: false }),
+}))
+
+vi.mock("@/hooks/use-team-management", () => ({
+  useTeamManagement: () => ({
+    data: {
+      team_id: managedTeamId,
+      capabilities: { can_rename_team: canRename },
+    },
+  }),
 }))
 
 import { TeamDetailsSection } from "./team-details-section"
@@ -28,6 +37,7 @@ beforeEach(() => {
   mutate.mockReset()
   canRename = true
   teamName = "Example Team"
+  managedTeamId = "team-1"
 })
 
 describe("TeamDetailsSection", () => {
@@ -87,5 +97,12 @@ describe("TeamDetailsSection", () => {
     expect(screen.queryByRole("button", { name: "Save Name" })).toBeNull()
     expect(screen.getByText("Example Team")).toBeTruthy()
     expect(screen.getByText("team-1")).toBeTruthy()
+  })
+
+  it("is read-only while the capability belongs to another team", () => {
+    managedTeamId = "team-2"
+    render(<TeamDetailsSection />)
+
+    expect(screen.queryByLabelText("Team Name")).toBeNull()
   })
 })
