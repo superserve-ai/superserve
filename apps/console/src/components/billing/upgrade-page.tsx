@@ -247,7 +247,9 @@ export function UpgradePage() {
               />
             </div>
           ) : (
-            <p className="text-sm text-muted">Loading your plan…</p>
+            <output className="block text-sm text-muted">
+              Loading your plan…
+            </output>
           )
         ) : (
           <>

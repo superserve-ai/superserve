@@ -392,6 +392,7 @@ describe("UpgradePage without a plan", () => {
     mocks.plan.mockReturnValue({ data: undefined, isError: false })
     mount()
     expect(screen.getByText("Loading your plan…")).toBeTruthy()
+    expect(screen.getByRole("status").textContent).toBe("Loading your plan…")
     expect(screen.queryByText("This team doesn't have a plan yet.")).toBeNull()
     expect(screen.queryByRole("button", { name: "Try again" })).toBeNull()
   })
