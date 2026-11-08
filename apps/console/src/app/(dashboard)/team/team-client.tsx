@@ -394,7 +394,9 @@ function ActiveAssignmentRows({
                     <span data-mask>{assignment.email}</span>
                   </div>
                 </TableCell>
-                <TableCell>{roleLabel(assignment.role_name)}</TableCell>
+                <TableCell className="whitespace-nowrap">
+                  {roleLabel(assignment.role_name)}
+                </TableCell>
                 <TableCell
                   className="text-muted tabular-nums"
                   suppressHydrationWarning
