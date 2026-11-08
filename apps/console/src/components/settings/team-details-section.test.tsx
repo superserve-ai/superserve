@@ -1,6 +1,8 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { RenameTeamActionFailure } from "@/lib/api/team-rename-error"
+
 const mutate = vi.fn()
 let canRename = true
 let teamName = "Example Team"
@@ -42,8 +44,14 @@ beforeEach(() => {
 
 describe("TeamDetailsSection", () => {
   it("shows the conflict message returned for a taken name", async () => {
+    const log = vi.spyOn(console, "error")
     mutate.mockImplementation((_vars, opts) =>
-      opts.onError(new Error("That name is unavailable. Try another.")),
+      opts.onError(
+        new RenameTeamActionFailure(
+          "name_unavailable",
+          "That name is unavailable. Try another.",
+        ),
+      ),
     )
     render(<TeamDetailsSection />)
 
@@ -58,7 +66,33 @@ describe("TeamDetailsSection", () => {
       ).toBeTruthy(),
     )
     expect(mutate.mock.calls[0][0]).toMatchObject({ name: "Taken" })
+    expect(log).not.toHaveBeenCalled()
   })
+
+  it.each([
+    "Failed to fetch",
+    "Database connection failed",
+    "That name is unavailable. Try another.",
+  ])(
+    "logs unexpected rename errors and shows a fallback: %s",
+    async (message) => {
+      const error = new Error(message)
+      const log = vi.spyOn(console, "error")
+      mutate.mockImplementation((_vars, opts) => opts.onError(error))
+      render(<TeamDetailsSection />)
+
+      fireEvent.change(screen.getByLabelText("Team Name"), {
+        target: { value: "Renamed Team" },
+      })
+      fireEvent.click(screen.getByRole("button", { name: "Save Name" }))
+
+      expect(
+        await screen.findByText("Failed to rename team. Try again."),
+      ).toBeInTheDocument()
+      expect(screen.queryByText(message)).not.toBeInTheDocument()
+      expect(log).toHaveBeenCalledWith("Failed to rename team:", error)
+    },
+  )
 
   it("resyncs an untouched name when the directory updates", () => {
     const { rerender } = render(<TeamDetailsSection />)

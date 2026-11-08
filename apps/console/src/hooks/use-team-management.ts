@@ -130,6 +130,7 @@ function friendlyRbacMessage(error: unknown, fallback: string): string {
     return error.message
   }
   if (!(error instanceof ApiError)) {
+    console.error("Team-management action failed:", error)
     return fallback
   }
   if (error.code === "team_changed") return error.message
@@ -144,7 +145,19 @@ function friendlyRbacMessage(error: unknown, fallback: string): string {
     return "This change conflicts with the current team state. If you are changing owners, make sure at least one active owner remains."
   }
 
-  return error.message
+  console.error("Team-management action failed:", error)
+  return fallback
+}
+
+function friendlyInvitationMessage(error: unknown, fallback: string): string {
+  if (
+    error instanceof InvitationActionFailure ||
+    (error instanceof Error && error.message === TEAM_NOT_READY_MESSAGE)
+  ) {
+    return error.message
+  }
+  console.error("Invitation action failed:", error)
+  return fallback
 }
 
 export function useTeamManagement() {
@@ -255,7 +268,13 @@ export function useResendInvitation() {
       }
     },
     onError: (error) => {
-      addToast(error.message, "error")
+      addToast(
+        friendlyInvitationMessage(
+          error,
+          "Failed to resend invitation. Try again.",
+        ),
+        "error",
+      )
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })
@@ -279,7 +298,13 @@ export function useRevokeInvitation() {
       addToast("Invitation revoked", "success")
     },
     onError: (error) => {
-      addToast(error.message, "error")
+      addToast(
+        friendlyInvitationMessage(
+          error,
+          "Failed to revoke invitation. Try again.",
+        ),
+        "error",
+      )
     },
     onSettled: () => {
       queryClient.invalidateQueries({ queryKey: teamManagementKeys.all })

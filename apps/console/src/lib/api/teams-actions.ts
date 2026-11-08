@@ -7,6 +7,7 @@ import {
 } from "@/lib/api/active-team"
 import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
 import { isPersonalTeam, ownsTeam, renameTeam } from "@/lib/api/team-conversion"
+import { TEAM_CREATION_NAME_LENGTH_MESSAGE } from "@/lib/api/team-creation-errors"
 import {
   invalidateMembershipDirectory,
   listTeamsForUser,
@@ -135,6 +136,9 @@ export async function createTeamAction(
         | "google_signup_recovery_required"
         | "team_name_conflict"
         | "team_conversion_unavailable"
+        | "invalid_team_name"
+        | "region_unavailable"
+        | "account_team_unconfirmed"
       message: string
     }
 > {
@@ -148,14 +152,21 @@ export async function createTeamAction(
   if (!operationId || operationId === user.id)
     throw new Error("A distinct team creation operation is required")
   const trimmed = name.trim()
-  if (!trimmed) throw new Error("Team name is required")
+  if (!trimmed)
+    return { code: "invalid_team_name", message: "Team name is required" }
   // Team creation enforces this limit in provisioning; a conversion skips it.
   if (Buffer.byteLength(trimmed, "utf8") > 256)
-    throw new Error("Enter a team name between 1 and 256 bytes")
+    return {
+      code: "invalid_team_name",
+      message: TEAM_CREATION_NAME_LENGTH_MESSAGE,
+    }
 
   const targetRegion = region ?? DEFAULT_REGION
   if (!configuredRegions().includes(targetRegion)) {
-    throw new Error(`Region ${targetRegion} is not available`)
+    return {
+      code: "region_unavailable",
+      message: `Region ${targetRegion} is not available`,
+    }
   }
 
   // The form asks to convert the user's own account team. A conversion never
@@ -166,12 +177,15 @@ export async function createTeamAction(
       (t) => t.id === convertTeamId && t.region === targetRegion,
     )
     if (!target) {
-      // The client drops its pending conversion on a refusal, so refuse only
-      // what the account's cell confirms.
+      // The client drops its pending conversion only on a confirmed refusal.
+      // Keep it open for a retry while the account's cell is unconfirmed.
       if (
         await conversionTargetUnconfirmed(targetRegion, user.id, convertTeamId)
       )
-        throw new Error("Could not read your account team. Try again.")
+        return {
+          code: "account_team_unconfirmed",
+          message: "Could not read your account team. Try again.",
+        }
       return teamConversionUnavailable()
     }
     if (!(await ownsTeam(targetRegion, user.id, target.id)))

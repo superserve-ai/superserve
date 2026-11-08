@@ -466,16 +466,35 @@ describe("createTeamAction", () => {
 
   it("rejects a region that is not configured", async () => {
     regions = ["use"]
-    await expect(createTeamAction("west pilot", "usw")).rejects.toThrow(
-      "Region usw is not available",
-    )
+    await expect(createTeamAction("west pilot", "usw")).resolves.toEqual({
+      code: "region_unavailable",
+      message: "Region usw is not available",
+    })
+    expect(cellClients.use.writes).toEqual({})
+    expect(cellClients.usw.writes).toEqual({})
+    expect(cookieSets).toEqual([])
   })
 
   it("rejects an empty team name", async () => {
-    await expect(createTeamAction("   ")).rejects.toThrow(
-      "Team name is required",
-    )
+    await expect(createTeamAction("   ")).resolves.toEqual({
+      code: "invalid_team_name",
+      message: "Team name is required",
+    })
+    expect(cellClients.use.writes).toEqual({})
+    expect(cookieSets).toEqual([])
   })
+
+  it.each(["a".repeat(257), "é".repeat(129)])(
+    "rejects a name longer than 256 bytes before creating a team",
+    async (name) => {
+      await expect(createTeamAction(name)).resolves.toEqual({
+        code: "invalid_team_name",
+        message: "Enter a team name between 1 and 256 bytes",
+      })
+      expect(cellClients.use.writes).toEqual({})
+      expect(cookieSets).toEqual([])
+    },
+  )
 
   it("requires the Google signup proof for a first-team Google user", async () => {
     currentUser = {
@@ -619,8 +638,11 @@ describe("createTeamAction", () => {
       directoryTeams = []
       omittedTeams = [{ id: "team-me", region: "use" }]
 
-      await expect(createTeamAction("acme", "use", "team-me")).rejects.toThrow(
-        "Could not read your account team",
+      await expect(createTeamAction("acme", "use", "team-me")).resolves.toEqual(
+        {
+          code: "account_team_unconfirmed",
+          message: "Could not read your account team. Try again.",
+        },
       )
       expect(cellClients.use.writes).toEqual({})
       expect(cookieSets).toEqual([])
@@ -646,8 +668,11 @@ describe("createTeamAction", () => {
       } as unknown as typeof cellClients.usw
       vi.spyOn(console, "error").mockImplementationOnce(() => {})
 
-      await expect(createTeamAction("acme", "usw", "team-me")).rejects.toThrow(
-        "Could not read your account team",
+      await expect(createTeamAction("acme", "usw", "team-me")).resolves.toEqual(
+        {
+          code: "account_team_unconfirmed",
+          message: "Could not read your account team. Try again.",
+        },
       )
       expect(cookieSets).toEqual([])
     })
@@ -689,7 +714,10 @@ describe("createTeamAction", () => {
     it("rejects a name longer than 256 bytes before renaming", async () => {
       await expect(
         createTeamAction("é".repeat(129), "use", "team-me"),
-      ).rejects.toThrow("between 1 and 256 bytes")
+      ).resolves.toEqual({
+        code: "invalid_team_name",
+        message: "Enter a team name between 1 and 256 bytes",
+      })
       expect(cellClients.use.writes).toEqual({})
     })
 

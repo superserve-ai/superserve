@@ -7,6 +7,7 @@ import { useState } from "react"
 import { useTeamManagement } from "@/hooks/use-team-management"
 import { useRenameTeam, useTeams } from "@/hooks/use-teams"
 import { teamNameProblem } from "@/lib/api/team-name"
+import { RenameTeamActionFailure } from "@/lib/api/team-rename-error"
 import { regionLabel } from "@/lib/format"
 
 interface ActiveTeam {
@@ -96,7 +97,14 @@ function TeamDetailsForm({ team }: { team: ActiveTeam }) {
           setName(renamed.name)
           addToast("Team renamed", "success")
         },
-        onError: (err) => setError(err.message || "Failed to rename team."),
+        onError: (err) => {
+          if (err instanceof RenameTeamActionFailure) {
+            setError(err.message)
+            return
+          }
+          console.error("Failed to rename team:", err)
+          setError("Failed to rename team. Try again.")
+        },
       },
     )
   }
