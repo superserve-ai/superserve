@@ -34,7 +34,6 @@ vi.mock("@/lib/api/team-provisioning", () => ({
   completeFirstSignup: mocks.completeFirstSignup,
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
-  GoogleSignupProofRequiredError: class extends Error {},
   GoogleSignupRecoveryRequiredError: class extends Error {},
   isGoogleUser: mocks.isGoogleUser,
 }))
@@ -50,10 +49,7 @@ vi.mock("./internal-api", () => ({
   acceptInvitation: mocks.accept,
 }))
 
-import {
-  GoogleSignupProofRequiredError,
-  GoogleSignupRecoveryRequiredError,
-} from "@/lib/auth/google-signup-proof"
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 import { SignupReviewPendingError } from "@/lib/auth/signup-review"
 
@@ -224,10 +220,6 @@ describe("acceptInviteAndSelectTeam", () => {
     })
 
     it.each([
-      [
-        "a Google account without signup proof",
-        () => new GoogleSignupProofRequiredError(),
-      ],
       [
         "a Google account needing recovery",
         () => new GoogleSignupRecoveryRequiredError(),
