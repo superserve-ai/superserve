@@ -1,0 +1,405 @@
+---
+title: "Letta"
+sidebarTitle: Letta
+description: Use Superserve sandboxes as the execution runtime for stateful agents built with the Letta Agent SDK.
+icon: "/logos/integrations/letta.svg"
+---
+
+[Letta](https://www.letta.com) builds stateful agents that keep memory across conversations. The [Letta Agent SDK](https://docs.letta.com/agent-sdk) runs those agents in TypeScript and lets you give them your own tools. Back the tools with `sandbox.commands.run` and `sandbox.files` so every command the agent runs, and every file it writes, stays in an isolated VM instead of on your server. The model API key stays with the agent runtime; the sandbox never sees it.
+
+## Setup
+
+```bash
+npm install @superserve/sdk @letta-ai/letta-agent-sdk @letta-ai/letta-code
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+The Letta Agent SDK needs Node.js 22.19 or later. The examples use top-level `await`, so run them as ES modules: set `"type": "module"` in `package.json` and run each file with `npx tsx`.
+
+The examples use Anthropic. To use OpenAI, set `OPENAI_API_KEY` and pass `model: "openai/gpt-5.5"` to `createAgent`. See [API keys](/api-key) to create a Superserve API key.
+
+## Wire the sandbox into the agent
+
+The highlighted block defines a `bash` tool backed by the sandbox. Letta runs the tool's `execute` function in your process, so the command goes to the sandbox through the Superserve SDK.
+
+```typescript {6-23,32}
+import { LettaAgentClient, type AnyAgentTool } from "@letta-ai/letta-agent-sdk"
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "letta-agent" })
+
+const bash = {
+  name: "bash",
+  label: "Bash",
+  description: "Run a shell command in the sandbox.",
+  parameters: {
+    type: "object",
+    properties: { command: { type: "string" } },
+    required: ["command"],
+  },
+  async execute(_toolCallId, input) {
+    const { command } = input as { command: string }
+    const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
+      timeoutMs: 60_000,
+    })
+    const output = JSON.stringify({ stdout, stderr, exitCode })
+    return { content: [{ type: "text", text: output }] }
+  },
+} satisfies AnyAgentTool
+
+await using client = new LettaAgentClient({ backend: "local" })
+
+try {
+  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  const result = await client.prompt(
+    "List the files in /tmp and tell me how many there are.",
+    agentId,
+    { tools: [bash], allowedTools: ["bash"], permissionMode: "unrestricted" },
+  )
+  console.log(result.result)
+} finally {
+  await sandbox.kill()
+}
+```
+
+Two session options matter:
+
+- `allowedTools` is the exact list of tools the agent can call. Letta agents also have built-in tools, such as `Bash`, `Read`, and `Write`, that run on the machine that hosts the agent runtime. List only your sandbox tools so the agent cannot use them.
+- Letta asks for approval before each tool call by default. `permissionMode: "unrestricted"` approves every call. To decide per call, see [Approve tool calls](#approve-tool-calls).
+
+The tool returns `stdout`, `stderr`, and `exitCode`, so the agent sees failed commands as well as their output.
+
+## Run code with file tools
+
+Add file tools next to `bash` to let the agent write a script, run it, and read the result. Put the tools in a function that takes a sandbox, so you can reuse them:
+
+```typescript sandbox-tools.ts
+import type { AnyAgentTool } from "@letta-ai/letta-agent-sdk"
+import type { Sandbox } from "@superserve/sdk"
+
+const text = (value: string) => ({ content: [{ type: "text" as const, text: value }] })
+
+export function sandboxTools(sandbox: Sandbox): AnyAgentTool[] {
+  return [
+    {
+      name: "bash",
+      label: "Bash",
+      description: "Run a shell command in the sandbox.",
+      parameters: {
+        type: "object",
+        properties: { command: { type: "string" } },
+        required: ["command"],
+      },
+      async execute(_toolCallId, input) {
+        const { command } = input as { command: string }
+        const { stdout, stderr, exitCode } = await sandbox.commands.run(command, {
+          timeoutMs: 60_000,
+        })
+        return text(JSON.stringify({ stdout, stderr, exitCode }))
+      },
+    },
+    {
+      name: "write_file",
+      label: "Write file",
+      description: "Write a text file in the sandbox. Use an absolute path.",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" }, content: { type: "string" } },
+        required: ["path", "content"],
+      },
+      async execute(_toolCallId, input) {
+        const { path, content } = input as { path: string; content: string }
+        await sandbox.files.write(path, content)
+        return text(`Wrote ${content.length} characters to ${path}`)
+      },
+    },
+    {
+      name: "read_file",
+      label: "Read file",
+      description: "Read a text file from the sandbox. Use an absolute path.",
+      parameters: {
+        type: "object",
+        properties: { path: { type: "string" } },
+        required: ["path"],
+      },
+      async execute(_toolCallId, input) {
+        const { path } = input as { path: string }
+        return text(await sandbox.files.readText(path))
+      },
+    },
+  ]
+}
+```
+
+Pass the tools and their names to the session:
+
+```typescript {15-17}
+import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
+import { Sandbox } from "@superserve/sdk"
+import { sandboxTools } from "./sandbox-tools"
+
+const sandbox = await Sandbox.create({ name: "code-runner" })
+await using client = new LettaAgentClient({ backend: "local" })
+
+try {
+  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  const result = await client.prompt(
+    "Write a Python script under /home/user that prints the first 10 prime " +
+      "numbers, run it with python3, and show me the output.",
+    agentId,
+    {
+      tools: sandboxTools(sandbox),
+      allowedTools: ["bash", "write_file", "read_file"],
+      permissionMode: "unrestricted",
+    },
+  )
+  console.log(result.result)
+} finally {
+  await sandbox.kill()
+}
+```
+
+Output from a run with `claude-sonnet-5-5` (the model's wording varies):
+
+```text
+I wrote the script to `/home/user/primes.py` and ran it with `python3`. This is the output:
+
+[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+```
+
+`sandbox.files` paths must be absolute. See [Read & write files](/filesystem/read-write) for binary content and directory downloads.
+
+## Stream tool calls
+
+`client.prompt` returns only the final result. Open a session and read `session.stream()` to show each tool call and its output while the agent works.
+
+```typescript {16-26}
+import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
+import { Sandbox } from "@superserve/sdk"
+import { sandboxTools } from "./sandbox-tools"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+await using client = new LettaAgentClient({ backend: "local" })
+
+try {
+  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  await using session = client.createSession(agentId, {
+    tools: sandboxTools(sandbox),
+    allowedTools: ["bash", "write_file", "read_file"],
+    permissionMode: "unrestricted",
+  })
+
+  await session.send("Which Linux distribution and Python version does this machine run?")
+  const started = new Set<string>()
+  for await (const message of session.stream()) {
+    if (message.type === "assistant") process.stdout.write(message.content)
+    // Arguments can arrive over several tool_call messages; print each call once.
+    if (message.type === "tool_call" && !started.has(message.toolCallId)) {
+      started.add(message.toolCallId)
+      console.log(`\n> ${message.toolName}`)
+    }
+    if (message.type === "tool_result") console.log(message.content)
+  }
+} finally {
+  await sandbox.kill()
+}
+```
+
+Output from a run (trimmed):
+
+```text
+> bash
+{"stdout":"PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\n...\nPython 3.12.3\n/bin/sh: 1: python: not found\n","stderr":"","exitCode":127}
+This machine runs **Ubuntu 24.04.5 LTS (Noble Numbat)** with **Python 3.12.3**.
+```
+
+See [Streaming](/commands/streaming) to stream a single command's output.
+
+## One sandbox per agent
+
+A Letta agent keeps its memory across conversations, so give it a sandbox that lasts as long. Tag the sandbox with the agent ID, find it on each turn, and pause it between turns so files and installed packages stay available without paying for an idle VM.
+
+```typescript {7-12,27-30}
+import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
+import { Sandbox } from "@superserve/sdk"
+import { sandboxTools } from "./sandbox-tools"
+
+await using client = new LettaAgentClient({ backend: "local" })
+
+// Find the agent's sandbox by its metadata tag, or create it on the first turn.
+async function sandboxFor(agentId: string) {
+  const [existing] = await Sandbox.list({ metadata: { letta_agent_id: agentId } })
+  if (existing) return Sandbox.connect(existing.id) // Resumes it if paused.
+  return Sandbox.create({ name: "letta-agent", metadata: { letta_agent_id: agentId } })
+}
+
+async function runTurn(agentId: string, message: string) {
+  const sandbox = await sandboxFor(agentId)
+  try {
+    // Continue the agent's default conversation.
+    await using session = client.resumeSession(agentId, {
+      tools: sandboxTools(sandbox),
+      allowedTools: ["bash", "write_file", "read_file"],
+      permissionMode: "unrestricted",
+    })
+    await session.send(message)
+    for await (const event of session.stream()) {
+      if (event.type === "result") return event.result
+    }
+  } finally {
+    // Pause between turns. Files and memory are kept until the next connect.
+    await sandbox.pause()
+  }
+}
+
+const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+
+try {
+  await runTurn(agentId, "Create /home/user/todo.txt with three short items.")
+  console.log(await runTurn(agentId, "Add a fourth item, then print the file."))
+} finally {
+  const sandboxes = await Sandbox.list({ metadata: { letta_agent_id: agentId } })
+  await Promise.all(sandboxes.map(({ id }) => Sandbox.killById(id)))
+}
+```
+
+Output from a run (trimmed; the model's wording varies):
+
+```text
+I added a fourth item. The file now reads:
+
+1. Buy groceries
+2. Call the dentist
+3. Finish report
+4. Water the plants
+```
+
+`client.prompt` starts a new conversation on each call. `resumeSession` continues the agent's default conversation, so the second turn knows about the file from the first. `Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Metadata](/sandbox/metadata).
+
+## Use a self-hosted App Server
+
+The `local` backend starts a Letta App Server as a child process of your app. To run one App Server for many app processes, start it yourself with the model API key in its environment:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+npx letta server --backend local --listen ws://127.0.0.1:4500
+```
+
+Then connect with the `remote` backend. The tools still run in your app process, so commands still go to the sandbox:
+
+```typescript {6-9}
+import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
+import { Sandbox } from "@superserve/sdk"
+import { sandboxTools } from "./sandbox-tools"
+
+const sandbox = await Sandbox.create({ name: "agent-runtime" })
+await using client = new LettaAgentClient({
+  backend: "remote",
+  url: process.env.LETTA_APP_SERVER_URL ?? "http://127.0.0.1:4500",
+})
+
+try {
+  const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+  const result = await client.prompt("What is the hostname of this machine?", agentId, {
+    tools: sandboxTools(sandbox),
+    allowedTools: ["bash", "write_file", "read_file"],
+    permissionMode: "unrestricted",
+  })
+  console.log(result.result)
+} finally {
+  await sandbox.kill()
+}
+```
+
+The agent reports the sandbox hostname, not the hostname of the App Server machine. To listen on an address other than loopback, set up authentication first. See [App Server](https://docs.letta.com/self-hosting/app-server) in the Letta docs.
+
+## Approve tool calls
+
+In the file tools example, replace `permissionMode` with a `canUseTool` callback to check each call before it reaches the sandbox. The agent reads the deny message and can change its plan.
+
+```typescript
+const result = await client.prompt(
+  "Create /home/user/build/out.txt, then delete the build directory.",
+  agentId,
+  {
+    tools: sandboxTools(sandbox),
+    allowedTools: ["bash", "write_file", "read_file"],
+    // Runs before each tool call. The model reads the deny message.
+    canUseTool: async (toolName, input) => {
+      const { command } = input as { command?: string }
+      if (toolName === "bash" && command && /\brm\b/.test(command)) {
+        return { behavior: "deny", message: "Deleting files is not allowed." }
+      }
+      return { behavior: "allow" }
+    },
+  },
+)
+```
+
+Without `permissionMode: "unrestricted"` or `canUseTool`, the turn stops and waits for an approval. See [Permissions](https://docs.letta.com/agent-sdk/permissions) in the Letta docs.
+
+## Use the Superserve MCP server
+
+To let the agent create and manage sandboxes itself, connect the [Superserve MCP server](/integrations/mcp) instead of defining tools. MCP tools are named `mcp__<server>__<tool>`. List the ones the agent can call in `allowedTools`.
+
+```typescript {7-18}
+import { LettaAgentClient } from "@letta-ai/letta-agent-sdk"
+
+await using client = new LettaAgentClient({ backend: "local" })
+
+const agentId = await client.createAgent({ model: "anthropic/claude-sonnet-5-5" })
+await using session = client.createSession(agentId, {
+  mcpServers: {
+    superserve: {
+      type: "http",
+      url: "https://mcp.superserve.ai",
+      headers: { Authorization: `Bearer ${process.env.SUPERSERVE_API_KEY}` },
+    },
+  },
+  allowedTools: [
+    "mcp__superserve__sandbox_create",
+    "mcp__superserve__sandbox_exec",
+    "mcp__superserve__sandbox_kill",
+  ],
+  permissionMode: "unrestricted",
+})
+
+await session.send("Create a sandbox, run `python3 --version` in it, then delete the sandbox.")
+for await (const message of session.stream()) {
+  if (message.type === "tool_result") console.log(message.content)
+  if (message.type === "result") console.log(message.result)
+}
+```
+
+Output from a run (trimmed):
+
+```text
+created sandbox <sandbox-id> (sandbox-mw83ca1c), status active
+exit 0
+--- stdout ---
+Python 3.12.3
+deleted <sandbox-id>
+I created a sandbox, ran `python3 --version` in it, and deleted it. The command returned `Python 3.12.3`.
+```
+
+With MCP, the agent owns the sandbox lifecycle. A sandbox the agent creates keeps running until the agent or your app kills it, so tell the agent to delete sandboxes when it is done.
+
+## Good to know
+
+- The agent can call only the tools in `allowedTools`. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
+- To limit what agent-written code can reach, create the sandbox with [network rules](/sandbox/networking).
+- Pass `timeoutMs` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
+- The default sandbox has `python3` but no `python`. Tell the agent in the prompt, or use a [template](/templates/overview) with the tools you need.
+- As a backstop for crashes, set `timeoutSeconds` and `autoDeleteSeconds` when you create the sandbox. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Letta Agent SDK docs" icon="book" href="https://docs.letta.com/agent-sdk">
+    Agents, sessions, tools, and permissions in the Letta Agent SDK.
+  </Card>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Options for `commands.run`, including environment variables and working directory.
+  </Card>
+</CardGroup>
