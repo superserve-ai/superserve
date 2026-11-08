@@ -267,6 +267,7 @@
             "pages": [
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
+              "integrations/agent-harnesses/crewai",
               "integrations/agent-harnesses/langchain",
               "integrations/agent-harnesses/mastra",
               "integrations/agent-harnesses/openai-agents-sdk",
