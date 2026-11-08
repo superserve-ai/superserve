@@ -78,11 +78,13 @@ function luminance(rgb: number[]) {
   return 0.2126 * r + 0.7152 * g + 0.0722 * b
 }
 
-function contrast(foreground: string, background: string) {
+function contrast(foreground: string, background: string, opacity = 1) {
   const { rgb, alpha } = color(foreground)
+  const effectiveAlpha = alpha * opacity
   const surface = color(background).rgb
   const blended = rgb.map(
-    (channel, i) => alpha * channel + (1 - alpha) * surface[i],
+    (channel, i) =>
+      effectiveAlpha * channel + (1 - effectiveAlpha) * surface[i],
   )
   const a = luminance(blended)
   const b = luminance(surface)
@@ -117,6 +119,15 @@ describe("design token contrast (WCAG 2.x)", () => {
   it.each(surfaces)("muted text has at least 4.5:1 on %s", (surface) => {
     expect(contrast("--color-muted", surface)).toBeGreaterThanOrEqual(4.5)
   })
+
+  it.each(surfaces.slice(0, 2))(
+    "text-muted/70 has at least 4.5:1 on %s",
+    (surface) => {
+      expect(contrast("--color-muted", surface, 0.7)).toBeGreaterThanOrEqual(
+        4.5,
+      )
+    },
+  )
 })
 
 describe("component token classes", () => {
