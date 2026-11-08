@@ -54,7 +54,7 @@ export const mainNavItems: NavItem[] = [
   { label: "Snapshots", href: "/snapshots", icon: CameraIcon },
   { label: "Audit Logs", href: "/audit-logs", icon: ClipboardTextIcon },
   { label: "API Keys", href: "/api-keys", icon: KeyIcon },
-  { label: "Plan & Usage", href: "/plan-usage", icon: ChartBarIcon },
+  { label: "Billing & Usage", href: "/billing-usage", icon: ChartBarIcon },
   { label: "Settings", href: "/settings", icon: GearIcon },
 ]
 

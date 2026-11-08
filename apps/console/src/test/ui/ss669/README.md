@@ -1,6 +1,6 @@
 # Storage billing browser checks
 
-This standalone Next app imports the production Settings and Plan & Usage pages,
+This standalone Next app imports the production Settings and Billing & Usage pages,
 billing hooks, query provider, API client, charts, and UI components. It follows
 the existing `ss640` fixture pattern. Only user identity, team-directory server
 actions, analytics, and local API responses are substituted. Production Console
@@ -31,7 +31,7 @@ Open `http://127.0.0.1:4174/settings/?scenario=tracked`. Available scenarios:
 | `unavailable` | Missing legacy storage measurements; known compute charges and billing summary remain visible |
 
 The production **Billing & Usage** link keeps the fixture selection. Direct entry
-also works at `/plan-usage/?scenario=paid`. Each scenario URL should be opened
+also works at `/billing-usage/?scenario=paid`. Each scenario URL should be opened
 with a full navigation. Setup completes before billing hooks mount, avoiding a
 race between the first API request and scenario selection. Unknown scenarios
 and API calls without setup fail instead of silently choosing a default response.

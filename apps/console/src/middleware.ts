@@ -1,6 +1,8 @@
 import { type NextRequest, NextResponse } from "next/server"
 
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
+import { isBuyCreditPath } from "@/lib/billing/buy-credit-path"
+import { legacyBillingUsagePath } from "@/lib/billing/legacy-billing-usage-path"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
@@ -17,11 +19,28 @@ const PUBLIC_ROUTES = [
   "/auth/auth-code-error",
   "/auth/pending",
   "/device",
+  "/invite",
   "/yc/confirm",
   "/yc/claim",
 ]
 
 export async function middleware(request: NextRequest) {
+  const pathname = request.nextUrl.pathname
+  const legacyPath = legacyBillingUsagePath(pathname)
+  // Old bookmarks, emails and in-flight Stripe sessions still use /plan-usage.
+  if (legacyPath) {
+    const url = request.nextUrl.clone()
+    url.pathname = legacyPath
+    return NextResponse.redirect(url, 308)
+  }
+
+  if (pathname === "/ingest" || pathname.startsWith("/ingest/")) {
+    // Invite tokens appear in auth page URLs; the rewrite would forward Referer to PostHog.
+    const headers = new Headers(request.headers)
+    headers.delete("referer")
+    return NextResponse.next({ request: { headers } })
+  }
+
   const client = createMiddlewareClient(request)
   if (!client.supabase) return client.response
 
@@ -29,8 +48,10 @@ export async function middleware(request: NextRequest) {
     data: { user },
   } = await client.supabase.auth.getUser()
 
-  const pathname = request.nextUrl.pathname
   const isPublicRoute = matchesRoute(pathname, PUBLIC_ROUTES)
+  // The invite page is public so signed-out visitors can read it, but a
+  // signed-in account held for review must still be stopped before it can join.
+  const isInviteRoute = matchesRoute(pathname, ["/invite"])
 
   if (!user && !isPublicRoute) {
     const signinUrl = request.nextUrl.clone()
@@ -40,7 +61,7 @@ export async function middleware(request: NextRequest) {
     const retainedBilling =
       proAuthReturnPath(billingPath) ?? starterAuthReturnPath(billingPath)
     const invalidBillingReturn =
-      /^\/(?:billing\/pro|plan-usage\/buy-credit)\/?$/.test(pathname) &&
+      (/^\/billing\/pro\/?$/.test(pathname) || isBuyCreditPath(pathname)) &&
       (request.nextUrl.searchParams.has("billing_flow") ||
         request.nextUrl.searchParams.has("billing") ||
         request.nextUrl.searchParams.has("purchase") ||
@@ -75,7 +96,11 @@ export async function middleware(request: NextRequest) {
 
   // Review state rides on the user getUser() already returned, so this adds
   // no Auth round trip for anyone else.
-  if (user && !isPublicRoute && isSignupReviewBlocked(user)) {
+  if (
+    user &&
+    (!isPublicRoute || isInviteRoute) &&
+    isSignupReviewBlocked(user)
+  ) {
     await client.supabase.auth.signOut().catch(() => {})
     const pendingUrl = request.nextUrl.clone()
     pendingUrl.pathname = "/auth/pending"
@@ -92,12 +117,14 @@ export async function middleware(request: NextRequest) {
 
 export const config = {
   matcher: [
-    // Skip Next internals and common static assets so getUser() isn't called
+    "/plan-usage/:path*",
+    // Skip Next internals and other static assets so getUser() isn't called
     // on every font/css/js request. /api is skipped too: every API route
     // authenticates its own request (and answers JSON, not a redirect to the
     // signin page), so the middleware getUser() was a second Supabase auth
     // round-trip on every API call — including the 10s sandbox list poll.
-    // PostHog ingestion must reach the rewrite even before sign-in.
+    // PostHog uses its own matcher to strip Referer and bypass auth before the rewrite.
     "/((?!ingest(?:/|$)|api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
+    "/ingest/:path*",
   ],
 }

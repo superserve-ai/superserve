@@ -17,6 +17,7 @@ from superserve._http import (
 )
 from superserve.errors import (
     AuthenticationError,
+    BillingError,
     NotFoundError,
     SandboxError,
     SandboxTimeoutError,
@@ -189,6 +190,31 @@ class TestRetriesSync:
                     json_body={},
                 )
             assert route.call_count == 1
+
+    def test_get_on_402_does_not_retry(self, zero_sleep: None) -> None:
+        with respx.mock() as router:
+            route = router.get("https://api.example.com/foo").mock(
+                return_value=httpx.Response(
+                    402,
+                    json={
+                        "error": {
+                            "code": "trial_exhausted",
+                            "message": "used up",
+                            "action_url": "https://console.example.com/auth/choose-plan",
+                        }
+                    },
+                )
+            )
+            with pytest.raises(BillingError) as exc_info:
+                api_request(
+                    "GET",
+                    "https://api.example.com/foo",
+                    headers={"X-API-Key": "k"},
+                )
+            assert route.call_count == 1
+            assert exc_info.value.action_url == (
+                "https://console.example.com/auth/choose-plan"
+            )
 
     def test_post_on_400_does_not_retry(self, zero_sleep: None) -> None:
         with respx.mock() as router:

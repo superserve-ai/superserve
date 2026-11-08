@@ -153,7 +153,7 @@ describe("google-signup-proof", () => {
 
     expect(await requireGoogleSignupProof("user-123")).toBe("attempt-a")
     await expect(requireGoogleSignupProof("another-user")).rejects.toThrow(
-      "Google signup verification required",
+      "Complete signup with Google to continue.",
     )
     await consumeGoogleSignupProof("user-123", "attempt-a")
     expect(await hasValidGoogleSignupProof("attempt-b")).toBe(true)
@@ -240,7 +240,7 @@ describe("google-signup-proof", () => {
   it("keeps a pre-auth proof unusable until callback promotion and preserves its expiry", async () => {
     await issueGoogleSignupProof("attempt-a")
     await expect(requireGoogleSignupProof("user-123")).rejects.toThrow(
-      "Google signup verification required",
+      "Complete signup with Google to continue.",
     )
     const issuedAt = Date.now()
     vi.useFakeTimers()
@@ -293,7 +293,7 @@ describe("google-signup-proof", () => {
       await consumeGoogleSignupProof("user-123", "attempt-before-deploy")
       expect(cookieEntries).toEqual([])
       await expect(requireGoogleSignupProof("user-123")).rejects.toThrow(
-        "Google signup verification required",
+        "Complete signup with Google to continue.",
       )
 
       cookieEntries = [
@@ -304,7 +304,7 @@ describe("google-signup-proof", () => {
       ]
       vi.setSystemTime(now + 301_000)
       await expect(requireGoogleSignupProof("user-123")).rejects.toThrow(
-        "Google signup verification required",
+        "Complete signup with Google to continue.",
       )
     } finally {
       vi.useRealTimers()
@@ -340,7 +340,7 @@ describe("google-signup-proof", () => {
     await markGoogleSignupAttempt("fresh-attempt", "user-123")
     expect(await requireGoogleSignupProof("user-123")).toBe("fresh-attempt")
     await expect(requireGoogleSignupProof("another-user")).rejects.toThrow(
-      "Google signup verification required",
+      "Complete signup with Google to continue.",
     )
   })
 
@@ -367,12 +367,12 @@ describe("google-signup-proof", () => {
       { name: "__Host-superserve-google-signup", value: cookieValue },
     ]
     await expect(requireGoogleSignupProof("user-123")).rejects.toThrow(
-      "Google signup verification required",
+      "Complete signup with Google to continue.",
     )
     await markGoogleSignupAttempt(undefined, "user-123")
     expect(await requireGoogleSignupProof("user-123")).toBeUndefined()
     await expect(requireGoogleSignupProof("another-user")).rejects.toThrow(
-      "Google signup verification required",
+      "Complete signup with Google to continue.",
     )
   })
 
@@ -416,7 +416,7 @@ describe("google-signup-proof", () => {
     ])
 
     await expect(requireGoogleSignupProof("user-123")).rejects.toThrow(
-      "Google signup verification required",
+      "Complete signup with Google to continue.",
     )
     expect(await requireGoogleSignupProof("another-user")).toBe("attempt-b")
     expect(await hasValidGoogleSignupProof("attempt-c")).toBe(false)
@@ -446,7 +446,7 @@ describe("google-signup-proof", () => {
     )
 
     await expect(requireGoogleSignupProof("user-123")).rejects.toThrow(
-      "Google signup verification required",
+      "Complete signup with Google to continue.",
     )
 
     expectSecureExpirations(["__Host-superserve-google-signup-attempt"])
@@ -567,8 +567,26 @@ describe("google-signup-proof", () => {
   })
 
   it("tracks a bypass block with a distinct telemetry id", async () => {
-    await expect(requireGoogleSignupProof("user-123")).rejects.toThrow(
-      "Google signup verification required",
+    // A missing proof sends the user to the proof step, not to a setup error.
+    await expect(requireGoogleSignupProof("user-123")).rejects.toBeInstanceOf(
+      GoogleSignupRecoveryRequiredError,
+    )
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_bypass_blocked",
+      expect.any(String),
+      { reason: "missing_or_invalid_proof", scope: "first_team_provisioning" },
+    )
+  })
+
+  it("surfaces a setup failure instead of another Google round trip", async () => {
+    await issueGoogleSignupProof("attempt-a")
+    delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
+
+    const error = await requireGoogleSignupProof("user-123").catch((e) => e)
+    expect(error).not.toBeInstanceOf(GoogleSignupRecoveryRequiredError)
+    expect(error).toHaveProperty(
+      "message",
+      "Google signup proof signing secret is not configured",
     )
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_google_signup_bypass_blocked",
