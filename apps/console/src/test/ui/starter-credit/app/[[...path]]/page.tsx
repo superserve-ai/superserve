@@ -3,7 +3,7 @@
 import { ToastProvider, TooltipProvider } from "@superserve/ui"
 import { useEffect, useState } from "react"
 
-import { BuyCreditRoute } from "../../../../../app/(dashboard)/plan-usage/buy-credit/route-client"
+import { BuyCreditRoute } from "../../../../../app/(dashboard)/billing-usage/buy-credit/route-client"
 import { QueryProvider } from "../../../../../components/query-provider"
 import { fixtureCookie, isScenario, type Scenario } from "../../fixtures"
 
