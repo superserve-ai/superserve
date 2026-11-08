@@ -55,7 +55,7 @@ it("preserves authentication and Google proof recovery redirects", async () => {
 })
 
 it.each([
-  "/plan-usage/buy-credit/",
+  "/billing-usage/buy-credit/",
   "/billing/pro/?team=use%3Aoriginal&billing=success",
 ])(
   "retries preparation and preserves the authorized paid continuation %s",

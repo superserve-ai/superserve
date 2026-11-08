@@ -71,8 +71,17 @@ export interface BillingPlan {
   included_usage: BillingIncludedUsage | null
 }
 
+// Why the trial is what blocks the team, when the server knows. null or absent
+// means the trial is not the cause, the block is generic (abuse denials stay
+// generic on purpose), or the server could not read the reason.
+export type BillingTrialBlock =
+  | "trial_exhausted"
+  | "trial_unavailable"
+  | "trial_check_unavailable"
+
 export interface BillingSummaryResponse {
   trial?: BillingTrialBalance | null
+  trial_block?: BillingTrialBlock | null
   billing_mode: "shadow" | "live"
   checkout_available: boolean
   portal_available: boolean

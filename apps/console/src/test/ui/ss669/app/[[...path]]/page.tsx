@@ -4,7 +4,7 @@ import { ToastProvider, TooltipProvider } from "@superserve/ui"
 import { usePathname } from "next/navigation"
 import { useEffect, useState } from "react"
 
-import { PlanUsagePageClient } from "../../../../../app/(dashboard)/plan-usage/page-client"
+import { PlanUsagePageClient } from "../../../../../app/(dashboard)/billing-usage/page-client"
 import SettingsPage from "../../../../../app/(dashboard)/settings/page"
 import { QueryProvider } from "../../../../../components/query-provider"
 import { fixtureCookie, isScenario, type Scenario } from "../../fixtures"
@@ -30,7 +30,7 @@ export default function Page() {
 
   if (invalid) return <p>Unknown billing fixture</p>
   if (!scenario) return <p>Loading local billing fixture…</p>
-  if (path !== "/settings" && path !== "/plan-usage")
+  if (path !== "/settings" && path !== "/billing-usage")
     return <p>Unknown fixture route</p>
   return (
     <QueryProvider key={scenario}>
