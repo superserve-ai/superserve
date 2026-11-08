@@ -1,4 +1,4 @@
 @import "../../../../app/globals.css";
 
 @source "../../../../components";
-@source "../../../../app/(dashboard)/plan-usage";
+@source "../../../../app/(dashboard)/billing-usage";

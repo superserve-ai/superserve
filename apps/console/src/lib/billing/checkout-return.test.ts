@@ -6,9 +6,11 @@ describe("retained direct checkout callbacks", () => {
   it.each(["success", "cancel"])(
     "preserves %s routing and purchase identity",
     (status) => {
-      const starter = `/plan-usage/buy-credit/?purchase=${status}&team=${team}&purchase_id=22222222-2222-4222-8222-222222222222`
+      const starter = `/billing-usage/buy-credit/?purchase=${status}&team=${team}&purchase_id=22222222-2222-4222-8222-222222222222`
       const pro = `/billing/pro/?billing=${status}&team=${team}&return=%2Fsandboxes%2F%3Fview%3Dall`
       expect(checkoutRecoveryPath(starter)).toBe(starter)
+      const legacy = starter.replace("billing-usage", "plan-usage")
+      expect(checkoutRecoveryPath(legacy)).toBe(legacy)
       expect(checkoutRecoveryPath(pro)).toBe(pro)
     },
   )
@@ -20,7 +22,10 @@ describe("retained direct checkout callbacks", () => {
     `/billing/pro/?billing=success&team=use:invalid`,
     `/billing/pro/?billing=success`,
     `/billing/pro/?billing=success&team=${team}&operation=other`,
-    `/plan-usage/buy-credit/?purchase=success&team=${team}&purchase_id=bad`,
+    `/billing-usage/buy-credit/?purchase=success&team=${team}&purchase_id=bad`,
+    `/billing-usage/buy-credit?purchase=success&team=${team}`,
+    `/billing-usage/buy-credit//?purchase=success&team=${team}`,
+    `/plan-usage/buy-credit?purchase=success&team=${team}`,
     `/billing/pro/?billing=success&team=${team}#other`,
   ])("rejects unsafe, ambiguous or incomplete callback %s", (path) => {
     expect(checkoutRecoveryPath(path)).toBeNull()
@@ -30,6 +35,7 @@ describe("retained direct checkout callbacks", () => {
 describe("fresh team-pinned entry remains separate from payment results", () => {
   it.each([
     `/billing/pro/?team=${team}&return=%2Fsandboxes%2F%3Fview%3Dall`,
+    `/billing-usage/buy-credit/?team=${team}&amount=500`,
     `/plan-usage/buy-credit/?team=${team}&amount=500`,
   ])(
     "retains validated fresh entry %s without treating it as a callback",
@@ -44,9 +50,9 @@ describe("fresh team-pinned entry remains separate from payment results", () => 
     `/billing/pro/?team=${team}&team=${team}`,
     `/billing/pro/?team=${team}&return=%2F%2Fevil.test`,
     `/billing/pro/?team=${team}&approved=true`,
-    `/plan-usage/buy-credit/?team=${team}&purchase_id=22222222-2222-4222-8222-222222222222`,
-    `/plan-usage/buy-credit/?team=${team}&purchase=`,
-    `/plan-usage/buy-credit/?team=${team}&amount=500&amount=1000`,
+    `/billing-usage/buy-credit/?team=${team}&purchase_id=22222222-2222-4222-8222-222222222222`,
+    `/billing-usage/buy-credit/?team=${team}&purchase=`,
+    `/billing-usage/buy-credit/?team=${team}&amount=500&amount=1000`,
   ])("does not reclassify malformed result or conflicting entry %s", (path) => {
     expect(checkoutEntryPath(path)).toBeNull()
   })

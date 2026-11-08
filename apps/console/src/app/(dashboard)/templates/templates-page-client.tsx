@@ -102,7 +102,7 @@ function TemplatesPageContent() {
     !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
 
   const newButton = templatesUnavailable ? (
-    <Button size="sm" render={<Link href="/plan-usage/upgrade" />}>
+    <Button size="sm" render={<Link href="/billing-usage/upgrade" />}>
       Upgrade to create templates
     </Button>
   ) : entitlement.status === "error" ? (

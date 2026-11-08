@@ -448,8 +448,8 @@ describe("signUpWithEmail", () => {
 
     it.each([
       "/billing/pro/?billing=cancel&team=use%3Ateam&return=%2Fsandboxes",
-      "/plan-usage/buy-credit?amount=500",
-      "/plan-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
+      "/billing-usage/buy-credit?amount=500",
+      "/billing-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
       "/device?code=BCDF-GHJK",
     ])(
       "keeps direct purchase entry through the emailed confirmation: %s",

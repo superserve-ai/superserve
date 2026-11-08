@@ -37,7 +37,7 @@ const Input = forwardRef<HTMLInputElement, InputProps>(
           ref={ref}
           id={inputId}
           className={cn(
-            "h-9 w-full border border-input bg-background px-3 text-sm text-foreground",
+            "h-9 w-full border border-control bg-background px-3 text-sm text-foreground",
             "placeholder:text-muted",
             "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
             "disabled:cursor-not-allowed disabled:opacity-30",

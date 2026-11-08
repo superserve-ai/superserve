@@ -471,10 +471,10 @@ describe("Pro payment return recovery", () => {
         version === "v2"
           ? availablePlans
           : { pricing_version: "legacy", cards: [] }
-      const view = render(<ProPayment returnTo="/plan-usage/" />)
+      const view = render(<ProPayment returnTo="/billing-usage/" />)
       expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
       state.summaryError = true
-      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      view.rerender(<ProPayment returnTo="/billing-usage/" />)
       expect(screen.queryByText(/Your team is on Pro/)).toBeNull()
       expect(
         screen.getByText("Pro isn’t available to buy here right now."),
@@ -491,7 +491,7 @@ describe("Pro payment return recovery", () => {
       state.members = false
       state.directoryError = false
       state.switch.mockReset()
-      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      view.rerender(<ProPayment returnTo="/billing-usage/" />)
       expect(screen.getByText(/Your team is on Pro/)).toBeTruthy()
     },
   )
@@ -500,7 +500,7 @@ describe("Pro payment return recovery", () => {
     render(
       <ProPayment
         billingReturn="success"
-        returnTo="/plan-usage/"
+        returnTo="/billing-usage/"
         checkoutTeam="use:team-b"
       />,
     )
@@ -513,14 +513,14 @@ describe("Pro payment return recovery", () => {
   it("pins in-page pending recovery to the team that started checkout", async () => {
     state.plans = availablePlans
     state.start.mockResolvedValue(null)
-    const view = render(<ProPayment returnTo="/plan-usage/" />)
+    const view = render(<ProPayment returnTo="/billing-usage/" />)
     fireEvent.click(await readyContinue())
     await screen.findByText("Processing payment…")
     expect(
       new URL(state.start.mock.calls[0]![2]).searchParams.get("team"),
     ).toBe("use:11111111-1111-4111-8111-111111111111")
     state.team = { teamId: "team-b", region: "use" }
-    view.rerender(<ProPayment returnTo="/plan-usage/" />)
+    view.rerender(<ProPayment returnTo="/billing-usage/" />)
     expect(
       screen.getByText(/Return to the account and team/).textContent,
     ).toContain("account and team that started checkout")
@@ -537,7 +537,7 @@ describe("Pro payment return recovery", () => {
     const view = render(
       <ProPayment
         billingReturn="success"
-        returnTo="/plan-usage/"
+        returnTo="/billing-usage/"
         checkoutTeam="use:11111111-1111-4111-8111-111111111111"
       />,
     )
@@ -550,7 +550,7 @@ describe("Pro payment return recovery", () => {
     view.rerender(
       <ProPayment
         billingReturn="success"
-        returnTo="/plan-usage/"
+        returnTo="/billing-usage/"
         checkoutTeam="use:11111111-1111-4111-8111-111111111111"
       />,
     )
@@ -568,7 +568,7 @@ describe("Pro payment return recovery", () => {
       new ApiError(409, "plan_conflict", "Earlier checkout requires recovery"),
     )
     state.recover.mockResolvedValue("retryable")
-    render(<ProPayment returnTo="/plan-usage/" />)
+    render(<ProPayment returnTo="/billing-usage/" />)
     fireEvent.click(await readyContinue())
     await screen.findByText(
       "This team already has a paid plan or a payment in progress.",
@@ -586,13 +586,13 @@ describe("Pro payment return recovery", () => {
   it("keeps manual pending recovery bound to its original team", async () => {
     state.plans = { ...availablePlans, pricing_version: "legacy" }
     state.recover.mockResolvedValue("payment_confirmation_pending")
-    const view = render(<ProPayment returnTo="/plan-usage/" />)
+    const view = render(<ProPayment returnTo="/billing-usage/" />)
     fireEvent.click(
       screen.getByRole("button", { name: "Check payment status" }),
     )
     await screen.findByText("Processing payment…")
     state.team = { teamId: "team-b", region: "use" }
-    view.rerender(<ProPayment returnTo="/plan-usage/" />)
+    view.rerender(<ProPayment returnTo="/billing-usage/" />)
     expect(
       screen.getByText(/Return to the account and team/).textContent,
     ).toContain("account and team that started checkout")
@@ -608,7 +608,7 @@ describe("Pro payment return recovery", () => {
     async (outcome) => {
       state.plans = { ...availablePlans, pricing_version: "legacy" }
       state.recover.mockResolvedValue(outcome)
-      const view = render(<ProPayment returnTo="/plan-usage/" />)
+      const view = render(<ProPayment returnTo="/billing-usage/" />)
       fireEvent.click(
         screen.getByRole("button", { name: "Check payment status" }),
       )
@@ -618,7 +618,7 @@ describe("Pro payment return recovery", () => {
         ),
       )
       state.team = { teamId: "team-b", region: "use" }
-      view.rerender(<ProPayment returnTo="/plan-usage/" />)
+      view.rerender(<ProPayment returnTo="/billing-usage/" />)
       await screen.findByRole("button", { name: "Check payment status" })
       expect(
         screen.queryByText(/account and team that started checkout/),
@@ -629,7 +629,7 @@ describe("Pro payment return recovery", () => {
   it("checks an accepted payment after entry closes without opening a new checkout", async () => {
     state.plans = { ...availablePlans, pricing_version: "legacy" }
     state.recover.mockResolvedValue("payment_confirmation_pending")
-    render(<ProPayment returnTo="/plan-usage/" />)
+    render(<ProPayment returnTo="/billing-usage/" />)
     fireEvent.click(
       screen.getByRole("button", { name: "Check payment status" }),
     )
@@ -654,7 +654,7 @@ describe("Pro payment return recovery", () => {
     )
     const props = {
       billingReturn: "success" as const,
-      returnTo: "/plan-usage/",
+      returnTo: "/billing-usage/",
       checkoutTeam: "use:11111111-1111-4111-8111-111111111111",
     }
     const view = render(<ProPayment {...props} />)
@@ -684,7 +684,7 @@ describe("Pro payment return recovery", () => {
       render(
         <ProPayment
           billingReturn="success"
-          returnTo="/plan-usage/"
+          returnTo="/billing-usage/"
           checkoutTeam="use:11111111-1111-4111-8111-111111111111"
         />,
       )
@@ -709,7 +709,7 @@ describe("Pro payment return recovery", () => {
     (query) => {
       state.query = query
       state.plans = availablePlans
-      render(<ActualProPayment returnTo="/plan-usage/" />)
+      render(<ActualProPayment returnTo="/billing-usage/" />)
       expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
       expect(
         screen.queryByRole("button", { name: "Continue to payment" }),
@@ -737,7 +737,7 @@ async function showPendingStarter() {
       ...pendingStarter,
       outcome: "pending_starter_checkout",
     })
-  const mounted = render(<ProPayment returnTo="/plan-usage/" />)
+  const mounted = render(<ProPayment returnTo="/billing-usage/" />)
   fireEvent.click(await readyContinue())
   await screen.findByText(
     "This team already has a paid plan or a payment in progress.",
@@ -829,7 +829,7 @@ it("discovers a server-side $5 purchase on ordinary Pro entry without attempting
     amount_cents: 500,
     outcome: "pending_starter_checkout",
   })
-  render(<ProPayment returnTo="/plan-usage/" />)
+  render(<ProPayment returnTo="/billing-usage/" />)
   await screen.findByRole("button", { name: "Resume your $5 credit purchase" })
   expect(
     screen.getByRole("button", { name: "Cancel this purchase and choose Pro" }),
@@ -858,7 +858,7 @@ it.each(["unavailable", "available"])(
     const assign = vi
       .spyOn(window.location, "assign")
       .mockImplementation(() => {})
-    render(<ProPayment returnTo="/plan-usage/" />)
+    render(<ProPayment returnTo="/billing-usage/" />)
     await screen.findByText(/Unable to check your existing purchase/)
     expect(state.recover).not.toHaveBeenCalled()
     expect(state.start).not.toHaveBeenCalled()
@@ -887,7 +887,7 @@ it("keeps a known non-Starter Pro checkout's ordinary status control without sta
     outcome: "no_pending_starter_checkout",
   })
   state.recover.mockResolvedValue("payment_confirmation_pending")
-  render(<ProPayment returnTo="/plan-usage/" />)
+  render(<ProPayment returnTo="/billing-usage/" />)
   await waitFor(() =>
     expect(
       screen.queryByText(/Checking for an unfinished credit purchase/),
@@ -905,7 +905,7 @@ describe("authoritative Pro offer terms context", () => {
     state.terms = {
       pro_checkout: { first_paid_pro_cycle: true, accepted: false },
     }
-    const view = render(<ProPayment returnTo="/plan-usage/" />)
+    const view = render(<ProPayment returnTo="/billing-usage/" />)
     await screen.findByText(/full billing month/)
     expect(state.termsQuery.mock.lastCall?.[0]).toMatchObject({
       queryKey: [
@@ -924,7 +924,7 @@ describe("authoritative Pro offer terms context", () => {
       region: "usw",
     }
     state.terms = undefined
-    view.rerender(<ProPayment returnTo="/plan-usage/" />)
+    view.rerender(<ProPayment returnTo="/billing-usage/" />)
     expect(screen.queryByText(/full billing month/)).toBeNull()
     expect(state.termsQuery.mock.lastCall?.[0]).toMatchObject({
       queryKey: [
@@ -949,7 +949,7 @@ describe("authoritative Pro offer terms context", () => {
       state.termsFetching = mode === "fetching"
       state.ready = mode !== "not-ready"
       state.scope = mode === "impersonated" ? "impersonated" : "self"
-      render(<ProPayment returnTo="/plan-usage/" />)
+      render(<ProPayment returnTo="/billing-usage/" />)
       await waitFor(() =>
         expect(screen.queryByText(/full billing month/)).toBeNull(),
       )
@@ -1017,7 +1017,7 @@ describe("Pro offer authority after recovery", () => {
       })
       const view = render(
         <QueryClientProvider client={queryClient}>
-          <ProPayment returnTo="/plan-usage/" />
+          <ProPayment returnTo="/billing-usage/" />
         </QueryClientProvider>,
       )
       await screen.findByText(
@@ -1113,7 +1113,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
           <ProPayment
             billingReturn="success"
             checkoutTeam="use:11111111-1111-4111-8111-111111111111"
-            returnTo="/plan-usage/"
+            returnTo="/billing-usage/"
           />
         </QueryClientProvider>,
       )
@@ -1123,7 +1123,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
         freshRead.resolve("Pro")
       })
       await waitFor(() =>
-        expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
+        expect(state.replace).toHaveBeenCalledWith("/billing-usage/"),
       )
       await act(async () => {
         oldRead.resolve(initial)
@@ -1152,7 +1152,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
           <ProPayment
             billingReturn="success"
             checkoutTeam="use:11111111-1111-4111-8111-111111111111"
-            returnTo="/plan-usage/"
+            returnTo="/billing-usage/"
           />
         </QueryClientProvider>,
       )
@@ -1168,7 +1168,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
             <ProPayment
               billingReturn="success"
               checkoutTeam="use:11111111-1111-4111-8111-111111111111"
-              returnTo="/plan-usage/"
+              returnTo="/billing-usage/"
             />
           </QueryClientProvider>,
         )
@@ -1199,7 +1199,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
         <ProPayment
           billingReturn="success"
           checkoutTeam="use:11111111-1111-4111-8111-111111111111"
-          returnTo="/plan-usage/"
+          returnTo="/billing-usage/"
         />
       </QueryClientProvider>,
     )
@@ -1213,7 +1213,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
     expect(state.recover).toHaveBeenCalledOnce()
     fireEvent.click(screen.getByRole("button", { name: "Try again" }))
     await waitFor(() =>
-      expect(state.replace).toHaveBeenCalledWith("/plan-usage/"),
+      expect(state.replace).toHaveBeenCalledWith("/billing-usage/"),
     )
     expect(client.getQueryData(key)).toBe("Pro")
     expect(state.recover).toHaveBeenCalledOnce()
@@ -1226,7 +1226,7 @@ describe("completed Pro callback refreshes authoritative plan cache", () => {
 it("retains enrolled v2 display but denies a new Pro purchase when the cohort gate closes", async () => {
   state.plans = availablePlans
   state.entryOpen = false
-  render(<ProPayment returnTo="/plan-usage/" />)
+  render(<ProPayment returnTo="/billing-usage/" />)
   expect(await screen.findByText(/Pro isn’t available/)).toBeTruthy()
   expect(
     screen.queryByRole("button", { name: "Continue to payment" }),
@@ -1248,7 +1248,7 @@ it.each([
     const mounted = await showPendingStarter()
     state.entryOpen = false
     if (outage) state.plans = undefined
-    mounted.rerender(<ProPayment returnTo="/plan-usage/" />)
+    mounted.rerender(<ProPayment returnTo="/billing-usage/" />)
     state.starterRecover.mockResolvedValue(
       cancel
         ? { outcome: "retryable" }
@@ -1297,7 +1297,7 @@ it.each([false, true])(
         checkoutTeam={
           callback ? "use:11111111-1111-4111-8111-111111111111" : undefined
         }
-        returnTo="/plan-usage/"
+        returnTo="/billing-usage/"
       />,
     )
     const button = await screen.findByRole("button", {
@@ -1321,7 +1321,7 @@ it("loads accepted terms independently of a null current plan", async () => {
     period_end: "2026-11-27T00:00:00Z",
   }
   state.readTerms.mockResolvedValue({ plan: null, pro_checkout: terms })
-  render(<ProPayment returnTo="/plan-usage/" />)
+  render(<ProPayment returnTo="/billing-usage/" />)
   const options = state.termsQuery.mock.lastCall?.[0]
   expect(await options.queryFn()).toEqual({ pro_checkout: terms })
 })
@@ -1329,7 +1329,7 @@ it("loads accepted terms independently of a null current plan", async () => {
 it("keeps fresh Pro entry fenced when recovery discovery is explicitly denied", async () => {
   state.plans = availablePlans
   state.recoveryAllowed = false
-  render(<ProPayment returnTo="/plan-usage/" />)
+  render(<ProPayment returnTo="/billing-usage/" />)
   const button = await screen.findByRole("button", {
     name: "Continue to payment",
   })
@@ -1351,7 +1351,7 @@ it.each([false, true])(
       <ProPayment
         billingReturn="success"
         checkoutTeam="use:11111111-1111-4111-8111-111111111111"
-        returnTo="/plan-usage/"
+        returnTo="/billing-usage/"
       />
     )
     const mounted = render(view())
