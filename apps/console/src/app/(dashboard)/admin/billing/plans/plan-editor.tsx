@@ -507,7 +507,7 @@ export function PlanEditor({
           <Field label="Pricing model" htmlFor="plan-pricing">
             <select
               id="plan-pricing"
-              className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+              className="block w-full border border-dashed border-control bg-transparent p-2 text-sm"
               value={form.pricing_version}
               disabled={initial.family !== ""}
               onChange={(event) =>
@@ -521,7 +521,7 @@ export function PlanEditor({
           <Field label="Kind" htmlFor="plan-kind">
             <select
               id="plan-kind"
-              className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+              className="block w-full border border-dashed border-control bg-transparent p-2 text-sm"
               value={form.kind}
               onChange={(event) => set("kind", event.target.value as PlanKind)}
             >
@@ -896,7 +896,7 @@ export function PlanEditor({
                   <Field label="Measured as" htmlFor="allowance-basis">
                     <select
                       id="allowance-basis"
-                      className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+                      className="block w-full border border-dashed border-control bg-transparent p-2 text-sm"
                       value={form.allowance.basis}
                       onChange={(event) =>
                         set("allowance", {
@@ -914,7 +914,7 @@ export function PlanEditor({
                   <Field label="Every" htmlFor="allowance-period">
                     <select
                       id="allowance-period"
-                      className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+                      className="block w-full border border-dashed border-control bg-transparent p-2 text-sm"
                       value={form.allowance.period}
                       onChange={(event) =>
                         set("allowance", {
@@ -932,7 +932,7 @@ export function PlanEditor({
                   <Field label="When used up" htmlFor="allowance-exhausted">
                     <select
                       id="allowance-exhausted"
-                      className="block w-full border border-dashed border-border bg-transparent p-2 text-sm"
+                      className="block w-full border border-dashed border-control bg-transparent p-2 text-sm"
                       value={form.allowance.on_exhausted}
                       onChange={(event) =>
                         set("allowance", {
