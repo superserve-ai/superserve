@@ -28,7 +28,10 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
     },
     {
       label: "Memory",
-      value: formatMemory(sandbox.memory_mib),
+      value:
+        sandbox.memory_max_mib != null
+          ? `${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`
+          : formatMemory(sandbox.memory_mib),
     },
     {
       label: "Timeout",
