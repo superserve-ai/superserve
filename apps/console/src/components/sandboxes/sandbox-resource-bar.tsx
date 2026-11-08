@@ -10,7 +10,7 @@ interface SandboxResourceBarProps {
 }
 
 function formatMemory(mib: number): string {
-  return mib >= 1024 ? `${(mib / 1024).toFixed(0)} GB` : `${mib} MB`
+  return mib >= 1024 ? `${+(mib / 1024).toFixed(2)} GB` : `${mib} MB`
 }
 
 export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {

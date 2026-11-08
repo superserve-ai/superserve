@@ -35,7 +35,7 @@ interface TemplateRow {
   status: string
   vcpu: number
   memory_mib: number
-  memory_max_mib?: number
+  memory_max_mib?: number | null
   disk_mib: number
   size_bytes?: number
   error_message?: string
@@ -126,9 +126,7 @@ function fmtMib(mib: number | undefined): string {
 
 function fmtMemory(t: TemplateRow): string {
   const min = fmtMib(t.memory_mib)
-  return t.memory_max_mib === undefined
-    ? min
-    : `${min}-${fmtMib(t.memory_max_mib)}`
+  return t.memory_max_mib == null ? min : `${min}-${fmtMib(t.memory_max_mib)}`
 }
 
 function validateStep(step: unknown, i: number): Step {
