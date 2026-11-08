@@ -545,6 +545,7 @@ narrow to a subclass. A **non-zero `exitCode` is a normal result, not a thrown e
 | `NotFoundError`       | Sandbox / template / resource does not exist (404)                                                                          |
 | `ConflictError`       | Invalid state transition, e.g. an unsupported lifecycle change (409)                                                        |
 | `TimeoutError`        | A request timed out — **Python: `SandboxTimeoutError`** (avoids shadowing the builtin)                                      |
+| `BillingError`        | Billing blocks a sandbox start (402); branch on `code`, show `actionUrl` (Python: `action_url`)                             |
 | `RateLimitError`      | Quota / rate limit exceeded (429); `code` names which limit (`too_many_builds`, `too_many_templates`, `too_many_sandboxes`) |
 | `ServerError`         | Platform error (500+)                                                                                                       |
 | `BuildError`          | Template build failed (carries `buildId`, `templateId`, `code`)                                                             |

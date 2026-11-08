@@ -645,6 +645,7 @@ Sandbox methods commonly raise:
 - `ValidationError` - bad request body
 - `NotFoundError` - sandbox doesn't exist (except `kill` / `killById`, which swallow 404)
 - `ConflictError` - wrong state (e.g., pausing an already-paused sandbox, or patching `network` while paused)
+- `BillingError` - billing does not allow the sandbox to start (on create, resume, or the automatic resume in `connect`). `actionUrl` / `action_url` links to where the user can add a card and choose a plan. See [Billing errors](/errors#billing-errors-402).
 - `ServerError` - platform error
 
 See [Errors](/errors) for the full hierarchy.
