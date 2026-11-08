@@ -212,9 +212,9 @@ Pull requests from outside contributors can run any code in their build scripts 
 
 - Each sandbox is its own microVM, so the code can't touch the runner or other jobs.
 - The Superserve API key and the runner's other credentials stay on the runner. Only the files and env vars you send go into the sandbox.
-- Bind credentials the tests need as [secrets](/secrets/overview), so the sandbox only holds stand-in tokens.
+- Bind credentials the tests need as [secrets](/secrets/overview), so the sandbox only holds stand-in tokens. A stand-in token hides the real value, but code in the sandbox can still use it on the secret's hosts, so bind only narrowly scoped test credentials.
 
-Also limit what the code can reach on the network. Create the sandbox with a [network allowlist](/sandbox/networking) that permits only the DNS resolvers and the package registry. After the install, remove all egress for the tests:
+Also limit what the code can reach on the network. Create the sandbox with a [network allowlist](/sandbox/networking) that permits only the DNS resolvers and the package registry. After the install, block all new outbound connections before the tests run:
 
 ```bash
 superserve sandbox create --name ci-1234 --template superserve/node-22 --timeout 30m --auto-delete 0 \
@@ -231,7 +231,8 @@ superserve exec ci-1234 --timeout 20m -- 'cd /w && npm test'
 
 - `npm ci --ignore-scripts` stops package install scripts from running while the registry is still reachable.
 - `sandbox update` replaces all the rules, so `--deny-out 0.0.0.0/0` alone removes the allowlist. You can only change rules while the sandbox is active.
-- The [network log](/sandbox/network-log) shows the HTTP and HTTPS connections the sandbox made or tried to make, allowed or blocked, so you can check what a job reached.
+- The new rules apply to new connections. With `--ignore-scripts`, no project code runs while the registry is allowed, so nothing can hold a connection open. If your job must run project code while the allowlist is in place, that code can reach the allowed hosts and keep its connections after the update.
+- The [network log](/sandbox/network-log) shows the HTTP and HTTPS connections on ports 80 and 443 that the sandbox made or tried to make, allowed or blocked. It doesn't record DNS or other ports.
 
 Keep the GitHub side safe too. Don't run untrusted pull requests with `pull_request_target` and a checkout of the pull request's code: that gives the code access to your repository secrets on the runner itself.
 
