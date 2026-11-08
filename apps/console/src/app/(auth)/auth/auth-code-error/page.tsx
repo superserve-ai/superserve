@@ -165,7 +165,7 @@ export default function AuthCodeErrorPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <div className="h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
+          <div className="h-5 w-5 border-2 border-primary border-t-transparent motion-safe:animate-spin" />
         </div>
       }
     >

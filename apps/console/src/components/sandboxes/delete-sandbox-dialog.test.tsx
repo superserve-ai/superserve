@@ -59,6 +59,7 @@ vi.mock("@superserve/ui", async () => {
 })
 
 vi.mock("motion/react", () => ({
+  useReducedMotion: () => false,
   motion: {
     div: (props: React.JSX.IntrinsicElements["div"]) => <div {...props} />,
   },

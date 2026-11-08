@@ -267,7 +267,7 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
             aria-label="Refresh"
           >
             <ArrowClockwiseIcon
-              className={`size-3.5 ${listing.isFetching ? "animate-spin" : ""}`}
+              className={`size-3.5 ${listing.isFetching ? "motion-safe:animate-spin" : ""}`}
               weight="light"
             />
           </Button>
@@ -336,9 +336,9 @@ function ListSkeleton() {
           key={i}
           className="flex items-center gap-3 border-b border-border/60 px-4 py-2"
         >
-          <div className="size-4 shrink-0 animate-pulse bg-muted/30" />
-          <div className="h-3 flex-1 animate-pulse bg-muted/20" />
-          <div className="h-3 w-12 animate-pulse bg-muted/20" />
+          <div className="size-4 shrink-0 bg-muted/30 motion-safe:animate-pulse" />
+          <div className="h-3 flex-1 bg-muted/20 motion-safe:animate-pulse" />
+          <div className="h-3 w-12 bg-muted/20 motion-safe:animate-pulse" />
         </div>
       ))}
     </div>

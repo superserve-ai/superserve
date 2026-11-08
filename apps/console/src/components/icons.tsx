@@ -1,6 +1,6 @@
 "use client"
 
-import { motion } from "motion/react"
+import { motion, useReducedMotion } from "motion/react"
 
 export function GoogleIcon() {
   return (
@@ -30,11 +30,17 @@ export function Spinner({
 }: {
   className?: string
 }) {
+  const shouldReduceMotion = useReducedMotion()
+
   return (
     <motion.div
       className={`h-5 w-5 rounded-full border-2 border-t-transparent ${className}`}
-      animate={{ rotate: 360 }}
-      transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
+      animate={shouldReduceMotion ? undefined : { rotate: 360 }}
+      transition={
+        shouldReduceMotion
+          ? undefined
+          : { duration: 0.8, repeat: Infinity, ease: "linear" }
+      }
     />
   )
 }

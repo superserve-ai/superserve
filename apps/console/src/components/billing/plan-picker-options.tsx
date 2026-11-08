@@ -199,7 +199,7 @@ export function PlanPickerOptions({
 
   if (current === undefined)
     return (
-      <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
+      <div className="mt-5 h-5 w-5 border-2 border-primary border-t-transparent motion-safe:animate-spin" />
     )
   // Only billing administrators can buy; anyone else would only be refused.
   if (adminRequired || current.canManage === false)

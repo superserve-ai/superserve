@@ -15,11 +15,11 @@ function TerminalSkeleton() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-14 items-center gap-3 border-b border-border px-6">
-        <div className="h-4 w-24 animate-pulse bg-muted/20" />
+        <div className="h-4 w-24 bg-muted/20 motion-safe:animate-pulse" />
         <span className="text-muted">/</span>
-        <div className="h-4 w-32 animate-pulse bg-muted/20" />
+        <div className="h-4 w-32 bg-muted/20 motion-safe:animate-pulse" />
         <span className="text-muted">/</span>
-        <div className="h-4 w-20 animate-pulse bg-muted/20" />
+        <div className="h-4 w-20 bg-muted/20 motion-safe:animate-pulse" />
       </div>
       <div className="flex-1 bg-background" />
     </div>

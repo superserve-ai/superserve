@@ -185,7 +185,10 @@ function useBillingAction(
         disabled={isActionDisabled}
       >
         {submitting ? (
-          <SpinnerGapIcon className="size-3.5 animate-spin" weight="light" />
+          <SpinnerGapIcon
+            className="size-3.5 motion-safe:animate-spin"
+            weight="light"
+          />
         ) : canOpenPortal ? (
           <ArrowSquareOutIcon className="size-3.5" weight="light" />
         ) : (

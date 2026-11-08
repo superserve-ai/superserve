@@ -687,7 +687,7 @@ export function SandboxTerminal({
 
       {status === "connecting" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="animate-pulse font-mono text-xs text-muted">
+          <span className="font-mono text-xs text-muted motion-safe:animate-pulse">
             Connecting...
           </span>
         </div>

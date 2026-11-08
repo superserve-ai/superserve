@@ -3,6 +3,16 @@
 
 @source "../../../../packages/ui/src";
 
+/* Cover unguarded animation utilities in shared UI components. */
+@media (prefers-reduced-motion: reduce) {
+  .animate-spin,
+  .animate-ping,
+  .animate-pulse,
+  .animate-bounce {
+    animation: none;
+  }
+}
+
 /* Hide xterm's built-in scrollbar — FitAddon otherwise reserves scrollbar
    width from usable columns, even when `scrollbar.showScrollbar: false` is
    set in the Terminal options. This is the belt-and-braces CSS guard. */

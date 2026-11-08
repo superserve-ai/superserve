@@ -124,6 +124,7 @@ vi.mock("posthog-js/react", () => ({
 // (TerminalTabs only uses motion.span; rendering a span for every accessed key
 // is enough for behavior tests and keeps the mock simple.)
 vi.mock("motion/react", () => ({
+  useReducedMotion: () => false,
   motion: new Proxy(
     {},
     {
