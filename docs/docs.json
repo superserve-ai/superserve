@@ -72,6 +72,10 @@
             "pages": ["introduction", "quickstart", "api-key", "cli"]
           },
           {
+            "group": "Guides",
+            "pages": ["guides/run-ci-jobs"]
+          },
+          {
             "group": "Sandbox",
             "pages": [
               "sandbox/create",
@@ -120,10 +124,6 @@
           {
             "group": "Storage",
             "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
-          },
-          {
-            "group": "Guides",
-            "pages": ["guides/run-ci-jobs"]
           },
           {
             "group": "Errors",
