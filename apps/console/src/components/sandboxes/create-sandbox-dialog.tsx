@@ -164,7 +164,7 @@ function SourcePicker({
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex h-9 w-full items-center justify-between border border-input bg-background px-3 text-sm text-foreground",
+          "flex h-9 w-full items-center justify-between border border-control bg-background px-3 text-sm text-foreground",
           "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
         )}
       >
@@ -854,6 +854,7 @@ export function CreateSandboxDialog({
                                   variant="ghost"
                                   size="icon-sm"
                                   className="shrink-0"
+                                  aria-label={`Remove allow rule ${i + 1}`}
                                   onClick={() =>
                                     setAllowRules(
                                       allowRules.filter((_, j) => j !== i),
@@ -899,6 +900,7 @@ export function CreateSandboxDialog({
                                   variant="ghost"
                                   size="icon-sm"
                                   className="shrink-0"
+                                  aria-label={`Remove deny rule ${i + 1}`}
                                   onClick={() =>
                                     setDenyRules(
                                       denyRules.filter((_, j) => j !== i),
@@ -975,6 +977,7 @@ export function CreateSandboxDialog({
                               variant="ghost"
                               size="icon-sm"
                               className="shrink-0"
+                              aria-label={`Remove environment variable ${i + 1}`}
                               onClick={() =>
                                 setEnvEntries(
                                   envEntries.filter((_, j) => j !== i),
@@ -1035,6 +1038,7 @@ export function CreateSandboxDialog({
                               variant="ghost"
                               size="icon-sm"
                               className="shrink-0"
+                              aria-label={`Remove metadata entry ${i + 1}`}
                               onClick={() =>
                                 setMetadataEntries(
                                   metadataEntries.filter((_, j) => j !== i),

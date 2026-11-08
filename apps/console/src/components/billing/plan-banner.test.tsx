@@ -469,7 +469,7 @@ describe("PlanBanner for a credit-funded subscription", () => {
     expect(banner.textContent).not.toMatch(/\$/)
     expect(screen.getByRole("link", { name: "Add Credits" })).toHaveAttribute(
       "href",
-      expect.stringMatching(/^\/plan-usage\/buy-credit\/?$/),
+      expect.stringMatching(/^\/billing-usage\/buy-credit\/?$/),
     )
   })
 

@@ -86,6 +86,34 @@ class RateLimitError(SandboxError):
         super().__init__(message, status_code=429, code=code)
 
 
+class BillingError(SandboxError):
+    """Raised on 402 responses: billing does not allow this request.
+    ``code`` distinguishes the variant:
+
+    - ``trial_exhausted`` — the free trial credit is used up.
+    - ``trial_unavailable`` — the free trial is not available for this account.
+    - ``trial_check_unavailable`` — the free trial could not be confirmed because
+      a required check did not complete. Not a denial. Right after sign-up it can
+      last a few seconds while the trial is set up; after that, retrying does not
+      resolve it.
+    - ``billing_ineligible`` — generic; billing does not allow this request.
+    - ``free_allowance_exhausted`` — the free allowance is used up until it resets.
+    - ``sandbox_exceeds_plan_limits`` — the requested size exceeds the plan limits.
+
+    ``action_url`` is where the user can add a card and choose a plan. It is
+    ``None`` unless the API sends one, so older servers leave it unset.
+    """
+
+    def __init__(
+        self,
+        message: str = "Billing does not allow this request",
+        code: str | None = None,
+        action_url: str | None = None,
+    ) -> None:
+        super().__init__(message, status_code=402, code=code)
+        self.action_url = action_url
+
+
 class BuildError(SandboxError):
     """Raised when a template build transitions to status 'failed'.
 
@@ -119,12 +147,14 @@ def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
         # Control-plane errors use ``{"error": {"message": ..., "code": ...}}``.
         message = error_data.get("message") or f"API error ({status_code})"
         code = error_data.get("code")
+        action_url = error_data.get("action_url")
     else:
         # Data-plane (boxd) errors use a bare string: ``{"error": "..."}``.
         # Defensively stringify any other non-dict shape so this mapper never
         # raises -- it runs precisely when a request already failed.
         message = str(error_data) if error_data else f"API error ({status_code})"
         code = None
+        action_url = None
 
     if status_code == 400:
         return ValidationError(message, code=code)
@@ -134,6 +164,14 @@ def map_api_error(status_code: int, body: dict[str, Any]) -> SandboxError:
         return NotFoundError(message, code=code)
     elif status_code == 409:
         return ConflictError(message, code=code)
+    elif status_code == 402:
+        return BillingError(
+            message,
+            code=code,
+            action_url=action_url
+            if isinstance(action_url, str) and action_url
+            else None,
+        )
     elif status_code == 429:
         return RateLimitError(message, code=code)
     elif status_code >= 500:

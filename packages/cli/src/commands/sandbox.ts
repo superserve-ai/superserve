@@ -241,9 +241,10 @@ function eventDetails(e: NetworkEvent): string {
   return parts.join("  ")
 }
 
-// A brand-new account's trial credit is recorded by a background worker a few
-// seconds after signup, so the first create right after `superserve login` can
-// briefly see 402. A 402 creates nothing, so retrying it is safe.
+// A brand-new account's trial claim may still be in progress after signup, so
+// the first create right after `superserve login` can briefly see a 402 with
+// billing_ineligible or trial_check_unavailable. A 402 creates nothing, so
+// retrying these codes is safe.
 const NEW_ACCOUNT_SETUP_MS = 90_000
 
 async function createWaitingForNewAccount<T>(
@@ -263,7 +264,8 @@ async function createWaitingForNewAccount<T>(
         fresh &&
         err instanceof SandboxError &&
         err.statusCode === 402 &&
-        err.code === "billing_ineligible" &&
+        (err.code === "billing_ineligible" ||
+          err.code === "trial_check_unavailable") &&
         Date.now() < deadline
       if (!settingUp) throw err
       if (!told) info("Finishing account setup…")
