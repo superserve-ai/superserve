@@ -4,6 +4,7 @@ import type { NextConfig } from "next"
 
 const sourceRoot = resolve(__dirname, "../../..")
 const stubs = resolve(__dirname, "stubs.ts")
+const queryStubs = resolve(__dirname, "query-stubs.ts")
 
 // Separate Next app. These substitutions are not part of Console.
 const config: NextConfig = {
@@ -14,6 +15,10 @@ const config: NextConfig = {
     config.resolve.alias["@"] = sourceRoot
     config.plugins.push(
       new webpack.NormalModuleReplacementPlugin(/^posthog-js\/react$/, stubs),
+      new webpack.NormalModuleReplacementPlugin(
+        /^@\/hooks\/use-(templates|snapshots|secrets)$/,
+        queryStubs,
+      ),
     )
     return config
   },

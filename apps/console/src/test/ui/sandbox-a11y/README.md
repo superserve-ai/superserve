@@ -10,9 +10,10 @@ Open `http://127.0.0.1:4177/sandboxes/`.
 
 The fixture renders the production `SandboxTableRow`, `NetworkSection`,
 `MetadataSection`, and `CreateSandboxDialog` with fake sandboxes and no
-network. `posthog-js/react` is replaced with a no-op (see `next.config.ts`);
-nothing else is stubbed, and `usePatchSandbox` runs against a local
-`QueryClient` (saving would fail, as no API exists here).
+network. `next.config.ts` replaces `posthog-js/react` with a no-op and the
+template, snapshot and secret query hooks with empty results
+(`query-stubs.ts`). `usePatchSandbox` and `useCreateSandbox` run against a
+local `QueryClient`; saving or creating fails, as no API exists here.
 
 Things to check:
 
