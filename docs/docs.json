@@ -122,6 +122,10 @@
             "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
           },
           {
+            "group": "Guides",
+            "pages": ["guides/run-ci-jobs"]
+          },
+          {
             "group": "Errors",
             "pages": ["errors"]
           }
