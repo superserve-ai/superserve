@@ -21,6 +21,7 @@ import { useUser } from "@/hooks/use-user"
 import type {
   BillingSummaryResponse,
   BillingTrialBalance,
+  BillingTrialBlock,
 } from "@/lib/api/billing"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { pickerOfferSellable, pickerPlanLabel } from "@/lib/billing/plan-picker"
@@ -89,24 +90,42 @@ function formatUsd(amount: number | null | undefined): string | null {
     : null
 }
 
-export type TrialStage = "trial" | "ended" | "payment_failed" | "plan_required"
+export type TrialStage =
+  | "trial"
+  | "ended"
+  | "unavailable"
+  | "check_unavailable"
+  | "unknown"
+  | "payment_failed"
+  | "plan_required"
 
-// The trial's stage from its entry state and balance.
+// The trial's stage from its entry state, balance and the server's trial block.
+// The entry state and the summary load independently, so an explicit
+// trial_block decides first, whatever the entry state: check_unavailable, then
+// exhausted, then unavailable (denied). Without one, "ended" needs proof: an
+// exhausted or expired balance, or a live trial whose credit ran out. A null
+// block is a failed reason read or a generic denial, so a team that is not on
+// a live trial stays "unknown" and the copy claims nothing about the trial.
 export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
+  block?: BillingTrialBlock | null,
 ): TrialStage {
   if (entry === "payment_failed" || entry === "plan_required") return entry
-  const remaining = trial?.remaining_usd
-  if (
-    entry === "trial_ended" ||
-    trial?.state === "exhausted" ||
-    (typeof remaining === "number" &&
-      Number.isFinite(remaining) &&
-      remaining <= 0)
-  )
-    return "ended"
-  return "trial"
+  if (block === "trial_check_unavailable") return "check_unavailable"
+  if (block === "trial_exhausted") return "ended"
+  if (block === "trial_unavailable") return "unavailable"
+  if (trial?.state === "exhausted" || trial?.state === "expired") return "ended"
+  if (entry === "trial_ended") return "unknown"
+  if (!trial) return "trial"
+  // Any other balance state (such as no_grant) is not a live trial.
+  if (trial.state !== "active") return "unknown"
+  const remaining = trial.remaining_usd
+  return typeof remaining === "number" &&
+    Number.isFinite(remaining) &&
+    remaining <= 0
+    ? "ended"
+    : "trial"
 }
 
 function TrialEntryBanner({
@@ -129,7 +148,7 @@ function TrialEntryBanner({
   const requested = trialPlanOffer(signup?.requestedOffer)
   const selected =
     requested && pickerOfferSellable(offers, requested) ? requested : undefined
-  const stage = trialStage(entry, summary.trial)
+  const stage = trialStage(entry, summary.trial, summary.trial_block)
   const remaining = formatUsd(summary.trial?.remaining_usd)
   const plan = selected ? pickerPlanLabel(offers, selected) : null
   const upgrade = plan ? `Upgrade to ${plan}` : "Upgrade"
@@ -138,7 +157,11 @@ function TrialEntryBanner({
   return (
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
-      label={stage === "plan_required" ? "No plan" : "Free trial"}
+      label={
+        stage === "plan_required" || stage === "unknown"
+          ? "No plan"
+          : "Free trial"
+      }
       action={
         <ManageAction canManage={canManage}>
           {selected && locator ? (
@@ -183,10 +206,22 @@ function TrialEntryBanner({
           We couldn&apos;t confirm a card for your plan. Your sandboxes are
           paused and nothing is deleted. Upgrade to resume.
         </>
+      ) : stage === "unavailable" ? (
+        <>
+          The free trial isn&apos;t available for this account. Upgrade to run
+          sandboxes.
+        </>
+      ) : stage === "unknown" ? (
+        <>Upgrade to run sandboxes.</>
+      ) : stage === "check_unavailable" ? (
+        <>
+          We couldn&apos;t confirm the free trial for this account because a
+          required check didn&apos;t complete. Upgrade to run sandboxes.
+        </>
       ) : stage === "ended" ? (
         <>
-          Your free trial has ended. Your sandboxes are paused and nothing is
-          deleted. Upgrade to resume.
+          Your free trial has ended. Your sandboxes are paused. A sandbox set to
+          auto-delete after a pause can still be deleted. Upgrade to resume.
         </>
       ) : (
         <>
@@ -228,12 +263,22 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
   const trial = summary.trial
   const currentUrgentRunway = useCurrentUrgentRunway(trial)
 
-  if (!trial || (trial.state !== "active" && trial.state !== "exhausted"))
+  // An explicit trial_block decides first, as in trialStage: check_unavailable,
+  // then exhausted, then unavailable (denied). Without one, only the balance.
+  const block = summary.trial_block
+  const blocked =
+    block === "trial_check_unavailable" ||
+    block === "trial_exhausted" ||
+    block === "trial_unavailable"
+  if (
+    !blocked &&
+    (!trial || (trial.state !== "active" && trial.state !== "exhausted"))
+  )
     return null
 
-  const exhausted = trial.state === "exhausted"
-  const urgent = exhausted || currentUrgentRunway
-  const remaining = formatUsd(trial.remaining_usd)
+  const exhausted = block === "trial_exhausted" || trial?.state === "exhausted"
+  const urgent = blocked || exhausted || currentUrgentRunway
+  const remaining = formatUsd(trial?.remaining_usd)
 
   return (
     <div
@@ -247,7 +292,23 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
       )}
     >
       <p className="min-w-0 flex-1 basis-72">
-        {exhausted ? (
+        {block === "trial_check_unavailable" ? (
+          <>
+            We couldn&apos;t confirm the free trial for this account because a
+            required check didn&apos;t complete. Add a payment method to run
+            sandboxes.
+          </>
+        ) : block === "trial_exhausted" ? (
+          <>
+            Your free trial credit has run out. Add a payment method to continue
+            running sandboxes.
+          </>
+        ) : block === "trial_unavailable" ? (
+          <>
+            The free trial isn&apos;t available for this account. Add a payment
+            method to run sandboxes.
+          </>
+        ) : exhausted ? (
           <>
             Your free trial credit has run out. Add a payment method to continue
             running sandboxes.

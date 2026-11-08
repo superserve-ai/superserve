@@ -1,7 +1,7 @@
 "use client"
 
 import { WarningIcon } from "@phosphor-icons/react"
-import { Button } from "@superserve/ui"
+import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
@@ -9,12 +9,14 @@ import { Suspense, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
 import {
   proAuthReturnPath,
   starterAuthReturnPath,
   signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 function AuthCodeErrorContent() {
@@ -26,6 +28,8 @@ function AuthCodeErrorContent() {
   // Carry only the recognized retry preference; it cannot authorize admission.
   if (searchParams.get("signup_offer") === "enterprise")
     retryParams.set("signup_offer", "enterprise")
+  const invite = inviteReturnPath(searchParams.get("next"))
+  if (invite) retryParams.set("next", invite)
   const continuation =
     proAuthReturnPath(searchParams.get("next")) ??
     starterAuthReturnPath(searchParams.get("next"))
@@ -134,7 +138,7 @@ function AuthCodeErrorContent() {
                 <Button
                   render={<Link href={retryHref} />}
                   size="sm"
-                  className="mt-5"
+                  className={cn("mt-5", inviteLinkReplayClass(retryHref))}
                 >
                   {impersonating
                     ? "Continue after ending impersonation"

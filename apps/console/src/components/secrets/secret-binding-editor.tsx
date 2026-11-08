@@ -115,7 +115,7 @@ export function SecretPicker({
         type="button"
         onClick={() => setOpen((o) => !o)}
         className={cn(
-          "flex h-9 w-full items-center justify-between border border-input bg-background px-3 font-mono text-xs",
+          "flex h-9 w-full items-center justify-between border border-control bg-background px-3 font-mono text-xs",
           "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
           value ? "text-foreground" : "text-muted",
         )}
