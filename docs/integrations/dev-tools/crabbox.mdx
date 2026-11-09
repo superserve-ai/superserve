@@ -98,7 +98,7 @@ crabbox run --shell 'npm ci && npm test'
 | `execTimeoutSecs` | `--superserve-exec-timeout-secs` | Command timeout in seconds. The default is `600`. |
 | `timeoutSecs` | `--superserve-timeout-secs` | Sandbox [timeout](/sandbox/lifecycle) in seconds, after which Superserve pauses it. The default `0` uses the Crabbox lease TTL (30 minutes unless you change it). |
 | `networkAllowOut` | `--superserve-network-allow-out` | Outbound hosts, IPs, or CIDRs to allow. |
-| `networkDenyOut` | `--superserve-network-deny-out` | Outbound hosts, IPs, or CIDRs to deny. |
+| `networkDenyOut` | `--superserve-network-deny-out` | Outbound IPs or CIDRs to deny. Hostnames are rejected. |
 
 Network lists map to Superserve [network rules](/sandbox/networking). With the config above, `npm ci` can reach the npm registry, and other outbound connections fail. Each flag takes a comma-separated list and overrides the matching config key.
 
@@ -175,7 +175,7 @@ The snapshot stays after its sandbox is deleted. Delete it with `Snapshot.delete
 
 ## Pass environment variables
 
-Crabbox does not forward your shell environment by default. Allow each variable with `--allow-env`:
+Crabbox forwards only `CI` and `NODE_OPTIONS` from your shell environment by default. Allow other variables with `--allow-env`:
 
 ```bash
 NODE_ENV=test crabbox run --provider superserve --allow-env NODE_ENV -- sh -c 'echo "$NODE_ENV"'
