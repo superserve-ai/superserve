@@ -1,6 +1,7 @@
 import { createClient, type SupabaseClient } from "@supabase/supabase-js"
 
 import { createAdminClient } from "@/lib/supabase/admin"
+import { supabaseFetch } from "@/lib/supabase/fresh-fetch"
 
 // Cell registry. Each region ("cell") runs a full stack: its own Supabase
 // project for team-scoped data and its own control-plane API. Auth stays on
@@ -41,6 +42,7 @@ function cachedClient(url: string, serviceRoleKey: string): SupabaseClient {
   if (!client) {
     client = createClient(url, serviceRoleKey, {
       auth: { autoRefreshToken: false, persistSession: false },
+      global: { fetch: supabaseFetch },
     })
     clientCache.set(cacheKey, client)
   }

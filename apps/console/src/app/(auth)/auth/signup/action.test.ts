@@ -70,6 +70,14 @@ const mockIssueGoogleSignupProof = vi.fn()
 vi.mock("@/lib/auth/google-signup-proof", () => ({
   issueGoogleSignupProof: (...args: unknown[]) =>
     mockIssueGoogleSignupProof(...args),
+  isGoogleUser: (user: { app_metadata?: { provider?: string } }) =>
+    user.app_metadata?.provider === "google",
+}))
+
+const mockGetUser = vi.fn()
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: () =>
+    Promise.resolve({ auth: { getUser: () => mockGetUser() } }),
 }))
 
 const mockObserveCloudflareSignup = vi.fn()
@@ -162,6 +170,7 @@ import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 
 import {
   beginGoogleSignup,
+  googleRecoveryAccount,
   resendSignupConfirmation,
   signUpWithEmail,
 } from "./action"
@@ -439,8 +448,8 @@ describe("signUpWithEmail", () => {
 
     it.each([
       "/billing/pro/?billing=cancel&team=use%3Ateam&return=%2Fsandboxes",
-      "/plan-usage/buy-credit?amount=500",
-      "/plan-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
+      "/billing-usage/buy-credit?amount=500",
+      "/billing-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
       "/device?code=BCDF-GHJK",
     ])(
       "keeps direct purchase entry through the emailed confirmation: %s",
@@ -2137,3 +2146,40 @@ it.each([undefined, { unavailable: true } as const])(
     expect(diagnostics.browser).toHaveBeenCalledWith(forgedDiagnostics)
   },
 )
+
+describe("googleRecoveryAccount", () => {
+  it("returns the email of the signed-in Google user", async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          email: "new.user@example.com",
+          app_metadata: { provider: "google" },
+        },
+      },
+    })
+    await expect(googleRecoveryAccount()).resolves.toBe("new.user@example.com")
+  })
+
+  it.each([
+    ["no session", { data: { user: null } }],
+    [
+      "an email user",
+      {
+        data: {
+          user: {
+            email: "new.user@example.com",
+            app_metadata: { provider: "email" },
+          },
+        },
+      },
+    ],
+  ])("returns nothing for %s", async (_, result) => {
+    mockGetUser.mockResolvedValue(result)
+    await expect(googleRecoveryAccount()).resolves.toBeUndefined()
+  })
+
+  it("returns nothing when the session lookup fails", async () => {
+    mockGetUser.mockRejectedValue(new Error("auth unavailable"))
+    await expect(googleRecoveryAccount()).resolves.toBeUndefined()
+  })
+})
