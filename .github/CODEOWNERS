@@ -1,0 +1,53 @@
+# Protected paths. A human owner listed here, other than the PR author, must
+# approve every PR that changes one of these paths, and no bot may merge such a
+# PR without that approval (see "Protected paths" in CLAUDE.md).
+#
+# List only protected paths: once code-owner review is required, every owned
+# path needs an owner's approval, so a catch-all entry would gate every PR.
+# Start each pattern with "/" and list individual @users; the Protected Paths
+# check reads this file the same way GitHub does.
+
+# CI and the npm, PyPI and docs release workflows, their scripts, and this file.
+/.github/ @awille-ai @meAmitPatil @pavitrabhalla
+
+# Console request authentication and security headers.
+/apps/console/src/middleware.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/next.config.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/env.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/supabase/ @awille-ai @meAmitPatil @pavitrabhalla
+
+# Server routes: the API proxy that mints keys, team management, CLI device login, checkout.
+/apps/console/src/app/api/ @awille-ai @meAmitPatil @pavitrabhalla
+
+# Sign-in, sign-up, and staff admin.
+/apps/console/src/app/(auth)/auth/callback/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/(auth)/**/*action.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/auth/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/admin/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/admin/ @awille-ai @meAmitPatil @pavitrabhalla
+
+# Team permissions, invitations, API keys, and secrets.
+/apps/console/src/lib/invite/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/active-team* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/team-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/teams-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/api-key* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/proxy-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/secrets.ts @awille-ai @meAmitPatil @pavitrabhalla
+
+# Billing, checkout, plans, signup offers, and promotional credits.
+/apps/console/src/lib/billing/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/billing* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/checkout-intent.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/plan-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/prepaid* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/signup-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/starter-checkout-recovery* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/promotion-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/yc/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/yc-claims.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/yc/**/*actions.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/yc/**/route.ts @awille-ai @meAmitPatil @pavitrabhalla
+
+# The license.
+/LICENSE @awille-ai @meAmitPatil @pavitrabhalla

@@ -91,6 +91,24 @@ The console has a deliberate austere, technical aesthetic:
 - Platform is `Superserve`; CLI tool is `superserve`
 - Never "Claude" standalone — always "Claude Agent" or "Claude Agent SDK"
 
+## Protected paths
+
+`.github/CODEOWNERS` lists the paths that automation must not change on `main` without a human. It is the only source of the list; today it covers:
+
+- CI and the npm, PyPI and docs release workflows, and CODEOWNERS itself
+- Console request authentication, security headers, env config, and the Supabase admin client
+- Console server routes (`apps/console/src/app/api/`), sign-in and sign-up actions, and staff admin
+- Team permissions, invitations, API keys, and secrets
+- Billing, checkout, plans, signup offers, and promotional credits
+- `LICENSE`
+
+A PR that changes one of these paths needs an approval from a human code owner who is not its author. The `Protected Paths` check fails until it has one. For bots and other automation:
+
+- Do not merge, approve, or turn on auto-merge for such a PR. Opening it is fine; ask a code owner to review it.
+- An approval from a bot, such as the QM reviewer, does not count.
+- Merging `main` into the PR branch to keep it current is fine.
+- Adding, removing, or re-owning a protected path is itself a protected change.
+
 ## Git
 
 - Single-line commit messages
