@@ -544,6 +544,23 @@ describe("SignInPage", () => {
       })
     })
 
+    it("keeps the invite on the recovery Forgot password link", async () => {
+      const next = `/invite/ssinv_use_${"T".repeat(43)}`
+      searchParamsMap = { next }
+      const region = await failPasswordSignIn()
+
+      const link = within(region).getByRole("link", {
+        name: "Forgot password?",
+      })
+      const url = new URL(
+        link.getAttribute("href")!,
+        "https://console.example.com",
+      )
+      expect(url.pathname).toBe("/auth/forgot-password")
+      expect(url.searchParams.get("next")).toBe(next)
+      expect(link).toHaveClass("ph-no-capture")
+    })
+
     it("tracks the shown event once per page view", async () => {
       await failPasswordSignIn()
       await user.click(screen.getByRole("button", { name: "Sign In" }))

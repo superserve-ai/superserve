@@ -400,9 +400,12 @@ function SignInContent() {
             </Button>
             <div className="flex justify-center">
               <Link
-                href="/auth/forgot-password"
+                href={forgotPasswordHref}
                 onClick={() => trackRecoveryOption("forgot_password")}
-                className="text-xs text-muted hover:text-foreground"
+                className={cn(
+                  "text-xs text-muted hover:text-foreground",
+                  inviteLinkReplayClass(forgotPasswordHref),
+                )}
               >
                 Forgot password?
               </Link>
