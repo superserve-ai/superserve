@@ -96,8 +96,8 @@ The console has a deliberate austere, technical aesthetic:
 `.github/CODEOWNERS` lists the paths that automation must not change on `main` without a human. It is the only source of the list; today it covers:
 
 - CI and the npm, PyPI and docs release workflows, and CODEOWNERS itself
-- Console request authentication, security headers, env config, and the Supabase admin client
-- Console server routes (`apps/console/src/app/api/`), sign-in and sign-up actions, and staff admin
+- Console request authentication, security headers, env config, and the Supabase admin and regional service-role clients
+- Every console server action and route handler, the `lib/api` server actions, and staff admin
 - Team permissions, invitations, API keys, and secrets
 - Billing, checkout, plans, signup offers, and promotional credits
 - `LICENSE`

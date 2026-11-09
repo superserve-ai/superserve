@@ -10,20 +10,30 @@
 # CI and the npm, PyPI and docs release workflows, their scripts, and this file.
 /.github/ @awille-ai @meAmitPatil @pavitrabhalla
 
-# Console request authentication and security headers.
+# Console request authentication, security headers, and the regional
+# service-role clients and tokens.
 /apps/console/src/middleware.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/next.config.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/env.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/supabase/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/cells.ts @awille-ai @meAmitPatil @pavitrabhalla
 
 # Server routes: the API proxy that mints keys, team management, CLI device login, checkout.
 /apps/console/src/app/api/ @awille-ai @meAmitPatil @pavitrabhalla
 
+# Every server action and route handler in the app tree (sign-in, device login,
+# invitations, onboarding payment, offers), and the server actions that use the
+# Supabase admin client.
+/apps/console/src/app/**/*action.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/**/*actions.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/**/route.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/*-actions.ts @awille-ai @meAmitPatil @pavitrabhalla
+
 # Sign-in, sign-up, and staff admin.
 /apps/console/src/app/(auth)/auth/callback/ @awille-ai @meAmitPatil @pavitrabhalla
-/apps/console/src/app/(auth)/**/*action.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/auth/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/app/admin/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/(dashboard)/admin/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/admin/ @awille-ai @meAmitPatil @pavitrabhalla
 
 # Team permissions, invitations, API keys, and secrets.
@@ -46,8 +56,6 @@
 /apps/console/src/lib/api/promotion-* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/yc/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/yc-claims.ts @awille-ai @meAmitPatil @pavitrabhalla
-/apps/console/src/app/yc/**/*actions.ts @awille-ai @meAmitPatil @pavitrabhalla
-/apps/console/src/app/yc/**/route.ts @awille-ai @meAmitPatil @pavitrabhalla
 
 # The license.
 /LICENSE @awille-ai @meAmitPatil @pavitrabhalla
