@@ -67,6 +67,39 @@ text: str = sandbox.files.read_text("/app/config.json")
 ```
 </CodeGroup>
 
+## Download size limit
+
+`read()` and `downloadDir()` / `download_dir()` stop at 2 GiB by default. A
+larger download fails with `ValidationError`. Pass `maxBytes` / `max_bytes` to
+set a different limit for one call, for example to reject unexpectedly large
+files early. For `downloadDir()`, the limit applies to the size of the ZIP
+archive. `readText()` / `read_text()` always uses the 2 GiB default.
+
+<CodeGroup>
+```typescript TypeScript
+import { ValidationError } from "@superserve/sdk"
+
+try {
+  const bytes = await sandbox.files.read("/app/results/output.bin", {
+    maxBytes: 1024 * 1024, // 1 MiB
+  })
+} catch (err) {
+  if (err instanceof ValidationError) {
+    console.log(err.message) // Download exceeds the maximum size of 1048576 bytes
+  }
+}
+```
+
+```python Python
+from superserve import ValidationError
+
+try:
+    data = sandbox.files.read("/app/results/output.bin", max_bytes=1024 * 1024)  # 1 MiB
+except ValidationError as err:
+    print(err)  # Download exceeds the maximum size of 1048576 bytes
+```
+</CodeGroup>
+
 ## Download a directory as a zip
 
 `downloadDir()` / `download_dir()` exports a whole directory as a ZIP archive —
