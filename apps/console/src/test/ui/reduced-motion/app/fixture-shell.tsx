@@ -58,6 +58,18 @@ function Banner() {
       <Link href="/sandboxes/sbx-7f3a91c2/" className="hover:text-foreground">
         detail
       </Link>
+      <Link href="/terminal/" className="hover:text-foreground">
+        terminal
+      </Link>
+      <Link href="/plans/" className="hover:text-foreground">
+        plans
+      </Link>
+      <Link href="/plans/fallback/" className="hover:text-foreground">
+        plans fallback
+      </Link>
+      <Link href="/dialogs/" className="hover:text-foreground">
+        dialogs
+      </Link>
     </aside>
   )
 }

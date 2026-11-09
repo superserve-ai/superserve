@@ -38,3 +38,8 @@ export async function GET(
     return NextResponse.json({ preview_access: "private", ports: [] })
   return NextResponse.json([])
 }
+
+// Deleting never answers, so a confirm button stays in its pending state.
+export async function DELETE(request: Request) {
+  await hang(request.signal)
+}
