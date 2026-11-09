@@ -47,7 +47,7 @@ export async function openOfferBilling(claim: string) {
     resolved.claim.team_id!,
     resolved.claim.home_region!,
   )
-  redirect("/plan-usage")
+  redirect("/billing-usage")
 }
 
 export async function openReadyOfferConsole(claim: string) {

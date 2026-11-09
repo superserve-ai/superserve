@@ -23,7 +23,7 @@ const state = vi.hoisted(() => ({
   assign: vi.fn(),
 }))
 const teamId = "11111111-1111-4111-8111-111111111111"
-const callback = `/plan-usage/buy-credit/?purchase=success&team=use:${teamId}&purchase_id=22222222-2222-4222-8222-222222222222`
+const callback = `/billing-usage/buy-credit/?purchase=success&team=use:${teamId}&purchase_id=22222222-2222-4222-8222-222222222222`
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({
     data: { teams: state.member ? [{ id: teamId, region: "use" }] : [] },

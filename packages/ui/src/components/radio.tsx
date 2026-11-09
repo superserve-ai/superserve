@@ -42,7 +42,7 @@ function RadioGroupItem({
         id={id}
         value={value}
         className={cn(
-          "peer relative h-4 w-4 shrink-0 rounded-full border border-input transition-colors",
+          "peer relative h-4 w-4 shrink-0 rounded-full border border-control transition-colors",
           "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
           "disabled:cursor-not-allowed disabled:opacity-30",
           "data-[checked]:border-primary",

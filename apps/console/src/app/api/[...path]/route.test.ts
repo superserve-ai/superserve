@@ -683,7 +683,7 @@ describe("api proxy /api/[...path]", () => {
       req("POST", ["stripe", "customer-portal-session"], {
         headers: { "content-type": "application/json" },
         body: JSON.stringify({
-          return_url: "https://console.test/plan-usage",
+          return_url: "https://console.test/billing-usage",
         }),
       }),
       params(["stripe", "customer-portal-session"]),
@@ -1246,37 +1246,51 @@ describe("api proxy prepaid credit", () => {
     vi.mocked(getImpersonationContext).mockResolvedValue(null)
   })
 
-  it("forwards only the purchase fields for the active team", async () => {
-    fetchSpy.mockResolvedValue(
-      new Response(JSON.stringify({ url: "https://checkout.stripe.com/s" }), {
-        status: 200,
-      }),
-    )
-    const path = ["billing", "prepaid", "checkout"]
-    const res = await POST(
-      req("POST", path, {
-        body: JSON.stringify({
-          expected_team: "use:team-east",
-          operation_id: "e2f2a080-167c-4cb0-8fb1-093be9e7720a",
-          amount_cents: 2500,
-          success_url: "https://console.test/plan-usage/buy-credit/",
-          cancel_url: "https://console.test/plan-usage/buy-credit/",
-          customer: "cus_attacker",
+  const buyCreditPaths = [
+    "/billing-usage/buy-credit/",
+    "/plan-usage/buy-credit/",
+  ]
+
+  it.each(
+    buyCreditPaths.flatMap((successPath) =>
+      buyCreditPaths.map((cancelPath) => [successPath, cancelPath]),
+    ),
+  )(
+    "forwards current or legacy payment returns unchanged: %s / %s",
+    async (successPath, cancelPath) => {
+      fetchSpy.mockResolvedValue(
+        new Response(JSON.stringify({ url: "https://checkout.stripe.com/s" }), {
+          status: 200,
         }),
-      }),
-      params(path),
-    )
-    expect(res.status).toBe(200)
-    const [url, init] = fetchSpy.mock.calls[0]
-    expect(url).toBe("https://api.test.superserve.ai/billing/prepaid/checkout")
-    expect(JSON.parse(init.body)).toEqual({
-      operation_id: "e2f2a080-167c-4cb0-8fb1-093be9e7720a",
-      amount_cents: 2500,
-      success_url: "https://console.test/plan-usage/buy-credit/",
-      cancel_url: "https://console.test/plan-usage/buy-credit/",
-    })
-    expect(res.headers.get("cache-control")).toBe("private, no-store")
-  })
+      )
+      const path = ["billing", "prepaid", "checkout"]
+      const res = await POST(
+        req("POST", path, {
+          body: JSON.stringify({
+            expected_team: "use:team-east",
+            operation_id: "e2f2a080-167c-4cb0-8fb1-093be9e7720a",
+            amount_cents: 2500,
+            success_url: `https://console.test${successPath}`,
+            cancel_url: `https://console.test${cancelPath}`,
+            customer: "cus_attacker",
+          }),
+        }),
+        params(path),
+      )
+      expect(res.status).toBe(200)
+      const [url, init] = fetchSpy.mock.calls[0]
+      expect(url).toBe(
+        "https://api.test.superserve.ai/billing/prepaid/checkout",
+      )
+      expect(JSON.parse(init.body)).toEqual({
+        operation_id: "e2f2a080-167c-4cb0-8fb1-093be9e7720a",
+        amount_cents: 2500,
+        success_url: `https://console.test${successPath}`,
+        cancel_url: `https://console.test${cancelPath}`,
+      })
+      expect(res.headers.get("cache-control")).toBe("private, no-store")
+    },
+  )
 
   it.each([
     ["checkout", POST],
@@ -1291,9 +1305,9 @@ describe("api proxy prepaid credit", () => {
         amount_cents: 500,
         enabled: false,
         success_url:
-          "https://console.test/plan-usage/buy-credit?purchase=success",
+          "https://console.test/billing-usage/buy-credit?purchase=success",
         cancel_url:
-          "https://console.test/plan-usage/buy-credit/?purchase=cancel",
+          "https://console.test/billing-usage/buy-credit/?purchase=cancel",
       })
       const res = await handler(
         req(suffix === "checkout" ? "POST" : "PUT", path, {
@@ -1316,24 +1330,40 @@ describe("api proxy prepaid credit", () => {
 
   it.each([
     [
-      "https://other.test/plan-usage/buy-credit",
-      "https://console.test/plan-usage/buy-credit",
+      "https://other.test/billing-usage/buy-credit",
+      "https://console.test/billing-usage/buy-credit",
     ],
     [
-      "https://console.test/plan-usage/buy-credit",
-      "https://other.test/plan-usage/buy-credit",
+      "https://console.test/billing-usage/buy-credit",
+      "https://other.test/billing-usage/buy-credit",
     ],
     [
-      "https://console.test/plan-usage",
-      "https://console.test/plan-usage/buy-credit",
+      "https://console.test/billing-usage",
+      "https://console.test/billing-usage/buy-credit",
     ],
     [
-      "https://console.test/plan-usage/buy-credit",
+      "https://console.test/billing-usage/buy-credit",
       "https://console.test/onboarding/plan",
     ],
-    ["invalid", "https://console.test/plan-usage/buy-credit"],
-    [undefined, "https://console.test/plan-usage/buy-credit"],
-    ["https://console.test/plan-usage/buy-credit", undefined],
+    [
+      "https://user:password@console.test/billing-usage/buy-credit/",
+      "https://console.test/billing-usage/buy-credit/",
+    ],
+    [
+      "https://console.test/billing-usage/buy-credit/",
+      "https://user:password@console.test/billing-usage/buy-credit/",
+    ],
+    [
+      "https://console.test/billing-usage/buy-credit/extra/",
+      "https://console.test/billing-usage/buy-credit/",
+    ],
+    [
+      "https://console.test/billing-usage/buy-credit/",
+      "https://console.test/billing-usage/buy-credit//",
+    ],
+    ["invalid", "https://console.test/billing-usage/buy-credit"],
+    [undefined, "https://console.test/billing-usage/buy-credit"],
+    ["https://console.test/billing-usage/buy-credit", undefined],
   ])(
     "rejects unowned prepaid payment returns %s / %s",
     async (success_url, cancel_url) => {
