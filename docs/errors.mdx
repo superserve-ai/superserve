@@ -122,7 +122,7 @@ Creating or resuming a sandbox fails with `402 Payment Required` when the team's
 |---|---|---|
 | `trial_exhausted` | The team has no plan, and its free trial credit is used up or has expired. | Add a card and choose a plan at `action_url`, then retry. |
 | `trial_unavailable` | The team has no plan and did not get the free trial, for example because it is not the first team its creator made. | Add a card and choose a plan at `action_url`, then retry. |
-| `trial_check_unavailable` | The team has no plan, and the free trial could not be confirmed because a required check did not complete. This is not a decision that the team is ineligible. | Add a card and choose a plan at `action_url`, then retry. |
+| `trial_check_unavailable` | The team has no plan, and the free trial could not be confirmed because a required check did not complete. This is not a decision that the team is ineligible. | Right after sign-up, wait a few seconds and retry once, because account setup can still be in progress. Otherwise, or if the code stays, add a card and choose a plan at `action_url`, or contact support@superserve.ai. Do not retry in a loop. |
 | `billing_ineligible` | Sandbox usage is unavailable until billing is active, for a reason other than the trial codes above. An unpaid invoice is one example (see [Unpaid invoices](#unpaid-invoices)). The message is `Sandbox usage is unavailable until billing is active`. | Check the team's billing on the [Billing & Usage](https://console.superserve.ai/billing-usage) page: add a payment method, choose a plan, or pay the open invoice. Then retry. |
 | `free_allowance_exhausted` | The team is on a legacy Free plan and has used its daily compute allowance. Running sandboxes are paused too. New accounts start on the free trial instead. | Wait until the allowance resets, or upgrade on the [Billing & Usage](https://console.superserve.ai/billing-usage) page for unlimited runtime. |
 | `sandbox_exceeds_plan_limits` | The sandbox's vCPU, memory, or disk is larger than the team's plan allows. The message gives the sandbox size and the plan's limits. | Use a smaller template, or upgrade on the [Billing & Usage](https://console.superserve.ai/billing-usage) page. |
@@ -136,8 +136,6 @@ Some codes add a field to the `error` object of the API response. `BillingError`
 - `limits` (`sandbox_exceeds_plan_limits`): the plan's vCPU, memory, and disk maximums.
 
 The error `message` is safe to show to users. The SDK never retries a `402`.
-
-Right after sign-up, `trial_check_unavailable` can last a short time while the new account is set up. Wait a few seconds and retry. If the code stays, add a card and choose a plan at `actionUrl` / `action_url`, or contact support@superserve.ai. Do not retry in a loop.
 
 The CLI prints `action_url` in `--json` errors and waits for account setup after a browser sign-up (see [Scripting](/cli#scripting)). The MCP server tells the agent not to retry a trial or billing block (see [MCP troubleshooting](/integrations/mcp#troubleshooting)).
 
