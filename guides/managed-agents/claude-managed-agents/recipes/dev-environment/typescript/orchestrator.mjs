@@ -178,8 +178,8 @@ async function findOrCreateSandbox(sessionId, workId, metadata) {
   if (metadata?.["superserve.sandbox_id"]) {
     const sandboxId = metadata["superserve.sandbox_id"]
     console.log(`attaching prepared sandbox=${sandboxId} for session=${sessionId}`)
+    // connect() resumes a paused sandbox, so no separate resume() call.
     const sandbox = await Sandbox.connect(sandboxId)
-    if (sandbox.status === "paused") await sandbox.resume()
     await updateMetadata(sandbox, {
       [META_SESSION_ID]: sessionId, [META_WORK_ID]: workId, [META_MODE]: "active", [META_PAUSED_AT]: null,
     })
@@ -190,11 +190,10 @@ async function findOrCreateSandbox(sessionId, workId, metadata) {
   const live = existing.filter((s) => s.status === "active" || s.status === "paused")
 
   if (live.length > 0) {
-    const sandbox = await Sandbox.connect(live[0].id)
     if (live[0].status === "paused") {
       console.log(`resuming sandbox=${live[0].id} for session=${sessionId}`)
-      await sandbox.resume()
     }
+    const sandbox = await Sandbox.connect(live[0].id)
     await updateMetadata(sandbox, {
       [META_WORK_ID]: workId, [META_MODE]: "active", [META_PAUSED_AT]: null,
     })
