@@ -192,7 +192,19 @@ vi.stubGlobal("ResizeObserver", MockResizeObserver)
 import { SandboxTerminal } from "./terminal"
 
 describe("SandboxTerminal", () => {
+  const motionQuery = {
+    matches: false,
+    addEventListener: vi.fn<(type: string, listener: () => void) => void>(),
+    removeEventListener: vi.fn<(type: string, listener: () => void) => void>(),
+  }
+
   beforeEach(() => {
+    motionQuery.matches = false
+    motionQuery.addEventListener.mockClear()
+    motionQuery.removeEventListener.mockClear()
+    vi.spyOn(window, "matchMedia").mockReturnValue(
+      motionQuery as unknown as MediaQueryList,
+    )
     FakeWebSocket.instances = []
     MockResizeObserver.callbacks = []
     mockTerm.cols = 80
@@ -214,6 +226,45 @@ describe("SandboxTerminal", () => {
 
   afterEach(() => {
     vi.clearAllTimers()
+    vi.restoreAllMocks()
+  })
+
+  it.each([true, false])(
+    "sets cursor blinking for reduced motion = %s",
+    (reducedMotion) => {
+      motionQuery.matches = reducedMotion
+      render(<SandboxTerminal sandboxId="sbx-1" accessToken="t" />)
+
+      expect(window.matchMedia).toHaveBeenCalledWith(
+        "(prefers-reduced-motion: reduce)",
+      )
+      expect(mockTerm.options.cursorBlink).toBe(!reducedMotion)
+    },
+  )
+
+  it("updates cursor blinking when the motion preference changes and removes the listener on unmount", () => {
+    const { unmount } = render(
+      <SandboxTerminal sandboxId="sbx-1" accessToken="t" />,
+    )
+    expect(motionQuery.addEventListener).toHaveBeenCalledWith(
+      "change",
+      expect.any(Function),
+    )
+    const listener = motionQuery.addEventListener.mock.calls[0][1]
+
+    motionQuery.matches = true
+    listener()
+    expect(mockTerm.options.cursorBlink).toBe(false)
+
+    motionQuery.matches = false
+    listener()
+    expect(mockTerm.options.cursorBlink).toBe(true)
+
+    unmount()
+    expect(motionQuery.removeEventListener).toHaveBeenCalledWith(
+      "change",
+      listener,
+    )
   })
 
   it("opens a WebSocket with the correct URL and subprotocols", () => {

@@ -296,7 +296,7 @@ export default function SignInPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <div className="h-5 w-5 rounded-full border-2 border-primary border-t-transparent motion-safe:animate-spin" />
+          <Spinner className="border-primary" />
         </div>
       }
     >

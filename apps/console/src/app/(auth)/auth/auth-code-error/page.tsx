@@ -9,6 +9,7 @@ import { Suspense, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
+import { Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
 import {
@@ -165,7 +166,7 @@ export default function AuthCodeErrorPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <div className="h-5 w-5 border-2 border-primary border-t-transparent motion-safe:animate-spin" />
+          <Spinner className="border-primary" />
         </div>
       }
     >

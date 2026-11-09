@@ -18,8 +18,16 @@ function unguardedAnimations(source: string) {
   )
 }
 
+function infiniteMotionLoops(source: string) {
+  return Array.from(
+    source.matchAll(/\brepeat\s*:\s*(?:Number\.POSITIVE_INFINITY|Infinity)\b/g),
+    (match) =>
+      `${source.slice(0, match.index).split("\n").length}: ${match[0]}`,
+  )
+}
+
 describe("reduced motion guards", () => {
-  it("requires motion-safe for keyframe animation utilities in source", () => {
+  it("requires motion-safe for keyframe animation utilities and forbids infinite motion loops in source", () => {
     const violations = readdirSync(sourceRoot, {
       recursive: true,
       encoding: "utf8",
@@ -30,13 +38,28 @@ describe("reduced motion guards", () => {
           !/\.(?:test|spec)\./.test(file) &&
           !file.startsWith(`test${path.sep}`),
       )
-      .flatMap((file) =>
-        unguardedAnimations(
-          readFileSync(path.join(sourceRoot, file), "utf8"),
-        ).map((violation) => `${file}:${violation}`),
-      )
+      .flatMap((file) => {
+        const source = readFileSync(path.join(sourceRoot, file), "utf8")
+        return [
+          ...unguardedAnimations(source),
+          ...infiniteMotionLoops(source),
+        ].map((violation) => `${file}:${violation}`)
+      })
 
     expect(violations, violations.join("\n")).toEqual([])
+  })
+
+  it("detects both forms of infinite motion loops", () => {
+    expect(
+      infiniteMotionLoops(
+        "transition={{ repeat: Infinity }}\ntransition={{\n  repeat: Number.POSITIVE_INFINITY,\n}}\ntransition={{ repeat:\n  Infinity }}",
+      ),
+    ).toEqual([
+      "1: repeat: Infinity",
+      "3: repeat: Number.POSITIVE_INFINITY",
+      "5: repeat:\n  Infinity",
+    ])
+    expect(infiniteMotionLoops("transition={{ repeat: 3 }}")).toEqual([])
   })
 
   it("detects unguarded utilities in conditional and template strings", () => {

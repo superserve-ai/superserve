@@ -1,5 +1,7 @@
 "use client"
 
+import { cn } from "@superserve/ui"
+
 export function GoogleIcon() {
   return (
     <svg className="size-5" viewBox="0 0 24 24" aria-hidden="true">
@@ -29,8 +31,14 @@ export function Spinner({
   className?: string
 }) {
   return (
-    <div
-      className={`h-5 w-5 rounded-full border-2 border-t-transparent motion-safe:animate-[spin_0.8s_linear_infinite] ${className}`}
-    />
+    <output
+      className={`border-t-transparent ${cn(
+        "block h-5 w-5 rounded-full border-2 motion-safe:animate-[spin_0.8s_linear_infinite]",
+        className,
+      )}`}
+      aria-label="Loading"
+    >
+      <span className="sr-only">Loading</span>
+    </output>
   )
 }

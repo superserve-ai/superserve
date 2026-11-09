@@ -11,8 +11,9 @@ import {
   Field,
   Input,
 } from "@superserve/ui"
-import { motion } from "motion/react"
 import { useState } from "react"
+
+import { Spinner } from "@/components/icons"
 
 interface DeleteSandboxDialogProps {
   open: boolean
@@ -114,17 +115,7 @@ export function DeleteSandboxDialog({
               onClick={handleConfirm}
               disabled={!isMatch || loading}
             >
-              {loading ? (
-                <motion.div
-                  className="h-4 w-4 rounded-full border-2 border-current border-t-transparent"
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 0.8,
-                    repeat: Number.POSITIVE_INFINITY,
-                    ease: "linear",
-                  }}
-                />
-              ) : null}
+              {loading ? <Spinner className="h-4 w-4 border-current" /> : null}
               Delete
             </Button>
           </DialogFooter>
