@@ -99,7 +99,7 @@ The console has a deliberate austere, technical aesthetic:
 - Console request authentication, security headers, env config, and the Supabase admin and regional service-role clients
 - Every console server action and route handler, the `lib/api` server actions, and staff admin
 - Team permissions, invitations, API keys, and secrets
-- Billing, checkout, plans, signup offers, and promotional credits
+- Billing, checkout, plans, signup offers, promotional credits, and device fingerprint evidence
 - `LICENSE`
 
 A PR that changes one of these paths needs an approval from a human code owner who is not its author. The `Protected Paths` check fails until it has one. For bots and other automation:

@@ -45,7 +45,8 @@
 /apps/console/src/lib/api/proxy-* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/secrets.ts @awille-ai @meAmitPatil @pavitrabhalla
 
-# Billing, checkout, plans, signup offers, and promotional credits.
+# Billing, checkout, plans, signup offers, promotional credits, and the device
+# evidence that offers rely on.
 /apps/console/src/lib/billing/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/billing* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/checkout-intent.ts @awille-ai @meAmitPatil @pavitrabhalla
@@ -54,6 +55,7 @@
 /apps/console/src/lib/api/signup-* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/starter-checkout-recovery* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/promotion-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/fingerprint/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/yc/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/yc-claims.ts @awille-ai @meAmitPatil @pavitrabhalla
 
