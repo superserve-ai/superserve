@@ -295,6 +295,10 @@
             "pages": ["integrations/evaluations/harbor"]
           },
           {
+            "group": "Reinforcement Learning",
+            "pages": ["integrations/reinforcement-learning/trl"]
+          },
+          {
             "group": "MCP & Tools",
             "pages": ["integrations/mcp"]
           }
