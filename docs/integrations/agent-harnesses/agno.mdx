@@ -54,7 +54,7 @@ finally:
 
 The toolkit creates a Python-ready sandbox on the first tool call. With `persistent=True`, the default, Agno stores its ID in session state and reuses the same sandbox across tool calls and runs in that session. Sync and async agents use the same sandbox automatically.
 
-`timeout` pauses the sandbox after that many seconds of active time; it does not delete it. Call `shutdown_sandbox(agent)` when you are done, as in the example. As a backstop for runs that exit early, also set `auto_delete_seconds`: once `timeout` pauses the sandbox, it is deleted after it has stayed paused for that many seconds. The countdown runs only while the sandbox is paused, so a sandbox that never pauses is never auto-deleted. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+`timeout` pauses the sandbox after that many seconds of active time, even if the agent is still running tools in it; it does not delete it. Call `shutdown_sandbox(agent)` when you are done, as in the example. As a backstop for runs that exit early, also set `auto_delete_seconds`: once `timeout` pauses the sandbox, it is deleted after it has stayed paused for that many seconds. The countdown runs only while the sandbox is paused, so a sandbox that never pauses is never auto-deleted. See [Auto-delete](/sandbox/lifecycle#auto-delete).
 
 ## Configure the sandbox
 
@@ -77,7 +77,7 @@ tools = [
 | --- | --- |
 | `template` | Select the sandbox runtime. The default is `superserve/code-interpreter`. |
 | `sandbox_id` | Connect the toolkit to an existing sandbox. |
-| `timeout` | Auto-pause the sandbox after this many seconds of active time. |
+| `timeout` | Auto-pause the sandbox after this many seconds of active time. Tool calls do not reset it. |
 | `auto_delete_seconds` | Delete the sandbox after it has stayed paused for this many seconds. Resuming it cancels the countdown. |
 | `secrets` | Bind [team secrets](/secrets/binding) without exposing their values in the sandbox. |
 | `enable_pause_sandbox` and `enable_resume_sandbox` | Let the agent pause and resume its current sandbox. |
