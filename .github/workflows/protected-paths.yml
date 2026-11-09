@@ -5,7 +5,9 @@ name: Protected Paths
 # stops there too. GitHub's required code-owner review is the binding gate:
 # this run uses the PR's own copy of the workflow, so a PR could weaken it.
 on:
+  # edited covers a change of base branch, which changes the diff and the rules.
   pull_request:
+    types: [opened, synchronize, reopened, edited]
   # A new or dismissed approval changes the result without a new commit.
   pull_request_review:
     types: [submitted, dismissed]
