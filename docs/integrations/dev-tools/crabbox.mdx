@@ -1,0 +1,227 @@
+---
+title: "Crabbox"
+sidebarTitle: Crabbox
+description: Run Crabbox test and build commands from your local checkout in isolated Superserve sandboxes.
+icon: "vials"
+---
+
+[Crabbox](https://github.com/openclaw/crabbox) is a remote test runner for developers and coding agents. Its built-in `superserve` provider creates a Superserve sandbox, uploads your working tree with uncommitted changes, runs a command, streams the output, and deletes the sandbox, all from one CLI command. Your tests run in an isolated VM instead of on your machine, and `crabbox` exits with the command's exit code.
+
+## Setup
+
+Install Crabbox:
+
+<CodeGroup>
+```bash Homebrew
+brew install openclaw/tap/crabbox
+crabbox --version
+```
+
+```bash Linux
+v=0.82.0 arch=amd64  # use arch=arm64 on ARM
+curl -fLO "https://github.com/openclaw/crabbox/releases/download/v$v/crabbox_${v}_linux_${arch}.tar.gz"
+curl -fLO "https://github.com/openclaw/crabbox/releases/download/v$v/checksums.txt"
+sha256sum -c checksums.txt --ignore-missing
+mkdir -p ~/.local/share/crabbox
+tar -xzf "crabbox_${v}_linux_${arch}.tar.gz" -C ~/.local/share/crabbox
+export PATH="$HOME/.local/share/crabbox:$PATH"
+crabbox --version
+```
+</CodeGroup>
+
+Export your Superserve API key and check that Crabbox can reach Superserve:
+
+```bash
+export SUPERSERVE_API_KEY=ss_live_...
+crabbox doctor --provider superserve
+```
+
+See [API keys](/api-key) to create a key. Crabbox reads the key only from the environment (`CRABBOX_SUPERSERVE_API_KEY` takes precedence over `SUPERSERVE_API_KEY`). It never stores the key in a config file.
+
+## Run tests
+
+From a Git repository, pass the command after `--`:
+
+```bash
+crabbox run --provider superserve -- echo crabbox-superserve-ok
+```
+
+The default template is `superserve/base`. Pick a [template](/templates/overview) that has your project's runtime, for example Node.js 22:
+
+```bash
+crabbox run --provider superserve --superserve-template superserve/node-22 -- npm test
+```
+
+```text Output
+leased ssbx_ac81eb14-... slug=tidal-shrimp-3795e645 provider=superserve sandbox=ac81eb14-...
+sync complete in 394ms
+
+> crabbox-demo@1.0.0 test
+> node --test
+...
+# pass 1
+# fail 0
+...
+superserve run summary sync=394ms command=753ms total=1.68s exit=0
+```
+
+Each run creates a new sandbox and deletes it when the command ends, whether the command passes or fails. Use `--shell` for a multi-step command, for example `--shell 'npm ci && npm test'`.
+
+Crabbox uploads tracked files and untracked files that `.gitignore` does not exclude. It skips dependency and build directories such as `node_modules` and `dist`, so install dependencies as part of the command.
+
+## Configure the repository
+
+Commit a `.crabbox.yaml` to your repository to select Superserve without flags:
+
+```yaml .crabbox.yaml
+provider: superserve
+target: linux
+superserve:
+  template: superserve/node-22
+  workdir: /workspace/crabbox
+  execTimeoutSecs: 600
+  networkAllowOut:
+    - registry.npmjs.org
+```
+
+Then run commands without `--provider`:
+
+```bash
+crabbox run --shell 'npm ci && npm test'
+```
+
+| Key | Flag | Purpose |
+| --- | --- | --- |
+| `template` | `--superserve-template` | Template to create the sandbox from. The default is `superserve/base`. |
+| `snapshot` | `--superserve-snapshot` | [Snapshot](/sandbox/snapshots) ID to create the sandbox from, in place of a template. |
+| `workdir` | `--superserve-workdir` | Absolute directory where Crabbox syncs and runs your project. The default is `/workspace/crabbox`. |
+| `execTimeoutSecs` | `--superserve-exec-timeout-secs` | Command timeout in seconds. The default is `600`. |
+| `timeoutSecs` | `--superserve-timeout-secs` | Sandbox [timeout](/sandbox/lifecycle) in seconds, after which Superserve pauses it. The default `0` uses the Crabbox lease TTL (30 minutes unless you change it). |
+| `networkAllowOut` | `--superserve-network-allow-out` | Outbound hosts, IPs, or CIDRs to allow. |
+| `networkDenyOut` | `--superserve-network-deny-out` | Outbound hosts, IPs, or CIDRs to deny. |
+
+Network lists map to Superserve [network rules](/sandbox/networking). With the config above, `npm ci` can reach the npm registry, and other outbound connections fail. Each flag takes a comma-separated list and overrides the matching config key.
+
+## Reuse a sandbox
+
+`warmup` creates a sandbox that stays until you stop it. Later runs with `--id` sync your changes into the same sandbox, which skips sandbox creation:
+
+```bash
+crabbox warmup --provider superserve --superserve-template superserve/node-22 --slug dev-box
+crabbox run --provider superserve --id dev-box --shell 'npm ci && npm test'
+crabbox run --provider superserve --id dev-box --no-sync -- echo reused
+crabbox status --provider superserve --id dev-box --wait
+crabbox list --provider superserve
+crabbox stop --provider superserve dev-box
+```
+
+`warmup` prints a lease ID (`ssbx_...`) and a slug. Without `--slug`, Crabbox picks a random slug. Pass either one to `--id`. `--no-sync` runs the command without uploading files.
+
+By default, each sync replaces the workdir, so files that a run creates there, such as `node_modules`, are gone at the next run. To keep them between runs, set `sync.delete: false` in `.crabbox.yaml`. Files you delete locally then also stay in the sandbox.
+
+```yaml .crabbox.yaml
+sync:
+  delete: false
+```
+
+Superserve pauses a warm sandbox after its timeout. The next `crabbox run --id` resumes it with its files in place. Always run `crabbox stop` when you are done, because a paused sandbox is kept until you delete it.
+
+## Start from a snapshot
+
+To skip slow setup in every run, install tools once in a sandbox and save a [snapshot](/sandbox/snapshots). Put the tools outside the workdir, because the workdir is replaced on each sync:
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "crabbox-base",
+  fromTemplate: "superserve/node-22",
+})
+try {
+  const result = await sandbox.commands.run("npm install -g pnpm@10", {
+    timeoutMs: 300_000,
+  })
+  if (result.exitCode !== 0) throw new Error(result.stderr)
+  const snapshot = await sandbox.snapshot({ name: "crabbox-node-pnpm" })
+  console.log(snapshot.id)
+} finally {
+  await sandbox.kill()
+}
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="crabbox-base", from_template="superserve/node-22")
+try:
+    result = sandbox.commands.run("npm install -g pnpm@10", timeout_seconds=300)
+    if result.exit_code != 0:
+        raise RuntimeError(result.stderr)
+    snapshot = sandbox.snapshot(name="crabbox-node-pnpm")
+    print(snapshot.id)
+finally:
+    sandbox.kill()
+```
+</CodeGroup>
+
+Then pass the printed snapshot ID to Crabbox. The snapshot name is not accepted here:
+
+```bash
+crabbox run --provider superserve --superserve-snapshot <snapshot-id> -- pnpm --version
+```
+
+The snapshot stays after its sandbox is deleted. Delete it with `Snapshot.deleteById` / `Snapshot.delete_by_id` when you no longer need it.
+
+## Pass environment variables
+
+Crabbox does not forward your shell environment by default. Allow each variable with `--allow-env`:
+
+```bash
+NODE_ENV=test crabbox run --provider superserve --allow-env NODE_ENV -- sh -c 'echo "$NODE_ENV"'
+```
+
+The value is set in the sandbox as plain text, so any code in the sandbox can read it.
+
+## Use with a coding agent
+
+A coding agent on your machine can run tests through Crabbox, so the tests run in a sandbox while the agent edits files locally. Add an instruction to the agent's instruction file, such as `CLAUDE.md` for Claude Code or `AGENTS.md` for other agents:
+
+```md CLAUDE.md
+Run tests with `crabbox run --shell 'npm ci && npm test'`, not `npm test`.
+```
+
+With `.crabbox.yaml` selecting Superserve, the agent's runs go to Superserve. For example, with Claude Code:
+
+```bash
+claude -p "Fix the failing test in this repository." \
+  --allowedTools "Bash(crabbox run:*)" Edit Read
+```
+
+## How it works
+
+Crabbox calls the Superserve API to create the sandbox, then uploads your files as an archive with the files API and runs the command with the exec API. There is no SSH connection. Crabbox labels each sandbox with `crabbox.*` [metadata](/sandbox/metadata), such as `crabbox.slug`. It finds and cleans up only sandboxes that have this metadata.
+
+## Limitations
+
+- Sandboxes run Linux only.
+- Crabbox commands that need SSH, such as `crabbox connect`, `crabbox ssh`, VNC, browser VS Code, and Actions hydration, are not available.
+- `--class` and `--type` are rejected. Select resources with `--superserve-template` or `--superserve-snapshot`.
+- Options that copy files back from the sandbox, such as `--download`, `--artifact-glob`, and `--capture-stdout`, are not supported.
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="Crabbox Superserve provider" icon="book" href="https://github.com/openclaw/crabbox/blob/main/docs/providers/superserve.md">
+    Read the full option and lifecycle reference in the Crabbox repository.
+  </Card>
+  <Card title="Crabbox source" icon="github" href="https://github.com/openclaw/crabbox">
+    Read Crabbox's source and command reference.
+  </Card>
+  <Card title="Templates" icon="layer-group" href="/templates/overview">
+    Build a template with your project's runtime and tools.
+  </Card>
+  <Card title="Network rules" icon="shield" href="/sandbox/networking">
+    Control which hosts a sandbox can reach.
+  </Card>
+</CardGroup>

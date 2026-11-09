@@ -294,6 +294,10 @@
             "pages": ["integrations/evaluations/harbor"]
           },
           {
+            "group": "Developer Tools",
+            "pages": ["integrations/dev-tools/crabbox"]
+          },
+          {
             "group": "MCP & Tools",
             "pages": ["integrations/mcp"]
           }
