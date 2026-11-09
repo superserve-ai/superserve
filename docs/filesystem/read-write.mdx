@@ -114,11 +114,19 @@ The `files` methods work on one file at a time. For a whole directory:
 directory. Each entry has `name`, `is_dir`, `size`, and `modified_unix`. Send
 your API key in the `X-API-Key` header. A paused sandbox resumes for the call.
 
+Send the request to the API URL for your key's region, the same URL the SDK
+uses. Keys that start with `ss_live_usw_` use `https://api-usw.superserve.ai`.
+Other keys use `https://api.superserve.ai`. `SUPERSERVE_BASE_URL`, when set,
+overrides both. In TypeScript, `resolveConfig()` returns this URL.
+
 <CodeGroup>
 ```typescript TypeScript
+import { resolveConfig } from "@superserve/sdk"
+
+const { baseUrl, apiKey } = resolveConfig()
 const res = await fetch(
-  `https://api.superserve.ai/sandboxes/${sandbox.id}/files?path=${encodeURIComponent("/app")}`,
-  { headers: { "X-API-Key": process.env.SUPERSERVE_API_KEY! } },
+  `${baseUrl}/sandboxes/${sandbox.id}/files?path=${encodeURIComponent("/app")}`,
+  { headers: { "X-API-Key": apiKey } },
 )
 if (!res.ok) throw new Error(await res.text())
 
@@ -133,10 +141,17 @@ import os
 
 import httpx  # installed with the superserve package
 
+api_key = os.environ["SUPERSERVE_API_KEY"]
+base_url = os.environ.get("SUPERSERVE_BASE_URL") or (
+    "https://api-usw.superserve.ai"
+    if api_key.startswith("ss_live_usw_")
+    else "https://api.superserve.ai"
+)
+
 res = httpx.get(
-    f"https://api.superserve.ai/sandboxes/{sandbox.id}/files",
+    f"{base_url}/sandboxes/{sandbox.id}/files",
     params={"path": "/app"},
-    headers={"X-API-Key": os.environ["SUPERSERVE_API_KEY"]},
+    headers={"X-API-Key": api_key},
 )
 res.raise_for_status()
 
