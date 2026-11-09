@@ -122,9 +122,21 @@ export default function SettingsPage() {
         addToast("Current password is incorrect", "error")
         return
       }
+      // Auth checks current_password itself once "Require current password"
+      // is on, so a password-session access token alone cannot change the
+      // password. Auth skips the check for OTP, magic-link and recovery
+      // sessions.
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
+        current_password: currentPassword,
       })
+      if (
+        error?.code === "current_password_invalid" ||
+        error?.code === "current_password_required"
+      ) {
+        addToast("Current password is incorrect", "error")
+        return
+      }
       if (error) throw error
       setCurrentPassword("")
       setNewPassword("")
@@ -352,9 +364,9 @@ export default function SettingsPage() {
                 <Button
                   size="sm"
                   variant="outline"
-                  render={<Link href="/plan-usage" />}
+                  render={<Link href="/billing-usage" />}
                 >
-                  Plan & Usage
+                  Billing & Usage
                 </Button>
               </div>
             </div>

@@ -220,8 +220,8 @@ export function fundedByCredit(
   )
 }
 
-export const UPGRADE_PATH = "/plan-usage/upgrade"
-export const BUY_CREDIT_PATH = "/plan-usage/buy-credit"
+export const UPGRADE_PATH = "/billing-usage/upgrade"
+export const BUY_CREDIT_PATH = "/billing-usage/buy-credit"
 export const SETTINGS_BILLING_PATH = "/settings/"
 
 export const TOPOFF_SETTINGS_PATH = "/settings/#auto-topoff"
