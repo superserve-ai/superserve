@@ -66,7 +66,7 @@ export function PricingActivation({
           {regions.length > 1 ? (
             <select
               aria-label="Region"
-              className="border border-dashed border-border bg-transparent p-2 text-sm"
+              className="border border-dashed border-control bg-transparent p-2 text-sm"
               value={selected}
               onChange={(event) => setSelected(event.target.value)}
             >

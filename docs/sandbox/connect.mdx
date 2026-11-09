@@ -29,7 +29,10 @@ sandbox.commands.run("ls /app")
 
 List all sandboxes on the team, or narrow the result with filters. `metadata`
 returns only sandboxes matching every key-value pair you pass; `status`
-selects one lifecycle state; `limit` and `offset` page through large lists.
+selects one lifecycle state, or any state in a non-empty list; `limit` and
+`offset` page through large lists. The states are `starting`, `active`,
+`pausing`, `paused`, `resuming`, `migrating`, `failed`, and `deleted` (see
+[Lifecycle](/sandbox/lifecycle)).
 
 <CodeGroup>
 ```typescript TypeScript
@@ -40,6 +43,10 @@ const prod = await Sandbox.list({
 })
 
 const running = await Sandbox.list({ status: "active" })
+
+const busy = await Sandbox.list({
+  status: ["starting", "resuming", "migrating"],
+})
 
 const page = await Sandbox.list({ limit: 100, offset: 100 })
 
@@ -54,6 +61,8 @@ all_boxes = Sandbox.list()
 prod = Sandbox.list(metadata={"env": "prod", "owner": "agent-7"})
 
 running = Sandbox.list(status="active")
+
+busy = Sandbox.list(status=["starting", "resuming", "migrating"])
 
 page = Sandbox.list(limit=100, offset=100)
 

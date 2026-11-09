@@ -53,10 +53,12 @@ print(build.status.value, build.error_message or "")
 
 ## List and inspect builds
 
+`listBuilds()` / `list_builds()` returns the template's 20 most recent builds, newest first.
+
 <CodeGroup>
 
 ```typescript TypeScript
-const builds = await template.listBuilds({ limit: 10 })
+const builds = await template.listBuilds()
 for (const b of builds) {
   console.log(b.id, b.status, b.errorMessage ?? "")
 }
@@ -65,9 +67,9 @@ const build = await template.getBuild(builds[0].id)
 ```
 
 ```python Python
-builds = template.list_builds(limit=10)
+builds = template.list_builds()
 for b in builds:
-    print(b.id, b.status, b.error_message or "")
+    print(b.id, b.status.value, b.error_message or "")
 
 build = template.get_build(builds[0].id)
 ```
@@ -110,7 +112,42 @@ Template.delete_by_id("7a3f2b8c-1234-...")
 
 </CodeGroup>
 
-Both calls are idempotent on `404`. If any non-destroyed sandbox still references the template, the call raises `ConflictError`; destroy those sandboxes first. Once the delete succeeds the template's `name` is released for reuse — you can immediately create a new template with the same name.
+Both calls are idempotent on `404`. Once the delete succeeds the template's `name` is released for reuse — you can immediately create a new template with the same name.
+
+A template can't be deleted while something still uses it:
+
+- a sandbox created from the template that is not deleted, including a paused one
+- a snapshot of such a sandbox, even after the sandbox itself is deleted
+
+The call then raises `ConflictError` with a message such as `template has 2 sandbox(es) or snapshot(s) still referencing it; delete them first`. Kill the sandboxes and delete their snapshots, then delete the template again. `Snapshot.list()` lists the snapshots of one sandbox, so keep the IDs of the sandboxes you create from a template:
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Sandbox, Snapshot } from "@superserve/sdk"
+
+// sandboxIds: the sandboxes you created from this template
+for (const sandboxId of sandboxIds) {
+  await Sandbox.killById(sandboxId)
+  for (const snapshot of await Snapshot.list(sandboxId)) {
+    await Snapshot.deleteById(snapshot.id)
+  }
+}
+await template.delete()
+```
+
+```python Python
+from superserve import Sandbox, Snapshot
+
+# sandbox_ids: the sandboxes you created from this template
+for sandbox_id in sandbox_ids:
+    Sandbox.kill_by_id(sandbox_id)
+    for snapshot in Snapshot.list(sandbox_id):
+        Snapshot.delete_by_id(snapshot.id)
+template.delete()
+```
+
+</CodeGroup>
 
 ## Related
 

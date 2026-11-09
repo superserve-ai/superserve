@@ -4,8 +4,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import AuthCodeErrorPage from "@/app/(auth)/auth/auth-code-error/page"
 import SignInPage from "@/app/(auth)/auth/signin/page"
+import { BuyCreditRoute } from "@/app/(dashboard)/billing-usage/buy-credit/route-client"
 import ProPaymentPage from "@/app/(dashboard)/billing/pro/page"
-import { BuyCreditRoute } from "@/app/(dashboard)/plan-usage/buy-credit/route-client"
 import { middleware } from "@/middleware"
 
 import { PlanBanner } from "./plan-banner"
@@ -179,7 +179,7 @@ describe("global billing banner composed with checkout routes", () => {
   it.each(["success", "cancel"])(
     "preserves the wrong-team Pro %s callback",
     async (result) => {
-      const query = `billing=${result}&team=${otherTeam}&return=%2Fplan-usage%2F`
+      const query = `billing=${result}&team=${otherTeam}&return=%2Fbilling-usage%2F`
       await renderPro(query)
       expect(screen.getByText("Current plan banner")).toBeTruthy()
       expect(
@@ -218,7 +218,7 @@ describe("global billing banner composed with checkout routes", () => {
     "preserves Starter %s callback and isolation",
     (result) => {
       const query = `purchase=${result}&team=${otherTeam}&purchase_id=33333333-3333-4333-8333-333333333333`
-      window.history.replaceState({}, "", `/plan-usage/buy-credit/?${query}`)
+      window.history.replaceState({}, "", `/billing-usage/buy-credit/?${query}`)
       render(
         <>
           <PlanBanner />
@@ -235,7 +235,7 @@ describe("global billing banner composed with checkout routes", () => {
   )
   it("consumes generic billing on buy-credit without erasing its purchase callback", () => {
     const query = `purchase=success&team=${team}&billing=success`
-    window.history.replaceState({}, "", `/plan-usage/buy-credit/?${query}`)
+    window.history.replaceState({}, "", `/billing-usage/buy-credit/?${query}`)
     render(
       <>
         <PlanBanner />
@@ -268,7 +268,7 @@ describe("global billing banner composed with checkout routes", () => {
       window.history.replaceState(
         {},
         "",
-        `/plan-usage/buy-credit/?billing=${result}&amount=500&keep=1`,
+        `/billing-usage/buy-credit/?billing=${result}&amount=500&keep=1`,
       )
       const { rerender } = render(<PlanBanner />)
       expect(window.location.search).toBe("?amount=500&keep=1")
@@ -280,7 +280,7 @@ describe("global billing banner composed with checkout routes", () => {
       expect(state.start).not.toHaveBeenCalled()
     },
   )
-  it.each(["/plan-usage", "/plan-usage/"])(
+  it.each(["/billing-usage", "/billing-usage/"])(
     "leaves %s consumption to inline notice",
     (path) => {
       window.history.replaceState({}, "", `${path}?billing=success`)
@@ -398,7 +398,7 @@ describe("generic setup marker and strict checkout callback matrix", () => {
       window.history.replaceState(
         {},
         "",
-        `/plan-usage/buy-credit/?${remaining}&billing_flow=success`,
+        `/billing-usage/buy-credit/?${remaining}&billing_flow=success`,
       )
       const view = render(
         <>
@@ -437,7 +437,7 @@ it("consumes overlapping generic markers on buy-credit without stealing its purc
   window.history.replaceState(
     {},
     "",
-    `/plan-usage/buy-credit/?${remaining}&billing=success&billing_flow=portal-return`,
+    `/billing-usage/buy-credit/?${remaining}&billing=success&billing_flow=portal-return`,
   )
   const view = render(
     <>
@@ -499,8 +499,8 @@ describe("expired generic checkout returns through middleware and sign-in", () =
       const paths = [
         `/billing/pro/?team=${otherTeam}&return=%2Fsandboxes&billing_flow=${flow}`,
         `/billing/pro/?billing=success&team=${otherTeam}&billing_flow=${flow}`,
-        `/plan-usage/buy-credit/?team=${otherTeam}&amount=500&billing_flow=${flow}`,
-        `/plan-usage/buy-credit/?purchase=cancel&team=${otherTeam}&purchase_id=33333333-3333-4333-8333-333333333333&billing_flow=${flow}`,
+        `/billing-usage/buy-credit/?team=${otherTeam}&amount=500&billing_flow=${flow}`,
+        `/billing-usage/buy-credit/?purchase=cancel&team=${otherTeam}&purchase_id=33333333-3333-4333-8333-333333333333&billing_flow=${flow}`,
       ]
       for (const path of paths.flatMap((path) => [path, path])) {
         state.originalTeamMember = !state.originalTeamMember
@@ -582,7 +582,7 @@ it.each(["unknown", "success&billing_flow=cancel"])(
     window.history.replaceState(
       {},
       "",
-      `/plan-usage/buy-credit/?billing_flow=${flow}`,
+      `/billing-usage/buy-credit/?billing_flow=${flow}`,
     )
     render(
       <>
@@ -610,7 +610,7 @@ it.each(["billing=unknown", "billing=success&billing=cancel"])(
   "preserves invalid Starter legacy markers through query synchronization: %s",
   (marker) => {
     const query = `team=${team}&${marker}`
-    window.history.replaceState({}, "", `/plan-usage/buy-credit/?${query}`)
+    window.history.replaceState({}, "", `/billing-usage/buy-credit/?${query}`)
     const view = () => (
       <>
         <PlanBanner />
@@ -634,7 +634,7 @@ it.each(["billing=unknown", "billing=success&billing=cancel"])(
     window.history.replaceState(
       {},
       "",
-      `/plan-usage/buy-credit/?team=${team}&${marker}&billing_flow=success`,
+      `/billing-usage/buy-credit/?team=${team}&${marker}&billing_flow=success`,
     )
     const view = () => (
       <>
@@ -661,7 +661,7 @@ it.each([
   "billing=unknown&billing_flow=success",
   "billing=success&billing=cancel&billing_flow=success",
 ])("fences teamless invalid Starter legacy returns: %s", (query) => {
-  window.history.replaceState({}, "", `/plan-usage/buy-credit/?${query}`)
+  window.history.replaceState({}, "", `/billing-usage/buy-credit/?${query}`)
   const view = () => (
     <>
       <PlanBanner />
@@ -683,30 +683,32 @@ vi.mock("@/lib/api/prepaid", async (original) => ({
   startPrepaidCheckout: (...args: unknown[]) => state.start(...args),
 }))
 
-const invalidReturnMatrix = ["/billing/pro", "/plan-usage/buy-credit"].flatMap(
-  (route) =>
-    ["", "/"].flatMap((slash) =>
-      ["", `team=${team}&`].flatMap((identity) =>
-        [
-          "purchase=unknown",
-          "purchase=",
-          "purchase=success&purchase=success",
-          "purchase=success&purchase=cancel",
-          "purchase_id=33333333-3333-4333-8333-333333333333&purchase_id=33333333-3333-4333-8333-333333333333",
-          "purchase_id=not-an-id&unsupported=1",
-          "billing=unknown",
-          "billing=",
-          "billing=success&billing=success",
-          "billing=success&billing=cancel",
-          "billing_flow=unknown",
-          "billing_flow=",
-          "billing_flow=success&billing_flow=success",
-          "billing_flow=success&billing_flow=cancel",
-          "billing=unknown&billing_flow=success",
-          "billing=success&billing_flow=unknown",
-        ].map((marker) => `${route}${slash}?${identity}${marker}`),
-      ),
+const invalidReturnMatrix = [
+  "/billing/pro",
+  "/billing-usage/buy-credit",
+].flatMap((route) =>
+  ["", "/"].flatMap((slash) =>
+    ["", `team=${team}&`].flatMap((identity) =>
+      [
+        "purchase=unknown",
+        "purchase=",
+        "purchase=success&purchase=success",
+        "purchase=success&purchase=cancel",
+        "purchase_id=33333333-3333-4333-8333-333333333333&purchase_id=33333333-3333-4333-8333-333333333333",
+        "purchase_id=not-an-id&unsupported=1",
+        "billing=unknown",
+        "billing=",
+        "billing=success&billing=success",
+        "billing=success&billing=cancel",
+        "billing_flow=unknown",
+        "billing_flow=",
+        "billing_flow=success&billing_flow=success",
+        "billing_flow=success&billing_flow=cancel",
+        "billing=unknown&billing_flow=success",
+        "billing=success&billing_flow=unknown",
+      ].map((marker) => `${route}${slash}?${identity}${marker}`),
     ),
+  ),
 )
 
 it.each(invalidReturnMatrix)(
@@ -770,7 +772,7 @@ it.each(invalidReturnMatrix)(
     expect(state.resume).not.toHaveBeenCalled()
     expect(state.recover).not.toHaveBeenCalled()
     expect(state.starterRecover).not.toHaveBeenCalled()
-    if (url.pathname.startsWith("/plan-usage"))
+    if (url.pathname.startsWith("/billing-usage"))
       expect(state.prepaid).toHaveBeenLastCalledWith(false)
   },
 )
@@ -778,8 +780,8 @@ it.each(invalidReturnMatrix)(
 it.each([
   "/billing/pro",
   "/billing/pro/",
-  "/plan-usage/buy-credit",
-  "/plan-usage/buy-credit/",
+  "/billing-usage/buy-credit",
+  "/billing-usage/buy-credit/",
 ])("preserves deliberate bare entry through sign-in: %s", async (path) => {
   const response = await middleware(
     new NextRequest(new URL(path, "https://console.test")),
@@ -799,7 +801,7 @@ it.each([
   expect(state.starterRecover).not.toHaveBeenCalled()
 })
 
-it.each(["/plan-usage/buy-credit", "/plan-usage/buy-credit/"])(
+it.each(["/billing-usage/buy-credit", "/billing-usage/buy-credit/"])(
   "retains accepted malformed operation evidence for downstream rejection: %s",
   async (route) => {
     const path = `${route}?team=${team}&purchase_id=not-an-id`

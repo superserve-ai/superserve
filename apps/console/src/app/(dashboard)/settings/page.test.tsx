@@ -52,7 +52,8 @@ vi.mock("@/components/settings/teams-section", () => ({
   TeamsSection: () => null,
 }))
 
-const { signInWithPassword, updateUser } = vi.hoisted(() => ({
+const { addToast, signInWithPassword, updateUser } = vi.hoisted(() => ({
+  addToast: vi.fn(),
   signInWithPassword: vi.fn(),
   updateUser: vi.fn(),
 }))
@@ -72,7 +73,7 @@ vi.mock("@superserve/ui", async () => {
     await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
   return {
     ...actual,
-    useToast: () => ({ addToast: vi.fn() }),
+    useToast: () => ({ addToast }),
   }
 })
 
@@ -356,6 +357,7 @@ describe("Settings change password", () => {
     "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number."
 
   beforeEach(() => {
+    addToast.mockReset()
     signInWithPassword.mockReset().mockResolvedValue({ error: null })
     updateUser.mockReset().mockResolvedValue({ error: null })
     useUser.mockReturnValue({
@@ -434,23 +436,88 @@ describe("Settings change password", () => {
     submitPasswords("Sandbox12345")
 
     await waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith({ password: "Sandbox12345" }),
+      expect(updateUser).toHaveBeenCalledWith({
+        password: "Sandbox12345",
+        current_password: "Current-value-1",
+      }),
     )
     expect(screen.queryByText("Add an uppercase letter.")).toBeNull()
     expect(screen.getByText(hint)).toBeTruthy()
   })
 
-  it("updates a password that meets the rule", async () => {
+  it("sends the current password so Auth can check it on the server", async () => {
     renderPage()
 
     submitPasswords("Sandbox12345")
 
     await waitFor(() =>
-      expect(updateUser).toHaveBeenCalledWith({ password: "Sandbox12345" }),
+      expect(addToast).toHaveBeenCalledWith("Password updated", "success"),
     )
     expect(signInWithPassword).toHaveBeenCalledWith({
       email: "user@example.com",
       password: "Current-value-1",
     })
+    expect(updateUser).toHaveBeenCalledWith({
+      password: "Sandbox12345",
+      current_password: "Current-value-1",
+    })
+    expect(
+      (screen.getByLabelText("Current Password") as HTMLInputElement).value,
+    ).toBe("")
+  })
+
+  it("does not update the password when the browser check fails", async () => {
+    signInWithPassword.mockResolvedValue({
+      error: { code: "invalid_credentials" },
+    })
+    renderPage()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        "Current password is incorrect",
+        "error",
+      ),
+    )
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it.each(["current_password_invalid", "current_password_required"])(
+    "shows the current password error when Auth returns %s",
+    async (code) => {
+      updateUser.mockResolvedValue({ error: { code } })
+      renderPage()
+
+      submitPasswords("Sandbox12345")
+
+      await waitFor(() =>
+        expect(addToast).toHaveBeenCalledWith(
+          "Current password is incorrect",
+          "error",
+        ),
+      )
+      expect(addToast).not.toHaveBeenCalledWith(
+        "Failed to update password",
+        "error",
+      )
+      expect(
+        (screen.getByLabelText("Current Password") as HTMLInputElement).value,
+      ).toBe("Current-value-1")
+    },
+  )
+
+  it("keeps the generic error for other Auth failures", async () => {
+    updateUser.mockResolvedValue({ error: { code: "same_password" } })
+    renderPage()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        "Failed to update password",
+        "error",
+      ),
+    )
   })
 })
