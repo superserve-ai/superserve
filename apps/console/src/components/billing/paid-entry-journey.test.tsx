@@ -2,9 +2,9 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { BuyCreditRoute } from "@/app/(dashboard)/billing-usage/buy-credit/route-client"
 import ProPage from "@/app/(dashboard)/billing/pro/page"
 import { ProPayment } from "@/app/(dashboard)/billing/pro/pro-payment"
-import { BuyCreditRoute } from "@/app/(dashboard)/plan-usage/buy-credit/route-client"
 import { GET as prepare } from "@/app/api/onboarding/prepare/route"
 import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { ApiError } from "@/lib/api/client"
@@ -295,7 +295,7 @@ describe("actual signup preparation to paid page journey", () => {
   it.each(["legacy", "v2"] as const)(
     "accepts the real Starter preparation team pin under %s entry policy",
     async (pricing) => {
-      await preparedDestination("/plan-usage/buy-credit", teamKey)
+      await preparedDestination("/billing-usage/buy-credit", teamKey)
       state.pricing = pricing
       show(<BuyCreditRoute />)
       if (pricing === "legacy")
@@ -321,7 +321,7 @@ describe("actual signup preparation to paid page journey", () => {
     "restores a fresh Starter pin across %s without starting checkout",
     async (account) => {
       const target = await preparedDestination(
-        "/plan-usage/buy-credit/?amount=500",
+        "/billing-usage/buy-credit/?amount=500",
         teamKey,
       )
       state.teamKey = "use:22222222-2222-4222-8222-222222222222"
@@ -639,7 +639,7 @@ describe("actual signup preparation to paid page journey", () => {
     "billing=success&team=invalid",
   ])("keeps malformed Pro callback %s separate from fresh entry", (query) => {
     state.query = query
-    show(<ProPayment returnTo="/plan-usage/" />)
+    show(<ProPayment returnTo="/billing-usage/" />)
     expect(screen.getByText(/incomplete or invalid/)).toBeTruthy()
     expect(
       screen.queryByRole("button", { name: "Continue to payment" }),

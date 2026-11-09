@@ -59,7 +59,7 @@ it.each(["", "owner=team", "owner=system"])(
     render(<TemplatesPageClient />)
     expect(
       screen.getByRole("link", { name: "Upgrade to create templates" }),
-    ).toHaveAttribute("href", "/plan-usage/upgrade")
+    ).toHaveAttribute("href", "/billing-usage/upgrade")
     expect(screen.queryByRole("button", { name: "Create template" })).toBeNull()
     expect(state.setOpen).not.toHaveBeenCalled()
   },

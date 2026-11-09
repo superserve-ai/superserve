@@ -737,7 +737,7 @@ export function PlanUsagePageClient() {
                       View by
                       <select
                         aria-label="View by"
-                        className="cursor-pointer border border-dashed border-border bg-background px-2 py-1 font-mono text-xs text-foreground uppercase"
+                        className="cursor-pointer border border-dashed border-control bg-background px-2 py-1 font-mono text-xs text-foreground uppercase"
                         value={effectiveGranularity}
                         onChange={(e) => {
                           granularitySelectedByUser.current = true
