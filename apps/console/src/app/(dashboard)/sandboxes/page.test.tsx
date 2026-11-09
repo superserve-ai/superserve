@@ -46,15 +46,15 @@ it("clears the status filter and search from the no-match state", async () => {
   window.history.replaceState(
     null,
     "",
-    "/sandboxes?status=paused&q=web&sort=name",
+    "/sandboxes?status=paused&q=web&sort=name&size=20&page=2",
   )
   const view = render(<SandboxesPage />)
 
   expect(screen.getByText("No sandboxes match")).toBeInTheDocument()
   fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
 
-  // Only the filters go; the chosen sort stays.
-  expect(window.location.search).toBe("?sort=name")
+  // The filters go and paging restarts; sort and page size stay.
+  expect(window.location.search).toBe("?sort=name&size=20")
   view.rerender(<SandboxesPage />)
   // The empty-account state follows once the search debounce settles.
   expect(await screen.findByText("No Sandboxes")).toBeInTheDocument()

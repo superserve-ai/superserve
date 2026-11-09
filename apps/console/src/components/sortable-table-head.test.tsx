@@ -46,6 +46,7 @@ describe("SortableTableHead", () => {
     const { header } = renderHead("created_at")
     const icon = header.querySelector("svg")
     expect(icon).not.toBeNull()
+    expect(icon).toHaveClass("opacity-40")
     expect(icon).not.toHaveClass("opacity-0")
   })
 
