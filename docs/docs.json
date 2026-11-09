@@ -18,14 +18,13 @@
   "background": {
     "color": {
       "dark": "#141414"
-    },
-    "decoration": "gradient"
+    }
   },
   "styling": {
     "codeblocks": {
       "theme": {
         "light": "github-light",
-        "dark": "vitesse-dark"
+        "dark": "github-dark-default"
       }
     }
   },
@@ -267,8 +266,12 @@
             "pages": [
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
+              "integrations/agent-harnesses/crewai",
+              "integrations/agent-harnesses/google-adk",
               "integrations/agent-harnesses/langchain",
+              "integrations/agent-harnesses/mastra",
               "integrations/agent-harnesses/openai-agents-sdk",
+              "integrations/agent-harnesses/pydantic-ai",
               "integrations/agent-harnesses/vercel-ai-sdk"
             ]
           },
@@ -283,12 +286,17 @@
             "group": "Managed Agents",
             "pages": [
               "integrations/managed-agents/claude-managed-agents",
-              "integrations/managed-agents/cursor-cloud-agents"
+              "integrations/managed-agents/cursor-cloud-agents",
+              "integrations/managed-agents/omnara"
             ]
           },
           {
             "group": "Evaluations",
             "pages": ["integrations/evaluations/harbor"]
+          },
+          {
+            "group": "Reinforcement Learning",
+            "pages": ["integrations/reinforcement-learning/trl"]
           },
           {
             "group": "MCP & Tools",

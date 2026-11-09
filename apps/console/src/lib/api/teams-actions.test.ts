@@ -262,7 +262,11 @@ vi.mock("@/lib/api/team-directory", () => ({
   invalidateMembershipDirectory: () => {},
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
-  GoogleSignupRecoveryRequiredError: class GoogleSignupRecoveryRequiredError extends Error {},
+  GoogleSignupRecoveryRequiredError: class GoogleSignupRecoveryRequiredError extends Error {
+    constructor() {
+      super("Complete signup with Google to continue.")
+    }
+  },
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
   readGoogleSignupVisitors: async () => [],
@@ -301,6 +305,7 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
   SignupRestrictedError,
   SIGNUP_RESTRICTED_MESSAGE,
@@ -503,13 +508,15 @@ describe("createTeamAction", () => {
       app_metadata: { provider: "google", providers: ["google"] },
     }
     googleUser = true
+    // A missing proof routes to the proof step and still creates nothing.
     mockRequireGoogleSignupProof.mockRejectedValue(
-      new Error("Google signup verification required"),
+      new GoogleSignupRecoveryRequiredError(),
     )
 
-    await expect(createTeamAction("west pilot", "usw")).rejects.toThrow(
-      "Google signup verification required",
-    )
+    await expect(createTeamAction("west pilot", "usw")).resolves.toEqual({
+      code: "google_signup_recovery_required",
+      message: "Complete signup with Google to continue.",
+    })
 
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
     expect(cellClients.usw.writes).toEqual({})
