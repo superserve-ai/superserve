@@ -24,6 +24,7 @@ export type {
 } from "./desktop.js"
 export {
   AuthenticationError,
+  BillingError,
   BuildError,
   ConflictError,
   NotFoundError,

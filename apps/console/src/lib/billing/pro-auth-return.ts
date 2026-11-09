@@ -1,3 +1,4 @@
+import { isBuyCreditPath } from "./buy-credit-path"
 import { genericBillingReturnState } from "./generic-return"
 import { safeReturnPath } from "./return-path"
 
@@ -42,8 +43,7 @@ export function starterAuthReturnPath(raw: string | null): string | null {
   )
     return null
   const url = new URL(raw, "https://console.invalid")
-  if (!/^\/plan-usage\/buy-credit\/?$/.test(url.pathname) || url.hash)
-    return null
+  if (!isBuyCreditPath(url.pathname) || url.hash) return null
   for (const key of url.searchParams.keys()) {
     if (
       ![
