@@ -111,12 +111,12 @@ Use `--mode json` to get one JSON event per line. The first line is the session 
 
 <CodeGroup>
 ```typescript TypeScript
-const result = await sandbox.commands.run(
+const jsonResult = await sandbox.commands.run(
   'cd ~/app && pi --mode json "Add a /health endpoint"',
   { timeoutMs: 600_000 },
 )
 
-const events = result.stdout.trim().split("\n").map((line) => JSON.parse(line))
+const events = jsonResult.stdout.trim().split("\n").map((line) => JSON.parse(line))
 const sessionId = events[0].id
 const done = events.filter((e) => e.type === "message_end").pop()
 
