@@ -160,6 +160,9 @@ function SandboxesPageContent() {
   // zero-result search would otherwise flash the account-level empty state for
   // the 300ms until the unfiltered refetch lands.
   const hasFilters = statusTab !== "all" || debouncedQ !== ""
+  // Uses q, not debouncedQ, so "Clear filters" also clears a search still in
+  // its debounce window.
+  const canClearFilters = statusTab !== "all" || q !== ""
   // A truly empty account (no sandboxes at all) gets the create call-to-action.
   // A zero-result filter/search keeps the toolbar so the user can clear it.
   // Placeholder data is a stale page shown during a params change — never treat
@@ -223,6 +226,8 @@ function SandboxesPageContent() {
                 icon={CubeIcon}
                 title="No sandboxes match"
                 description="Try a different search term or status filter."
+                actionLabel={canClearFilters ? "Clear filters" : undefined}
+                onAction={() => setParam({ status: null, q: null })}
               />
             ) : (
               <Table>
