@@ -9,15 +9,25 @@ A sandbox transitions between two long-lived states:
 - **`active`** - VM is running, processes executing, compute billed
 - **`paused`** - VM paused, state persisted to disk, no compute billed
 
-You'll briefly see **`pausing`** while a sandbox is being checkpointed and **`resuming`** while a paused sandbox is being restored to `active`. `connect()` and `resume()` wait a pause out for you; a pause still finishing after that wait answers `409` with code `sandbox_pausing` and a `Retry-After` header, so retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
+You may also see these short-lived states:
+
+- **`starting`** - a new sandbox is booting. `create()` returns once the sandbox is `active`, so you see `starting` only when another caller lists or reads the sandbox during boot. `connect()` waits until the sandbox is `active`.
+- **`pausing`** - the sandbox is being checkpointed.
+- **`resuming`** - a paused sandbox is being restored to `active`.
+- **`migrating`** - the platform is moving a paused sandbox. This state is temporary. Calls that need the running sandbox, such as `connect()`, can fail with `ConflictError` (`409`) until it ends, so retry shortly.
+
+`connect()` and `resume()` wait a pause out for you; a pause still finishing after that wait answers `409` with code `sandbox_pausing` and a `Retry-After` header, so retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
 
 ```
-active  ↔  paused  →  deleted
+starting  →  active  →  pausing  →  paused  →  resuming  →  active
+paused  →  migrating  →  active
+starting or resuming  →  failed
+any state  →  deleted
 ```
 
 ## Pause
 
-`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute. It returns once the pause is accepted and the sandbox finishes pausing on its own; pass `wait: true` / `wait=True` to return once the sandbox is `paused`. A waited pause is a single request the server holds until the pause lands, so it costs no polling.
+`pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute. It returns once the pause is accepted and the sandbox finishes pausing on its own; pass `wait: true` / `wait=True` to return once the sandbox is `paused`. A waited pause is a single request the server holds until the pause lands, so in the usual case the SDK does not poll. The call still blocks until the sandbox is `paused`, up to `timeoutMs` / `timeout` (default 5 minutes). If that limit passes first, the call throws `TimeoutError` (TypeScript) or `SandboxTimeoutError` (Python), and the pause finishes in the background.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -28,6 +38,8 @@ const sandbox = await Sandbox.create({ name: "long-job" })
 await sandbox.pause()
 // or, to return only once the sandbox is paused:
 // await sandbox.pause({ wait: true })
+// and to stop waiting after 1 minute:
+// await sandbox.pause({ wait: true, timeoutMs: 60_000 })
 ```
 
 ```python Python {5}
@@ -38,6 +50,8 @@ sandbox = Sandbox.create(name="long-job")
 sandbox.pause()
 # or, to return only once the sandbox is paused:
 # sandbox.pause(wait=True)
+# and to stop waiting after 1 minute:
+# sandbox.pause(wait=True, timeout=60)
 ```
 </CodeGroup>
 
@@ -110,6 +124,37 @@ from superserve import Sandbox
 Sandbox.kill_by_id("7a3f2b8c-1234-...")
 ```
 </CodeGroup>
+
+## Update without an instance
+
+Use `updateById` / `update_by_id` to change a sandbox when you have only its ID. Unlike `connect()`, it does not resume the sandbox: a paused sandbox stays paused. It takes the same options as `update()`, such as `metadata` (replaces the whole map), `timeoutSeconds`, `idleTimeoutSeconds`, `autoDeleteSeconds`, and `network`. Pass `null` / `None` to clear a timeout or the auto-delete window.
+
+<CodeGroup>
+```typescript TypeScript {3-7}
+import { Sandbox } from "@superserve/sdk"
+
+await Sandbox.updateById("7a3f2b8c-1234-...", {
+  metadata: { stage: "archived" },
+  autoDeleteSeconds: 86400, // delete after 1 day of continuous pause
+  idleTimeoutSeconds: null, // turn idle pausing off
+})
+```
+
+```python Python {3-8}
+from superserve import Sandbox
+
+Sandbox.update_by_id(
+    "7a3f2b8c-1234-...",
+    metadata={"stage": "archived"},
+    auto_delete_seconds=86400,  # delete after 1 day of continuous pause
+    idle_timeout_seconds=None,  # turn idle pausing off
+)
+```
+</CodeGroup>
+
+<Note>
+`network` changes need an `active` sandbox. On a paused sandbox, the call fails with `ConflictError`. Resume the sandbox first, or use `connect()` and `update()`.
+</Note>
 
 
 ## Auto-pause
