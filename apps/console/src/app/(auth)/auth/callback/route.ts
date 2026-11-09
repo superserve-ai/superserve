@@ -152,6 +152,12 @@ export async function GET(request: Request) {
     | null
   let next = sanitizeNext(searchParams.get("next"))
   let linkExpired = false
+  // Set by the sign-in recovery options after a failed password sign-in.
+  const rawSignInRecovery = searchParams.get("sign_in_recovery")
+  const signInRecovery =
+    rawSignInRecovery === "email_link" || rawSignInRecovery === "google"
+      ? rawSignInRecovery
+      : null
 
   if (code || tokenHash) {
     const supabase = await createServerClient()
@@ -741,6 +747,7 @@ export async function GET(request: Request) {
             ...(isNewUser && requestedOffer
               ? { requested_offer: requestedOffer }
               : {}),
+            ...(signInRecovery ? { sign_in_recovery: signInRecovery } : {}),
           },
         )
 
