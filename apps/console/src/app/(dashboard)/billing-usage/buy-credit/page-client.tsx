@@ -80,7 +80,7 @@ export function BuyCreditPageClient({
   const { user, loading: actorLoading, error: actorError } = useUser()
   const actor = !actorLoading && !actorError ? user?.id : undefined
   const returnTeam = params.get("team")
-  const callbackPath = `/plan-usage/buy-credit/?${params.toString()}`
+  const callbackPath = `/billing-usage/buy-credit/?${params.toString()}`
   const returning =
     params.has("billing") ||
     params.has("purchase") ||

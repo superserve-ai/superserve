@@ -1,11 +1,11 @@
 ---
-title: "Kilocode"
-sidebarTitle: Kilocode
-description: Run Kilocode in a Superserve sandbox.
+title: "Kilo Code"
+sidebarTitle: Kilo Code
+description: Run Kilo Code in a Superserve sandbox.
 icon: "/logos/integrations/kilocode.svg"
 ---
 
-Pair Kilocode with a Superserve sandbox to run its generated commands and file edits in an isolated VM.
+Pair Kilo Code with a Superserve sandbox to run its generated commands and file edits in an isolated VM.
 
 ## Via the console
 
@@ -13,7 +13,7 @@ Pair Kilocode with a Superserve sandbox to run its generated commands and file e
 2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
 3. Pick the **`superserve/node-22`** template.
 4. Under **Advanced Options → Secrets**, bind that secret to your provider's key env var (e.g. `ANTHROPIC_API_KEY`).
-5. Create the sandbox, open its **Terminal**, and install Kilocode.
+5. Create the sandbox, open its **Terminal**, and install Kilo Code.
 
 ## Via the SDK
 
@@ -58,7 +58,7 @@ sandbox.commands.run("npm install -g @kilocode/cli")
 ```
 </CodeGroup>
 
-Kilocode reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to the provider, never exposed to the agent.
+Kilo Code reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to the provider, never exposed to the agent.
 
 Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `kilocode`.
 

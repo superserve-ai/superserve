@@ -202,7 +202,7 @@ export function CreateTemplateDialog({
         <p className="text-sm text-muted">
           Your plan does not include template creation.
         </p>
-        <Button render={<Link href="/plan-usage/upgrade" />}>
+        <Button render={<Link href="/billing-usage/upgrade" />}>
           Upgrade to create templates
         </Button>
       </div>
