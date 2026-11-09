@@ -1982,7 +1982,7 @@ describe("auth callback", () => {
       // This real guard cannot use an unbound scoped proof without completion.
       // After that gate binds the proof, the same actor's guard succeeds.
       await expect(proof.requireGoogleSignupProof("u1")).rejects.toThrow(
-        "Google signup verification required",
+        "Complete signup with Google to continue.",
       )
       await proof.markGoogleSignupAttempt("early-unbound-attempt", "u1")
       await expect(proof.requireGoogleSignupProof("u1")).resolves.toBe(
@@ -3015,5 +3015,56 @@ describe("auth callback", () => {
         delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
       else process.env.GOOGLE_SIGNUP_PROOF_SECRET = previousSecret
     }
+  })
+
+  describe("sign-in recovery", () => {
+    it("signs in with an emailed sign-in link without the reset-password step", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=hashed&type=magiclink&sign_in_recovery=email_link&next=/sandboxes",
+        ),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).not.toBe("/auth/reset-password")
+      expect(location.pathname).toBe("/sandboxes")
+      expect(mockTrackEvent).toHaveBeenCalledWith("sign_in_completed", "u1", {
+        provider: "email",
+        email: "user@example.com",
+        is_new_user: false,
+        sign_in_recovery: "email_link",
+      })
+    })
+
+    it("carries the Google recovery flag to the sign-in event", async () => {
+      currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&sign_in_recovery=google",
+        ),
+      )
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "sign_in_completed",
+        "u1",
+        expect.objectContaining({
+          provider: "google",
+          sign_in_recovery: "google",
+        }),
+      )
+    })
+
+    it("ignores an unknown recovery flag", async () => {
+      currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&sign_in_recovery=other",
+        ),
+      )
+      const completed = mockTrackEvent.mock.calls.find(
+        ([event]) => event === "sign_in_completed",
+      )
+      expect(completed?.[2]).not.toHaveProperty("sign_in_recovery")
+    })
   })
 })
