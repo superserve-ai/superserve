@@ -189,9 +189,8 @@ async def find_or_create_sandbox(
     if metadata and metadata.get("superserve.sandbox_id"):
         sandbox_id = metadata["superserve.sandbox_id"]
         log.info("attaching prepared sandbox=%s for session=%s", sandbox_id, session_id)
+        # connect() resumes a paused sandbox, so no separate resume() call.
         sandbox = await AsyncSandbox.connect(sandbox_id)
-        if sandbox.status == "paused":
-            await sandbox.resume()
         await update_metadata(
             sandbox,
             **{
@@ -207,10 +206,9 @@ async def find_or_create_sandbox(
     live = [s for s in existing if s.status in ("active", "paused")]
 
     if live:
-        sandbox = await AsyncSandbox.connect(live[0].id)
         if live[0].status == "paused":
             log.info("resuming sandbox=%s for session=%s", live[0].id, session_id)
-            await sandbox.resume()
+        sandbox = await AsyncSandbox.connect(live[0].id)
         await update_metadata(
             sandbox,
             **{META_WORK_ID: work_id, META_MODE: MODE_ACTIVE, META_PAUSED_AT: None},
