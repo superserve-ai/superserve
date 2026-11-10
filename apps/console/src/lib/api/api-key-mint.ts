@@ -2,6 +2,7 @@ import "server-only"
 import crypto from "node:crypto"
 
 import type { User } from "@supabase/supabase-js"
+import { after } from "next/server"
 
 import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
@@ -162,17 +163,24 @@ export async function mintTeamApiKey(
 
   if (error) throw new Error(error.message)
 
-  // Analytics only: never let a tracking failure fail a stored key, and never
-  // send the key or its hash.
+  // Analytics only, sent after the response: a slow or failing PostHog must
+  // never delay or fail the key handoff (CLI device login has already used
+  // its code by now). Never send the key or its hash.
   try {
-    await trackEvent(API_KEY_EVENTS.CREATED, user.id, {
-      source,
-      api_key_id: data.id,
-      team_id: team.teamId,
-      team_region: team.region,
+    after(async () => {
+      try {
+        await trackEvent(API_KEY_EVENTS.CREATED, user.id, {
+          source,
+          api_key_id: data.id,
+          team_id: team.teamId,
+          team_region: team.region,
+        })
+      } catch {
+        /* Delivery is best effort. */
+      }
     })
   } catch {
-    // The key is stored; a tracking failure must not fail the request.
+    /* No request scope (for example a script): skip the event. */
   }
 
   return {

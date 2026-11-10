@@ -33,6 +33,16 @@ const mockTrackEvent = vi.fn(async (..._args: unknown[]) => {})
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
 }))
+// Callbacks that next/server `after` would run once the response is sent.
+const afterQueue: Array<() => unknown> = []
+vi.mock("next/server", () => ({
+  after: (fn: () => unknown) => {
+    afterQueue.push(fn)
+  },
+}))
+async function runAfter() {
+  for (const fn of afterQueue.splice(0)) await fn()
+}
 
 // Default cell: the user's profile exists, but their team lives elsewhere.
 const useClient = {
@@ -249,12 +259,16 @@ describe("api_key_created event", () => {
   beforeEach(() => {
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     insertError = null
+    afterQueue.length = 0
   })
 
-  it("sends one server event with the console source after the key is stored", async () => {
+  it("sends one server event with the console source after the response", async () => {
     const res = await createApiKeyAction("SDK Key", "connect_dialog_sdk_key")
     if ("code" in res) throw new Error(res.message)
 
+    // Nothing is sent before the response, so PostHog cannot delay the key.
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+    await runAfter()
     expect(mockTrackEvent).toHaveBeenCalledTimes(1)
     expect(mockTrackEvent).toHaveBeenCalledWith("api_key_created", "u1", {
       source: "connect_dialog_sdk_key",
@@ -276,6 +290,7 @@ describe("api_key_created event", () => {
     ["anything-else", "console"],
   ])("labels source %s as %s", async (source, expected) => {
     await createApiKeyAction("k", source)
+    await runAfter()
     expect(mockTrackEvent.mock.calls[0][2]).toMatchObject({ source: expected })
   })
 
@@ -284,14 +299,22 @@ describe("api_key_created event", () => {
     await expect(createApiKeyAction("k", "create_dialog")).rejects.toThrow(
       "insert failed",
     )
+    await runAfter()
     expect(mockTrackEvent).not.toHaveBeenCalled()
   })
 
-  it("returns the stored key when the event cannot be sent", async () => {
-    mockTrackEvent.mockRejectedValueOnce(new Error("posthog down"))
+  it("returns the stored key without waiting for a slow PostHog", async () => {
+    mockTrackEvent.mockImplementationOnce(() => new Promise(() => {}))
     const res = await createApiKeyAction("k", "create_dialog")
     if ("code" in res) throw new Error(res.message)
     expect(res.key).toMatch(/^ss_live_usw_/)
+    expect(afterQueue).toHaveLength(1)
+  })
+
+  it("swallows a failed delivery after the response", async () => {
+    mockTrackEvent.mockRejectedValueOnce(new Error("posthog down"))
+    await createApiKeyAction("k", "create_dialog")
+    await expect(runAfter()).resolves.toBeUndefined()
   })
 })
 
