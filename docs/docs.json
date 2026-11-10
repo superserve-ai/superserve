@@ -272,6 +272,7 @@
               "integrations/agent-harnesses/dspy",
               "integrations/agent-harnesses/google-adk",
               "integrations/agent-harnesses/langchain",
+              "integrations/agent-harnesses/letta",
               "integrations/agent-harnesses/mastra",
               "integrations/agent-harnesses/openai-agents-sdk",
               "integrations/agent-harnesses/pydantic-ai",
