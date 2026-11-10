@@ -395,9 +395,39 @@ describe("SignInPage", () => {
 
     expect(
       await screen.findByText(
-        "We couldn't sign you in. Try again, or use a sign-in link.",
+        "We couldn't sign you in. Try again, or continue with Google.",
       ),
     ).toBeInTheDocument()
+  })
+
+  it("offers Google after a generic error without showing recovery on a fresh page", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      error: {
+        name: "AuthRetryableFetchError",
+        status: 503,
+        message: "Service Unavailable",
+      },
+    })
+    render(<SignInPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    expect(
+      await screen.findByText(
+        "We couldn't sign you in. Try again, or continue with Google.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Continue with Google/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("region", { name: "Other ways to sign in" }),
+    ).not.toBeInTheDocument()
   })
 
   it.each([
@@ -432,7 +462,16 @@ describe("SignInPage", () => {
         status: 503,
         message: "Service Unavailable",
       },
-      copy: "We couldn't sign you in. Try again, or use a sign-in link.",
+      copy: "We couldn't sign you in. Try again, or continue with Google.",
+    },
+    {
+      cause: "an unparseable response",
+      error: {
+        name: "AuthRetryableFetchError",
+        status: 0,
+        message: "Unexpected token '<', \"<html>\" is not valid JSON",
+      },
+      copy: "We couldn't sign you in. Try again, or continue with Google.",
     },
   ])(
     "shows the expected copy for $cause and tracks the reason",
@@ -462,23 +501,31 @@ describe("SignInPage", () => {
     },
   )
 
-  it("shows a network error when password sign-in throws", async () => {
-    mockSignInWithPassword.mockRejectedValue(new Error("network failure"))
-    render(<SignInPage />)
+  it.each([
+    {
+      error: new TypeError("Failed to fetch"),
+      copy: "We couldn't reach Superserve. Check your connection and try again.",
+    },
+    {
+      error: new Error("boom"),
+      copy: "We couldn't sign you in. Try again, or continue with Google.",
+    },
+  ])(
+    "shows the expected copy when password sign-in throws $error",
+    async ({ error, copy }) => {
+      mockSignInWithPassword.mockRejectedValue(error)
+      render(<SignInPage />)
 
-    await user.type(
-      await screen.findByPlaceholderText("Email"),
-      "test@test.com",
-    )
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
-    await user.click(screen.getByRole("button", { name: "Sign In" }))
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "test@test.com",
+      )
+      await user.type(screen.getByPlaceholderText("Password"), "password123")
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
 
-    expect(
-      await screen.findByText(
-        "We couldn't reach Superserve. Check your connection and try again.",
-      ),
-    ).toBeInTheDocument()
-  })
+      expect(await screen.findByText(copy)).toBeInTheDocument()
+    },
+  )
 
   it("preserves the claim destination when switching to signup", async () => {
     searchParamsMap = { offer: "yc_2026", next: "/yc/claim" }

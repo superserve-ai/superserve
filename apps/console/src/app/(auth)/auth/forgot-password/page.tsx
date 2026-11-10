@@ -10,7 +10,7 @@ import { Suspense, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
-import { AUTH_MESSAGES } from "@/lib/auth/sign-in-messages"
+import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { getRecaptchaToken, RECAPTCHA_SITE_KEY } from "@/lib/recaptcha/client"
 
@@ -46,8 +46,12 @@ function ForgotPasswordContent() {
       }
       posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
-    } catch {
-      setErrors({ form: AUTH_MESSAGES.resetEmailFailed })
+    } catch (err) {
+      setErrors({
+        form: isNetworkAuthError(err)
+          ? AUTH_MESSAGES.resetEmailNetworkError
+          : AUTH_MESSAGES.resetEmailFailed,
+      })
     } finally {
       setIsLoading(false)
     }

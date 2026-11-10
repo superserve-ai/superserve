@@ -152,8 +152,12 @@ function SignInContent() {
           : nextUrl,
       )
       navigating = true
-    } catch {
-      setErrors({ form: AUTH_MESSAGES.networkError })
+    } catch (err) {
+      setErrors({
+        form: isNetworkAuthError(err)
+          ? AUTH_MESSAGES.networkError
+          : AUTH_MESSAGES.signInFailed,
+      })
     } finally {
       if (!navigating) setIsEmailLoading(false)
     }

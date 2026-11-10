@@ -106,21 +106,29 @@ describe("ForgotPasswordPage", () => {
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
   })
 
-  it("shows a reset email error when the request throws", async () => {
-    mockSendPasswordResetEmail.mockRejectedValue(new Error("Failed to fetch"))
+  it.each([
+    {
+      error: new TypeError("Failed to fetch"),
+      copy: "We couldn't send the reset email. Check your connection and try again.",
+    },
+    {
+      error: new Error("An unexpected response was received from the server."),
+      copy: "We couldn't send the reset email. Try again in a minute.",
+    },
+  ])(
+    "shows the expected reset email error for $error",
+    async ({ error, copy }) => {
+      mockSendPasswordResetEmail.mockRejectedValue(error)
 
-    submit()
+      submit()
 
-    expect(
-      await screen.findByText(
-        "We couldn't send the reset email. Check your connection and try again.",
-      ),
-    ).toBeTruthy()
-    expect(screen.queryByText("Check Your Email")).toBeNull()
-    expect(
-      screen.getByRole("button", { name: "Send reset link" }),
-    ).toBeEnabled()
-  })
+      expect(await screen.findByText(copy)).toBeTruthy()
+      expect(screen.queryByText("Check Your Email")).toBeNull()
+      expect(
+        screen.getByRole("button", { name: "Send reset link" }),
+      ).toBeEnabled()
+    },
+  )
 
   it("shows the server error and stays on the form", async () => {
     mockSendPasswordResetEmail.mockResolvedValue({
