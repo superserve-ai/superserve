@@ -340,7 +340,7 @@ function RenameInput({ initialValue, onCommit, onCancel }: RenameInputProps) {
       }}
       onClick={(e) => e.stopPropagation()}
       onDoubleClick={(e) => e.stopPropagation()}
-      className="w-full min-w-0 border border-dashed border-foreground/30 bg-surface px-1 py-0.5 font-mono text-xs text-foreground uppercase outline-none"
+      className="w-full min-w-0 border border-dashed border-control bg-surface px-1 py-0.5 font-mono text-xs text-foreground uppercase focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
     />
   )
 }

@@ -72,6 +72,10 @@
             "pages": ["introduction", "quickstart", "api-key", "cli"]
           },
           {
+            "group": "Guides",
+            "pages": ["sandbox/desktop", "sandbox/docker"]
+          },
+          {
             "group": "Sandbox",
             "pages": [
               "sandbox/create",
@@ -81,9 +85,7 @@
               "sandbox/metadata",
               "sandbox/networking",
               "sandbox/preview-urls",
-              "sandbox/network-log",
-              "sandbox/desktop",
-              "sandbox/docker"
+              "sandbox/network-log"
             ]
           },
           {
@@ -267,6 +269,8 @@
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/crewai",
+              "integrations/agent-harnesses/dspy",
+              "integrations/agent-harnesses/google-adk",
               "integrations/agent-harnesses/langchain",
               "integrations/agent-harnesses/mastra",
               "integrations/agent-harnesses/openai-agents-sdk",
@@ -292,6 +296,10 @@
           {
             "group": "Evaluations",
             "pages": ["integrations/evaluations/harbor"]
+          },
+          {
+            "group": "Reinforcement Learning",
+            "pages": ["integrations/reinforcement-learning/trl"]
           },
           {
             "group": "MCP & Tools",
