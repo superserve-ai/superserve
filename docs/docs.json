@@ -274,6 +274,7 @@
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/crewai",
               "integrations/agent-harnesses/dspy",
+              "integrations/agent-harnesses/flue",
               "integrations/agent-harnesses/google-adk",
               "integrations/agent-harnesses/langchain",
               "integrations/agent-harnesses/letta",
