@@ -54,7 +54,11 @@
   "redirects": [
     {
       "source": "/integrations/virtual-filesystems/mesa",
-      "destination": "/storage/mesa"
+      "destination": "/storage/archil"
+    },
+    {
+      "source": "/storage/mesa",
+      "destination": "/storage/archil"
     },
     {
       "source": "/integrations/virtual-filesystems/archil",
@@ -121,7 +125,7 @@
           },
           {
             "group": "Storage",
-            "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
+            "pages": ["storage/archil", "storage/cloud-buckets"]
           },
           {
             "group": "Errors",
