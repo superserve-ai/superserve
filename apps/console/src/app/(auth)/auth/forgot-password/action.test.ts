@@ -197,7 +197,7 @@ describe("sendPasswordResetEmail", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "We couldn't verify you're human. Please try again.",
+      error: "We couldn't verify you're human. Refresh the page and try again.",
       errorCode: "captcha_failed",
     })
     expect(mockVerifyRecaptcha).toHaveBeenCalledWith("token", "password_reset")
@@ -216,7 +216,7 @@ describe("sendPasswordResetEmail", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "We couldn't reach our bot-check. Please try again in a minute.",
+      error: "Our bot check isn't responding. Try again in a minute.",
       errorCode: "captcha_unavailable",
     })
     expect(mockGenerateLink).not.toHaveBeenCalled()

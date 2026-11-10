@@ -67,7 +67,7 @@ function submit(email = "user@example.com") {
   fireEvent.change(screen.getByPlaceholderText("Email"), {
     target: { value: email },
   })
-  fireEvent.click(screen.getByRole("button", { name: "Send Reset Link" }))
+  fireEvent.click(screen.getByRole("button", { name: "Send reset link" }))
 }
 
 describe("ForgotPasswordPage", () => {
@@ -99,9 +99,27 @@ describe("ForgotPasswordPage", () => {
     submit()
 
     expect(
-      await screen.findByText(/We couldn't load our bot-check/),
+      await screen.findByText(
+        "Our bot check didn't load. Turn off ad or content blockers for this site, then try again.",
+      ),
     ).toBeTruthy()
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
+  })
+
+  it("shows a reset email error when the request throws", async () => {
+    mockSendPasswordResetEmail.mockRejectedValue(new Error("Failed to fetch"))
+
+    submit()
+
+    expect(
+      await screen.findByText(
+        "We couldn't send the reset email. Check your connection and try again.",
+      ),
+    ).toBeTruthy()
+    expect(screen.queryByText("Check Your Email")).toBeNull()
+    expect(
+      screen.getByRole("button", { name: "Send reset link" }),
+    ).toBeEnabled()
   })
 
   it("shows the server error and stays on the form", async () => {
@@ -122,7 +140,7 @@ describe("ForgotPasswordPage", () => {
     expect(mockCapture).not.toHaveBeenCalled()
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Send Reset Link" }),
+        screen.getByRole("button", { name: "Send reset link" }),
       ).toHaveProperty("disabled", false),
     )
   })
