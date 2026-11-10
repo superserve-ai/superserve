@@ -82,3 +82,12 @@ export const SETTINGS_EVENTS = {
   PASSWORD_CHANGED: "settings_password_changed",
   ACCOUNT_DELETION_REQUESTED: "settings_account_deletion_requested",
 } as const
+
+// A 402 billing block shown in the console, and a click on its next step.
+// Props: reason (trial_denied | trial_used_up | system_unavailable |
+// billing_inactive), code (the server's error code) and surface (create |
+// resume | terminal | activity).
+export const BILLING_BLOCK_EVENTS = {
+  SHOWN: "billing_block_shown",
+  ACTION_CLICKED: "billing_block_action_clicked",
+} as const

@@ -10,6 +10,7 @@ import {
 import { Badge, HighlightedCode, Separator } from "@superserve/ui"
 import Link from "next/link"
 
+import { BillingActivityAction } from "@/components/billing/billing-activity-action"
 import { CodeBlock } from "@/components/code-block"
 import type { ActivityResponse } from "@/lib/api/types"
 import { formatTime } from "@/lib/format"
@@ -19,7 +20,11 @@ import {
   formatDuration,
 } from "@/lib/sandbox-utils"
 
-import { activityActionLabel, activityResource } from "./activity-labels"
+import {
+  activityActionLabel,
+  activityResource,
+  BILLING_PAUSE_ACTIVITY,
+} from "./activity-labels"
 
 const CATEGORY_META: Record<
   string,
@@ -162,7 +167,15 @@ export function ActivityDetail({ log }: { log: ActivityResponse }) {
           </>
         )}
         <Field label="Action">
-          <span className="font-mono">{activityActionLabel(log.action)}</span>
+          {log.action === BILLING_PAUSE_ACTIVITY ? (
+            <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+              <span>{activityActionLabel(log.action)}</span>
+              <span className="font-mono text-xs text-muted">{log.action}</span>
+              <BillingActivityAction />
+            </span>
+          ) : (
+            <span className="font-mono">{activityActionLabel(log.action)}</span>
+          )}
         </Field>
         <Field label="Duration">
           <span className="font-mono tabular-nums">

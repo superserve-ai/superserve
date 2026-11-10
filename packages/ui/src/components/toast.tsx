@@ -33,6 +33,8 @@ type AddToastInput =
       description?: string
       variant?: ToastVariant
       actions?: ToastAction[]
+      // Milliseconds before the toast closes on its own; 5000 by default.
+      duration?: number
     }
 
 interface ToastContextType {
@@ -40,6 +42,8 @@ interface ToastContextType {
   removeToast: (id: string) => void
   toasts: Toast[]
 }
+
+const DEFAULT_TOAST_MS = 5000
 
 const ToastContext = createContext<ToastContextType | undefined>(undefined)
 
@@ -51,6 +55,7 @@ export function ToastProvider({ children }: { children: ReactNode }) {
       const id = crypto.randomUUID()
 
       let newToast: Toast
+      let duration = DEFAULT_TOAST_MS
 
       if (typeof input === "string") {
         newToast = { id, title: input, variant }
@@ -62,13 +67,14 @@ export function ToastProvider({ children }: { children: ReactNode }) {
           variant: input.variant || variant,
           actions: input.actions,
         }
+        if (input.duration !== undefined) duration = input.duration
       }
 
       setToasts((prev) => [...prev, newToast])
 
       setTimeout(() => {
         setToasts((prev) => prev.filter((toast) => toast.id !== id))
-      }, 5000)
+      }, duration)
     },
     [],
   )

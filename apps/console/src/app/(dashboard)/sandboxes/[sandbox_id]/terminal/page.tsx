@@ -5,10 +5,16 @@ import { Badge, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 
+import { BillingBlockState } from "@/components/billing/billing-block-state"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { TerminalTabs } from "@/components/sandboxes/terminal-tabs"
+import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useResumeSandbox, useSandbox } from "@/hooks/use-sandboxes"
+import {
+  billingBlockFromCode,
+  billingBlockFromError,
+} from "@/lib/billing/billing-block"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
 function TerminalSkeleton() {
@@ -32,7 +38,9 @@ export default function TerminalPage() {
 
   const router = useRouter()
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
-  const resumeMutation = useResumeSandbox()
+  // The page shows a billing block in place of the terminal, not as a toast.
+  const resumeMutation = useResumeSandbox({ billingBlockToast: false })
+  const trialBlock = useBillingSummary().data?.trial_block
 
   if (isPending) return <TerminalSkeleton />
 
@@ -57,6 +65,13 @@ export default function TerminalPage() {
   }
 
   const canRun = sandbox.status === "active"
+  // A failed Start says why; before that, a known trial block on a paused
+  // sandbox shows the next step instead of a Start that cannot work.
+  const billingBlock =
+    sandbox.status === "paused"
+      ? (billingBlockFromError(resumeMutation.error) ??
+        (trialBlock ? billingBlockFromCode(trialBlock) : null))
+      : null
 
   return (
     <div className="flex h-full flex-col">
@@ -89,7 +104,7 @@ export default function TerminalPage() {
           </Badge>
         </div>
         <div className="flex items-center gap-2">
-          {sandbox.status === "paused" && (
+          {sandbox.status === "paused" && !billingBlock && (
             <Button size="sm" onClick={() => resumeMutation.mutate(sandbox.id)}>
               <PlayIcon className="size-3.5" weight="light" />
               Start
@@ -108,6 +123,8 @@ export default function TerminalPage() {
           sandboxId={sandboxId}
           accessToken={sandbox.access_token}
         />
+      ) : billingBlock ? (
+        <BillingBlockState block={billingBlock} surface="terminal" />
       ) : sandbox.status === "paused" ? (
         <EmptyState
           icon={TerminalIcon}

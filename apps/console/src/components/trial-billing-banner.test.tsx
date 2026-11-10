@@ -663,3 +663,68 @@ describe("trialStage", () => {
     expect(trialStage(entry, trial, block)).toBe(stage)
   })
 })
+
+// Browser translation (for example Edge or Chrome) swaps text nodes for its
+// own elements. React then cannot remove or insert next to the old nodes.
+function translatePage(root: Element) {
+  const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT)
+  const nodes: Node[] = []
+  while (walker.nextNode()) nodes.push(walker.currentNode)
+  for (const node of nodes) {
+    const font = document.createElement("font")
+    font.textContent = `[t] ${node.textContent}`
+    node.parentNode?.replaceChild(font, node)
+  }
+}
+
+describe("TrialBillingBanner under browser translation", () => {
+  const rerender = (result: ReturnType<typeof mount>) =>
+    result.rerender(
+      <QueryClientProvider client={result.client}>
+        <TrialBillingBanner />
+      </QueryClientProvider>,
+    )
+
+  it("swaps the trial copy for the ended copy without a crash", () => {
+    mocks.entry.mockReturnValue({
+      data: "trial",
+      isPending: false,
+      isError: false,
+    })
+    mocks.summary.mockReturnValue({
+      data: summary({ trial: { state: "active", remaining_usd: 0.05 } }),
+    })
+    const result = mount()
+    translatePage(result.container)
+
+    mocks.summary.mockReturnValue({
+      data: summary({
+        trial: { state: "exhausted", remaining_usd: 0 },
+        trial_block: "trial_exhausted",
+      }),
+    })
+    expect(() => rerender(result)).not.toThrow()
+    expect(
+      screen.getByRole("region", { name: "Free trial" }),
+    ).toHaveTextContent("Your free trial has ended.")
+  })
+
+  it("swaps the legacy trial copy without a crash", () => {
+    mocks.summary.mockReturnValue({
+      data: summary({ trial: { state: "active", remaining_usd: 0.05 } }),
+    })
+    const result = mount()
+    translatePage(result.container)
+
+    mocks.summary.mockReturnValue({
+      data: summary({
+        trial: { state: "exhausted", remaining_usd: 0 },
+        trial_block: "trial_exhausted",
+      }),
+    })
+    expect(() => rerender(result)).not.toThrow()
+    expect(screen.getByRole("status")).toHaveTextContent(
+      "Your free trial credit has run out.",
+    )
+  })
+})

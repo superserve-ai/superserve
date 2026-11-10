@@ -11,6 +11,7 @@ import {
 } from "@tanstack/react-query"
 
 import { useQueryScope } from "@/components/query-provider"
+import { useBillingBlockToast } from "@/hooks/use-billing-block"
 import { ApiError, type PagedResult } from "@/lib/api/client"
 import { sandboxKeys } from "@/lib/api/query-keys"
 import {
@@ -31,6 +32,7 @@ import type {
   SandboxPatch,
   SandboxResponse,
 } from "@/lib/api/types"
+import { billingBlockFromError } from "@/lib/billing/billing-block"
 
 type SandboxPage = PagedResult<SandboxListItem>
 type SandboxListSnapshots = [QueryKey, SandboxPage | undefined][]
@@ -94,6 +96,7 @@ export function useSandbox(id: string | null) {
 export function useCreateSandbox() {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const showBillingBlock = useBillingBlockToast()
 
   return useMutation({
     mutationFn: (data: CreateSandboxRequest) => createSandbox(data),
@@ -105,6 +108,7 @@ export function useCreateSandbox() {
       addToast(`Sandbox "${newSandbox.name}" created`, "success")
     },
     onError: (error) => {
+      if (showBillingBlock(error, "create")) return
       const message =
         error instanceof ApiError
           ? error.message
@@ -215,9 +219,12 @@ export function usePauseSandbox() {
   })
 }
 
-export function useResumeSandbox() {
+export function useResumeSandbox({
+  billingBlockToast = true,
+}: { billingBlockToast?: boolean } = {}) {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
+  const showBillingBlock = useBillingBlockToast()
 
   return useMutation({
     mutationFn: (id: string) => resumeSandbox(id),
@@ -261,6 +268,11 @@ export function useResumeSandbox() {
             context.previousDetail,
           )
         }
+      }
+      // A page that shows the billing block itself turns the toast off.
+      if (billingBlockFromError(error)) {
+        if (billingBlockToast) showBillingBlock(error, "resume")
+        return
       }
       const message =
         error instanceof ApiError
