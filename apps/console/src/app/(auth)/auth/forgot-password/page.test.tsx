@@ -100,7 +100,7 @@ describe("ForgotPasswordPage", () => {
 
     expect(
       await screen.findByText(
-        "Our bot check didn't load. Turn off ad or content blockers for this site, then try again.",
+        "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
       ),
     ).toBeTruthy()
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()

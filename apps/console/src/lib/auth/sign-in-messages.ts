@@ -5,7 +5,7 @@ export const AUTH_MESSAGES = Object.freeze({
   googleSignInFailed:
     "We couldn't start Google sign-in. Try again, or sign in with email.",
   botCheckBlocked:
-    "Our bot check didn't load. Turn off ad or content blockers for this site, then try again.",
+    "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
   botCheckFailed:
     "We couldn't verify you're human. Refresh the page and try again.",
   botCheckUnavailable: "Our bot check isn't responding. Try again in a minute.",
