@@ -1,0 +1,14 @@
+/*
+ * Highlighted code lines ({n-m} in code fences), dark mode.
+ * The default 20% primary tint over the github-dark-default background
+ * drops comment and keyword tokens below WCAG AA 4.5:1. An 8% tint keeps
+ * every token at or above 5:1; the primary left border remains the cue.
+ * Blocks without line numbers paint the line and its ::before/::after;
+ * blocks with line numbers paint only ::after.
+ */
+html.dark [data-component-part="code-block-root"]:not(.has-line-numbers) .line-highlight,
+html.dark [data-component-part="code-block-root"]:not(.has-line-numbers) .line-highlight::before,
+html.dark [data-component-part="code-block-root"]:not(.has-line-numbers) .line-highlight::after,
+html.dark .has-line-numbers .line-highlight::after {
+  background: rgb(var(--primary-light) / 0.08) !important;
+}
