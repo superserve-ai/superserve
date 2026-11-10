@@ -1,6 +1,10 @@
 "use server"
 
-import { getOrCreateTeamForUser, mintTeamApiKey } from "@/lib/api/api-key-mint"
+import {
+  consoleApiKeySource,
+  getOrCreateTeamForUser,
+  mintTeamApiKey,
+} from "@/lib/api/api-key-mint"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
@@ -58,7 +62,7 @@ export async function listApiKeysAction() {
   }))
 }
 
-export async function createApiKeyAction(name: string) {
+export async function createApiKeyAction(name: string, source?: string) {
   const supabase = await createServerClient()
   const {
     data: { user },
@@ -77,7 +81,13 @@ export async function createApiKeyAction(name: string) {
     throw error
   }
 
-  return mintTeamApiKey(user, team, name, observedAt)
+  return mintTeamApiKey(
+    user,
+    team,
+    name,
+    observedAt,
+    consoleApiKeySource(source),
+  )
 }
 
 export async function revokeApiKeyAction(id: string) {

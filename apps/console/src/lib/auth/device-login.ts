@@ -266,6 +266,7 @@ export async function pollDeviceCode(deviceCode: string) {
       team,
       `CLI · ${row.client_name ?? "unknown device"}`,
       new Date().toISOString(),
+      "cli_device_login",
     )
     minted = { apiKey: key.key, email: user.email ?? null }
   } catch (error) {

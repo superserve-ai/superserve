@@ -13,6 +13,10 @@ import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
+import {
+  trackCallbackFailure,
+  type CallbackFailureReason,
+} from "@/lib/auth/callback-failure"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import {
   classifyGoogleMembershipState,
@@ -157,6 +161,8 @@ export async function GET(request: Request) {
     rawSignInRecovery === "email_link" || rawSignInRecovery === "google"
       ? rawSignInRecovery
       : null
+  // Supabase error code of a failed exchange or verify, for analytics only.
+  let failureErrorCode: string | null = null
 
   if (code || tokenHash) {
     const supabase = await createServerClient()
@@ -175,6 +181,12 @@ export async function GET(request: Request) {
     }
 
     if (error) {
+      failureErrorCode = error.code ?? null
+      const failure = {
+        method: code ? ("code" as const) : ("token_hash" as const),
+        type,
+        errorCode: failureErrorCode,
+      }
       // Supabase's generic trigger error is not authoritative SS-499 policy
       // evidence. Preserve the existing rejected-auth redirect and report an
       // unavailable annotation rather than a definitive blocked outcome.
@@ -190,6 +202,7 @@ export async function GET(request: Request) {
           },
           requestedOffer,
         ).catch(() => {})
+        await trackCallbackFailure({ ...failure, reason: "signup_blocked" })
         return NextResponse.redirect(
           buildRedirectUrl(
             origin,
@@ -206,6 +219,7 @@ export async function GET(request: Request) {
       // again with the same email sends a new link while the account is
       // unconfirmed, so return there with the signup's offer and destination.
       if (!code && type === "signup") {
+        await trackCallbackFailure({ ...failure, reason: "signup_link_failed" })
         const signup = new URLSearchParams({ error: "link_expired" })
         for (const param of ["offer", SIGNUP_OFFER_PARAM]) {
           const value = searchParams.get(param)
@@ -521,8 +535,17 @@ export async function GET(request: Request) {
                   ),
                 )
                 await supabase.auth.signOut().catch(() => {})
+                await trackCallbackFailure({
+                  reason: "enterprise_hold_failed",
+                  method: "code",
+                  type,
+                  userId: user.id,
+                })
                 return NextResponse.redirect(
-                  buildRedirectUrl(origin, "/auth/auth-code-error"),
+                  buildRedirectUrl(
+                    origin,
+                    "/auth/auth-code-error?reason=enterprise_hold_failed",
+                  ),
                 )
               }
             }
@@ -733,16 +756,20 @@ export async function GET(request: Request) {
           ).catch(() => {})
         }
 
+        // newSignup, not isNewUser: an email signup confirmed more than 30 s
+        // after the account was created is still the account's first
+        // confirmation. A used or expired confirmation link fails verifyOtp
+        // above, so a second click cannot reach this line.
         await trackEvent(
-          isNewUser
+          newSignup
             ? AUTH_EVENTS.SIGN_UP_COMPLETED
             : AUTH_EVENTS.SIGN_IN_COMPLETED,
           user.id,
           {
             provider,
             email: user.email,
-            is_new_user: isNewUser,
-            ...(isNewUser && requestedOffer
+            is_new_user: newSignup,
+            ...(newSignup && requestedOffer
               ? { requested_offer: requestedOffer }
               : {}),
             ...(signInRecovery ? { sign_in_recovery: signInRecovery } : {}),
@@ -854,9 +881,27 @@ export async function GET(request: Request) {
       return response
     }
   }
+  // Only a failed exchange or verify, or a request without either
+  // credential, reaches this point. A provider or Supabase-hosted failure
+  // returns here with `error`/`error_code` and no credential.
+  const providerErrorCode =
+    searchParams.get("error_code") ?? searchParams.get("error")
+  const reason: CallbackFailureReason = code
+    ? "exchange_failed"
+    : tokenHash
+      ? "otp_failed"
+      : providerErrorCode
+        ? "provider_error"
+        : "missing_code"
+  await trackCallbackFailure({
+    reason,
+    method: code ? "code" : tokenHash ? "token_hash" : "none",
+    type,
+    errorCode: code || tokenHash ? failureErrorCode : providerErrorCode,
+  })
   // A failed exchange keeps the invitation, so its retry can still join it.
   const invite = inviteReturnPath(next)
-  return NextResponse.redirect(
-    `${origin}/auth/auth-code-error${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
-  )
+  const errorParams = new URLSearchParams({ reason })
+  if (invite) errorParams.set("next", invite)
+  return NextResponse.redirect(`${origin}/auth/auth-code-error?${errorParams}`)
 }

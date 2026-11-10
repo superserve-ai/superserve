@@ -74,6 +74,30 @@ describe("useCreateApiKey", () => {
     expect(list?.[0] as unknown as { key?: string }).not.toHaveProperty("key")
   })
 
+  it("passes its source to the server action for the api_key_created event", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockCreateApiKey.mockResolvedValue({
+      id: "new",
+      name: "SDK Key",
+      key: "ss_live_full_secret",
+      prefix: "ss_live_pro",
+      created_at: "2026-04-15T00:00:00.000Z",
+    })
+
+    const { result } = renderHook(
+      () => useCreateApiKey("connect_dialog_sdk_key"),
+      { wrapper },
+    )
+    await act(async () => {
+      await result.current.mutateAsync("SDK Key")
+    })
+
+    expect(mockCreateApiKey).toHaveBeenCalledWith({
+      name: "SDK Key",
+      source: "connect_dialog_sdk_key",
+    })
+  })
+
   it("toasts ApiError message on failure", async () => {
     const { wrapper } = createQueryWrapper()
     mockCreateApiKey.mockRejectedValue(
