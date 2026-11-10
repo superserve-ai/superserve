@@ -65,7 +65,7 @@ export function SortableTableHead<C extends string>({
         ) : (
           // Visible at rest so sortable columns are discoverable without hover.
           <CaretUpDownIcon
-            className="size-3.5 opacity-40 transition-opacity group-hover:opacity-80 group-focus-visible:opacity-80"
+            className="size-3.5 text-control transition-colors group-hover:text-foreground group-focus-visible:text-foreground"
             weight="light"
             aria-hidden
           />

@@ -51,7 +51,18 @@ it("clears the status filter and search from the no-match state", async () => {
   const view = render(<SandboxesPage />)
 
   expect(screen.getByText("No sandboxes match")).toBeInTheDocument()
-  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
+  expect(
+    screen.getByText(
+      "No sandbox matches this search or status. Clear the filters to see all sandboxes.",
+    ),
+  ).toBeInTheDocument()
+  const clearFilters = screen.getByRole("button", { name: "Clear filters" })
+  clearFilters.focus()
+  fireEvent.click(clearFilters)
+
+  expect(document.activeElement).toBe(
+    screen.getByRole("textbox", { name: "Search sandboxes..." }),
+  )
 
   // The filters go and paging restarts; sort and page size stay.
   expect(window.location.search).toBe("?sort=name&size=20")
@@ -67,5 +78,8 @@ it("offers no clear action when no filter is set", () => {
   render(<SandboxesPage />)
 
   expect(screen.getByText("No sandboxes match")).toBeInTheDocument()
+  expect(
+    screen.getByText("Try a different search term or status filter."),
+  ).toBeInTheDocument()
   expect(screen.queryByRole("button", { name: "Clear filters" })).toBeNull()
 })

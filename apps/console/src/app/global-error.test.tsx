@@ -23,12 +23,18 @@ it("retries and links back without showing the raw error", () => {
     },
   )
   expect(
-    screen.getByRole("heading", { name: "Something went wrong" }),
+    screen.getByRole("heading", { name: "Console failed to load" }),
+  ).toBeInTheDocument()
+  expect(document.title).toBe("Console failed to load | Superserve")
+  expect(
+    screen.getByText(
+      "Try again. If it fails again, reload the console from the start.",
+    ),
   ).toBeInTheDocument()
   expect(screen.queryByText(/secret stack detail/)).toBeNull()
   expect(screen.getByRole("link", { name: "Back to console" })).toHaveAttribute(
     "href",
-    "/",
+    "/sandboxes/",
   )
   fireEvent.click(screen.getByRole("button", { name: "Try again" }))
   expect(reset).toHaveBeenCalledOnce()

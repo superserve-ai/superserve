@@ -6,11 +6,11 @@ import Link from "next/link"
 import { StatusPage } from "@/components/status-page"
 
 export const metadata: Metadata = {
-  title: "Page Not Found",
+  title: "Page not found",
 }
 
-// Handles every unmatched URL. Signed-out visitors never get here: middleware
-// sends them to sign-in first.
+// Signed-out visitors reach this page under public prefixes such as /device/;
+// middleware redirects them to sign-in on other paths.
 export default function NotFound() {
   return (
     <StatusPage
@@ -19,7 +19,7 @@ export default function NotFound() {
       title="Page not found"
       description="This page doesn't exist or has moved. Check the URL, or go back to the console."
     >
-      <Button size="sm" render={<Link href="/" />}>
+      <Button size="sm" render={<Link href="/sandboxes/" />}>
         Back to console
       </Button>
     </StatusPage>

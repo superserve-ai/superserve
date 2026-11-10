@@ -23,7 +23,7 @@ import {
 } from "@superserve/ui"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -60,6 +60,7 @@ function SandboxesPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const posthog = usePostHog()
+  const searchInputRef = useRef<HTMLInputElement>(null)
 
   const {
     page,
@@ -208,6 +209,7 @@ function SandboxesPageContent() {
             activeTab={statusTab}
             onTabChange={(v) => setParam({ status: v === "all" ? null : v })}
             searchPlaceholder="Search sandboxes..."
+            searchInputRef={searchInputRef}
             searchValue={q}
             onSearchChange={setSearch}
             selectedCount={selected.size}
@@ -225,9 +227,16 @@ function SandboxesPageContent() {
               <EmptyState
                 icon={CubeIcon}
                 title="No sandboxes match"
-                description="Try a different search term or status filter."
+                description={
+                  canClearFilters
+                    ? "No sandbox matches this search or status. Clear the filters to see all sandboxes."
+                    : "Try a different search term or status filter."
+                }
                 actionLabel={canClearFilters ? "Clear filters" : undefined}
-                onAction={() => setParam({ status: null, q: null })}
+                onAction={() => {
+                  setParam({ status: null, q: null })
+                  searchInputRef.current?.focus()
+                }}
               />
             ) : (
               <Table>

@@ -30,18 +30,18 @@ export default function GlobalError({
   return (
     <html lang="en" className={cn(sansFont.variable, monoFont.variable)}>
       <body className="font-sans antialiased">
-        <title>Something went wrong | Superserve</title>
+        <title>Console failed to load | Superserve</title>
         <StatusPage
           icon={WarningCircleIcon}
-          title="Something went wrong"
-          description="The console failed to load. Try again, or reload the console from the start."
+          title="Console failed to load"
+          description="Try again. If it fails again, reload the console from the start."
         >
           <Button size="sm" onClick={reset}>
             Try again
           </Button>
           {/* oxlint-disable-next-line nextjs/no-html-link-for-pages -- full page load: the root layout itself failed, so client navigation can't be trusted */}
           <a
-            href="/"
+            href="/sandboxes/"
             className={buttonVariants({ size: "sm", variant: "outline" })}
           >
             Back to console
