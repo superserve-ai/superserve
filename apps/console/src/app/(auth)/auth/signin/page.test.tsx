@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from "@testing-library/react"
+import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -6,30 +6,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // @superserve/ui — mock only the pieces the page uses. Input renders its
 // `error` prop visibly (like the real component), so assertions can search
-// by text instead of needing aria lookups.
-vi.mock("@superserve/ui", () => ({
-  cn: (...classes: Array<string | undefined | false>) =>
-    classes.filter(Boolean).join(" "),
-  Button: (props: React.JSX.IntrinsicElements["button"]) => (
-    <button {...props} />
-  ),
-  Input: ({
-    suffix,
-    error,
-    wrapperClassName: _wrapperClassName,
-    ...props
-  }: React.JSX.IntrinsicElements["input"] & {
-    suffix?: React.ReactNode
-    error?: string
-    wrapperClassName?: string
-  }) => (
-    <div>
-      <input {...props} />
-      {suffix}
-      {error && <p>{error}</p>}
-    </div>
-  ),
-}))
+// by text instead of needing aria lookups. Button honors `render` like the
+// real component, so a link-styled button renders as its link.
+vi.mock("@superserve/ui", async () => {
+  const { cloneElement } = await import("react")
+  return {
+    cn: (...classes: Array<string | undefined | false>) =>
+      classes.filter(Boolean).join(" "),
+    Button: ({
+      render,
+      ...props
+    }: React.JSX.IntrinsicElements["button"] & {
+      render?: React.ReactElement
+    }) => (render ? cloneElement(render, props) : <button {...props} />),
+    Input: ({
+      suffix,
+      error,
+      wrapperClassName: _wrapperClassName,
+      ...props
+    }: React.JSX.IntrinsicElements["input"] & {
+      suffix?: React.ReactNode
+      error?: string
+      wrapperClassName?: string
+    }) => (
+      <div>
+        <input {...props} />
+        {suffix}
+        {error && <p>{error}</p>}
+      </div>
+    ),
+  }
+})
 
 // Decorative components the page pulls in — render nothing.
 vi.mock("@/components/corner-brackets", () => ({
@@ -78,16 +85,27 @@ vi.mock("next/link", () => ({
     children,
     href,
     className,
+    onClick,
   }: {
     children: React.ReactNode
     href: string
     className?: string
+    onClick?: React.MouseEventHandler<HTMLAnchorElement>
   }) => (
-    <a href={href} className={className}>
+    <a
+      href={href}
+      className={className}
+      onClick={(e) => {
+        e.preventDefault()
+        onClick?.(e)
+      }}
+    >
       {children}
     </a>
   ),
 }))
+
+vi.mock("next/script", () => ({ default: () => null }))
 
 const mockCapture = vi.fn()
 vi.mock("posthog-js/react", () => ({
@@ -101,6 +119,10 @@ const mockSignOut = vi.fn()
 const mockBeginGoogleSignIn = vi.fn()
 vi.mock("./google-action", () => ({
   beginGoogleSignIn: () => mockBeginGoogleSignIn(),
+}))
+const mockSendSignInLink = vi.fn()
+vi.mock("./link-action", () => ({
+  sendSignInLink: (...args: unknown[]) => mockSendSignInLink(...args),
 }))
 
 vi.mock("@/lib/supabase/client", () => ({
@@ -128,6 +150,7 @@ describe("SignInPage", () => {
     mockSignOut.mockReset()
     mockBeginGoogleSignIn.mockReset().mockResolvedValue("signin-origin")
     mockCapture.mockReset()
+    mockSendSignInLink.mockReset().mockResolvedValue({ success: true })
     searchParamsMap = {}
     // Default: no existing session
     mockGetUser.mockResolvedValue({
@@ -341,7 +364,7 @@ describe("SignInPage", () => {
   it("preserves the claim destination when switching to signup", async () => {
     searchParamsMap = { offer: "yc_2026", next: "/yc/claim" }
     render(<SignInPage />)
-    const link = await screen.findByRole("link", { name: "Sign up" })
+    const link = await screen.findByRole("link", { name: "Create an account" })
     const url = new URL(
       link.getAttribute("href")!,
       "https://console.example.test",
@@ -354,7 +377,7 @@ describe("SignInPage", () => {
   it("keeps an invite destination in the signup link out of session replay", async () => {
     searchParamsMap = { next: "/invite/ssinv_exampletoken" }
     render(<SignInPage />)
-    const link = await screen.findByRole("link", { name: "Sign up" })
+    const link = await screen.findByRole("link", { name: "Create an account" })
     expect(
       new URL(
         link.getAttribute("href")!,
@@ -369,7 +392,7 @@ describe("SignInPage", () => {
     mockSignInWithOAuth.mockResolvedValue({ error: null })
     render(<SignInPage />)
     expect(
-      await screen.findByRole("link", { name: "Sign up" }),
+      await screen.findByRole("link", { name: "Create an account" }),
     ).toHaveAttribute("href", "/auth/signup?offer=pro_annual")
     await user.click(
       screen.getByRole("button", { name: /Continue with Google/ }),
@@ -432,11 +455,11 @@ describe("SignInPage", () => {
     ).not.toContain("google_signin_intent")
   })
 
-  it("has links to sign up and forgot password", async () => {
+  it("has links to create an account and forgot password", async () => {
     render(<SignInPage />)
 
     expect(
-      await screen.findByRole("link", { name: "Sign up" }),
+      await screen.findByRole("link", { name: "Create an account" }),
     ).toHaveAttribute("href", "/auth/signup")
     expect(
       screen.getByRole("link", { name: "Forgot password?" }),
@@ -468,5 +491,274 @@ describe("SignInPage", () => {
       ).toBeInTheDocument()
     })
     expect(mockSignOut).not.toHaveBeenCalled()
+  })
+
+  describe("sign-in recovery", () => {
+    const failPasswordSignIn = async (email = "test@test.com") => {
+      mockSignInWithPassword.mockResolvedValue({
+        error: { message: "Invalid login credentials" },
+      })
+      render(<SignInPage />)
+      await user.type(await screen.findByPlaceholderText("Email"), email)
+      await user.type(screen.getByPlaceholderText("Password"), "wrongpassword")
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+      return screen.findByRole("region", { name: "Other ways to sign in" })
+    }
+
+    it("is hidden until a password sign-in fails", async () => {
+      render(<SignInPage />)
+      await screen.findByPlaceholderText("Email")
+      expect(
+        screen.queryByRole("region", { name: "Other ways to sign in" }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("offers a sign-in link, Google, and password reset after invalid credentials", async () => {
+      const region = await failPasswordSignIn()
+
+      expect(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      ).toBeInTheDocument()
+      expect(
+        within(region).getByRole("button", { name: /Continue with Google/ }),
+      ).toBeInTheDocument()
+      expect(
+        within(region).getByRole("link", { name: "Forgot password?" }),
+      ).toHaveAttribute("href", "/auth/forgot-password")
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_recovery_shown", {
+        method: "email",
+      })
+    })
+
+    it("tracks the shown event once per page view", async () => {
+      await failPasswordSignIn()
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+      await waitFor(() =>
+        expect(mockSignInWithPassword).toHaveBeenCalledTimes(2),
+      )
+      expect(
+        mockCapture.mock.calls.filter(
+          ([event]) => event === "auth_sign_in_recovery_shown",
+        ),
+      ).toHaveLength(1)
+    })
+
+    it("does not offer recovery for other sign-in errors", async () => {
+      mockSignInWithPassword.mockResolvedValue({
+        error: { message: "Email not confirmed" },
+      })
+      render(<SignInPage />)
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "test@test.com",
+      )
+      await user.type(screen.getByPlaceholderText("Password"), "password123")
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+      await screen.findByText("Please verify your email before signing in.")
+      expect(
+        screen.queryByRole("region", { name: "Other ways to sign in" }),
+      ).not.toBeInTheDocument()
+    })
+
+    it("requests a sign-in link and shows the neutral confirmation", async () => {
+      searchParamsMap = { next: "/sandboxes" }
+      const region = await failPasswordSignIn("someone@example.com")
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      expect(
+        await within(region).findByText(
+          /If an account exists, we sent a link to/,
+        ),
+      ).toHaveTextContent(
+        "If an account exists, we sent a link to someone@example.com.",
+      )
+      // Session replay must not record the typed address.
+      expect(within(region).getByText("someone@example.com")).toHaveAttribute(
+        "data-mask",
+      )
+      expect(mockSendSignInLink).toHaveBeenCalledWith(
+        "someone@example.com",
+        undefined,
+        "/sandboxes",
+      )
+      expect(mockCapture).toHaveBeenCalledWith(
+        "auth_sign_in_recovery_option_clicked",
+        { option: "magic_link" },
+      )
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_requested", {
+        method: "email_link",
+      })
+      // Google and password reset stay available after the link is sent.
+      expect(
+        within(region).getByRole("button", { name: /Continue with Google/ }),
+      ).toBeInTheDocument()
+      expect(
+        within(region).getByRole("link", { name: "Forgot password?" }),
+      ).toBeInTheDocument()
+    })
+
+    it("sends the offer destination when there is no explicit next", async () => {
+      searchParamsMap = { offer: "pro_monthly" }
+      const region = await failPasswordSignIn("someone@example.com")
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      await waitFor(() =>
+        expect(mockSendSignInLink).toHaveBeenCalledWith(
+          "someone@example.com",
+          undefined,
+          "/billing/pro/",
+        ),
+      )
+    })
+
+    it("shows an error and tracks the failure when the captcha check fails", async () => {
+      mockSendSignInLink.mockResolvedValue({
+        success: false,
+        errorCode: "captcha_failed",
+      })
+      const region = await failPasswordSignIn()
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      expect(
+        await within(region).findByText(
+          "We couldn't verify you're human. Please try again.",
+        ),
+      ).toBeInTheDocument()
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
+        method: "email_link",
+        reason: "captcha_failed",
+      })
+      expect(
+        within(region).queryByText(/If an account exists/),
+      ).not.toBeInTheDocument()
+    })
+
+    it("shows a retry error when the captcha provider is unavailable", async () => {
+      mockSendSignInLink.mockResolvedValue({
+        success: false,
+        errorCode: "captcha_unavailable",
+      })
+      const region = await failPasswordSignIn()
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      expect(
+        await within(region).findByText(
+          "Could not send the link. Please try again.",
+        ),
+      ).toBeInTheDocument()
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
+        method: "email_link",
+        reason: "captcha_unavailable",
+      })
+    })
+
+    it("locks the email field while a link request is pending", async () => {
+      let resolveRequest!: (value: { success: true }) => void
+      mockSendSignInLink.mockReturnValue(
+        new Promise((resolve) => {
+          resolveRequest = resolve
+        }),
+      )
+      const region = await failPasswordSignIn("someone@example.com")
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      const emailInput = screen.getByPlaceholderText("Email")
+      await waitFor(() => expect(emailInput).toBeDisabled())
+      resolveRequest({ success: true })
+      await within(region).findByText(/If an account exists/)
+      expect(emailInput).toBeEnabled()
+
+      // Editing the address afterwards offers the link again.
+      await user.type(emailInput, "x")
+      expect(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      ).toBeInTheDocument()
+    })
+
+    it("tracks a request error", async () => {
+      mockSendSignInLink.mockRejectedValue(new Error("network"))
+      const region = await failPasswordSignIn()
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      expect(
+        await within(region).findByText(
+          "Could not send the link. Please try again.",
+        ),
+      ).toBeInTheDocument()
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
+        method: "email_link",
+        reason: "request_error",
+      })
+    })
+
+    it("marks Google sign-in from the recovery block in the callback URL", async () => {
+      mockSignInWithOAuth.mockResolvedValue({ error: null })
+      const region = await failPasswordSignIn()
+
+      await user.click(
+        within(region).getByRole("button", { name: /Continue with Google/ }),
+      )
+
+      await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled())
+      const callbackUrl = new URL(
+        mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+      )
+      expect(callbackUrl.pathname).toBe("/auth/callback")
+      expect(callbackUrl.searchParams.get("sign_in_recovery")).toBe("google")
+      expect(callbackUrl.searchParams.get("google_signin_intent")).toBe(
+        "signin-origin",
+      )
+      expect(mockCapture).toHaveBeenCalledWith(
+        "auth_sign_in_recovery_option_clicked",
+        { option: "google" },
+      )
+    })
+
+    it("does not mark the main Google button as recovery", async () => {
+      mockSignInWithOAuth.mockResolvedValue({ error: null })
+      render(<SignInPage />)
+
+      await user.click(
+        await screen.findByRole("button", { name: /Continue with Google/ }),
+      )
+
+      await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalled())
+      expect(
+        new URL(
+          mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+        ).searchParams.has("sign_in_recovery"),
+      ).toBe(false)
+    })
+
+    it("tracks the forgot-password option", async () => {
+      const region = await failPasswordSignIn()
+
+      await user.click(
+        within(region).getByRole("link", { name: "Forgot password?" }),
+      )
+
+      expect(mockCapture).toHaveBeenCalledWith(
+        "auth_sign_in_recovery_option_clicked",
+        { option: "forgot_password" },
+      )
+    })
   })
 })

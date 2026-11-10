@@ -33,25 +33,33 @@ it.each([
 })
 
 it.each([
+  "/billing-usage/buy-credit",
+  "/billing-usage/buy-credit/",
   "/plan-usage/buy-credit",
+  "/plan-usage/buy-credit/",
   "/plan-usage/buy-credit/?purchase=success&team=use%3Aoriginal",
   "/plan-usage/buy-credit?purchase=cancel&team=use%3Aoriginal",
+  "/billing-usage/buy-credit/?purchase=success&team=use%3Aoriginal",
+  "/billing-usage/buy-credit?purchase=cancel&team=use%3Aoriginal",
 ])("retains the Starter team locator: %s", (path) => {
   expect(starterAuthReturnPath(path)).toBe(path)
 })
 it.each([
-  "//external/plan-usage/buy-credit",
-  "/plan-usage/buy-credit#paid",
-  "/plan-usage/buy-credit?purchase=success&purchase=cancel",
-  "/plan-usage/buy-credit?team=a&team=b",
-  "/plan-usage/buy-credit?payment_authorized=true",
+  "//external/billing-usage/buy-credit",
+  "/billing-usage/buy-credit/other",
+  "/billing-usage/buy-credit//",
+  "/billing-usage-old/buy-credit/",
+  "/billing-usage/buy-credit#paid",
+  "/billing-usage/buy-credit?purchase=success&purchase=cancel",
+  "/billing-usage/buy-credit?team=a&team=b",
+  "/billing-usage/buy-credit?payment_authorized=true",
 ])("rejects unsafe Starter returns: %s", (path) => {
   expect(starterAuthReturnPath(path)).toBeNull()
 })
 
 it.each([
   "/api/onboarding/prepare/?account=owner&next=%2Fbilling%2Fpro%2F",
-  "/api/onboarding/prepare/?account=owner&team=use%3Aoriginal&billing=success&next=%2Fplan-usage%2Fbuy-credit%2F%3Fteam%3Duse%253Aoriginal%26purchase%3Dsuccess",
+  "/api/onboarding/prepare/?account=owner&team=use%3Aoriginal&billing=success&next=%2Fbilling-usage%2Fbuy-credit%2F%3Fteam%3Duse%253Aoriginal%26purchase%3Dsuccess",
 ])("retains only a bound paid preparation return: %s", (path) => {
   expect(signupPreparationReturnPath(path)).toBe(path)
 })
@@ -75,7 +83,7 @@ it.each(["success", "cancel", "portal-return"])(
   "retains bounded generic %s on both routes",
   (flow) => {
     const pro = `/billing/pro/?team=use%3Aoriginal&return=%2Fsandboxes&billing_flow=${flow}`
-    const starter = `/plan-usage/buy-credit/?purchase=cancel&team=use%3Aoriginal&purchase_id=original&billing_flow=${flow}`
+    const starter = `/billing-usage/buy-credit/?purchase=cancel&team=use%3Aoriginal&purchase_id=original&billing_flow=${flow}`
     expect(proAuthReturnPath(pro)).toBe(pro)
     expect(starterAuthReturnPath(starter)).toBe(starter)
   },
@@ -91,7 +99,7 @@ it.each([
   ).toBeNull()
   expect(
     starterAuthReturnPath(
-      `/plan-usage/buy-credit/?team=original&billing_flow=${flow}`,
+      `/billing-usage/buy-credit/?team=original&billing_flow=${flow}`,
     ),
   ).toBeNull()
 })

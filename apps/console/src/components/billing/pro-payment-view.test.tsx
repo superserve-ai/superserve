@@ -296,6 +296,6 @@ describe("Pro payment return path", () => {
       "/\u0000/example.com/",
       "/\u007f/example.com/",
     ])
-      expect(safeReturnPath(unsafe)).toBe("/plan-usage/")
+      expect(safeReturnPath(unsafe)).toBe("/billing-usage/")
   })
 })

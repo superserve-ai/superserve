@@ -70,6 +70,14 @@ const mockIssueGoogleSignupProof = vi.fn()
 vi.mock("@/lib/auth/google-signup-proof", () => ({
   issueGoogleSignupProof: (...args: unknown[]) =>
     mockIssueGoogleSignupProof(...args),
+  isGoogleUser: (user: { app_metadata?: { provider?: string } }) =>
+    user.app_metadata?.provider === "google",
+}))
+
+const mockGetUser = vi.fn()
+vi.mock("@/lib/supabase/server", () => ({
+  createServerClient: () =>
+    Promise.resolve({ auth: { getUser: () => mockGetUser() } }),
 }))
 
 const mockObserveCloudflareSignup = vi.fn()
@@ -162,6 +170,7 @@ import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 
 import {
   beginGoogleSignup,
+  googleRecoveryAccount,
   resendSignupConfirmation,
   signUpWithEmail,
 } from "./action"
@@ -439,8 +448,8 @@ describe("signUpWithEmail", () => {
 
     it.each([
       "/billing/pro/?billing=cancel&team=use%3Ateam&return=%2Fsandboxes",
-      "/plan-usage/buy-credit?amount=500",
-      "/plan-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
+      "/billing-usage/buy-credit?amount=500",
+      "/billing-usage/buy-credit?purchase=success&team=use%3Ateam&purchase_id=payment",
       "/device?code=BCDF-GHJK",
     ])(
       "keeps direct purchase entry through the emailed confirmation: %s",
@@ -955,6 +964,49 @@ describe("signUpWithEmail", () => {
       )
       expect(mockGenerateLink).toHaveBeenCalledTimes(verified ? 1 : 0)
       expect(mockSendEmail).toHaveBeenCalledTimes(verified ? 1 : 0)
+    },
+  )
+
+  it.each([
+    [
+      "unavailable",
+      {
+        success: false,
+        error: "We couldn't reach our bot-check. Please try again in a minute.",
+        errorCode: "captcha_unavailable",
+      },
+    ],
+    ["unconfigured", { success: true }],
+  ] as const)(
+    "handles an %s reCAPTCHA provider on email signup",
+    async (providerOutcome, expected) => {
+      mockVerifyRecaptcha.mockResolvedValue({ verified: true, providerOutcome })
+      mockGenerateLink.mockResolvedValue({
+        data: { properties: { hashed_token: "abc123" } },
+        error: null,
+      })
+      mockSendEmail.mockResolvedValue({ success: true })
+
+      const result = await signUpWithEmail(
+        "user@test.com",
+        "password123",
+        "Test User",
+        "recaptcha-token",
+      )
+
+      expect(result).toEqual(expected)
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_signup_recaptcha_observed",
+        expect.any(String),
+        expect.objectContaining({
+          provider_outcome: providerOutcome,
+          block_reason:
+            providerOutcome === "unavailable" ? "provider_unavailable" : null,
+        }),
+      )
+      const sent = providerOutcome === "unconfigured" ? 1 : 0
+      expect(mockGenerateLink).toHaveBeenCalledTimes(sent)
+      expect(mockSendEmail).toHaveBeenCalledTimes(sent)
     },
   )
 
@@ -1628,6 +1680,40 @@ describe("beginGoogleSignup", () => {
       },
     )
   })
+  it("fails closed when the reCAPTCHA provider is unavailable", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: true,
+      providerOutcome: "unavailable",
+    })
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: false,
+      error: "We couldn't reach our bot-check. Please try again in a minute.",
+      errorCode: "captcha_unavailable",
+    })
+    expect(mockIssueGoogleSignupProof).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_failed",
+      expect.any(String),
+      {
+        reason: "provider_unavailable",
+        stage: "captcha_verification",
+      },
+    )
+  })
+
+  it("still issues proof when reCAPTCHA is not configured", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: true,
+      providerOutcome: "unconfigured",
+    })
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: true,
+      signupAttemptId: expect.any(String),
+    })
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
+  })
 })
 
 const mockOriginalPublication = vi.fn()
@@ -2060,3 +2146,40 @@ it.each([undefined, { unavailable: true } as const])(
     expect(diagnostics.browser).toHaveBeenCalledWith(forgedDiagnostics)
   },
 )
+
+describe("googleRecoveryAccount", () => {
+  it("returns the email of the signed-in Google user", async () => {
+    mockGetUser.mockResolvedValue({
+      data: {
+        user: {
+          email: "new.user@example.com",
+          app_metadata: { provider: "google" },
+        },
+      },
+    })
+    await expect(googleRecoveryAccount()).resolves.toBe("new.user@example.com")
+  })
+
+  it.each([
+    ["no session", { data: { user: null } }],
+    [
+      "an email user",
+      {
+        data: {
+          user: {
+            email: "new.user@example.com",
+            app_metadata: { provider: "email" },
+          },
+        },
+      },
+    ],
+  ])("returns nothing for %s", async (_, result) => {
+    mockGetUser.mockResolvedValue(result)
+    await expect(googleRecoveryAccount()).resolves.toBeUndefined()
+  })
+
+  it("returns nothing when the session lookup fails", async () => {
+    mockGetUser.mockRejectedValue(new Error("auth unavailable"))
+    await expect(googleRecoveryAccount()).resolves.toBeUndefined()
+  })
+})
