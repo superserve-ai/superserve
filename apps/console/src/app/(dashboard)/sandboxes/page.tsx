@@ -61,6 +61,8 @@ function SandboxesPageContent() {
   const searchParams = useSearchParams()
   const posthog = usePostHog()
   const searchInputRef = useRef<HTMLInputElement>(null)
+  const createButtonRef = useRef<HTMLButtonElement>(null)
+  const clearFiltersRef = useRef(false)
 
   const {
     page,
@@ -171,6 +173,18 @@ function SandboxesPageContent() {
   const isEmpty =
     !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
 
+  useEffect(() => {
+    if (
+      !clearFiltersRef.current ||
+      hasFilters ||
+      isPending ||
+      isPlaceholderData
+    )
+      return
+    clearFiltersRef.current = false
+    if (isEmpty) createButtonRef.current?.focus()
+  }, [hasFilters, isPending, isPlaceholderData, isEmpty])
+
   return (
     <div className="flex h-full flex-col">
       <PageHeader title="Sandboxes">
@@ -200,6 +214,7 @@ function SandboxesPageContent() {
           title="No Sandboxes"
           description="Create a sandbox to run code in an isolated cloud environment."
           actionLabel="Create Sandbox"
+          actionRef={createButtonRef}
           onAction={() => setCreateOpen(true)}
         />
       ) : (
@@ -234,6 +249,7 @@ function SandboxesPageContent() {
                 }
                 actionLabel={canClearFilters ? "Clear filters" : undefined}
                 onAction={() => {
+                  clearFiltersRef.current = true
                   setParam({ status: null, q: null })
                   searchInputRef.current?.focus()
                 }}
