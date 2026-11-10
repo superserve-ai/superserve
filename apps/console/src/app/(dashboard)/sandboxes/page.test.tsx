@@ -147,6 +147,38 @@ it("focuses Create Sandbox when clearing filters settles on an empty account", a
   expect(search).not.toBeInTheDocument()
 })
 
+it("preserves dialog focus when clearing filters settles on an empty account", async () => {
+  window.history.replaceState(null, "", "/sandboxes?status=paused&q=web")
+  const view = render(<SandboxesPage />)
+  fireEvent.click(screen.getByRole("button", { name: "Clear filters" }))
+
+  state.isPlaceholderData = true
+  view.rerender(<SandboxesPage />)
+  await waitFor(() => {
+    expect(useSandboxesPage).toHaveBeenLastCalledWith(
+      expect.objectContaining({ q: undefined, status: undefined }),
+    )
+  })
+
+  render(
+    <div role="dialog" aria-label="Create Sandbox">
+      <button type="button">Cancel</button>
+    </div>,
+  )
+  const cancel = screen.getByRole("button", { name: "Cancel" })
+  cancel.focus()
+  expect(cancel).toHaveFocus()
+
+  state.isPlaceholderData = false
+  view.rerender(<SandboxesPage />)
+
+  expect(screen.getByText("No Sandboxes")).toBeInTheDocument()
+  expect(cancel).toHaveFocus()
+  expect(
+    screen.getByRole("button", { name: "Create Sandbox" }),
+  ).not.toHaveFocus()
+})
+
 it("does not move focus on the initial load of an empty account", () => {
   render(<SandboxesPage />)
 

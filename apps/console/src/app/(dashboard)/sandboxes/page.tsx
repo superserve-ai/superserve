@@ -182,7 +182,12 @@ function SandboxesPageContent() {
     )
       return
     clearFiltersRef.current = false
-    if (isEmpty) createButtonRef.current?.focus()
+    if (
+      isEmpty &&
+      (document.activeElement === null ||
+        document.activeElement === document.body)
+    )
+      createButtonRef.current?.focus()
   }, [hasFilters, isPending, isPlaceholderData, isEmpty])
 
   return (
