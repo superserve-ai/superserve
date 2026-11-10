@@ -4,11 +4,15 @@ import { redirect, unstable_rethrow } from "next/navigation"
 
 import { getImpersonationContext } from "@/lib/admin/impersonation"
 import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { readSignupPlan } from "@/lib/api/signup-plan-read"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
-import { listTeamsAction } from "@/lib/api/teams-actions"
+import {
+  listTeamsAction,
+  type TeamDirectoryResponse,
+} from "@/lib/api/teams-actions"
 import { readFresh } from "@/lib/supabase/fresh-fetch"
 import { createServerClient } from "@/lib/supabase/server"
 
@@ -28,22 +32,51 @@ export function signupPlanPath(params: SignupPlanPageParams) {
   return `/onboarding/plan/?${query}`
 }
 
+export interface SignupPlanPage {
+  context: SignupPlanContext
+  directory: TeamDirectoryResponse
+}
+
+// "blocked" keeps the console closed: setup can't continue for this account
+// or team, or the team itself couldn't be confirmed. "unavailable" is a plan
+// read that failed twice for a team and directory that were confirmed, so the
+// plan is unknown, not refused.
+export type SignupPlanPageState =
+  | { status: "ready"; page: SignupPlanPage }
+  | { status: "blocked" }
+  | { status: "unavailable"; directory: TeamDirectoryResponse }
+
 // Read before sending the destination page, so navigation keeps the previous
 // document visible. Provisioning stays in a handler where cookies are writable.
-// A failed read is retried once, past the render's request memoization, before
-// the caller shows the setup error. A second failure, or one that a retry
-// can't change, still returns null.
-export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
+// A failed read is retried once, past the render's request memoization. A plan
+// that still can't be read is unavailable; any other failure, or one that a
+// retry can't change, is blocked.
+export async function getSignupPlanPageState(
+  params: SignupPlanPageParams = {},
+): Promise<SignupPlanPageState> {
   for (let attempt = 1; ; attempt++) {
     try {
-      return attempt > 1
-        ? await readFresh(() => readSignupPlanPage(params))
-        : await readSignupPlanPage(params)
+      const page =
+        attempt > 1
+          ? await readFresh(() => readSignupPlanPage(params))
+          : await readSignupPlanPage(params)
+      if (!page) return { status: "blocked" }
+      const { context, directory } = page
+      if (context) return { status: "ready", page: { context, directory } }
+      if (attempt > 1) return { status: "unavailable", directory }
     } catch (error) {
       unstable_rethrow(error)
-      if (attempt > 1 || error instanceof SignupSetupBlockedError) return null
+      if (attempt > 1 || error instanceof SignupSetupBlockedError)
+        return { status: "blocked" }
     }
   }
+}
+
+// For callers that show the setup error whether the plan was refused or
+// unknown.
+export async function getSignupPlanPage(params: SignupPlanPageParams = {}) {
+  const state = await getSignupPlanPageState(params)
+  return state.status === "ready" ? state.page : null
 }
 
 async function readSignupPlanPage(params: SignupPlanPageParams) {
@@ -75,7 +108,12 @@ async function readSignupPlanPage(params: SignupPlanPageParams) {
     redirect(`/api/onboarding/prepare/?${query}`)
   }
   const [context, directory] = await Promise.all([
-    readSignupPlan(user.id, team, params.team),
+    // Only the plan may stay unknown; the team it belongs to is still checked.
+    readSignupPlan(user.id, team, params.team).catch((error: unknown) => {
+      unstable_rethrow(error)
+      if (error instanceof SignupSetupBlockedError) throw error
+      return null
+    }),
     listTeamsAction(),
   ])
   if (
