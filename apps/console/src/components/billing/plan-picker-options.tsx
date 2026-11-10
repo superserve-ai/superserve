@@ -9,6 +9,11 @@ import { useSignOut } from "@/hooks/use-sign-out"
 import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
+  listTeamsAction,
+  setActiveTeamAction,
+  type TeamSummary,
+} from "@/lib/api/teams-actions"
+import {
   canManageTeamBillingAction,
   getTeamCatalogAction,
   type TeamCatalog,
@@ -29,6 +34,7 @@ import {
   type SignupCheckoutOffer,
   signupCheckoutPath,
 } from "@/lib/billing/signup-checkout-paths"
+import { regionLabel } from "@/lib/format"
 
 function Limit({ children }: { children: string }) {
   return (
@@ -156,6 +162,73 @@ function PlanOption({
   )
 }
 
+// The user's other teams, so someone who can't buy a plan for this team can
+// carry on in one of theirs. Nothing shows while they load or can't be read.
+function OtherTeams({ locator }: { locator: CheckoutLocator }) {
+  const [teams, setTeams] = useState<TeamSummary[]>()
+  const [switching, setSwitching] = useState<string | null>(null)
+  const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    let live = true
+    listTeamsAction()
+      .then(
+        (directory) =>
+          live &&
+          setTeams(
+            directory.teams.filter(
+              (team) => `${team.region}:${team.id}` !== locator.team,
+            ),
+          ),
+      )
+      .catch(() => undefined)
+    return () => {
+      live = false
+    }
+  }, [locator.team])
+  if (!teams?.length) return null
+  // Region badges only add signal when the teams span regions.
+  const multiRegion = new Set(teams.map((team) => team.region)).size > 1
+  const open = async (team: TeamSummary) => {
+    const key = `${team.region}:${team.id}`
+    setSwitching(key)
+    setFailed(false)
+    try {
+      await setActiveTeamAction(team.id, team.region)
+      window.location.assign("/sandboxes")
+    } catch {
+      setSwitching(null)
+      setFailed(true)
+    }
+  }
+  return (
+    <div className="flex flex-col items-center gap-2">
+      <p className="text-center text-sm text-muted">Or open another team:</p>
+      {teams.map((team) => {
+        const key = `${team.region}:${team.id}`
+        return (
+          <Button
+            key={key}
+            variant="outline"
+            size="sm"
+            disabled={switching !== null}
+            onClick={() => void open(team)}
+          >
+            {switching === key ? <Spinner size="sm" /> : null}
+            {multiRegion
+              ? `${team.name} · ${regionLabel(team.region)}`
+              : team.name}
+          </Button>
+        )
+      })}
+      {failed ? (
+        <p role="alert" className="text-center text-sm text-muted">
+          We couldn&apos;t open that team. Please try again.
+        </p>
+      ) : null}
+    </div>
+  )
+}
+
 export function PlanPickerOptions({
   preselected,
   locator,
@@ -211,6 +284,7 @@ export function PlanPickerOptions({
             one of them to upgrade this team.
           </p>
         )}
+        <OtherTeams locator={locator} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
