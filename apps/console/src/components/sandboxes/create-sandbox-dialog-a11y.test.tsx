@@ -3,10 +3,13 @@ import { render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { expect, it, vi } from "vitest"
 
+import { ApiError } from "@/lib/api/client"
+
 import { CreateSandboxDialog } from "./create-sandbox-dialog"
 
+const mutate = vi.hoisted(() => vi.fn())
 vi.mock("@/hooks/use-sandboxes", () => ({
-  useCreateSandbox: () => ({ mutate: vi.fn(), isPending: false }),
+  useCreateSandbox: () => ({ mutate, isPending: false }),
 }))
 
 vi.mock("@/hooks/use-templates", () => ({
@@ -65,3 +68,30 @@ it("gives each advanced row removal button a specific, one-based name", async ()
     ).not.toBeInTheDocument()
   }
 })
+
+it.each([
+  [new ApiError(402, "trial_exhausted", "Trial credit used up."), [false]],
+  [new ApiError(500, "internal", "Server error"), undefined],
+])(
+  "closes the dialog only for a billing block (%s)",
+  async (error, closeCall) => {
+    const user = userEvent.setup()
+    const onOpenChange = vi.fn()
+    mutate.mockImplementation(
+      (_payload: unknown, options: { onError?: (e: unknown) => void }) =>
+        options.onError?.(error),
+    )
+    render(
+      <ToastProvider>
+        <CreateSandboxDialog open hideTrigger onOpenChange={onOpenChange} />
+      </ToastProvider>,
+    )
+
+    await user.type(screen.getByPlaceholderText("my-sandbox"), "box")
+    await user.click(screen.getByRole("button", { name: "Create Sandbox" }))
+
+    expect(mutate).toHaveBeenCalled()
+    if (closeCall) expect(onOpenChange).toHaveBeenCalledWith(...closeCall)
+    else expect(onOpenChange).not.toHaveBeenCalled()
+  },
+)

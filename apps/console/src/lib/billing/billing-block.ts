@@ -1,3 +1,4 @@
+import type { BillingSummaryResponse } from "@/lib/api/billing"
 import { ApiError } from "@/lib/api/client"
 
 import { legacyBillingUsagePath } from "./legacy-billing-usage-path"
@@ -90,9 +91,33 @@ export function safeBillingActionHref(
   if (url.pathname.startsWith("/api/") || url.pathname === "/api")
     return BILLING_BLOCK_FALLBACK_PATH
   const pathname = legacyBillingUsagePath(url.pathname) ?? url.pathname
+  // Dot segments and doubled slashes can normalize to "//host", which the
+  // browser reads as another origin.
+  if (pathname.startsWith("//")) return BILLING_BLOCK_FALLBACK_PATH
   // The app uses trailing slashes; asking for one directly saves a redirect.
   const path = pathname.endsWith("/") ? pathname : `${pathname}/`
-  return `${path}${url.search}${url.hash}`
+  const href = `${path}${url.search}${url.hash}`
+  // The result must still resolve to the console itself.
+  const base = origin ?? "https://console.invalid"
+  if (new URL(href, base).origin !== new URL(base).origin)
+    return BILLING_BLOCK_FALLBACK_PATH
+  return href
+}
+
+const BLOCKED_PLAN_STATES = new Set([
+  "trial_ended",
+  "payment_failed",
+  "plan_required",
+])
+
+/** The team still cannot run sandboxes for a billing reason. */
+export function billingStillBlocked(
+  summary: BillingSummaryResponse | undefined,
+): boolean {
+  if (!summary) return false
+  return (
+    !!summary.trial_block || BLOCKED_PLAN_STATES.has(summary.plan?.status ?? "")
+  )
 }
 
 // The server appends ": <action_url>" to the message. The link becomes a

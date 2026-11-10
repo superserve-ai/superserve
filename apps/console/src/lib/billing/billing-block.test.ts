@@ -8,6 +8,7 @@ import {
   billingBlockFromError,
   billingBlockMessage,
   billingBlockReason,
+  billingStillBlocked,
   safeBillingActionHref,
 } from "./billing-block"
 
@@ -47,6 +48,9 @@ describe("safeBillingActionHref", () => {
     "/plan-usage\n",
     "/api/billing/checkout",
     "https://console.superserve.ai/api/keys",
+    "/x/..//evil.example.com/path",
+    "https://console.superserve.ai//evil.example.com/path",
+    "/%2e%2e//evil.example.com",
   ])("falls back for %o", (input) => {
     expect(safeBillingActionHref(input, ORIGIN)).toBe(
       BILLING_BLOCK_FALLBACK_PATH,
@@ -186,5 +190,22 @@ describe("billingBlockFromCode", () => {
       reason: "trial_used_up",
       href: BILLING_BLOCK_FALLBACK_PATH,
     })
+  })
+})
+
+describe("billingStillBlocked", () => {
+  it.each([
+    [undefined, false],
+    [{ trial_block: "trial_exhausted" }, true],
+    [{ trial_block: "trial_check_unavailable" }, true],
+    [{ trial_block: null, plan: { status: "trial_ended" } }, true],
+    [{ trial_block: null, plan: { status: "payment_failed" } }, true],
+    [{ trial_block: null, plan: { status: "plan_required" } }, true],
+    [{ trial_block: null, plan: { status: "active" } }, false],
+    [{ trial_block: null, plan: null }, false],
+  ])("%o is %s", (summary, expected) => {
+    expect(
+      billingStillBlocked(summary as Parameters<typeof billingStillBlocked>[0]),
+    ).toBe(expected)
   })
 })

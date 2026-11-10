@@ -1,4 +1,4 @@
-import { fireEvent, render, screen } from "@testing-library/react"
+import { act, fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
@@ -49,9 +49,55 @@ describe("TerminalPage billing block", () => {
     mocks.summary.mockReturnValue({ data: undefined })
     mocks.resume.mockReturnValue({
       mutate: vi.fn(),
+      reset: vi.fn(),
       isPending: false,
       error: null,
     })
+  })
+
+  it("offers Start again once a newer billing summary shows the team unblocked", () => {
+    const mutate = vi.fn()
+    const reset = vi.fn()
+    const error = new ApiError(402, "trial_check_unavailable", "")
+    mocks.resume.mockReturnValue({
+      mutate,
+      reset,
+      isPending: false,
+      error: null,
+    })
+    mocks.summary.mockReturnValue({ data: undefined, dataUpdatedAt: 0 })
+    const view = render(<TerminalPage />)
+
+    fireEvent.click(screen.getByRole("button", { name: "Start sandbox" }))
+    const [, options] = mutate.mock.calls[0]
+    const failedAt = Date.now()
+    act(() => options.onError(error))
+    mocks.resume.mockReturnValue({ mutate, reset, isPending: false, error })
+    view.rerender(<TerminalPage />)
+    expect(screen.getByText("Free trial not confirmed")).toBeInTheDocument()
+
+    // A summary from before the failure does not clear it.
+    mocks.summary.mockReturnValue({
+      data: { trial_block: null, plan: { status: "active" } },
+      dataUpdatedAt: failedAt - 1_000,
+    })
+    view.rerender(<TerminalPage />)
+    expect(reset).not.toHaveBeenCalled()
+
+    // A newer summary that still shows a block does not clear it either.
+    mocks.summary.mockReturnValue({
+      data: { trial_block: null, plan: { status: "trial_ended" } },
+      dataUpdatedAt: failedAt + 1_000,
+    })
+    view.rerender(<TerminalPage />)
+    expect(reset).not.toHaveBeenCalled()
+
+    mocks.summary.mockReturnValue({
+      data: { trial_block: null, plan: { status: "active" } },
+      dataUpdatedAt: failedAt + 2_000,
+    })
+    view.rerender(<TerminalPage />)
+    expect(reset).toHaveBeenCalledOnce()
   })
 
   it("offers Start for a paused sandbox when billing is fine", () => {
@@ -74,6 +120,7 @@ describe("TerminalPage billing block", () => {
     })
     mocks.resume.mockReturnValue({
       mutate: vi.fn(),
+      reset: vi.fn(),
       isPending: false,
       error: new ApiError(
         402,

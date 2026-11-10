@@ -4,6 +4,7 @@ import { ArrowLeftIcon, PlayIcon, TerminalIcon } from "@phosphor-icons/react"
 import { Badge, Button } from "@superserve/ui"
 import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
+import { useEffect, useState } from "react"
 
 import { BillingBlockState } from "@/components/billing/billing-block-state"
 import { EmptyState } from "@/components/empty-state"
@@ -14,6 +15,7 @@ import { useResumeSandbox, useSandbox } from "@/hooks/use-sandboxes"
 import {
   billingBlockFromCode,
   billingBlockFromError,
+  billingStillBlocked,
 } from "@/lib/billing/billing-block"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
@@ -40,7 +42,31 @@ export default function TerminalPage() {
   const { data: sandbox, isPending, error, refetch } = useSandbox(sandboxId)
   // The page shows a billing block in place of the terminal, not as a toast.
   const resumeMutation = useResumeSandbox({ billingBlockToast: false })
-  const trialBlock = useBillingSummary().data?.trial_block
+  const summaryQuery = useBillingSummary()
+  const summary = summaryQuery.data
+  const trialBlock = summary?.trial_block
+  // When Start last failed for a billing reason. A billing summary fetched
+  // after that which shows the team unblocked clears the old error, so the
+  // page offers Start again without a reload.
+  const [billingFailedAt, setBillingFailedAt] = useState(0)
+  const { reset: resetResume } = resumeMutation
+  useEffect(() => {
+    if (
+      billingFailedAt &&
+      summary &&
+      summaryQuery.dataUpdatedAt > billingFailedAt &&
+      !billingStillBlocked(summary)
+    ) {
+      setBillingFailedAt(0)
+      resetResume()
+    }
+  }, [billingFailedAt, summary, summaryQuery.dataUpdatedAt, resetResume])
+  const startSandbox = (id: string) =>
+    resumeMutation.mutate(id, {
+      onError: (e) => {
+        if (billingBlockFromError(e)) setBillingFailedAt(Date.now())
+      },
+    })
 
   if (isPending) return <TerminalSkeleton />
 
@@ -105,7 +131,7 @@ export default function TerminalPage() {
         </div>
         <div className="flex items-center gap-2">
           {sandbox.status === "paused" && !billingBlock && (
-            <Button size="sm" onClick={() => resumeMutation.mutate(sandbox.id)}>
+            <Button size="sm" onClick={() => startSandbox(sandbox.id)}>
               <PlayIcon className="size-3.5" weight="light" />
               Start
             </Button>
@@ -131,7 +157,7 @@ export default function TerminalPage() {
           title="Sandbox is paused"
           description="Start the sandbox to open a terminal session. Resume takes a second or two."
           actionLabel={resumeMutation.isPending ? "Starting…" : "Start sandbox"}
-          onAction={() => resumeMutation.mutate(sandbox.id)}
+          onAction={() => startSandbox(sandbox.id)}
         />
       ) : sandbox.status === "resuming" ? (
         <EmptyState

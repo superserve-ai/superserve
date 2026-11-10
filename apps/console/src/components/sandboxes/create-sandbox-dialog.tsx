@@ -35,6 +35,7 @@ import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { useSnapshots } from "@/hooks/use-snapshots"
 import { useTemplates } from "@/hooks/use-templates"
 import type { CreateSandboxRequest, PreviewAccessPolicy } from "@/lib/api/types"
+import { billingBlockFromError } from "@/lib/billing/billing-block"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
@@ -599,6 +600,11 @@ export function CreateSandboxDialog({
         setOpen(false)
         handleReset()
         onCreated?.(sandbox.id)
+      },
+      onError: (error) => {
+        // The billing toast holds the next step. An open modal would trap
+        // focus away from its button, so close it and keep the form values.
+        if (billingBlockFromError(error)) setOpen(false)
       },
     })
   }

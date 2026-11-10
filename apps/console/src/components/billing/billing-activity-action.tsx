@@ -3,29 +3,13 @@
 import { usePostHog } from "posthog-js/react"
 
 import { useBillingSummary } from "@/hooks/use-billing-summary"
-import type { BillingSummaryResponse } from "@/lib/api/billing"
 import {
   BILLING_BLOCK_ACTION_LABEL,
   BILLING_BLOCK_FALLBACK_PATH,
   billingBlockReason,
+  billingStillBlocked,
 } from "@/lib/billing/billing-block"
 import { BILLING_BLOCK_EVENTS } from "@/lib/posthog/events"
-
-const BLOCKED_PLAN_STATES = new Set([
-  "trial_ended",
-  "payment_failed",
-  "plan_required",
-])
-
-// The team still cannot run sandboxes for a billing reason.
-export function billingStillBlocked(
-  summary: BillingSummaryResponse | undefined,
-): boolean {
-  if (!summary) return false
-  return (
-    !!summary.trial_block || BLOCKED_PLAN_STATES.has(summary.plan?.status ?? "")
-  )
-}
 
 /**
  * The "Add card / choose plan" link beside a billing pause in the activity
