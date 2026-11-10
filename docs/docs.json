@@ -296,7 +296,10 @@
           },
           {
             "group": "Evaluations",
-            "pages": ["integrations/evaluations/harbor"]
+            "pages": [
+              "integrations/evaluations/harbor",
+              "integrations/evaluations/openenv"
+            ]
           },
           {
             "group": "Reinforcement Learning",
