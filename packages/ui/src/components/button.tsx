@@ -6,7 +6,7 @@ type ButtonVariant = "default" | "destructive" | "outline" | "ghost" | "link"
 type ButtonSize = "default" | "sm" | "lg" | "icon" | "icon-sm" | "icon-lg"
 
 const baseClasses =
-  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-mono font-medium uppercase transition-colors disabled:pointer-events-none disabled:opacity-30 [&_svg]:pointer-events-none [&_svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus aria-invalid:ring-destructive/20 aria-invalid:ring-2"
+  "inline-flex items-center justify-center gap-2 whitespace-nowrap text-sm font-mono font-medium uppercase transition-colors disabled:pointer-events-none disabled:opacity-30 [&_svg]:pointer-events-none [&_svg]:shrink-0 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:ring-offset-2 ring-offset-surface aria-invalid:ring-destructive aria-invalid:ring-2"
 
 const variantClasses: Record<ButtonVariant, string> = {
   default: "bg-primary text-brand-ink hover:bg-primary-hover",
