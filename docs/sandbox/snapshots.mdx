@@ -62,6 +62,8 @@ fork.commands.run("python -c 'import pandas'")
 
 Each fork is independent. Changes in one fork don't affect the snapshot, the original sandbox or other forks.
 
+To fork one sandbox per CI job from a snapshot with installed dependencies, see [Run CI jobs in sandboxes](/guides/run-ci-jobs#snapshots-and-forks).
+
 ### What a fork starts with
 
 - **Machine:** the snapshot's vCPU, memory and disk size, and the template it was built on.

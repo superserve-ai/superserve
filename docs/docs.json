@@ -77,7 +77,7 @@
           },
           {
             "group": "Guides",
-            "pages": ["sandbox/desktop", "sandbox/docker"]
+            "pages": ["sandbox/desktop", "guides/run-ci-jobs", "sandbox/docker"]
           },
           {
             "group": "Sandbox",
