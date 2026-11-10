@@ -120,7 +120,7 @@ export function ReviewForm({
           </label>
           <button
             disabled={pending}
-            className="border border-dashed border-border px-4 py-2"
+            className="border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
           >
             {pending
               ? "Saving request…"
