@@ -5,7 +5,7 @@ description: Guides for running coding agents, agent frameworks, and agent evalu
 icon: "grid-2"
 ---
 
-Each guide covers one tool, from setup to a first run. Pick a section by what you are doing: running or hosting an agent, building one with a framework, evaluating agents, or connecting an MCP client.
+Each guide covers one tool, from setup to a first run. Pick a section by what you are doing: running or hosting an agent, building one with a framework, evaluating agents, or connecting an MCP client so its agent can create sandboxes on demand.
 
 ## Coding agents
 
@@ -73,7 +73,7 @@ Score model outputs in sandboxes as the reward signal for reinforcement learning
 
 ## MCP and tools
 
-Let any MCP client create and control sandboxes.
+Connect an MCP client to Superserve, so the agent in it can start a sandbox when a task needs one, run commands and edit files there instead of on your machine, and delete the sandbox when the task is done.
 
 <CardGroup cols={3}>
   <Card title="MCP Server" icon="plug" href="/integrations/mcp" />
