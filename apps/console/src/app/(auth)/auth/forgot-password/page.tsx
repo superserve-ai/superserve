@@ -4,6 +4,7 @@ import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useState } from "react"
 
@@ -13,6 +14,7 @@ import { Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { getRecaptchaToken, RECAPTCHA_SITE_KEY } from "@/lib/recaptcha/client"
 
 import { sendPasswordResetEmail } from "./action"
 
@@ -36,7 +38,22 @@ function ForgotPasswordContent() {
     }
     setIsLoading(true)
     try {
-      await sendPasswordResetEmail(email, invite ?? undefined)
+      const recaptchaToken = await getRecaptchaToken("password_reset")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        setErrors({
+          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        })
+        return
+      }
+      const result = await sendPasswordResetEmail(
+        email,
+        recaptchaToken,
+        invite ?? undefined,
+      )
+      if (!result.success) {
+        setErrors({ form: result.error })
+        return
+      }
       posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
     } catch {
@@ -48,6 +65,12 @@ function ForgotPasswordContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
+      {RECAPTCHA_SITE_KEY && (
+        <Script
+          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
@@ -71,9 +94,9 @@ function ForgotPasswordContent() {
             </h1>
             <p className="mt-2 text-center text-xs leading-relaxed text-muted">
               We&apos;ve sent a password reset link to{" "}
-              <span data-mask className="font-semibold text-foreground">
+              <strong data-mask className="text-foreground">
                 {email}
-              </span>
+              </strong>
               . Check your inbox and click the link to reset your password.
             </p>
             <p className="mt-5 text-center text-xs text-muted">
@@ -96,11 +119,11 @@ function ForgotPasswordContent() {
 
             <form onSubmit={handleResetPassword} className="space-y-3">
               <Input
-                disabled={isLoading}
                 type="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
+                disabled={isLoading}
                 error={errors.email}
               />
               {errors.form && (

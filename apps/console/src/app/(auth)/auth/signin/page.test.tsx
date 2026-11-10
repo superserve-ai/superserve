@@ -6,30 +6,37 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // @superserve/ui — mock only the pieces the page uses. Input renders its
 // `error` prop visibly (like the real component), so assertions can search
-// by text instead of needing aria lookups.
-vi.mock("@superserve/ui", () => ({
-  cn: (...classes: Array<string | undefined | false>) =>
-    classes.filter(Boolean).join(" "),
-  Button: (props: React.JSX.IntrinsicElements["button"]) => (
-    <button {...props} />
-  ),
-  Input: ({
-    suffix,
-    error,
-    wrapperClassName: _wrapperClassName,
-    ...props
-  }: React.JSX.IntrinsicElements["input"] & {
-    suffix?: React.ReactNode
-    error?: string
-    wrapperClassName?: string
-  }) => (
-    <div>
-      <input {...props} />
-      {suffix}
-      {error && <p>{error}</p>}
-    </div>
-  ),
-}))
+// by text instead of needing aria lookups. Button honors `render` like the
+// real component, so a link-styled button renders as its link.
+vi.mock("@superserve/ui", async () => {
+  const { cloneElement } = await import("react")
+  return {
+    cn: (...classes: Array<string | undefined | false>) =>
+      classes.filter(Boolean).join(" "),
+    Button: ({
+      render,
+      ...props
+    }: React.JSX.IntrinsicElements["button"] & {
+      render?: React.ReactElement
+    }) => (render ? cloneElement(render, props) : <button {...props} />),
+    Input: ({
+      suffix,
+      error,
+      wrapperClassName: _wrapperClassName,
+      ...props
+    }: React.JSX.IntrinsicElements["input"] & {
+      suffix?: React.ReactNode
+      error?: string
+      wrapperClassName?: string
+    }) => (
+      <div>
+        <input {...props} />
+        {suffix}
+        {error && <p>{error}</p>}
+      </div>
+    ),
+  }
+})
 
 // Decorative components the page pulls in — render nothing.
 vi.mock("@/components/corner-brackets", () => ({
@@ -378,7 +385,7 @@ describe("SignInPage", () => {
   it("preserves the claim destination when switching to signup", async () => {
     searchParamsMap = { offer: "yc_2026", next: "/yc/claim" }
     render(<SignInPage />)
-    const link = await screen.findByRole("link", { name: "Sign up" })
+    const link = await screen.findByRole("link", { name: "Create an account" })
     const url = new URL(
       link.getAttribute("href")!,
       "https://console.example.test",
@@ -391,7 +398,7 @@ describe("SignInPage", () => {
   it("keeps an invite destination in the signup link out of session replay", async () => {
     searchParamsMap = { next: "/invite/ssinv_exampletoken" }
     render(<SignInPage />)
-    const link = await screen.findByRole("link", { name: "Sign up" })
+    const link = await screen.findByRole("link", { name: "Create an account" })
     expect(
       new URL(
         link.getAttribute("href")!,
@@ -406,7 +413,7 @@ describe("SignInPage", () => {
     mockSignInWithOAuth.mockResolvedValue({ error: null })
     render(<SignInPage />)
     expect(
-      await screen.findByRole("link", { name: "Sign up" }),
+      await screen.findByRole("link", { name: "Create an account" }),
     ).toHaveAttribute("href", "/auth/signup?offer=pro_annual")
     await user.click(
       screen.getByRole("button", { name: /Continue with Google/ }),
@@ -469,11 +476,11 @@ describe("SignInPage", () => {
     ).not.toContain("google_signin_intent")
   })
 
-  it("has links to sign up and forgot password", async () => {
+  it("has links to create an account and forgot password", async () => {
     render(<SignInPage />)
 
     expect(
-      await screen.findByRole("link", { name: "Sign up" }),
+      await screen.findByRole("link", { name: "Create an account" }),
     ).toHaveAttribute("href", "/auth/signup")
     expect(
       screen.getByRole("link", { name: "Forgot password?" }),

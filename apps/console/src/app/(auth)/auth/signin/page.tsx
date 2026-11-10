@@ -413,19 +413,24 @@ function SignInContent() {
           </section>
         )}
 
-        {/* Sign up link */}
-        <p className="mt-5 text-center text-xs text-muted">
-          Don&apos;t have an account?{" "}
-          <Link
-            href={signUpHref}
-            className={cn(
-              "font-medium text-foreground hover:underline",
-              inviteLinkReplayClass(signUpHref),
-            )}
-          >
-            Sign up
-          </Link>
-        </p>
+        {/* Sign up */}
+        <div className="relative mt-6 mb-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-dashed border-border" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-surface px-3 text-muted">
+              New to Superserve?
+            </span>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          className={cn("w-full", inviteLinkReplayClass(signUpHref))}
+          render={<Link href={signUpHref} />}
+        >
+          Create an account
+        </Button>
 
         {/* Privacy */}
         <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">

@@ -227,7 +227,7 @@ export default async function YCClaimPage({
                   name="team"
                   required
                   defaultValue=""
-                  className="mt-2 block w-full rounded border p-2"
+                  className="mt-2 block w-full border border-control bg-background p-2 focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
                 >
                   <option value="" disabled>
                     Select your team
@@ -242,7 +242,10 @@ export default async function YCClaimPage({
                   ))}
                 </select>
               </label>
-              <button className="rounded border px-4 py-2" type="submit">
+              <button
+                className="border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                type="submit"
+              >
                 Attach claim to this team
               </button>
             </form>
@@ -257,7 +260,10 @@ export default async function YCClaimPage({
                 Finish normal account setup to create your first team, then
                 choose it for your claim.
               </p>
-              <button className="mt-3 rounded border px-4 py-2" type="submit">
+              <button
+                className="mt-3 border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                type="submit"
+              >
                 Finish account setup
               </button>
             </form>
@@ -285,7 +291,7 @@ export default async function YCClaimPage({
                 Use your matching founder email, or create and verify an account
                 with your preferred email before requesting review.
               </p>
-              <button className="mt-3 border border-dashed border-border px-4 py-2">
+              <button className="mt-3 border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none">
                 Use a different email
               </button>
             </form>
@@ -302,7 +308,7 @@ export default async function YCClaimPage({
                     Finish normal account setup before requesting a review. This
                     does not select a paid plan or grant offer eligibility.
                   </p>
-                  <button className="mt-3 border border-dashed border-border px-4 py-2">
+                  <button className="mt-3 border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none">
                     Set up your account for review
                   </button>
                 </form>

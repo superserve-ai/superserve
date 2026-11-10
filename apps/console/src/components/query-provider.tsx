@@ -57,7 +57,8 @@ export function QueryProvider({
   cacheScope?: string
   teamContext?: DashboardTeamContextValue | null
   initialSignup?: {
-    context: SignupPlanContext
+    // Absent when the plan couldn't be read for a confirmed team.
+    context?: SignupPlanContext
     directory: TeamDirectoryResponse
   }
   children: React.ReactNode
@@ -66,10 +67,11 @@ export function QueryProvider({
     const client = createQueryClient()
     if (initialSignup && cacheScope === "self") {
       client.setQueryData(teamKeys.directory(), initialSignup.directory)
-      client.setQueryData(
-        ["signup-plan", initialSignup.context.teamKey],
-        initialSignup.context,
-      )
+      if (initialSignup.context)
+        client.setQueryData(
+          ["signup-plan", initialSignup.context.teamKey],
+          initialSignup.context,
+        )
     }
     return client
   })
