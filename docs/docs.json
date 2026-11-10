@@ -54,7 +54,11 @@
   "redirects": [
     {
       "source": "/integrations/virtual-filesystems/mesa",
-      "destination": "/storage/mesa"
+      "destination": "/storage/archil"
+    },
+    {
+      "source": "/storage/mesa",
+      "destination": "/storage/archil"
     },
     {
       "source": "/integrations/virtual-filesystems/archil",
@@ -72,6 +76,10 @@
             "pages": ["introduction", "quickstart", "api-key", "cli"]
           },
           {
+            "group": "Guides",
+            "pages": ["sandbox/desktop", "sandbox/docker"]
+          },
+          {
             "group": "Sandbox",
             "pages": [
               "sandbox/create",
@@ -81,9 +89,7 @@
               "sandbox/metadata",
               "sandbox/networking",
               "sandbox/preview-urls",
-              "sandbox/network-log",
-              "sandbox/desktop",
-              "sandbox/docker"
+              "sandbox/network-log"
             ]
           },
           {
@@ -119,7 +125,7 @@
           },
           {
             "group": "Storage",
-            "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
+            "pages": ["storage/archil", "storage/cloud-buckets"]
           },
           {
             "group": "Errors",
@@ -267,7 +273,11 @@
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/crewai",
+              "integrations/agent-harnesses/dspy",
+              "integrations/agent-harnesses/google-adk",
               "integrations/agent-harnesses/langchain",
+              "integrations/agent-harnesses/letta",
+              "integrations/agent-harnesses/mastra",
               "integrations/agent-harnesses/openai-agents-sdk",
               "integrations/agent-harnesses/pydantic-ai",
               "integrations/agent-harnesses/vercel-ai-sdk"
@@ -290,7 +300,14 @@
           },
           {
             "group": "Evaluations",
-            "pages": ["integrations/evaluations/harbor"]
+            "pages": [
+              "integrations/evaluations/harbor",
+              "integrations/evaluations/openenv"
+            ]
+          },
+          {
+            "group": "Reinforcement Learning",
+            "pages": ["integrations/reinforcement-learning/trl"]
           },
           {
             "group": "MCP & Tools",
