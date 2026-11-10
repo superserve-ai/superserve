@@ -96,7 +96,7 @@ export function ReviewForm({
               autoComplete="off"
               maxLength={2048}
               readOnly={!!attempt.current}
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             />
           </label>
           <label className="block">
@@ -105,7 +105,7 @@ export function ReviewForm({
               name="team"
               required
               disabled={!!attempt.current}
-              className="block w-full border border-dashed p-2"
+              className="block w-full border border-dashed border-control p-2"
             >
               <option value="">Choose your team</option>
               {teams.map((team) => (
@@ -120,7 +120,7 @@ export function ReviewForm({
           </label>
           <button
             disabled={pending}
-            className="border border-dashed border-border px-4 py-2"
+            className="border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
           >
             {pending
               ? "Saving request…"

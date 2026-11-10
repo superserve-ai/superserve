@@ -62,7 +62,7 @@ export function AdminTeamsTable({
                       <button
                         type="submit"
                         disabled={!canActAs}
-                        className="inline-flex h-8 items-center justify-center border border-dashed border-border px-3 font-mono text-xs text-foreground uppercase transition-colors hover:bg-muted/30"
+                        className="inline-flex h-8 items-center justify-center border border-dashed border-control px-3 font-mono text-xs text-foreground uppercase transition-colors hover:bg-muted/30 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                       >
                         Act as
                       </button>

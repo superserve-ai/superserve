@@ -658,7 +658,7 @@ export function SandboxTerminal({
                 termRef.current?.focus()
               }
             }}
-            className="w-48 bg-transparent px-2 py-1 font-mono text-xs text-foreground outline-none placeholder:text-muted"
+            className="w-48 border border-dashed border-control bg-transparent px-2 py-1 font-mono text-xs text-foreground placeholder:text-muted focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
           />
           <button
             type="button"
@@ -703,7 +703,7 @@ export function SandboxTerminal({
           <button
             type="button"
             onClick={handleReconnect}
-            className="border border-dashed border-border bg-surface px-3 py-1.5 font-mono text-xs text-foreground uppercase hover:bg-surface-hover"
+            className="border border-dashed border-control bg-surface px-3 py-1.5 font-mono text-xs text-foreground uppercase hover:bg-surface-hover focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
           >
             Reconnect
           </button>
@@ -711,7 +711,7 @@ export function SandboxTerminal({
             <button
               type="button"
               onClick={handleClearBuffer}
-              className="border border-dashed border-border bg-surface px-3 py-1.5 font-mono text-xs text-muted uppercase hover:bg-surface-hover hover:text-foreground"
+              className="border border-dashed border-control bg-surface px-3 py-1.5 font-mono text-xs text-muted uppercase hover:bg-surface-hover hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
             >
               Clear scrollback
             </button>

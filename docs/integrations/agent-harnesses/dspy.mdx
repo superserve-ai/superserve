@@ -1,0 +1,402 @@
+---
+title: "DSPy"
+sidebarTitle: DSPy
+description: Run the code that DSPy Recursive Language Models write in Superserve sandboxes.
+icon: "/logos/integrations/dspy.svg"
+---
+
+[DSPy](https://dspy.ai/) is a Python framework for programming language models. Its `dspy.RLM` module, a Recursive Language Model, answers questions over inputs that are too large for one prompt. The model gets the inputs as variables in a Python REPL, writes code to explore them, and calls sub-LLMs from that code. By default, the REPL runs in a local Deno and Pyodide process.
+
+`dspy.RLM` accepts any interpreter that follows DSPy's `CodeInterpreter` protocol. This page builds one that runs each REPL in a Superserve sandbox. The model's code then runs in an isolated VM with a full Python and the packages from your [template](/templates/overview). Sub-LLM calls still run in your app, so the model API key never enters the sandbox.
+
+## Setup
+
+```bash
+pip install dspy superserve
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+DSPy needs Python 3.10 or later. It reads the provider key from the environment; to use another provider, change the model string. See [Language Models](https://dspy.ai/learn/programming/language_models/) in the DSPy docs, and [API keys](/api-key) to create a Superserve API key.
+
+## How it works
+
+`dspy.RLM` calls the interpreter factory once for each call, runs every step through the interpreter, and shuts it down when the call ends. The interpreter on this page:
+
+1. Creates a sandbox and starts a small Python worker in it with [`commands.spawn`](/commands/sessions). The worker is a long-lived process, and its stdin and stdout stay open for the whole call.
+2. Sends each step's code and the input variables to the worker as one JSON line. The worker runs the code in a namespace that persists between steps, and replies with the printed output, the error, or the value given to `SUBMIT`.
+3. Answers tool calls while a step runs. When the model's code calls `llm_query`, the worker writes a request line and waits. The interpreter runs the tool in your app and writes the result back.
+
+## Add the sandbox worker
+
+Save this file as `rlm_worker.py`. It runs inside the sandbox and uses only the Python standard library.
+
+```python rlm_worker.py
+"""Persistent Python REPL that runs inside the sandbox for dspy.RLM."""
+
+import contextlib
+import io
+import json
+import os
+import sys
+import threading
+from functools import partial
+from typing import Any
+
+# Keep protocol messages on a private copy of stdout, so output that model code
+# writes straight to file descriptor 1 (for example from a subprocess) cannot
+# corrupt them.
+protocol = os.fdopen(os.dup(1), "w")
+os.dup2(os.open(os.devnull, os.O_WRONLY), 1)
+
+namespace: dict[str, Any] = {"__name__": "__main__"}
+output_names: list[str] = []
+tool_lock = threading.Lock()
+
+
+class Submitted(BaseException):
+    def __init__(self, value: dict[str, Any]) -> None:
+        self.value = value
+
+
+def send(message: dict[str, Any]) -> None:
+    protocol.write(json.dumps(message, default=repr) + "\n")
+    protocol.flush()
+
+
+def receive() -> dict[str, Any]:
+    line = sys.stdin.readline()
+    if not line:
+        raise SystemExit(0)
+    message: dict[str, Any] = json.loads(line)
+    return message
+
+
+def call_tool(tool_name: str, /, *args: Any, **kwargs: Any) -> Any:
+    # One tool call at a time: the host answers each request in order.
+    with tool_lock:
+        send({"type": "tool_call", "name": tool_name, "args": args, "kwargs": kwargs})
+        reply = receive()
+    if "error" in reply:
+        raise RuntimeError(reply["error"])
+    return reply["value"]
+
+
+def submit(*args: Any, **kwargs: Any) -> None:
+    raise Submitted({**dict(zip(output_names, args, strict=False)), **kwargs})
+
+
+def execute(request: dict[str, Any]) -> dict[str, Any]:
+    output_names[:] = [field["name"] for field in request["output_fields"] or []]
+    for name in request["tools"]:
+        namespace[name] = partial(call_tool, name)
+    namespace["SUBMIT"] = submit
+    namespace.update(request["variables"])
+
+    output = io.StringIO()
+    try:
+        with contextlib.redirect_stdout(output), contextlib.redirect_stderr(output):
+            exec(compile(request["code"], "<rlm>", "exec"), namespace)
+    except Submitted as submitted:
+        return {"type": "final", "value": submitted.value}
+    except SyntaxError as exc:
+        return {"type": "syntax_error", "error": str(exc)}
+    except Exception as exc:
+        error = f"{output.getvalue()}{type(exc).__name__}: {exc}"
+        return {"type": "error", "error": error}
+    return {"type": "output", "stdout": output.getvalue()}
+
+
+send({"type": "ready"})
+while True:
+    send(execute(receive()))
+```
+
+The worker keeps its protocol on a private copy of stdout. Output that the model's code writes directly to file descriptor 1, for example from a subprocess, is discarded instead of corrupting the protocol.
+
+## Add the interpreter
+
+Save this file as `superserve_interpreter.py`, next to `rlm_worker.py`. The highlighted lines are the Superserve calls: create the sandbox, start the worker, write to its stdin, and clean up.
+
+```python superserve_interpreter.py {70-79,101,175-178}
+"""A dspy.RLM code interpreter that runs the REPL in a Superserve sandbox."""
+
+import asyncio
+import concurrent.futures
+import contextlib
+import contextvars
+import inspect
+import json
+import queue
+import threading
+import time
+from collections.abc import Awaitable, Callable
+from pathlib import Path
+from typing import Any, TypeVar
+
+from dspy.primitives.code_interpreter import (
+    CodeExecutionError,
+    CodeInterpreterError,
+    FinalOutput,
+)
+from pydantic_core import to_jsonable_python
+from superserve import AsyncCommandSession, AsyncSandbox
+
+T = TypeVar("T")
+
+WORKER_SOURCE = Path(__file__).with_name("rlm_worker.py").read_text()
+WORKER_PATH = "/home/user/rlm_worker.py"
+
+
+class SuperserveInterpreter:
+    execution_instructions = (
+        "Code runs in a persistent Python 3 REPL inside an isolated Superserve "
+        "sandbox, a Linux VM. Variables, imports, and files persist between "
+        "steps. Only print() output is returned to you."
+    )
+
+    def __init__(self, *, from_template: str | None = None, step_timeout: float = 600):
+        self.tools: dict[str, Callable[..., Any]] = {}
+        self.output_fields: list[dict[str, Any]] | None = None
+        self._from_template = from_template
+        self._step_timeout = step_timeout
+        self._sandbox: AsyncSandbox | None = None
+        self._session: AsyncCommandSession | None = None
+        self._lines: queue.Queue[str | None] = queue.Queue()
+        self._partial_line = ""
+        self._closed = False
+        # The Superserve session API is async; RLM calls the interpreter
+        # synchronously, so run sandbox I/O on a private event loop.
+        self._loop = asyncio.new_event_loop()
+        threading.Thread(target=self._loop.run_forever, daemon=True).start()
+
+    @staticmethod
+    async def _await(awaitable: Awaitable[T]) -> T:
+        return await awaitable
+
+    def _run(self, awaitable: Awaitable[T], timeout: float | None = None) -> T:
+        future = asyncio.run_coroutine_threadsafe(self._await(awaitable), self._loop)
+        try:
+            return future.result(timeout)
+        except concurrent.futures.TimeoutError:
+            future.cancel()
+            raise CodeInterpreterError("The sandbox step timed out.") from None
+
+    def _on_stdout(self, chunk: str) -> None:
+        *lines, self._partial_line = (self._partial_line + chunk).split("\n")
+        for line in lines:
+            self._lines.put(line)
+
+    async def _start(self) -> None:
+        self._sandbox = await AsyncSandbox.create(
+            name="dspy-rlm",
+            from_template=self._from_template,
+            timeout_seconds=3600,
+            auto_delete_seconds=3600,
+        )
+        await self._sandbox.files.write(WORKER_PATH, WORKER_SOURCE)
+        self._session = await self._sandbox.commands.spawn(
+            f"python3 -u {WORKER_PATH}", on_stdout=self._on_stdout
+        )
+        self._loop.create_task(self._watch(self._session))
+
+    async def _watch(self, session: AsyncCommandSession) -> None:
+        # Wake up a waiting execute() if the worker exits.
+        with contextlib.suppress(Exception):
+            await session.wait()
+        self._lines.put(None)
+
+    def start(self) -> None:
+        if self._closed:
+            raise CodeInterpreterError("The interpreter has been shut down.")
+        if self._sandbox is None:
+            self._run(self._start())
+            if self._receive(time.monotonic() + self._step_timeout)["type"] != "ready":
+                raise CodeInterpreterError("The sandbox worker did not start.")
+
+    def _send(self, message: dict[str, Any], deadline: float) -> None:
+        assert self._session is not None
+        # Send Pydantic models and dataclasses as JSON objects, like DSPy does.
+        data = to_jsonable_python(message, fallback=str)
+        line = json.dumps(data) + "\n"
+        self._run(self._session.stdin.write(line), max(0, deadline - time.monotonic()))
+
+    @staticmethod
+    def _get(items: "queue.Queue[T]", deadline: float) -> T:
+        try:
+            return items.get(timeout=max(0, deadline - time.monotonic()))
+        except queue.Empty:
+            raise CodeInterpreterError("The sandbox step timed out.") from None
+
+    def _receive(self, deadline: float) -> dict[str, Any]:
+        line = self._get(self._lines, deadline)
+        if line is None:
+            raise CodeInterpreterError("The sandbox worker exited.")
+        message: dict[str, Any] = json.loads(line)
+        return message
+
+    def _run_tool(self, request: dict[str, Any]) -> dict[str, Any]:
+        try:
+            tool = self.tools[request["name"]]
+            # RLM wraps custom tools to take keyword arguments only, so pass
+            # positional arguments by their parameter names.
+            names = [
+                p.name
+                for p in inspect.signature(tool).parameters.values()
+                if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
+            ]
+            if len(request["args"]) > len(names):
+                raise TypeError("too many positional arguments")
+            positional = dict(zip(names, request["args"], strict=False))
+            value = tool(**positional, **request["kwargs"])
+            if inspect.isawaitable(value):
+                # Use a separate loop, so a blocking async tool cannot stall
+                # the sandbox I/O loop.
+                value = asyncio.run(self._await(value))
+            return {"value": value}
+        except Exception as exc:
+            return {"error": f"{type(exc).__name__}: {exc}"}
+
+    def _call_tool(self, request: dict[str, Any], deadline: float) -> dict[str, Any]:
+        # Run the tool on its own thread, so a slow tool cannot outlast the step.
+        result: queue.Queue[dict[str, Any]] = queue.Queue()
+        run = contextvars.copy_context().run
+        threading.Thread(
+            target=run, args=(lambda: result.put(self._run_tool(request)),), daemon=True
+        ).start()
+        return self._get(result, deadline)
+
+    def execute(self, code: str, variables: dict[str, Any] | None = None) -> Any:
+        self.start()
+        deadline = time.monotonic() + self._step_timeout
+        self._send(
+            {
+                "code": code,
+                "variables": variables or {},
+                "tools": list(self.tools),
+                "output_fields": self.output_fields,
+            },
+            deadline,
+        )
+        message = self._receive(deadline)
+        # Host tools such as llm_query run here, while the sandbox code waits.
+        while message["type"] == "tool_call":
+            self._send(self._call_tool(message, deadline), deadline)
+            message = self._receive(deadline)
+
+        if message["type"] == "final":
+            return FinalOutput(message["value"])
+        if message["type"] == "syntax_error":
+            raise SyntaxError(message["error"])
+        if message["type"] == "error":
+            raise CodeExecutionError(message["error"])
+        return message["stdout"] or None
+
+    async def _stop(self) -> None:
+        if self._session is not None:
+            await self._session.close()
+        if self._sandbox is not None:
+            await self._sandbox.kill()
+
+    def shutdown(self) -> None:
+        if self._closed:
+            return
+        self._closed = True
+        try:
+            self._run(self._stop())
+        finally:
+            self._loop.call_soon_threadsafe(self._loop.stop)
+```
+
+The Superserve session API is async, but `dspy.RLM` calls the interpreter synchronously. The interpreter runs the sandbox I/O on a private event loop in a background thread, and waits for each result.
+
+## Run an RLM
+
+Pass the class as `interpreter_factory`. DSPy reads `execution_instructions` from the factory and adds it to the model's instructions.
+
+```python run_rlm.py {11}
+import random
+
+import dspy
+
+from superserve_interpreter import SuperserveInterpreter
+
+dspy.configure(lm=dspy.LM("anthropic/claude-sonnet-4-5"))
+
+rlm = dspy.RLM(
+    "logs, question -> answer",
+    interpreter_factory=SuperserveInterpreter,
+    sub_lm=dspy.LM("anthropic/claude-haiku-4-5"),
+    max_iters=10,
+)
+
+# About 800 KB of service logs: too much to paste into one prompt.
+random.seed(7)
+services = ["auth", "billing", "search", "checkout"]
+lines = []
+for i in range(20_000):
+    service = random.choice(services)
+    status = random.choices([200, 404, 500], weights=[90, 7, 3])[0]
+    if service == "billing" and i > 15_000:
+        status = random.choices([200, 500], weights=[40, 60])[0]
+    latency = random.randint(5, 900)
+    lines.append(f"{i:05d} service={service} status={status} ms={latency}")
+
+result = rlm(
+    logs="\n".join(lines),
+    question="Which service has the most 500 errors, and at which line did its error rate spike?",
+)
+print(result.answer)
+```
+
+Output from a run (the model's wording varies):
+
+```text
+billing service has the most 500 errors (867 total), and its error rate spiked at line 15000
+```
+
+The model never sees the 800 KB of logs in its prompt. It reads them with code in the sandbox, and `sub_lm` answers the `llm_query` calls that the code makes.
+
+## Use a template
+
+The sandbox starts from the default template unless you pass `from_template`. To give the model's code more packages, subclass the interpreter. Use a subclass instead of a `lambda` or `functools.partial`, because DSPy reads `execution_instructions` from the factory itself.
+
+```python {12-13}
+import dspy
+
+from superserve_interpreter import SuperserveInterpreter
+
+
+class DataInterpreter(SuperserveInterpreter):
+    execution_instructions = (
+        SuperserveInterpreter.execution_instructions
+        + " pandas, numpy, and matplotlib are installed."
+    )
+
+    def __init__(self) -> None:
+        super().__init__(from_template="superserve/code-interpreter")
+
+
+rlm = dspy.RLM("context, query -> answer", interpreter_factory=DataInterpreter)
+```
+
+`superserve/code-interpreter` comes with pandas, numpy, matplotlib, and other data packages. See [Templates](/templates/overview) for the full list, and to build your own.
+
+## Good to know
+
+- Each `dspy.RLM` call creates one sandbox and kills it in `shutdown()`, also when the call fails. As a backstop for a crashed app, the interpreter sets `timeout_seconds` and `auto_delete_seconds`. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+- The model can create sub-agents in its code, such as `dspy.Predict` or a nested `dspy.RLM`. They run in your app and use your API key. A nested `dspy.RLM` uses the same interpreter factory, so it gets its own sandbox.
+- DSPy sends the input variables again with every step. Inputs of several megabytes work, but each step uploads them again.
+- If a step, including the host tools it calls, does not finish within `step_timeout` seconds (600 by default), the interpreter raises `CodeInterpreterError`. The call stops and the sandbox is killed. A host tool that is still running is not stopped, but the step no longer waits for it.
+- `dspy.RLM` is marked experimental in DSPy. This page was tested with DSPy 3.4.1.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="DSPy RLM docs" icon="book" href="https://dspy.ai/api/modules/RLM/">
+    Parameters, built-in tools, and custom interpreters for `dspy.RLM`.
+  </Card>
+  <Card title="Command sessions" icon="terminal" href="/commands/sessions">
+    Long-lived processes with streaming output and stdin, through `commands.spawn`.
+  </Card>
+</CardGroup>
