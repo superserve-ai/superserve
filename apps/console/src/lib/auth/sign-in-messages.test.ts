@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { AUTH_MESSAGES, isNetworkAuthError } from "./messages"
+import { AUTH_MESSAGES, isNetworkAuthError } from "./sign-in-messages"
 
 describe("isNetworkAuthError", () => {
   it("recognizes Supabase rejected fetches by class and status", () => {

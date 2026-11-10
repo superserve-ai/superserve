@@ -12,8 +12,8 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/messages"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import {
   SIGNUP_OFFER_PARAM,
   signInOfferDestination,

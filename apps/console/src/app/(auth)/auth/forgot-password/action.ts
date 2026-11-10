@@ -3,8 +3,8 @@
 import { headers } from "next/headers"
 import * as z from "zod"
 
-import { AUTH_MESSAGES } from "@/lib/auth/messages"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
+import { AUTH_MESSAGES } from "@/lib/auth/sign-in-messages"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
