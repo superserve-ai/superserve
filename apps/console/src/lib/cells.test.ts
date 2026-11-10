@@ -10,6 +10,8 @@ vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => mockCreateAdminClient(),
 }))
 
+import { supabaseFetch } from "@/lib/supabase/fresh-fetch"
+
 import { cellFor, configuredRegions, DEFAULT_REGION } from "./cells"
 
 const ORIGINAL_ENV = {
@@ -95,7 +97,10 @@ describe("cells registry env gating", () => {
     expect(mockCreateClient).toHaveBeenCalledWith(
       "https://usw.supabase.co",
       "usw-service-role-key",
-      { auth: { autoRefreshToken: false, persistSession: false } },
+      {
+        auth: { autoRefreshToken: false, persistSession: false },
+        global: { fetch: supabaseFetch },
+      },
     )
     expect(mockCreateAdminClient).not.toHaveBeenCalled()
   })

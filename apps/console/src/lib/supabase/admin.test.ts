@@ -5,6 +5,8 @@ vi.mock("@supabase/supabase-js", () => ({
   createClient: (...args: unknown[]) => mockCreateClient(...args),
 }))
 
+import { supabaseFetch } from "@/lib/supabase/fresh-fetch"
+
 import { createAdminClient } from "./admin"
 
 describe("createAdminClient", () => {
@@ -42,6 +44,7 @@ describe("createAdminClient", () => {
       "service-role-key",
       {
         auth: { autoRefreshToken: false, persistSession: false },
+        global: { fetch: supabaseFetch },
       },
     )
   })
