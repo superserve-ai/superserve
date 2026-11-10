@@ -1,4 +1,5 @@
 import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
@@ -266,13 +267,46 @@ describe("PlanPickerOptions", () => {
     mocks.canManage = false
     mocks.teams = [
       { id: "team-1", name: "Current", region: "use" },
+      { id: "team-3", name: "Zeta", region: "use" },
       { id: "team-2", name: "Side project", region: "use" },
     ]
+    const user = userEvent.setup()
     render(<PlanPickerOptions preselected={null} locator={locator} />)
-    fireEvent.click(await screen.findByRole("button", { name: "Side project" }))
-    expect(screen.queryByRole("button", { name: "Current" })).toBeNull()
-    expect(mocks.switchTeam).toHaveBeenCalledWith("team-2", "use")
+    await user.click(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    )
+    // One dropdown, alphabetical, without the team the user is in.
+    expect(
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Side project", "Zeta"])
+    await user.click(screen.getByRole("option", { name: "Zeta" }))
+    mocks.switchTeam.mockClear()
+    await user.click(screen.getByRole("button", { name: "Open team" }))
+    expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
+    expect(mocks.switchTeam).toHaveBeenCalledWith("team-3", "use")
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+  })
+
+  it("labels each team with its region when the teams span regions", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.canManage = false
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "usw" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    const user = userEvent.setup()
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    await user.click(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    )
+    expect(
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Side project · US East", "Side project · US West"])
   })
 
   it("says so when another team can't be opened", async () => {
@@ -285,13 +319,13 @@ describe("PlanPickerOptions", () => {
     render(
       <PlanPickerOptions preselected={null} locator={locator} adminRequired />,
     )
-    fireEvent.click(await screen.findByRole("button", { name: "Side project" }))
+    fireEvent.click(await screen.findByRole("button", { name: "Open team" }))
     expect((await screen.findByRole("alert")).textContent).toMatch(
       /couldn't open that team/,
     )
     expect(
       screen
-        .getByRole("button", { name: "Side project" })
+        .getByRole("button", { name: "Open team" })
         .hasAttribute("disabled"),
     ).toBe(false)
   })
@@ -325,10 +359,81 @@ describe("PlanPickerOptions", () => {
     ).toBeTruthy()
   })
 
-  it("says so when no plan is sellable", async () => {
+  it("offers support and Sign out when no plan is sellable", async () => {
     mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
     render(<PlanPickerOptions preselected={null} locator={locator} />)
     expect(await screen.findByText(/No plans are available/)).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "support@superserve.ai" }),
+    ).toHaveAttribute("href", "mailto:support@superserve.ai")
+    expect(screen.queryByRole("form")).toBeNull()
+    mocks.signOut.mockClear()
+    fireEvent.click(screen.getByRole("button", { name: "Sign out" }))
+    expect(mocks.signOut).toHaveBeenCalledTimes(1)
+  })
+
+  it("keeps the Enterprise card when no plan is sellable", async () => {
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.cards = [
+      card("enterprise", {
+        kind: "custom",
+        name: "Bespoke",
+        price_label: "Talk to us",
+        display_only: true,
+      }),
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("region", { name: "Bespoke plan" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Book a meeting" }),
+    ).toHaveAttribute("href", ENTERPRISE_MEETING_URL)
+    expect(screen.queryByRole("form", { name: "Team plan" })).toBeNull()
+  })
+
+  it("lets the user open another of their teams when no plan is sellable", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    // The first team is chosen already, so one click opens it.
+    expect(
+      (await screen.findByRole("combobox", { name: "Team to open" }))
+        .textContent,
+    ).toBe("Side project")
+    mocks.switchTeam.mockClear()
+    fireEvent.click(screen.getByRole("button", { name: "Open team" }))
+    expect(screen.getByText(/No plans are available/)).toBeTruthy()
+    expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
+    expect(mocks.switchTeam).toHaveBeenCalledWith("team-2", "use")
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+  })
+
+  it("offers no other team when no plan is sellable and the user has none", async () => {
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.teams = [{ id: "team-1", name: "Current", region: "use" }]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(await screen.findByText(/No plans are available/)).toBeTruthy()
+    await act(async () => {})
+    expect(screen.queryByText(/open another team/)).toBeNull()
+    expect(screen.getByRole("button", { name: "Sign out" })).toBeTruthy()
+  })
+
+  it("still asks a member without billing access to ask an administrator when no plan is sellable", async () => {
+    mocks.offers = [offer("pro_monthly", "Team", { sellable: false })]
+    mocks.cards = [card("enterprise", { kind: "custom", name: "Bespoke" })]
+    mocks.canManage = false
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByText(/Only your team's billing administrators/),
+    ).toBeTruthy()
+    expect(screen.queryByText(/No plans are available/)).toBeNull()
+    expect(screen.queryByRole("region", { name: "Bespoke plan" })).toBeNull()
   })
 })
 

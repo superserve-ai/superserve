@@ -1,7 +1,16 @@
 "use client"
 
 import { CheckIcon } from "@phosphor-icons/react"
-import { Button, cn, Spinner } from "@superserve/ui"
+import {
+  Button,
+  cn,
+  Select,
+  SelectItem,
+  SelectPopup,
+  SelectTrigger,
+  SelectValue,
+  Spinner,
+} from "@superserve/ui"
 import Link from "next/link"
 import { type FormEvent, useEffect, useState } from "react"
 
@@ -48,6 +57,8 @@ function Limit({ children }: { children: string }) {
     </li>
   )
 }
+
+const SUPPORT_EMAIL = "support@superserve.ai"
 
 function EnterpriseOption({
   card,
@@ -162,11 +173,19 @@ function PlanOption({
   )
 }
 
+// Option values pair region with id, as in the sidebar team switcher: the
+// same team id can exist in two cells.
+function teamKey(team: { id: string; region: string }) {
+  return `${team.region}:${team.id}`
+}
+
 // The user's other teams, so someone who can't buy a plan for this team can
-// carry on in one of theirs. Nothing shows while they load or can't be read.
+// carry on in one of theirs. One dropdown keeps the page short however many
+// teams there are. Nothing shows while they load or can't be read.
 function OtherTeams({ locator }: { locator: CheckoutLocator }) {
   const [teams, setTeams] = useState<TeamSummary[]>()
-  const [switching, setSwitching] = useState<string | null>(null)
+  const [picked, setPicked] = useState<string>()
+  const [switching, setSwitching] = useState(false)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let live = true
@@ -175,9 +194,13 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
         (directory) =>
           live &&
           setTeams(
-            directory.teams.filter(
-              (team) => `${team.region}:${team.id}` !== locator.team,
-            ),
+            directory.teams
+              .filter((team) => teamKey(team) !== locator.team)
+              .toSorted(
+                (a, b) =>
+                  a.name.localeCompare(b.name) ||
+                  a.region.localeCompare(b.region),
+              ),
           ),
       )
       .catch(() => undefined)
@@ -188,38 +211,54 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
   if (!teams?.length) return null
   // Region badges only add signal when the teams span regions.
   const multiRegion = new Set(teams.map((team) => team.region)).size > 1
-  const open = async (team: TeamSummary) => {
-    const key = `${team.region}:${team.id}`
-    setSwitching(key)
+  const teamLabel = (team: TeamSummary) =>
+    multiRegion ? `${team.name} · ${regionLabel(team.region)}` : team.name
+  const selected = teams.find((team) => teamKey(team) === picked) ?? teams[0]!
+  const open = async () => {
+    setSwitching(true)
     setFailed(false)
     try {
-      await setActiveTeamAction(team.id, team.region)
+      await setActiveTeamAction(selected.id, selected.region)
       window.location.assign("/sandboxes")
     } catch {
-      setSwitching(null)
+      setSwitching(false)
       setFailed(true)
     }
   }
   return (
-    <div className="flex flex-col items-center gap-2">
+    <div className="flex w-80 max-w-full flex-col items-center gap-2">
       <p className="text-center text-sm text-muted">Or open another team:</p>
-      {teams.map((team) => {
-        const key = `${team.region}:${team.id}`
-        return (
-          <Button
-            key={key}
-            variant="outline"
-            size="sm"
-            disabled={switching !== null}
-            onClick={() => void open(team)}
-          >
-            {switching === key ? <Spinner size="sm" /> : null}
-            {multiRegion
-              ? `${team.name} · ${regionLabel(team.region)}`
-              : team.name}
-          </Button>
-        )
-      })}
+      <div className="flex w-full gap-2">
+        <Select
+          value={teamKey(selected)}
+          onValueChange={(value) => setPicked(value as string)}
+          disabled={switching}
+        >
+          <SelectTrigger aria-label="Team to open" className="h-8 min-w-0">
+            {/* Base UI's Value renders the raw option value by default. */}
+            <SelectValue className="truncate">
+              {() => teamLabel(selected)}
+            </SelectValue>
+          </SelectTrigger>
+          <SelectPopup dropdown>
+            {teams.map((team) => (
+              <SelectItem key={teamKey(team)} value={teamKey(team)}>
+                {teamLabel(team)}
+              </SelectItem>
+            ))}
+          </SelectPopup>
+        </Select>
+        <Button
+          variant="outline"
+          size="sm"
+          className="shrink-0"
+          disabled={switching}
+          onClick={() => void open()}
+        >
+          {switching ? <Spinner size="sm" /> : null}
+          Open team
+        </Button>
+      </div>
       {failed ? (
         <p role="alert" className="text-center text-sm text-muted">
           We couldn&apos;t open that team. Please try again.
@@ -298,11 +337,29 @@ export function PlanPickerOptions({
       : asked
   const highlighted = (offer: SignupCheckoutOffer) =>
     !chosen || chosen === offer
+  const enterprise = catalog?.cards.find((card) => card.kind === "custom")
+  // Nothing is sellable to this team now, so offer every other way forward.
   if (plans.length === 0)
     return (
-      <p className="mt-5 text-center text-xs text-muted">
-        No plans are available right now. Please try again later.
-      </p>
+      <div className="mt-5 flex w-full flex-col items-center gap-4">
+        <p className="max-w-sm text-center text-xs text-muted">
+          No plans are available for this team right now. Contact{" "}
+          <a
+            href={`mailto:${SUPPORT_EMAIL}`}
+            className="text-foreground underline underline-offset-4 hover:text-primary"
+          >
+            {SUPPORT_EMAIL}
+          </a>{" "}
+          to choose a plan.
+        </p>
+        {enterprise ? (
+          <EnterpriseOption card={enterprise} className="w-full max-w-sm" />
+        ) : null}
+        <OtherTeams locator={locator} />
+        <Button variant="outline" size="sm" onClick={() => void signOut()}>
+          Sign out
+        </Button>
+      </div>
     )
   const listed = plans.filter(
     (plan): plan is PickerPlan & { catalog: BillingOffer } =>
@@ -331,7 +388,6 @@ export function PlanPickerOptions({
         ))}
       </div>
     )
-  const enterprise = catalog?.cards.find((card) => card.kind === "custom")
   return (
     <div
       className={cn(
