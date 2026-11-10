@@ -12,7 +12,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
     },
   }),
 }))
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
@@ -52,12 +52,15 @@ vi.mock("@/components/settings/teams-section", () => ({
   TeamsSection: () => null,
 }))
 
+const { addToast, signInWithPassword, updateUser } = vi.hoisted(() => ({
+  addToast: vi.fn(),
+  signInWithPassword: vi.fn(),
+  updateUser: vi.fn(),
+}))
+
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
-    auth: {
-      updateUser: vi.fn(),
-      signInWithPassword: vi.fn(),
-    },
+    auth: { updateUser, signInWithPassword },
   }),
 }))
 
@@ -70,7 +73,7 @@ vi.mock("@superserve/ui", async () => {
     await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
   return {
     ...actual,
-    useToast: () => ({ addToast: vi.fn() }),
+    useToast: () => ({ addToast }),
   }
 })
 
@@ -346,5 +349,121 @@ describe("Settings billing", () => {
 
     expect(screen.getByText("Billed")).toBeInTheDocument()
     expect(screen.getAllByText("Unavailable")).toHaveLength(3)
+  })
+})
+
+describe("Settings change password", () => {
+  beforeEach(() => {
+    addToast.mockReset()
+    signInWithPassword.mockReset().mockResolvedValue({ error: null })
+    updateUser.mockReset().mockResolvedValue({ error: null })
+    useUser.mockReturnValue({
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        user_metadata: {},
+        app_metadata: {},
+      },
+      loading: false,
+    })
+    useBillingSettings.mockReturnValue({
+      data: pricing,
+      isPending: false,
+      error: null,
+    })
+    useBillingSummary.mockReturnValue({
+      data: summary(false),
+      isPending: false,
+      error: null,
+    })
+  })
+
+  function submitPasswords() {
+    fireEvent.change(screen.getByLabelText("Current Password"), {
+      target: { value: "Current-value-1" },
+    })
+    fireEvent.change(screen.getByLabelText("New Password"), {
+      target: { value: "Sandbox12345" },
+    })
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), {
+      target: { value: "Sandbox12345" },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Update Password" }))
+  }
+
+  it("sends the current password so Auth can check it on the server", async () => {
+    renderPage()
+
+    submitPasswords()
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith("Password updated", "success"),
+    )
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: "user@example.com",
+      password: "Current-value-1",
+    })
+    expect(updateUser).toHaveBeenCalledWith({
+      password: "Sandbox12345",
+      current_password: "Current-value-1",
+    })
+    expect(
+      (screen.getByLabelText("Current Password") as HTMLInputElement).value,
+    ).toBe("")
+  })
+
+  it("does not update the password when the browser check fails", async () => {
+    signInWithPassword.mockResolvedValue({
+      error: { code: "invalid_credentials" },
+    })
+    renderPage()
+
+    submitPasswords()
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        "Current password is incorrect",
+        "error",
+      ),
+    )
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it.each(["current_password_invalid", "current_password_required"])(
+    "shows the current password error when Auth returns %s",
+    async (code) => {
+      updateUser.mockResolvedValue({ error: { code } })
+      renderPage()
+
+      submitPasswords()
+
+      await waitFor(() =>
+        expect(addToast).toHaveBeenCalledWith(
+          "Current password is incorrect",
+          "error",
+        ),
+      )
+      expect(addToast).not.toHaveBeenCalledWith(
+        "Failed to update password",
+        "error",
+      )
+      expect(
+        (screen.getByLabelText("Current Password") as HTMLInputElement).value,
+      ).toBe("Current-value-1")
+    },
+  )
+
+  it("keeps the generic error for other Auth failures", async () => {
+    updateUser.mockResolvedValue({ error: { code: "same_password" } })
+    renderPage()
+
+    submitPasswords()
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        "Failed to update password",
+        "error",
+      ),
+    )
   })
 })
