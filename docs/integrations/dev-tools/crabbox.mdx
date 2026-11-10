@@ -82,6 +82,10 @@ superserve:
   execTimeoutSecs: 600
   networkAllowOut:
     - registry.npmjs.org
+    - 1.1.1.1/32 # DNS resolver
+    - 8.8.8.8/32 # DNS resolver
+  networkDenyOut:
+    - 0.0.0.0/0
 ```
 
 Then run commands without `--provider`:
@@ -100,7 +104,7 @@ crabbox run --shell 'npm ci && npm test'
 | `networkAllowOut` | `--superserve-network-allow-out` | Outbound hosts, IPs, or CIDRs to allow. |
 | `networkDenyOut` | `--superserve-network-deny-out` | Outbound IPs or CIDRs to deny. Hostnames are rejected. |
 
-Network lists map to Superserve [network rules](/sandbox/networking). With the config above, `npm ci` can reach the npm registry, and other outbound connections fail. Each flag takes a comma-separated list and overrides the matching config key.
+Network lists map to Superserve [network rules](/sandbox/networking). With the config above, `npm ci` can reach the npm registry, and other outbound connections on all ports fail. `networkDenyOut: [0.0.0.0/0]` blocks all traffic that the allow list does not match. The two DNS resolvers are allowed so that hostnames resolve, which means the sandbox can still send DNS queries. Without the deny rule, the allow list limits only HTTP and HTTPS, and connections on other ports stay open. Each flag takes a comma-separated list and overrides the matching config key.
 
 ## Reuse a sandbox
 
