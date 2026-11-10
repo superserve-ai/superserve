@@ -4,11 +4,13 @@ sidebarTitle: API key
 description: Create an API key and configure the SDK to authenticate with Superserve.
 ---
 
-Every SDK call is authenticated with an API key. Keys are prefixed with `ss_live_` and scoped to a single team.
+Every SDK call is authenticated with an API key. Keys are prefixed with `ss_live_` and scoped to a single team. New keys have the form `ss_live_<region>_<random>`: the SDKs and the CLI read the region from the key and send requests to that region, so you don't need to set an API URL.
 
 ## 1. Create a key in the console
 
-Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and sign in, or sign up for free (no card required). Open **Settings &rarr; API keys**, and click **Create key**. Copy the value - it's only shown once.
+Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and sign in, or sign up for free (no card required). Open **API Keys** in the sidebar, and click **Create Key**. Copy the value - it's only shown once.
+
+To revoke a key, open its row menu on the same page and click **Revoke Key**. Revocation is permanent: the key can no longer be used.
 
 If you use the [CLI](/cli#authenticate), `superserve login` signs you in from the terminal and saves a key for the CLI. You approve the sign-in in your browser.
 
