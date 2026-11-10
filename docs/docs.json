@@ -282,7 +282,8 @@
             "group": "Personal Agents",
             "pages": [
               "integrations/personal-agents/hermes",
-              "integrations/personal-agents/openclaw"
+              "integrations/personal-agents/openclaw",
+              "integrations/personal-agents/qm"
             ]
           },
           {
