@@ -307,6 +307,9 @@ describe("memory growth", () => {
         "Boot memory is at your plan's limit, so there is no room to grow.",
       ),
     ).toBeInTheDocument()
+    // Room to grow again doesn't re-enable it without the user.
+    press("Decrease Memory")
+    expect(screen.getByRole("switch")).not.toBeChecked()
     expect(await submit()).not.toHaveProperty("memory_max_mib")
   })
 })

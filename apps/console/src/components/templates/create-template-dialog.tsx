@@ -135,7 +135,7 @@ function Stepper({
           </div>
           <div className="text-xs text-muted">{hint}</div>
         </div>
-        <div className="flex shrink-0 items-center border border-control">
+        <div className="flex shrink-0 items-center border border-dashed border-border">
           <button
             type="button"
             aria-label={`Decrease ${label}`}
@@ -143,7 +143,7 @@ function Stepper({
             onClick={() => go(index - 1)}
             className={iconButton}
           >
-            <MinusIcon className="size-3.5" weight="bold" />
+            <MinusIcon className="size-3.5" weight="light" />
           </button>
           <div
             // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- steps are uneven, which a number input can't express
@@ -167,7 +167,7 @@ function Stepper({
               e.preventDefault()
               go(next)
             }}
-            className="flex h-9 w-24 items-center justify-center border-x border-control font-mono text-sm text-foreground tabular-nums focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+            className="flex h-9 w-24 items-center justify-center border-x border-dashed border-border font-mono text-sm text-foreground tabular-nums focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
           >
             {format(value)}
           </div>
@@ -178,7 +178,7 @@ function Stepper({
             onClick={() => go(index + 1)}
             className={iconButton}
           >
-            <PlusIcon className="size-3.5" weight="bold" />
+            <PlusIcon className="size-3.5" weight="light" />
           </button>
         </div>
       </div>
@@ -194,9 +194,7 @@ function Stepper({
               onClick={() => onChange(s)}
               className={cn(
                 "h-1.5 flex-1 cursor-pointer transition-colors",
-                i <= index
-                  ? "bg-foreground"
-                  : "bg-border hover:bg-foreground/40",
+                i <= index ? "bg-brand" : "bg-border hover:bg-brand/40",
               )}
             />
           ))}
@@ -260,6 +258,9 @@ export function CreateTemplateDialog({
   const disk = clampTo(diskPick, diskSteps)
   const memoryMaxSteps = maxMemorySteps(memory, memoryLimit)
   const canGrow = memoryMaxSteps.length > 0
+  // Drop the opt-in once there is no room to grow, so a later lower boot size
+  // doesn't re-enable it unasked.
+  if (growth && !canGrow) setGrowth(false)
   const memoryMax =
     growth && canGrow ? clampTo(memoryMaxPick, memoryMaxSteps) : null
   const [errors, setErrors] = useState<{
