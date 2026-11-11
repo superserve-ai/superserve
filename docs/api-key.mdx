@@ -1,7 +1,7 @@
 ---
 title: "Get an API key"
 sidebarTitle: API key
-description: Create an API key and configure the SDK to authenticate with Superserve.
+description: Create an API key, configure the SDK, and call the REST API with it.
 ---
 
 Every SDK call is authenticated with an API key. Keys are prefixed with `ss_live_` and scoped to a single team. New keys have the form `ss_live_<region>_<random>`: the SDKs and the CLI read the region from the key and send requests to that region, so you don't need to set an API URL.
@@ -10,13 +10,21 @@ Every SDK call is authenticated with an API key. Keys are prefixed with `ss_live
 
 Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and sign in, or sign up for free (no card required). Open **API Keys** in the sidebar, and click **Create Key**. Copy the value - it's only shown once.
 
-To revoke a key, open its row menu on the same page and click **Revoke Key**. Revocation is permanent: the key can no longer be used.
+The key belongs to the team that's active in the console when you create it. It can access that team's sandboxes, snapshots, templates, and secrets, including ones created with other keys, the CLI, or the console. It can't access another team's resources. To get a key for another team, switch to that team with the team switcher in the sidebar, then create the key.
 
-If you use the [CLI](/cli#authenticate), `superserve login` signs you in from the terminal and saves a key for the CLI. You approve the sign-in in your browser.
+To revoke a key, open its row menu on the same page and click **Revoke Key**. Revocation is permanent: the key can no longer be used.
 
 <Warning>
 Treat API keys like passwords. Never commit them to source control or paste them into client-side code.
 </Warning>
+
+### Keys created by the CLI
+
+If you use the [CLI](/cli#authenticate), `superserve login` signs you in from the terminal. You approve the sign-in in your browser, and the console creates a new key for your active team. The key shows up on the **API Keys** page as `CLI · <hostname>`, and you revoke it there like any other key. `superserve logout` only removes the key from your machine; it doesn't revoke it.
+
+<Note>
+`superserve login` authenticates only the CLI. The SDKs don't read the key the CLI saves: they read `SUPERSERVE_API_KEY` or the `apiKey` / `api_key` option. Create a key in the console for your code and set `SUPERSERVE_API_KEY`. The CLI uses `SUPERSERVE_API_KEY` instead of its saved key when it's set, so one variable works for both.
+</Note>
 
 ## 2. Configure the SDK
 
@@ -48,3 +56,65 @@ sandbox = Sandbox.create(
 )
 ```
 </CodeGroup>
+
+## Regions and base URL
+
+The region in a key sets the API URL that the SDKs and the CLI use:
+
+| Key prefix | API URL |
+|------------|---------|
+| `ss_live_use_` | `https://api.superserve.ai` |
+| `ss_live_usw_` | `https://api-usw.superserve.ai` |
+| Keys without a region | `https://api.superserve.ai` |
+
+A key with a region works only with that region's URL. A request to another region's URL fails with `401` and the error code `wrong_region`.
+
+The SDKs pick the API URL in this order:
+
+1. The `baseUrl` / `base_url` option.
+2. The `SUPERSERVE_BASE_URL` environment variable.
+3. The region in the API key.
+4. `https://api.superserve.ai`.
+
+You don't need to set a URL for normal use. To override it, pass the option or set the variable:
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandboxes = await Sandbox.list({
+  baseUrl: "https://api.superserve.ai",
+})
+```
+
+```python Python
+from superserve import Sandbox
+
+sandboxes = Sandbox.list(base_url="https://api.superserve.ai")
+```
+</CodeGroup>
+
+The CLI also reads `SUPERSERVE_BASE_URL`. Run `superserve whoami` to see the key, region, and API URL the CLI uses.
+
+## Use the key with the REST API
+
+Send the key in the `X-API-Key` header to the API URL for your key's region. For example, list your team's sandboxes:
+
+```bash
+curl https://api.superserve.ai/sandboxes \
+  -H "X-API-Key: $SUPERSERVE_API_KEY"
+```
+
+A missing or invalid key returns `401` with the error code `auth_failed`. See [List all sandboxes](/api-reference/sandboxes/list-all-sandboxes) and the rest of the REST API reference for every endpoint.
+
+Commands and files (`/exec`, `/exec/stream`, and `/files`) run on the sandbox host, not the API URL. They take the sandbox's access token in the `X-Access-Token` header instead of the API key. Creating, getting, resuming, and activating a sandbox return the token as `access_token`. Keys that start with `ss_live_usw_` use `usw-sandbox.superserve.ai` as the sandbox host; other keys use `sandbox.superserve.ai`.
+
+```bash
+curl -X POST https://sandbox.superserve.ai/exec \
+  -H "X-Superserve-Sandbox-Id: $SANDBOX_ID" \
+  -H "X-Access-Token: $ACCESS_TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"command": "echo hello"}'
+```
+
+See [Run a command and wait for it to finish](/api-reference/exec/run-a-command-and-wait-for-it-to-finish) for the request and response fields.
