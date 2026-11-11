@@ -531,51 +531,48 @@ def point(sandbox: Sandbox, coordinate: list[int] | None) -> dict[str, int]:
 
 def to_desktop_actions(sandbox: Sandbox, block: ToolUseBlock) -> list[dict[str, Any]]:
     args = cast(ComputerInput, block.input)
-    match block.name:
-        case "left_click" | "right_click" | "middle_click":
-            no_modifiers(args)
-            at = point(sandbox, args.get("coordinate"))
-            return [{"type": "click", **at, "button": BUTTONS[block.name]}]
-        case "double_click":
-            no_modifiers(args)
-            return [{"type": "double_click", **point(sandbox, args.get("coordinate"))}]
-        case "triple_click":
-            no_modifiers(args)
-            return [{"type": "click", **point(sandbox, args.get("coordinate"))}] * 3
-        case "left_click_drag":
-            no_modifiers(args)
-            end = point(sandbox, args["coordinate"])
-            return [
-                {"type": "mouse_down", **point(sandbox, args["start_coordinate"])},
-                {"type": "move", **end},
-                {"type": "mouse_up", **end},
-            ]
-        case "mouse_move":
-            return [{"type": "move", **point(sandbox, args["coordinate"])}]
-        case "left_mouse_down":
-            return [{"type": "mouse_down", **cursor(sandbox)}]
-        case "left_mouse_up":
-            return [{"type": "mouse_up", **cursor(sandbox)}]
-        case "scroll":
-            no_modifiers(args)
-            clicks = args["scroll_amount"]
-            dx, dy = {
-                "up": (0, -clicks),
-                "down": (0, clicks),
-                "left": (-clicks, 0),
-                "right": (clicks, 0),
-            }[args["scroll_direction"]]
-            coordinate = args.get("coordinate")
-            move = (
-                [{"type": "move", **point(sandbox, coordinate)}] if coordinate else []
-            )
-            return [*move, {"type": "scroll", "dx": dx, "dy": dy}]
-        case "type":
-            return [{"type": "write", "text": args["text"]}]
-        case "key":
-            return [{"type": "press", "key": args["text"]}] * (args.get("repeat") or 1)
-        case _:
-            raise RuntimeError(f"{block.name} is not supported")
+    if block.name in ("left_click", "right_click", "middle_click"):
+        no_modifiers(args)
+        at = point(sandbox, args.get("coordinate"))
+        return [{"type": "click", **at, "button": BUTTONS[block.name]}]
+    elif block.name == "double_click":
+        no_modifiers(args)
+        return [{"type": "double_click", **point(sandbox, args.get("coordinate"))}]
+    elif block.name == "triple_click":
+        no_modifiers(args)
+        return [{"type": "click", **point(sandbox, args.get("coordinate"))}] * 3
+    elif block.name == "left_click_drag":
+        no_modifiers(args)
+        end = point(sandbox, args["coordinate"])
+        return [
+            {"type": "mouse_down", **point(sandbox, args["start_coordinate"])},
+            {"type": "move", **end},
+            {"type": "mouse_up", **end},
+        ]
+    elif block.name == "mouse_move":
+        return [{"type": "move", **point(sandbox, args["coordinate"])}]
+    elif block.name == "left_mouse_down":
+        return [{"type": "mouse_down", **cursor(sandbox)}]
+    elif block.name == "left_mouse_up":
+        return [{"type": "mouse_up", **cursor(sandbox)}]
+    elif block.name == "scroll":
+        no_modifiers(args)
+        clicks = args["scroll_amount"]
+        dx, dy = {
+            "up": (0, -clicks),
+            "down": (0, clicks),
+            "left": (-clicks, 0),
+            "right": (clicks, 0),
+        }[args["scroll_direction"]]
+        coordinate = args.get("coordinate")
+        move = [{"type": "move", **point(sandbox, coordinate)}] if coordinate else []
+        return [*move, {"type": "scroll", "dx": dx, "dy": dy}]
+    elif block.name == "type":
+        return [{"type": "write", "text": args["text"]}]
+    elif block.name == "key":
+        return [{"type": "press", "key": args["text"]}] * (args.get("repeat") or 1)
+    else:
+        raise RuntimeError(f"{block.name} is not supported")
 
 
 class Computer:
@@ -586,32 +583,31 @@ class Computer:
 
     def run(self, block: ToolUseBlock) -> str | list[ImageBlockParam]:
         desktop = self.sandbox.desktop
-        match block.name:
-            case "screenshot":
-                self.frame = None
-                return [image(desktop.screenshot(format="jpeg"))]
-            case "cursor_position":
-                at = cursor(self.sandbox)
-                return f"X={at['x']}, Y={at['y']}"
-            case "wait":
-                time.sleep(cast(ComputerInput, block.input)["duration"])
-                # Show Claude the screen after the pause.
-                self.frame = desktop.screenshot(format="jpeg")
-                return "OK"
-            case _:
-                step = desktop.step(
-                    to_desktop_actions(self.sandbox, block),
-                    wait_for_change=True,
-                    quiet_ms=300,
-                    format="jpeg",
-                )
-                if step.action_error:
-                    raise RuntimeError(step.action_error)
-                self.frame = step.screenshot
-                # The input ran even when the capture after it failed.
-                if step.screenshot is None:
-                    return f"OK, but the screen capture failed: {step.screenshot_error}"
-                return "OK"
+        if block.name == "screenshot":
+            self.frame = None
+            return [image(desktop.screenshot(format="jpeg"))]
+        elif block.name == "cursor_position":
+            at = cursor(self.sandbox)
+            return f"X={at['x']}, Y={at['y']}"
+        elif block.name == "wait":
+            time.sleep(cast(ComputerInput, block.input)["duration"])
+            # Show Claude the screen after the pause.
+            self.frame = desktop.screenshot(format="jpeg")
+            return "OK"
+        else:
+            step = desktop.step(
+                to_desktop_actions(self.sandbox, block),
+                wait_for_change=True,
+                quiet_ms=300,
+                format="jpeg",
+            )
+            if step.action_error:
+                raise RuntimeError(step.action_error)
+            self.frame = step.screenshot
+            # The input ran even when the capture after it failed.
+            if step.screenshot is None:
+                return f"OK, but the screen capture failed: {step.screenshot_error}"
+            return "OK"
 
 
 def bash(sandbox: Sandbox, args: BashInput) -> str:
@@ -631,54 +627,54 @@ def bash(sandbox: Sandbox, args: BashInput) -> str:
 
 def edit(sandbox: Sandbox, args: EditorInput) -> str:
     files, path = sandbox.files, args["path"]
-    match args["command"]:
-        case "view":
-            listing = sandbox.commands.run(
-                'test -d "$P" && find "$P" -maxdepth 2 -not -path "*/.*"',
-                env={"P": path},
-                timeout_seconds=TIMEOUT_SECONDS,
+    command = args["command"]
+    if command == "view":
+        listing = sandbox.commands.run(
+            'test -d "$P" && find "$P" -maxdepth 2 -not -path "*/.*"',
+            env={"P": path},
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if listing.exit_code == 0:
+            return listing.stdout
+        start, end = args.get("view_range", [1, -1])
+        # Number the lines without the empty string after the final newline.
+        lines = files.read_text(path).removesuffix("\n").split("\n")
+        shown = lines[start - 1 : None if end == -1 else end]
+        return "\n".join(f"{start + i}\t{line}" for i, line in enumerate(shown))
+    elif command == "create":
+        exists = sandbox.commands.run(
+            'test -e "$P"',
+            user="root",
+            env={"P": path},
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if exists.exit_code == 0:
+            raise RuntimeError(f"{path} already exists")
+        files.write(path, args.get("file_text", ""))
+        # The files API writes as root; give the file to the user that runs bash.
+        sandbox.commands.run(
+            'chown desktop: "$P"',
+            user="root",
+            env={"P": path},
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        return f"Created {path}"
+    elif command == "str_replace":
+        parts = files.read_text(path).split(args["old_str"])
+        if len(parts) != 2:
+            raise RuntimeError(
+                f"old_str must match exactly once in {path}, found {len(parts) - 1}"
             )
-            if listing.exit_code == 0:
-                return listing.stdout
-            start, end = args.get("view_range", [1, -1])
-            # Number the lines without the empty string after the final newline.
-            lines = files.read_text(path).removesuffix("\n").split("\n")
-            shown = lines[start - 1 : None if end == -1 else end]
-            return "\n".join(f"{start + i}\t{line}" for i, line in enumerate(shown))
-        case "create":
-            exists = sandbox.commands.run(
-                'test -e "$P"',
-                user="root",
-                env={"P": path},
-                timeout_seconds=TIMEOUT_SECONDS,
-            )
-            if exists.exit_code == 0:
-                raise RuntimeError(f"{path} already exists")
-            files.write(path, args.get("file_text", ""))
-            # The files API writes as root; give the file to the user that runs bash.
-            sandbox.commands.run(
-                'chown desktop: "$P"',
-                user="root",
-                env={"P": path},
-                timeout_seconds=TIMEOUT_SECONDS,
-            )
-            return f"Created {path}"
-        case "str_replace":
-            parts = files.read_text(path).split(args["old_str"])
-            if len(parts) != 2:
-                raise RuntimeError(
-                    f"old_str must match exactly once in {path}, found {len(parts) - 1}"
-                )
-            files.write(path, args.get("new_str", "").join(parts))
-            return f"Edited {path}"
-        case "insert":
-            lines = files.read_text(path).split("\n")
-            # The text becomes whole lines, so drop its own final newline.
-            lines.insert(args["insert_line"], args["insert_text"].removesuffix("\n"))
-            files.write(path, "\n".join(lines))
-            return f"Edited {path}"
-        case command:
-            raise RuntimeError(f"Unknown command {command}")
+        files.write(path, args.get("new_str", "").join(parts))
+        return f"Edited {path}"
+    elif command == "insert":
+        lines = files.read_text(path).split("\n")
+        # The text becomes whole lines, so drop its own final newline.
+        lines.insert(args["insert_line"], args["insert_text"].removesuffix("\n"))
+        files.write(path, "\n".join(lines))
+        return f"Edited {path}"
+    else:
+        raise RuntimeError(f"Unknown command {command}")
 
 
 # Answer every tool call in one response, in order.
