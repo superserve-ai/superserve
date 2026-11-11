@@ -10,7 +10,10 @@ import * as z from "zod"
 import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
 import { deviceReturnPath } from "@/lib/auth/device-return-path"
-import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
+import {
+  isExistingAccountError,
+  isGenericAuthSignupFailure,
+} from "@/lib/auth/errors"
 import {
   claimGoogleSignupRecovery,
   isGoogleUser,
@@ -18,6 +21,7 @@ import {
 } from "@/lib/auth/google-signup-proof"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { SIGN_UP_MESSAGES } from "@/lib/auth/sign-up-messages"
 import {
   beginSignupEvidenceAttempt,
   isSupersededSignupEvidenceAttempt,
@@ -630,10 +634,11 @@ export const signUpWithEmail = async (
 
     if (error) {
       emitFingerprintObservation()
-      if (error.message.includes("already registered")) {
+      if (isExistingAccountError(error)) {
         return {
           success: false,
-          error: "An account with this email already exists.",
+          error: SIGN_UP_MESSAGES.emailExists,
+          errorCode: "email_exists" as const,
         }
       }
       // Auth exposes trigger failures as a generic database error. It keeps
@@ -656,7 +661,21 @@ export const signUpWithEmail = async (
           errorCode: "blocked_email" as const,
         }
       }
-      return { success: false, error: error.message }
+      console.warn("Signup rejected by Auth", {
+        code: error.code,
+        status: error.status,
+        message: error.message,
+      })
+      const authErrorCode =
+        typeof error.code === "string" && /^[a-z0-9_]{1,64}$/.test(error.code)
+          ? error.code
+          : null
+      return {
+        success: false,
+        error: SIGN_UP_MESSAGES.signUpFailed,
+        errorCode: "auth_error" as const,
+        authErrorCode,
+      }
     }
 
     const originalSignup =
@@ -852,7 +871,7 @@ export const resendSignupConfirmation = async (
       )
     const tokenHash = link?.properties?.hashed_token
     if (linkError || !tokenHash || link.user?.id !== ticket.user) {
-      if (linkError?.message.includes("already registered")) {
+      if (isExistingAccountError(linkError)) {
         await clearSignupResendTicket()
         return {
           success: false,

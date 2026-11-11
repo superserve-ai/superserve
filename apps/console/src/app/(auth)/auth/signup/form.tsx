@@ -12,8 +12,13 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
+import {
+  PASSWORD_RULE_HINT,
+  passwordRuleError,
+  passwordRuleFailure,
+} from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { SIGN_UP_MESSAGES } from "@/lib/auth/sign-up-messages"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   clearFingerprintSignupCapture,
@@ -275,6 +280,21 @@ export default function SignUpContent() {
       newErrors.confirmPassword = "Passwords do not match."
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
+      const failure = passwordRuleFailure(password)
+      const fields = [
+        ["fullName", "full_name"],
+        ["email", "email"],
+        ["password", "password"],
+        ["confirmPassword", "confirm_password"],
+      ]
+        .filter(([field]) => newErrors[field])
+        .map(([, field]) => field)
+      posthog.capture(AUTH_EVENTS.SIGN_UP_VALIDATION_FAILED, {
+        method: "email",
+        fields,
+        password_rule: failure?.rule ?? null,
+        password_missing: failure?.missing ?? [],
+      })
       return
     }
     setIsLoading(true)
@@ -308,6 +328,9 @@ export default function SignUpContent() {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
           reason: result.error,
+          error_code: ("errorCode" in result && result.errorCode) || null,
+          auth_error_code:
+            ("authErrorCode" in result && result.authErrorCode) || null,
         })
         if ("errorCode" in result && result.errorCode === "blocked_email") {
           router.push("/auth/auth-code-error?reason=signup_blocked")
@@ -320,7 +343,7 @@ export default function SignUpContent() {
           setEmailStatus("not_sent")
           return
         }
-        setErrors({ form: result.error || "Error creating account." })
+        setErrors({ form: result.error || SIGN_UP_MESSAGES.signUpFailed })
         return
       }
       posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, {
@@ -737,7 +760,32 @@ export default function SignUpContent() {
                 }
               />
               {errors.form && (
-                <p className="text-xs text-destructive">{errors.form}</p>
+                <p className="text-xs text-destructive">
+                  {errors.form === SIGN_UP_MESSAGES.emailExists ? (
+                    <>
+                      This email already has an account.{" "}
+                      <Link
+                        href={signInHref}
+                        className={cn(
+                          "font-medium text-foreground hover:underline",
+                          inviteLinkReplayClass(signInHref),
+                        )}
+                      >
+                        Sign in
+                      </Link>
+                      , or{" "}
+                      <Link
+                        href="/auth/forgot-password"
+                        className="font-medium text-foreground hover:underline"
+                      >
+                        reset your password
+                      </Link>{" "}
+                      if you forgot it.
+                    </>
+                  ) : (
+                    errors.form
+                  )}
+                </p>
               )}
               <Button
                 type="submit"

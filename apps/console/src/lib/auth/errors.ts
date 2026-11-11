@@ -14,3 +14,15 @@ export function isGenericAuthSignupFailure(message: unknown): boolean {
     message.toLowerCase().includes(BLOCKED_TRIGGER_MESSAGE)
   )
 }
+
+export function isExistingAccountError(error: unknown): boolean {
+  if (typeof error !== "object" || error === null) return false
+  if ("code" in error && typeof error.code === "string") {
+    return error.code === "email_exists" || error.code === "user_already_exists"
+  }
+  return (
+    "message" in error &&
+    typeof error.message === "string" &&
+    /already (been )?registered/i.test(error.message)
+  )
+}

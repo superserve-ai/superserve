@@ -1,7 +1,9 @@
-import { act, render, screen, waitFor } from "@testing-library/react"
+import { act, render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+
+import { SIGN_UP_MESSAGES } from "@/lib/auth/sign-up-messages"
 
 // --- Mocks ---
 
@@ -231,6 +233,13 @@ describe("SignUpPage", () => {
     expect(screen.getByText("Email is required.")).toBeInTheDocument()
     expect(screen.getByText("Password is required.")).toBeInTheDocument()
     expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledTimes(1)
+    expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_validation_failed", {
+      method: "email",
+      fields: ["full_name", "email", "password"],
+      password_rule: "required",
+      password_missing: [],
+    })
   })
 
   it("shows an inline error when password is too short", async () => {
@@ -279,6 +288,17 @@ describe("SignUpPage", () => {
       await screen.findByText("Add an uppercase letter."),
     ).toBeInTheDocument()
     expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledTimes(1)
+    expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_validation_failed", {
+      method: "email",
+      fields: ["password"],
+      password_rule: "missing_characters",
+      password_missing: ["uppercase"],
+    })
+    const payload = JSON.stringify(mockCapture.mock.lastCall![1])
+    for (const value of ["Test User", "test@test.com", "sandbox12345"]) {
+      expect(payload).not.toContain(value)
+    }
   })
 
   it("rejects a password over 72 bytes without calling the server", async () => {
@@ -320,6 +340,14 @@ describe("SignUpPage", () => {
     expect(
       await screen.findByText("Passwords do not match."),
     ).toBeInTheDocument()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledTimes(1)
+    expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_validation_failed", {
+      method: "email",
+      fields: ["confirm_password"],
+      password_rule: null,
+      password_missing: [],
+    })
   })
 
   it("preserves the claim destination when switching to sign in", async () => {
@@ -478,10 +506,93 @@ describe("SignUpPage", () => {
     })
   })
 
-  it("shows inline form error when signUpWithEmail returns an error", async () => {
+  it.each([
+    ["", "/auth/signin", false],
+    [
+      "offer=yc_2026&next=%2Fyc%2Fclaim",
+      "/auth/signin?offer=yc_2026&next=%2Fyc%2Fclaim",
+      false,
+    ],
+    [
+      "next=%2Finvite%2Fssinv_exampletoken",
+      "/auth/signin?next=%2Finvite%2Fssinv_exampletoken",
+      true,
+    ],
+  ] as const)(
+    "shows inline form error when signUpWithEmail returns an error (%s)",
+    async (search, expectedHref, protectedInvite) => {
+      mockSignUpWithEmail.mockResolvedValue({
+        success: false,
+        error: SIGN_UP_MESSAGES.emailExists,
+        errorCode: "email_exists",
+      })
+      mockSearchParams = new URLSearchParams(search)
+      render(<SignUpPage />)
+      const bottomSignIn = await screen.findByRole("link", { name: "Sign in" })
+
+      await user.type(
+        await screen.findByPlaceholderText("Full Name"),
+        "Test User",
+      )
+      await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+      await user.type(screen.getByPlaceholderText("Password"), "Password123")
+      await user.type(
+        screen.getByPlaceholderText("Confirm Password"),
+        "Password123",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+      const paragraph = await screen.findByText(
+        (_text, element) =>
+          element?.tagName === "P" &&
+          element.textContent === SIGN_UP_MESSAGES.emailExists,
+      )
+      expect(paragraph).toHaveClass("text-xs", "text-destructive")
+      expect(paragraph.textContent).not.toContain("test@test.com")
+      const signInLinks = screen.getAllByRole("link", { name: "Sign in" })
+      expect(signInLinks).toHaveLength(2)
+      const errorSignIn = within(paragraph).getByRole("link", {
+        name: "Sign in",
+      })
+      expect(errorSignIn).toHaveAttribute(
+        "href",
+        bottomSignIn.getAttribute("href"),
+      )
+      for (const link of signInLinks) {
+        expect(link).toHaveAttribute("href", expectedHref)
+        expect(link).toHaveClass(
+          "font-medium",
+          "text-foreground",
+          "hover:underline",
+        )
+        if (protectedInvite) expect(link).toHaveClass("ph-no-capture")
+        else expect(link).not.toHaveClass("ph-no-capture")
+      }
+      const resetLink = within(paragraph).getByRole("link", {
+        name: "reset your password",
+      })
+      expect(resetLink).toHaveAttribute("href", "/auth/forgot-password")
+      expect(resetLink).toHaveClass(
+        "font-medium",
+        "text-foreground",
+        "hover:underline",
+      )
+      expect(mockCapture).toHaveBeenCalledTimes(1)
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_failed", {
+        method: "email",
+        reason: SIGN_UP_MESSAGES.emailExists,
+        error_code: "email_exists",
+        auth_error_code: null,
+      })
+    },
+  )
+
+  it("captures the mapped and underlying Auth error codes", async () => {
     mockSignUpWithEmail.mockResolvedValue({
       success: false,
-      error: "An account with this email already exists.",
+      error: SIGN_UP_MESSAGES.signUpFailed,
+      errorCode: "auth_error",
+      authErrorCode: "over_email_send_rate_limit",
     })
     render(<SignUpPage />)
 
@@ -498,8 +609,15 @@ describe("SignUpPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     expect(
-      await screen.findByText("An account with this email already exists."),
+      await screen.findByText(SIGN_UP_MESSAGES.signUpFailed),
     ).toBeInTheDocument()
+    expect(mockCapture).toHaveBeenCalledTimes(1)
+    expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_failed", {
+      method: "email",
+      reason: SIGN_UP_MESSAGES.signUpFailed,
+      error_code: "auth_error",
+      auth_error_code: "over_email_send_rate_limit",
+    })
   })
 
   it("redirects to auth-code-error when signup is blocked by the trigger", async () => {
