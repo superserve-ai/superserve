@@ -332,6 +332,7 @@
                 "pages": [
                   "integrations/evaluations/harbor",
                   "integrations/reinforcement-learning/trl",
+                  "integrations/reinforcement-learning/nemo-gym",
                   "integrations/evaluations/openenv"
                 ]
               },
