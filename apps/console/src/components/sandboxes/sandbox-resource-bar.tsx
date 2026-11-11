@@ -29,9 +29,11 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
     {
       label: "Memory",
       value:
-        sandbox.memory_max_mib != null
-          ? `${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`
-          : formatMemory(sandbox.memory_mib),
+        sandbox.memory_max_mib == null
+          ? formatMemory(sandbox.memory_mib)
+          : sandbox.memory_current_mib != null
+            ? `${formatMemory(sandbox.memory_current_mib)} of ${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`
+            : `${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`,
     },
     {
       label: "Timeout",

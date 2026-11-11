@@ -53,13 +53,13 @@ const sandbox: SandboxListItem = {
 }
 const href = `/sandboxes/${sandbox.id}/`
 
-function mount() {
+function mount(row: SandboxListItem = sandbox) {
   const onToggle = vi.fn()
   render(
     <table>
       <tbody>
         <SandboxTableRow
-          sandbox={sandbox}
+          sandbox={row}
           selected={false}
           onToggle={onToggle}
           onConnect={vi.fn()}
@@ -189,4 +189,20 @@ describe("SandboxTableRow accessibility", () => {
       expect(linkPush).toHaveBeenCalledTimes(0)
     },
   )
+})
+
+describe("SandboxTableRow memory", () => {
+  it("shows the memory a growable sandbox holds within its range", () => {
+    mount({ ...sandbox, memory_max_mib: 4096, memory_current_mib: 3072 })
+    expect(
+      screen.getByRole("cell", { name: "2CPU | 3072 of 1024–4096MB" }),
+    ).toBeInTheDocument()
+  })
+
+  it("shows only the range until the current size is known", () => {
+    mount({ ...sandbox, memory_max_mib: 4096, memory_current_mib: null })
+    expect(
+      screen.getByRole("cell", { name: "2CPU | 1024–4096MB" }),
+    ).toBeInTheDocument()
+  })
 })
