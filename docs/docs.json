@@ -283,12 +283,13 @@
                 ]
               },
               {
-                "group": "Managed agents",
+                "group": "Agent platforms",
                 "expanded": true,
                 "pages": [
                   "integrations/managed-agents/claude-managed-agents",
                   "integrations/managed-agents/cursor-cloud-agents",
-                  "integrations/managed-agents/omnara"
+                  "integrations/managed-agents/omnara",
+                  "integrations/personal-agents/qm"
                 ]
               },
               {
@@ -314,8 +315,7 @@
                 "expanded": true,
                 "pages": [
                   "integrations/personal-agents/hermes",
-                  "integrations/personal-agents/openclaw",
-                  "integrations/personal-agents/qm"
+                  "integrations/personal-agents/openclaw"
                 ]
               },
               {
