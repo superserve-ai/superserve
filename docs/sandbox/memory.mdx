@@ -42,7 +42,7 @@ See [Growing memory](/templates/build-spec#growing-memory) for the values `memor
 
 It's automatic: no API calls, no restarts, and no changes to your code.
 
-- **Growing:** when a sandbox runs low on memory, it grows to its limit right away. A program can even ask for a large block of memory at once, more than the sandbox started with, and the sandbox grows as the program uses it.
+- **Growing:** when a sandbox runs low on memory, it grows automatically, up to its limit. A program can even ask for a large block of memory at once, more than the sandbox started with, and the sandbox grows as the program uses it.
 - **Shrinking:** once the burst is over and memory use has stayed low for a few minutes, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`.
 - **Pause, resume and snapshots:** a sandbox resumes at the size it was paused at, and a sandbox created from a snapshot starts at its source's size.
 - **Above the limit:** if a program needs more than `memoryMaxMib`, Linux stops that program, as on any machine that runs out of memory. The sandbox keeps running.
@@ -67,4 +67,4 @@ print(info.memory_mib, info.memory_max_mib, info.memory_current_mib)
 
 </CodeGroup>
 
-`memoryCurrentMib` / `memory_current_mib` is the memory the sandbox holds right now. It isn't set for fixed-size sandboxes. The console shows it next to the range, for example **3 GB of 2–8 GB**.
+`memoryCurrentMib` / `memory_current_mib` is the memory an active sandbox holds. For a paused sandbox, it's the size the sandbox will resume at; paused sandboxes aren't billed for it. It isn't set for fixed-size sandboxes. The console shows it next to the range, for example **3 GB of 2–8 GB**.
