@@ -419,6 +419,33 @@ describe("sendSignInLink", () => {
     },
   )
 
+  it("does not start another address's cooldown once the caller's network limit is used up", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+    refuse("recovery_email_ip")
+    withAccount(confirmedUser)
+
+    await sendSignInLink("victim@example.com", "token")
+    await runAfter()
+
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+      expect.anything(),
+    )
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it("starts no cooldown for an address with no account", async () => {
+    withAccount(null)
+
+    await sendSignInLink("nobody@example.com", "token")
+    await runAfter()
+
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+      expect.anything(),
+    )
+  })
+
   it("shares the hourly network and account limits with password reset", async () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7" }
     withAccount(confirmedUser)

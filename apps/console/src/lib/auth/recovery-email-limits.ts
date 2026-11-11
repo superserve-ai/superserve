@@ -100,18 +100,10 @@ export function recoveryClientNetworkKey(ip: string): string {
   return `${groups.slice(0, 4).join(":")}::/64`
 }
 
-/**
- * Starts the per-address cooldown. Returns false when this address already
- * got a recovery token in the last minute. Call it before generateLink, so a
- * refused request does not replace the token in the email already sent.
- */
-export function startRecoveryEmailCooldown(email: string): Promise<boolean> {
-  return consumeAuthRateLimit(RECOVERY_EMAIL_COOLDOWN, email.toLowerCase())
-}
-
 export type RecoveryEmailReservation =
   | "reserved"
   | "ip_limit"
+  | "cooldown"
   | "account_limit"
   | "budget_used_up"
   | "budget_busy"
@@ -129,17 +121,20 @@ async function reportBudgetUsedUp(max: number) {
 }
 
 /**
- * Takes one email from the hourly limits for this client network and this
- * account, then from the project-wide budget. Call it after the account
- * lookup and eligibility checks, so requests for addresses with no eligible
- * account do not count. Call it before generateLink, so a refused email does
- * not replace the token in an email already sent.
+ * Takes one email from, in order: the hourly limit for this client network,
+ * the one-minute cooldown for this address, the hourly limit for this
+ * account, and the project-wide budget. Call it after the account lookup and
+ * eligibility checks, so requests for addresses with no eligible account do
+ * not count. Call it before generateLink, so a refused email does not
+ * replace the token in an email already sent.
  */
 export async function reserveRecoveryEmail({
   userId,
+  email,
   clientIp,
 }: {
   userId: string
+  email: string
   clientIp: string | undefined
 }): Promise<RecoveryEmailReservation> {
   if (
@@ -150,6 +145,13 @@ export async function reserveRecoveryEmail({
     ))
   ) {
     return "ip_limit"
+  }
+  // After the network limit, so a caller who used up its own limit cannot
+  // keep restarting another address's cooldown and block its emails.
+  if (
+    !(await consumeAuthRateLimit(RECOVERY_EMAIL_COOLDOWN, email.toLowerCase()))
+  ) {
+    return "cooldown"
   }
   if (!(await consumeAuthRateLimit(RECOVERY_EMAIL_ACCOUNT_LIMIT, userId))) {
     return "account_limit"
