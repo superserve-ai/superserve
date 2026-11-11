@@ -4,7 +4,7 @@ sidebarTitle: Cloud buckets
 description: Mount an S3, GCS, or R2 bucket inside a Superserve sandbox with a FUSE driver to read and write object storage as ordinary files.
 ---
 
-Mount a cloud storage bucket inside a sandbox with a FUSE driver so your code reads and writes objects as ordinary files. This talks to the bucket directly, with no caching layer in between, which is the simplest option when a sandbox just needs to reach an existing S3, GCS, or R2 bucket. For a faster, cache-backed filesystem over object storage, use [Archil](/storage/archil); for a versioned, branchable workspace, use [Mesa](/storage/mesa).
+Mount a cloud storage bucket inside a sandbox with a FUSE driver so your code reads and writes objects as ordinary files. This talks to the bucket directly, with no caching layer in between, which is the simplest option when a sandbox just needs to reach an existing S3, GCS, or R2 bucket. For a faster, cache-backed filesystem over object storage, use [Archil](/storage/archil).
 
 The setup has two parts: bake the FUSE driver into a [template](/templates/overview), then mount at runtime with `sandbox.commands.run`.
 

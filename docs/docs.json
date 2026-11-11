@@ -54,7 +54,11 @@
   "redirects": [
     {
       "source": "/integrations/virtual-filesystems/mesa",
-      "destination": "/storage/mesa"
+      "destination": "/storage/archil"
+    },
+    {
+      "source": "/storage/mesa",
+      "destination": "/storage/archil"
     },
     {
       "source": "/integrations/virtual-filesystems/archil",
@@ -73,7 +77,7 @@
           },
           {
             "group": "Guides",
-            "pages": ["sandbox/desktop", "sandbox/docker"]
+            "pages": ["sandbox/desktop", "guides/run-ci-jobs", "sandbox/docker"]
           },
           {
             "group": "Sandbox",
@@ -121,7 +125,7 @@
           },
           {
             "group": "Storage",
-            "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
+            "pages": ["storage/archil", "storage/cloud-buckets"]
           },
           {
             "group": "Errors",
@@ -269,8 +273,11 @@
               "integrations/agent-harnesses/agno",
               "integrations/agent-harnesses/claude-agent-sdk",
               "integrations/agent-harnesses/crewai",
+              "integrations/agent-harnesses/dspy",
+              "integrations/agent-harnesses/flue",
               "integrations/agent-harnesses/google-adk",
               "integrations/agent-harnesses/langchain",
+              "integrations/agent-harnesses/letta",
               "integrations/agent-harnesses/mastra",
               "integrations/agent-harnesses/openai-agents-sdk",
               "integrations/agent-harnesses/pydantic-ai",
@@ -281,7 +288,8 @@
             "group": "Personal Agents",
             "pages": [
               "integrations/personal-agents/hermes",
-              "integrations/personal-agents/openclaw"
+              "integrations/personal-agents/openclaw",
+              "integrations/personal-agents/qm"
             ]
           },
           {
@@ -294,7 +302,10 @@
           },
           {
             "group": "Evaluations",
-            "pages": ["integrations/evaluations/harbor"]
+            "pages": [
+              "integrations/evaluations/harbor",
+              "integrations/evaluations/openenv"
+            ]
           },
           {
             "group": "Reinforcement Learning",
@@ -303,6 +314,10 @@
           {
             "group": "MCP & Tools",
             "pages": ["integrations/mcp"]
+          },
+          {
+            "group": "Computer Use",
+            "pages": ["integrations/computer-use/openai"]
           }
         ]
       }

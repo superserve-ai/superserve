@@ -100,7 +100,106 @@ except ValidationError as err:
 ```
 </CodeGroup>
 
-## Download a directory as a zip
+## Directories
+
+The `files` methods work on one file at a time. For a whole directory:
+
+- **List** — call the REST API, as shown below.
+- **Upload** — write a tar archive, then extract it in the sandbox.
+- **Download** — use [`downloadDir()` / `download_dir()`](#download-a-directory-as-a-zip).
+
+### List a directory
+
+`GET /sandboxes/{sandbox_id}/files?path=<dir>` returns one level of the
+directory. Each entry has `name`, `is_dir`, `size`, and `modified_unix`. Send
+your API key in the `X-API-Key` header. A paused sandbox resumes for the call.
+
+Send the request to the API URL for your key's region, the same URL the SDK
+uses. Keys that start with `ss_live_usw_` use `https://api-usw.superserve.ai`.
+Other keys use `https://api.superserve.ai`. `SUPERSERVE_BASE_URL`, when set,
+overrides both. In TypeScript, `resolveConfig()` returns this URL.
+
+<CodeGroup>
+```typescript TypeScript
+import { resolveConfig } from "@superserve/sdk"
+
+const { baseUrl, apiKey } = resolveConfig()
+const res = await fetch(
+  `${baseUrl}/sandboxes/${sandbox.id}/files?path=${encodeURIComponent("/app")}`,
+  { headers: { "X-API-Key": apiKey } },
+)
+if (!res.ok) throw new Error(await res.text())
+
+const { entries } = await res.json()
+for (const entry of entries) {
+  console.log(entry.is_dir ? `${entry.name}/` : entry.name, entry.size)
+}
+```
+
+```python Python
+import os
+
+import httpx  # installed with the superserve package
+
+api_key = os.environ["SUPERSERVE_API_KEY"]
+base_url = os.environ.get("SUPERSERVE_BASE_URL") or (
+    "https://api-usw.superserve.ai"
+    if api_key.startswith("ss_live_usw_")
+    else "https://api.superserve.ai"
+)
+
+res = httpx.get(
+    f"{base_url}/sandboxes/{sandbox.id}/files",
+    params={"path": "/app"},
+    headers={"X-API-Key": api_key},
+)
+res.raise_for_status()
+
+for entry in res.json()["entries"]:
+    print(entry["name"] + ("/" if entry["is_dir"] else ""), entry["size"])
+```
+</CodeGroup>
+
+For a recursive listing, run a command, for example
+`sandbox.commands.run("find /app -type f")`.
+
+### Upload a directory
+
+Pack the local directory into a tar archive, write the archive to the
+sandbox, and extract it with a command.
+
+<CodeGroup>
+```typescript TypeScript
+import { execFileSync } from "node:child_process"
+import { readFileSync } from "node:fs"
+
+execFileSync("tar", ["-czf", "data.tar.gz", "-C", "./data", "."])
+await sandbox.files.write("/app/data.tar.gz", readFileSync("data.tar.gz"))
+
+const result = await sandbox.commands.run(
+  "mkdir -p /app/data && tar -xzf /app/data.tar.gz -C /app/data && rm /app/data.tar.gz",
+)
+if (result.exitCode !== 0) throw new Error(result.stderr)
+```
+
+```python Python
+import io
+import tarfile
+
+buf = io.BytesIO()
+with tarfile.open(fileobj=buf, mode="w:gz") as tar:
+    tar.add("./data", arcname=".")
+sandbox.files.write("/app/data.tar.gz", buf.getvalue())
+
+result = sandbox.commands.run(
+    "mkdir -p /app/data && tar -xzf /app/data.tar.gz -C /app/data && rm /app/data.tar.gz"
+)
+if result.exit_code != 0:
+    raise RuntimeError(result.stderr)
+```
+</CodeGroup>
+
+### Download a directory as a zip
 
 `downloadDir()` / `download_dir()` exports a whole directory as a ZIP archive —
 useful for pulling out logs, build artifacts, or results in one call. It returns

@@ -22,7 +22,7 @@ You can snapshot an `active` or `paused` sandbox. A running sandbox is paused br
 ```typescript TypeScript {5}
 import { Sandbox } from "@superserve/sdk"
 
-const sandbox = await Sandbox.create({ name: "dev-env" })
+const sandbox = await Sandbox.create({ name: "dev-env", fromTemplate: "superserve/python-3.11" })
 await sandbox.commands.run("pip install pandas")
 const snapshot = await sandbox.snapshot({ name: "with-pandas" })
 ```
@@ -30,7 +30,7 @@ const snapshot = await sandbox.snapshot({ name: "with-pandas" })
 ```python Python {5}
 from superserve import Sandbox
 
-sandbox = Sandbox.create(name="dev-env")
+sandbox = Sandbox.create(name="dev-env", from_template="superserve/python-3.11")
 sandbox.commands.run("pip install pandas")
 snapshot = sandbox.snapshot(name="with-pandas")
 ```
@@ -61,6 +61,8 @@ fork.commands.run("python -c 'import pandas'")
 </CodeGroup>
 
 Each fork is independent. Changes in one fork don't affect the snapshot, the original sandbox or other forks.
+
+To fork one sandbox per CI job from a snapshot with installed dependencies, see [Run CI jobs in sandboxes](/guides/run-ci-jobs#snapshots-and-forks).
 
 ### What a fork starts with
 

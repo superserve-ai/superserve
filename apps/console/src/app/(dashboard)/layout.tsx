@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { AccountDeviceRecorder } from "@/components/account-device-recorder"
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { PlanBanner } from "@/components/billing/plan-banner"
+import { PlanUnavailableBanner } from "@/components/billing/plan-unavailable-banner"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
@@ -13,7 +14,7 @@ import {
   hasImpersonationCookie,
 } from "@/lib/admin/impersonation"
 import { needsPlanSelection } from "@/lib/api/signup-plan"
-import { getSignupPlanPage } from "@/lib/api/signup-plan-page"
+import { getSignupPlanPageState } from "@/lib/api/signup-plan-page"
 import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
 
 export default async function DashboardLayout({
@@ -24,9 +25,15 @@ export default async function DashboardLayout({
   const impersonationContext = (await hasImpersonationCookie())
     ? await getImpersonationContext()
     : null
-  const signup = impersonationContext ? null : await getSignupPlanPage()
-  if (!impersonationContext && !signup)
+  const state = impersonationContext ? null : await getSignupPlanPageState()
+  if (state?.status === "blocked")
     return <PlanSelectionLoader initialContext={null} />
+  // A plan read that failed twice for a confirmed team leaves the console
+  // usable without its plan. The client gate re-checks it, and nothing is
+  // unlocked by the failure.
+  const unavailable = state?.status === "unavailable"
+  const signup = state?.status === "ready" ? state.page : null
+  const seed = unavailable ? { directory: state.directory } : signup
   if (signup && needsPlanSelection(signup.context)) redirect("/onboarding/plan")
   const picker = signup ? awaitingPlanRedirect(signup.context) : null
   if (picker) redirect(picker)
@@ -35,7 +42,7 @@ export default async function DashboardLayout({
   return (
     <QueryProvider
       cacheScope={queryScope}
-      initialSignup={signup ?? undefined}
+      initialSignup={seed ?? undefined}
       teamContext={
         impersonationContext
           ? {
@@ -50,7 +57,9 @@ export default async function DashboardLayout({
       {!impersonationContext && <AccountDeviceRecorder />}
       <SignupPlanGate>
         <DashboardShell
-          globalBanner={<PlanBanner />}
+          globalBanner={
+            unavailable ? <PlanUnavailableBanner /> : <PlanBanner />
+          }
           banner={<ImpersonationBanner context={impersonationContext} />}
         >
           {children}
