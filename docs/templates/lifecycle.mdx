@@ -114,6 +114,8 @@ Template.delete_by_id("7a3f2b8c-1234-...")
 
 Both calls are idempotent on `404`. Once the delete succeeds the template's `name` is released for reuse — you can immediately create a new template with the same name.
 
+You don't need to cancel a running build first. If a build is running when you delete the template, the delete succeeds and the build ends with status `cancelled`.
+
 A template can't be deleted while something still uses it:
 
 - a sandbox created from the template that is not deleted, including a paused one

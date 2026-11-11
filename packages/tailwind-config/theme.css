@@ -14,7 +14,6 @@
   --color-border: rgba(255, 255, 255, 0.08);
   --color-border-strong: rgba(255, 255, 255, 0.12);
   --color-border-focus: var(--color-brand);
-  --color-input: rgba(255, 255, 255, 0.08);
   /* Boundary of interactive controls (inputs, selects, outline buttons); 3:1 against the surfaces (WCAG 1.4.11). */
   --color-control: rgba(255, 255, 255, 0.4);
   --color-ring: var(--color-brand);

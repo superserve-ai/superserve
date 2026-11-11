@@ -11,7 +11,7 @@ const baseClasses =
 const variantClasses: Record<ButtonVariant, string> = {
   default: "bg-primary text-brand-ink hover:bg-primary-hover",
   destructive:
-    "bg-destructive-fill text-foreground hover:bg-destructive-fill-hover focus-visible:ring-destructive/20",
+    "bg-destructive-fill text-foreground hover:bg-destructive-fill-hover",
   outline:
     "border border-dashed border-control bg-background hover:bg-surface-hover hover:text-foreground",
   ghost: "hover:bg-surface-hover hover:text-foreground",

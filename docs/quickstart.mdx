@@ -1,10 +1,12 @@
 ---
 title: "Quickstart"
 sidebarTitle: Quickstart
-description: Create your first sandbox, run a command, and read a file.
+description: Start free, no card required. Create your first sandbox, run a command, and read a file.
 ---
 
 Install the SDK, set your API key, and create a sandbox.
+
+Start free, no card required. A new account gets a limited free trial for its first sandbox. Add a card and choose a plan to continue once the trial credit is used up.
 
 ## 1. Install the SDK
 
@@ -20,7 +22,7 @@ pip install superserve
 
 ## 2. Set your API key
 
-Grab your API key from the [Superserve Console](https://console.superserve.ai?utm_source=docs&utm_medium=link) and export it.
+Sign up for free in the [Superserve Console](https://console.superserve.ai?utm_source=docs&utm_medium=link), no card required. Grab your API key and export it.
 
 ```bash
 export SUPERSERVE_API_KEY=ss_live_...
@@ -61,6 +63,24 @@ print(content)
 sandbox.kill()
 ```
 </CodeGroup>
+
+## 4. Run it
+
+Save the TypeScript as `index.mts` or the Python as `main.py`, then run it:
+
+<CodeGroup>
+```bash TypeScript
+npx tsx index.mts
+```
+
+```bash Python
+python3 main.py
+```
+</CodeGroup>
+
+<Note>
+The TypeScript uses top-level `await`, which Node only allows in ES modules. The `.mts` extension makes the file one. To use `.ts` instead, set `"type": "module"` in your `package.json`.
+</Note>
 
 ## Where to go next
 
