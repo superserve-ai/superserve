@@ -1,0 +1,446 @@
+---
+title: "NVIDIA NeMo Gym"
+sidebarTitle: "NVIDIA NeMo Gym"
+description: Run NeMo Gym sandboxes and tool calls in Superserve sandboxes with a Superserve sandbox provider.
+icon: "/logos/integrations/nvidia.svg"
+---
+
+[NeMo Gym](https://github.com/NVIDIA-NeMo/Gym) is NVIDIA's library for building reinforcement learning environments and for evaluating models and agents in them. An environment has a set of tasks, an agent that calls a model, and a resources server that provides tools and a `verify()` method that returns the reward.
+
+NeMo Gym runs code through a provider-neutral sandbox API, `nemo_gym.sandbox`. A sandbox provider creates the sandboxes on a backend. This page adds a provider that runs each NeMo Gym sandbox as a Superserve sandbox. Then it builds a small environment: a model writes Python, each `run_python` tool call runs the code in a new Superserve sandbox, and `verify()` scores the final answer. Model-written code never runs on your machine.
+
+## Setup
+
+NeMo Gym needs Python 3.13.14 or later, [uv](https://docs.astral.sh/uv/getting-started/installation/), and git. Clone NeMo Gym, install it, and add the Superserve SDK:
+
+```bash
+git clone --branch v0.7.0 https://github.com/NVIDIA-NeMo/Gym.git
+cd Gym
+uv venv --python 3.13.14 && source .venv/bin/activate
+uv sync
+uv pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+See [API keys](/api-key) to create a Superserve API key. Run all the commands on this page from the `Gym` folder.
+
+## How it works
+
+1. NeMo Gym code creates a sandbox with `AsyncSandbox` and a `SandboxSpec`. `AsyncSandbox` calls the provider to create the sandbox, run commands, move files, read the status, and close the sandbox.
+2. `SuperserveProvider` makes these calls with the [Superserve Python SDK](/sdk-reference/sandbox). `register_provider()` makes it available under the name `superserve`.
+3. A config block selects the provider and its settings. A resources server refers to the block by name, so you change the backend in config, not in code.
+4. The resources server on this page creates a sandbox for each `run_python` call, runs the code, and deletes the sandbox.
+
+## Add the provider
+
+Create the folder `resources_servers/superserve_python` and save this file in it as `superserve_provider.py`. The highlighted lines are the Superserve calls.
+
+```python resources_servers/superserve_python/superserve_provider.py {42-53,58,60,75,91,98,103,111}
+import math
+import shlex
+import uuid
+from pathlib import Path
+
+import superserve
+from superserve import AsyncSandbox, NetworkConfig, NotFoundError
+
+from nemo_gym.sandbox import (
+    SandboxCreateError,
+    SandboxExecResult,
+    SandboxHandle,
+    SandboxSpec,
+    SandboxStatus,
+)
+
+STATUSES = {
+    superserve.SandboxStatus.STARTING: SandboxStatus.STARTING,
+    superserve.SandboxStatus.RESUMING: SandboxStatus.STARTING,
+    superserve.SandboxStatus.ACTIVE: SandboxStatus.RUNNING,
+    superserve.SandboxStatus.MIGRATING: SandboxStatus.RUNNING,
+    superserve.SandboxStatus.PAUSING: SandboxStatus.PAUSED,
+    superserve.SandboxStatus.PAUSED: SandboxStatus.PAUSED,
+    superserve.SandboxStatus.FAILED: SandboxStatus.ERROR,
+    superserve.SandboxStatus.DELETED: SandboxStatus.STOPPED,
+}
+
+
+class SuperserveProvider:
+    """Runs each NeMo Gym sandbox as a Superserve sandbox."""
+
+    name = "superserve"
+
+    def __init__(
+        self, template: str = "superserve/base", deny_out: list[str] | None = None
+    ) -> None:
+        self._template = template
+        self._network = NetworkConfig(deny_out=deny_out) if deny_out else None
+
+    async def create(self, spec: SandboxSpec) -> SandboxHandle:
+        try:
+            sandbox = await AsyncSandbox.create(
+                name=f"nemo-gym-{uuid.uuid4().hex[:8]}",
+                # SandboxSpec.image names a Superserve template. The template
+                # also sets the sandbox's CPU, memory, and disk.
+                from_template=spec.image or self._template,
+                # Pause the sandbox after ttl_s, then delete it at once.
+                timeout_seconds=int(spec.ttl_s or 3600),
+                auto_delete_seconds=0,
+                metadata=spec.metadata or None,
+                env_vars=spec.env or None,
+                network=self._network,
+            )
+        except superserve.SandboxError as error:
+            raise SandboxCreateError(str(error)) from error
+        try:
+            if spec.workdir:
+                await sandbox.commands.run(f"mkdir -p {shlex.quote(spec.workdir)}")
+        except BaseException:
+            await sandbox.kill()
+            raise
+        return SandboxHandle(sandbox.id, self.name, raw=sandbox)
+
+    async def exec(
+        self,
+        handle: SandboxHandle,
+        command: str,
+        *,
+        cwd: str | None = None,
+        env: dict[str, str] | None = None,
+        timeout_s: int | float | None = None,
+        user: str | int | None = None,
+    ) -> SandboxExecResult:
+        sandbox: AsyncSandbox = handle.raw
+        result = await sandbox.commands.run(
+            command,
+            cwd=cwd,
+            env=env,
+            user=None if user is None else str(user),
+            # A command that runs past the timeout is stopped with exit code 124.
+            timeout_seconds=math.ceil(timeout_s) if timeout_s else None,
+        )
+        return SandboxExecResult(
+            stdout=result.stdout, stderr=result.stderr, return_code=result.exit_code
+        )
+
+    async def upload_file(
+        self, handle: SandboxHandle, source_path: Path, target_path: str
+    ) -> None:
+        sandbox: AsyncSandbox = handle.raw
+        await sandbox.files.write(target_path, source_path.read_bytes())
+
+    async def download_file(
+        self, handle: SandboxHandle, source_path: str, target_path: Path
+    ) -> None:
+        sandbox: AsyncSandbox = handle.raw
+        target_path.parent.mkdir(parents=True, exist_ok=True)
+        target_path.write_bytes(await sandbox.files.read(source_path))
+
+    async def status(self, handle: SandboxHandle) -> SandboxStatus:
+        sandbox: AsyncSandbox = handle.raw
+        try:
+            info = await sandbox.get_info()
+        except NotFoundError:
+            return SandboxStatus.STOPPED
+        return STATUSES.get(info.status, SandboxStatus.UNKNOWN)
+
+    async def close(self, handle: SandboxHandle) -> None:
+        sandbox: AsyncSandbox = handle.raw
+        try:
+            await sandbox.kill()
+        except NotFoundError:
+            pass  # Already deleted.
+
+    async def aclose(self) -> None:
+        return None
+```
+
+The provider maps the `SandboxSpec` fields to Superserve sandbox options:
+
+| `SandboxSpec` field | Superserve sandbox |
+| --- | --- |
+| `image` | Name of the [template](/templates/overview) to boot. When `image` is not set, the provider uses its `template` setting. |
+| `ttl_s` | `timeout_seconds`. The sandbox pauses after this many seconds and is then deleted at once (`auto_delete_seconds=0`). The default is one hour. |
+| `env` | `env_vars`, set for every command. |
+| `metadata` | Sandbox [metadata](/sandbox/metadata). |
+| `workdir` | Created when the sandbox starts. `AsyncSandbox` runs commands in it. |
+| `resources` | Not used. The template sets the vCPUs, memory, and disk. |
+
+The provider has two settings. `template` is the default template, `superserve/base` when you do not set it. `deny_out` is a list of CIDR ranges that the sandbox cannot reach. `["0.0.0.0/0"]` blocks all outbound traffic. See [Networking](/sandbox/networking).
+
+## Try the provider
+
+Save this file as `try_superserve.py` in the `Gym` folder. It registers the provider, starts a sandbox from the `superserve/python-3.11` template, and runs a script that `SandboxSpec.files` uploads.
+
+```python try_superserve.py
+import asyncio
+
+from nemo_gym.sandbox import AsyncSandbox, SandboxSpec, register_provider
+from resources_servers.superserve_python.superserve_provider import SuperserveProvider
+
+register_provider("superserve", SuperserveProvider)
+
+spec = SandboxSpec(
+    image="superserve/python-3.11",
+    workdir="/workspace",
+    files={
+        "/workspace/hello.py": "import sys\nprint('Python', sys.version.split()[0])\n"
+    },
+)
+
+
+async def main() -> None:
+    async with AsyncSandbox({"superserve": {}}, spec) as sandbox:
+        await sandbox.start()
+        print("status:", (await sandbox.status()).value)
+        result = await sandbox.exec("python3 hello.py", timeout_s=60)
+        print("exit code:", result.return_code)
+        print("stdout:", result.stdout)
+
+
+asyncio.run(main())
+```
+
+Run it:
+
+```bash
+python try_superserve.py
+```
+
+```text
+status: running
+exit code: 0
+stdout: Python 3.11.18
+```
+
+`async with` stops the sandbox when the block exits, and the provider deletes it.
+
+## Build the environment
+
+The environment gives the model one tool, `run_python`, and rewards the correct final number.
+
+### Resources server
+
+Save this file as `resources_servers/superserve_python/app.py`. The highlighted lines register the provider, read its config block, and run the tool call in a sandbox.
+
+```python resources_servers/superserve_python/app.py {22,56-58,63-65}
+import re
+
+from fastapi import FastAPI
+from pydantic import BaseModel
+
+from nemo_gym.base_resources_server import (
+    BaseResourcesServerConfig,
+    BaseRunRequest,
+    BaseVerifyRequest,
+    BaseVerifyResponse,
+    SimpleResourcesServer,
+)
+from nemo_gym.global_config import get_global_config_dict
+from nemo_gym.sandbox import (
+    AsyncSandbox,
+    SandboxSpec,
+    register_provider,
+    resolve_provider_config,
+)
+from resources_servers.superserve_python.superserve_provider import SuperserveProvider
+
+register_provider("superserve", SuperserveProvider)
+
+
+class SuperservePythonConfig(BaseResourcesServerConfig):
+    sandbox_provider: str  # Name of the sandbox config block, for example "sandbox".
+
+
+class RunPythonRequest(BaseModel):
+    code: str
+
+
+class RunPythonResponse(BaseModel):
+    exit_code: int
+    stdout: str
+    stderr: str
+
+
+class SuperservePythonRunRequest(BaseRunRequest):
+    expected_answer: str
+
+
+class SuperservePythonVerifyRequest(SuperservePythonRunRequest, BaseVerifyRequest):
+    pass
+
+
+class SuperservePythonServer(SimpleResourcesServer):
+    config: SuperservePythonConfig
+
+    def setup_webserver(self) -> FastAPI:
+        app = super().setup_webserver()
+        app.post("/run_python")(self.run_python)
+        return app
+
+    async def run_python(self, body: RunPythonRequest) -> RunPythonResponse:
+        provider = resolve_provider_config(
+            self.config.sandbox_provider, get_global_config_dict()
+        )
+        spec = SandboxSpec(
+            workdir="/workspace", ttl_s=600, files={"/workspace/main.py": body.code}
+        )
+        # Each tool call gets a new sandbox, which is deleted when the block exits.
+        async with AsyncSandbox(provider, spec) as sandbox:
+            await sandbox.start()
+            result = await sandbox.exec("python3 main.py", timeout_s=30)
+        return RunPythonResponse(
+            exit_code=result.return_code,
+            stdout=result.stdout or "",
+            stderr=result.stderr or "",
+        )
+
+    async def verify(  # type: ignore[override]
+        self, body: SuperservePythonVerifyRequest
+    ) -> BaseVerifyResponse:
+        # Reward 1.0 when the last number in the final answer is the expected one.
+        numbers = re.findall(r"-?\d+", body.response.output_text.replace(",", ""))
+        reward = 1.0 if numbers and numbers[-1] == body.expected_answer else 0.0
+        return BaseVerifyResponse(**body.model_dump(), reward=reward)
+
+
+if __name__ == "__main__":
+    SuperservePythonServer.run_webserver()
+```
+
+`verify()` reads `expected_answer` from the task. The `# type: ignore[override]` comment is there because `verify()` takes a request type with that extra field.
+
+### Config
+
+Save the resources server and agent config as `resources_servers/superserve_python/configs/superserve_python.yaml`. `sandbox_provider: sandbox` names the config block that selects the provider.
+
+```yaml resources_servers/superserve_python/configs/superserve_python.yaml
+superserve_python:
+  resources_servers:
+    superserve_python:
+      entrypoint: app.py
+      domain: coding
+      verified: false
+      description: Run model-written Python in Superserve sandboxes
+      sandbox_provider: sandbox
+superserve_python_simple_agent:
+  responses_api_agents:
+    simple_agent:
+      entrypoint: app.py
+      resources_server:
+        type: resources_servers
+        name: superserve_python
+      model_server:
+        type: responses_api_models
+        name: policy_model
+      datasets:
+      - name: example
+        type: example
+        jsonl_fpath: resources_servers/superserve_python/data/example.jsonl
+```
+
+Save the provider config as `resources_servers/superserve_python/configs/superserve.yaml`. The `sandbox` block selects the `superserve` provider and passes the settings to its constructor. Here every sandbox boots the `superserve/python-3.11` template and has no outbound network access.
+
+```yaml resources_servers/superserve_python/configs/superserve.yaml
+sandbox:
+  superserve:
+    template: superserve/python-3.11
+    deny_out: ["0.0.0.0/0"]
+```
+
+### Dependencies
+
+NeMo Gym installs each server in its own virtual environment. Save the server's dependencies as `resources_servers/superserve_python/requirements.txt`:
+
+```text resources_servers/superserve_python/requirements.txt
+-e nemo-gym[dev] @ ../../
+superserve>=0.11.6
+```
+
+### Tasks
+
+Save the tasks as `resources_servers/superserve_python/data/example.jsonl`. Each line has the model input, the `run_python` tool definition, and the expected answer.
+
+```json resources_servers/superserve_python/data/example.jsonl
+{"responses_create_params": {"input": [{"role": "developer", "content": "Use the run_python tool to compute the answer. Reply with the final number only."}, {"role": "user", "content": "What is the sum of all prime numbers below 100000?"}], "tools": [{"type": "function", "name": "run_python", "description": "Run a Python 3 program in a sandbox and return its exit code, stdout, and stderr. Print the values you need.", "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "The full Python program."}}, "required": ["code"], "additionalProperties": false}, "strict": true}]}, "expected_answer": "454396537"}
+{"responses_create_params": {"input": [{"role": "developer", "content": "Use the run_python tool to compute the answer. Reply with the final number only."}, {"role": "user", "content": "What is the 10001st prime number?"}], "tools": [{"type": "function", "name": "run_python", "description": "Run a Python 3 program in a sandbox and return its exit code, stdout, and stderr. Print the values you need.", "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "The full Python program."}}, "required": ["code"], "additionalProperties": false}, "strict": true}]}, "expected_answer": "104743"}
+{"responses_create_params": {"input": [{"role": "developer", "content": "Use the run_python tool to compute the answer. Reply with the final number only."}, {"role": "user", "content": "How many trailing zeros does 1000 factorial have?"}], "tools": [{"type": "function", "name": "run_python", "description": "Run a Python 3 program in a sandbox and return its exit code, stdout, and stderr. Print the values you need.", "parameters": {"type": "object", "properties": {"code": {"type": "string", "description": "The full Python program."}}, "required": ["code"], "additionalProperties": false}, "strict": true}]}, "expected_answer": "249"}
+```
+
+## Run rollouts
+
+The agent calls the model through the OpenAI Responses API. Save the model settings as `env.yaml` in the `Gym` folder:
+
+```yaml env.yaml
+policy_base_url: https://api.openai.com/v1
+policy_api_key: sk-...
+policy_model_name: gpt-5.4-mini
+```
+
+Start the servers. The first start installs the dependencies of each server.
+
+```bash
+gym env start \
+  --resources-server superserve_python \
+  --config resources_servers/superserve_python/configs/superserve.yaml \
+  --model-type openai_model
+```
+
+In a second terminal, activate the virtual environment, set `SUPERSERVE_API_KEY`, and collect one rollout for each task:
+
+```bash
+gym eval run --no-serve \
+  --agent superserve_python_simple_agent \
+  --input resources_servers/superserve_python/data/example.jsonl \
+  --output results/superserve_python_rollouts.jsonl \
+  --num-repeats 1
+```
+
+Sample output:
+
+```text
+Key metrics for superserve_python_simple_agent:
+{
+    "mean/reward": 1.0,
+    "mean/input_tokens": 552.3333333333334,
+    "mean/output_tokens": 146.66666666666666,
+    "mean/total_tokens": 699.0
+}
+Finished rollout collection! View results at:
+Fully materialized inputs: results/superserve_python_rollouts_materialized_inputs.jsonl
+Rollouts: results/superserve_python_rollouts.jsonl
+Aggregate metrics: results/superserve_python_rollouts_aggregate_metrics.json
+```
+
+Each line of `results/superserve_python_rollouts.jsonl` has the full rollout, with the tool calls, the tool outputs, and the reward. In this sample run, the model first tried to import `sympy`. The `superserve/python-3.11` template does not include `sympy`, so the import failed. The model then wrote a sieve in plain Python. A summary of that rollout:
+
+```text
+function_call         run_python: import sympy as sp ...
+function_call_output  exit_code 1: ModuleNotFoundError: No module named 'sympy'
+function_call         run_python: def sum_primes_below(n): ...
+function_call_output  exit_code 0: 454396537
+message               454396537
+reward                1.0
+```
+
+To train a policy with rollouts from this environment, see NeMo Gym's [training tutorials](https://docs.nvidia.com/nemo/gym/main/tutorials/training-tutorials).
+
+## Clean up
+
+Each `run_python` call deletes its sandbox when the call ends. If a server stops before it closes a sandbox, the sandbox pauses after `ttl_s` and is then deleted. Press `Ctrl+C` in the first terminal to stop the servers.
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="NeMo Gym documentation" icon="book" href="https://docs.nvidia.com/nemo/gym/main/about">
+    Read about NeMo Gym environments, agents, and training.
+  </Card>
+  <Card title="NeMo Gym sandbox API" icon="cube" href="https://docs.nvidia.com/nemo/gym/main/infrastructure/sandbox">
+    See the provider-neutral sandbox API and the provider contract.
+  </Card>
+  <Card title="Commands" icon="terminal" href="/sdk-reference/commands">
+    Run commands in a sandbox with the Superserve SDK.
+  </Card>
+  <Card title="Templates" icon="layer-group" href="/templates/overview">
+    Build a template with the packages your environment needs.
+  </Card>
+</CardGroup>
