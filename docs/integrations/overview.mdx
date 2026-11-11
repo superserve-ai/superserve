@@ -1,47 +1,17 @@
 ---
-title: "Guides"
-sidebarTitle: Overview
-description: Guides for running computer use agents, CI jobs, Docker, evaluations, coding agents, code interpreters, and headless browsers in Superserve sandboxes, and for connecting agent tools and frameworks.
+title: "Integrations"
+sidebarTitle: All integrations
+description: Every tool, framework, and model that runs on Superserve sandboxes, on one page.
 icon: "grid-2"
 ---
 
-Start with a use case to learn what a sandbox does for that job and how the parts fit. Then open an integration guide for the setup of one tool. To let an agent start its own sandboxes when a task needs one, connect it through the [MCP Server](/integrations/mcp).
+Each integration guide covers one tool, from setup to a first run. To learn what a sandbox does for a job, such as running a coding agent or a CI job, start with the use cases in the sidebar. To let an agent start its own sandboxes, connect it through the [MCP Server](/integrations/mcp).
 
-## Use cases
+## Coding agents
 
-<CardGroup cols={2}>
-  <Card title="Computer use agents" icon="desktop" href="/sandbox/desktop">
-    Give an agent a desktop that it controls with screenshots, mouse, and keyboard.
-  </Card>
-  <Card title="CI workers" icon="gears" href="/guides/run-ci-jobs">
-    Run each CI job in its own sandbox, with sharding and isolation for untrusted code.
-  </Card>
-  <Card title="Docker services" icon="docker" href="/sandbox/docker">
-    Run containers and Docker Compose services, and expose them with a Preview URL.
-  </Card>
-  <Card title="Evals & RL" icon="flask-vial" href="/guides/evals-and-rl">
-    Run each evaluation trial or training rollout in its own sandbox and score it.
-  </Card>
-  <Card title="Coding agents" icon="terminal" href="/guides/coding-agents">
-    Let a coding agent edit and run a repository in a sandbox.
-  </Card>
-  <Card title="Code interpreter" icon="code" href="/guides/code-interpreter">
-    Run code that a model wrote and read the output, files, and charts back.
-  </Card>
-  <Card title="Headless browser" icon="globe" href="/guides/headless-browser">
-    Run Playwright and Chromium to read pages, take screenshots, and test web apps.
-  </Card>
-</CardGroup>
+Terminal coding agents that run in a sandbox, so their shell commands and file edits stay off your machine.
 
-## Integrations
-
-Each guide covers one tool, from setup to a first run.
-
-### Coding agents
-
-Run a terminal coding agent in a sandbox, so its shell commands and file edits stay off your machine.
-
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Claude Code" icon="/logos/integrations/claude.svg" href="/integrations/coding-agents/claude" />
   <Card title="Codex" icon="/logos/integrations/codex.svg" href="/integrations/coding-agents/codex" />
   <Card title="Kilo Code" icon="/logos/integrations/kilocode.svg" href="/integrations/coding-agents/kilocode" />
@@ -49,21 +19,21 @@ Run a terminal coding agent in a sandbox, so its shell commands and file edits s
   <Card title="Pi" icon="/logos/integrations/pi.svg" href="/integrations/coding-agents/pi" />
 </CardGroup>
 
-### Managed agents
+## Managed agents
 
-Give a hosted agent platform a Superserve sandbox as its self-hosted environment.
+Hosted agent platforms that use a Superserve sandbox as their self-hosted environment.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Claude Managed Agents" icon="/logos/integrations/claude.svg" href="/integrations/managed-agents/claude-managed-agents" />
   <Card title="Cursor Cloud Agents" icon="/logos/integrations/cursor.svg" href="/integrations/managed-agents/cursor-cloud-agents" />
   <Card title="Omnara" icon="/logos/integrations/omnara.svg" href="/integrations/managed-agents/omnara" />
 </CardGroup>
 
-### Agent frameworks
+## Agent frameworks
 
-Use a sandbox as the execution runtime for agents you build with an SDK or framework.
+SDKs and frameworks that use a sandbox as the place where the agent's tools run.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Agno" icon="/logos/integrations/agno.svg" href="/integrations/agent-harnesses/agno" />
   <Card title="Claude Agent SDK" icon="/logos/integrations/claude-agent-sdk.svg" href="/integrations/agent-harnesses/claude-agent-sdk" />
   <Card title="CrewAI" icon="/logos/integrations/crewai.svg" href="/integrations/agent-harnesses/crewai" />
@@ -78,30 +48,30 @@ Use a sandbox as the execution runtime for agents you build with an SDK or frame
   <Card title="Vercel AI SDK" icon="/logos/integrations/vercel.svg" href="/integrations/agent-harnesses/vercel-ai-sdk" />
 </CardGroup>
 
-### Personal agents
+## Personal agents
 
-Host a long-running personal assistant in its own sandbox.
+Long-running personal assistants, each in its own sandbox.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Hermes" icon="/logos/integrations/hermes.svg" href="/integrations/personal-agents/hermes" />
   <Card title="OpenClaw" icon="/logos/integrations/openclaw.svg" href="/integrations/personal-agents/openclaw" />
   <Card title="QM" icon="/logos/integrations/qm.png" href="/integrations/personal-agents/qm" />
 </CardGroup>
 
-### Computer use models
+## Computer use models
 
-Connect a model's computer-use tool to a sandbox desktop.
+Model computer-use tools that control a sandbox desktop.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Claude computer use" icon="/logos/integrations/claude.svg" href="/integrations/computer-use/claude" />
   <Card title="OpenAI computer use" icon="/logos/integrations/openai-agents-sdk.svg" href="/integrations/computer-use/openai" />
 </CardGroup>
 
-### Eval & RL frameworks
+## Evaluation and RL frameworks
 
-Run agent evaluations, benchmarks, and training rollouts with a framework, one sandbox per trial.
+Frameworks that run each evaluation trial or training rollout in its own sandbox.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Harbor" icon="flask" href="/integrations/evaluations/harbor" />
   <Card title="OpenEnv" icon="dumbbell" href="/integrations/evaluations/openenv" />
   <Card title="Hugging Face TRL" icon="/logos/integrations/huggingface.svg" href="/integrations/reinforcement-learning/trl" />

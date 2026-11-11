@@ -114,19 +114,9 @@ asyncio.run(main())
 - Past your team's active sandbox limit, `create` fails with [`too_many_sandboxes`](/errors#ratelimiterror). For large batches, limit how many trials run at the same time.
 - For a trial that runs an agent for several turns, keep the sandbox for the whole episode and delete it at the end. See [OpenEnv](/integrations/evaluations/openenv).
 
-## Related tools
+## Integrations
 
-<CardGroup cols={3}>
-  <Card title="Harbor" icon="flask" href="/integrations/evaluations/harbor">
-    Run agent benchmarks, one sandbox per trial.
-  </Card>
-  <Card title="OpenEnv" icon="dumbbell" href="/integrations/evaluations/openenv">
-    Multi-turn rollouts, one sandbox per episode.
-  </Card>
-  <Card title="Hugging Face TRL" icon="/logos/integrations/huggingface.svg" href="/integrations/reinforcement-learning/trl">
-    Score generated code as the reward for GRPO training.
-  </Card>
-</CardGroup>
+To run benchmarks and training with a framework, one sandbox per trial, see [Harbor](/integrations/evaluations/harbor), [OpenEnv](/integrations/evaluations/openenv), and [Hugging Face TRL](/integrations/reinforcement-learning/trl).
 
 ## Related guides
 
