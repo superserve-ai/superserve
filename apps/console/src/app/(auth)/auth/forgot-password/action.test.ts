@@ -106,7 +106,7 @@ describe("sendPasswordResetEmail", () => {
       data: { properties: { hashed_token: "hash" } },
       error: null,
     })
-    await sendPasswordResetEmail("user@example.com", "recaptcha-token", next)
+    await reset("user@example.com", "recaptcha-token", next)
     const redirect = new URL(
       mockGenerateLink.mock.calls[0][0].options.redirectTo,
     )
