@@ -339,6 +339,7 @@ describe("middleware", () => {
       "/auth/signup",
       "/auth/forgot-password",
       "/auth/callback",
+      "/auth/confirm/",
       "/device",
     ]) {
       const res = await middleware(buildRequest(path))

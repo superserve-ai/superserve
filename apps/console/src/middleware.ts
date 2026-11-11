@@ -16,6 +16,7 @@ const PUBLIC_ROUTES = [
   "/auth/signup",
   "/auth/forgot-password",
   "/auth/callback",
+  "/auth/confirm",
   "/auth/auth-code-error",
   "/auth/pending",
   "/device",

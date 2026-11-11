@@ -325,6 +325,7 @@ vi.mock("@/lib/posthog/events", () => ({
 }))
 
 const mockSignOut = vi.fn()
+const mockVerifyOtp = vi.fn()
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
@@ -335,7 +336,10 @@ vi.mock("@/lib/supabase/server", () => ({
           session: { access_token: "exchanged-token", user: currentUser },
         },
       }),
-      verifyOtp: async () => ({ error: authVerifyOtpError }),
+      verifyOtp: async (...args: unknown[]) => {
+        mockVerifyOtp(...args)
+        return { error: authVerifyOtpError }
+      },
       getUser: async () => ({ data: { user: currentUser } }),
     },
   }),
@@ -345,7 +349,61 @@ import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { STAFF_SESSION_COOKIE } from "@/lib/yc/staff-session"
 
-import { GET } from "./route"
+import { GET as handleGet, POST } from "./route"
+
+const CONFIRM_COOKIE = "__Host-ss_email_link"
+
+/** Reads the email-link cookie value the confirm step set, or null. */
+function confirmCookie(response: Response): string | null {
+  for (const header of response.headers.getSetCookie()) {
+    const [pair] = header.split(";")
+    const index = pair.indexOf("=")
+    if (pair.slice(0, index) === CONFIRM_COOKIE)
+      return decodeURIComponent(pair.slice(index + 1))
+  }
+  return null
+}
+
+function confirmCsrf(cookie: string): string {
+  return JSON.parse(Buffer.from(cookie, "base64url").toString("utf8")).csrf
+}
+
+function confirmPost(
+  cookie: string | null,
+  csrf: string | null,
+  headers: Record<string, string> = { "sec-fetch-site": "same-origin" },
+) {
+  const body = new URLSearchParams()
+  if (csrf !== null) body.set("csrf", csrf)
+  const request = new Request("https://console.superserve.ai/auth/callback/", {
+    method: "POST",
+    body,
+  })
+  // happy-dom drops browser-only headers passed to the constructor, but keeps
+  // headers set afterwards.
+  if (cookie) request.headers.set("cookie", `${CONFIRM_COOKIE}=${cookie}`)
+  for (const [name, value] of Object.entries(headers))
+    request.headers.set(name, value)
+  return request
+}
+
+/**
+ * Email token links stop at the confirm page. This helper presses Continue on
+ * that page, so the tests below cover what the token does once it is used.
+ */
+async function GET(request: Request) {
+  const url = new URL(request.url)
+  if (!url.searchParams.get("token_hash") || url.searchParams.has("code"))
+    return handleGet(request)
+  const interstitial = await handleGet(request)
+  expect(interstitial.status).toBe(303)
+  expect(interstitial.headers.get("location")).toBe(
+    "https://console.superserve.ai/auth/confirm/",
+  )
+  const cookie = confirmCookie(interstitial)!
+  expect(cookie).toBeTruthy()
+  return POST(confirmPost(cookie, confirmCsrf(cookie)))
+}
 
 describe("auth callback", () => {
   it.each([
@@ -398,6 +456,7 @@ describe("auth callback", () => {
       cards: [],
     }))
     mockSignOut.mockReset().mockResolvedValue({ error: null })
+    mockVerifyOtp.mockReset()
     mockUpdateSignupReview.mockReset().mockResolvedValue(undefined)
     evidenceJar.clear()
     currentUser = {
@@ -3065,6 +3124,178 @@ describe("auth callback", () => {
         ([event]) => event === "sign_in_completed",
       )
       expect(completed?.[2]).not.toHaveProperty("sign_in_recovery")
+    })
+  })
+  describe("email link confirm step", () => {
+    const link =
+      "https://console.superserve.ai/auth/callback?token_hash=hashed&type=magiclink&next=%2Fsandboxes"
+
+    async function openLink() {
+      const response = await handleGet(new Request(link))
+      return { response, cookie: confirmCookie(response)! }
+    }
+
+    it("does not use the token on GET and saves the link in a host-only cookie", async () => {
+      const { response, cookie } = await openLink()
+
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+      expect(response.status).toBe(303)
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/confirm/",
+      )
+      // The token stays out of the page URL.
+      expect(response.headers.get("location")).not.toContain("hashed")
+      const header = response.headers
+        .getSetCookie()
+        .find((value) => value.startsWith(`${CONFIRM_COOKIE}=`))!
+      expect(header).toMatch(/HttpOnly/i)
+      expect(header).toMatch(/Secure/i)
+      expect(header).toMatch(/SameSite=lax/i)
+      expect(header).toMatch(/Path=\//i)
+      expect(header).toMatch(/Max-Age=900/i)
+      expect(header).not.toMatch(/Domain=/i)
+      const saved = JSON.parse(
+        Buffer.from(cookie, "base64url").toString("utf8"),
+      )
+      expect(new URLSearchParams(saved.query).get("token_hash")).toBe("hashed")
+      expect(saved.csrf.length).toBeGreaterThanOrEqual(32)
+    })
+
+    it("keeps the OAuth code flow on GET", async () => {
+      const response = await handleGet(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+      expect(confirmCookie(response)).toBeNull()
+      expect(response.headers.get("location")).not.toContain("/auth/confirm")
+    })
+
+    it("uses the token once the confirm page posts back and clears the cookie", async () => {
+      const { cookie } = await openLink()
+
+      const response = await POST(confirmPost(cookie, confirmCsrf(cookie)))
+
+      expect(mockVerifyOtp).toHaveBeenCalledWith({
+        token_hash: "hashed",
+        type: "magiclink",
+      })
+      expect(response.status).toBe(303)
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/sandboxes",
+      )
+      const cleared = response.headers
+        .getSetCookie()
+        .find((value) => value.startsWith(`${CONFIRM_COOKIE}=`))!
+      expect(cleared).toMatch(/Max-Age=0/i)
+    })
+
+    it.each([
+      ["a wrong CSRF value", (csrf: string) => `${csrf}x`],
+      ["no CSRF value", () => null],
+    ])("refuses a post with %s", async (_label, csrfFor) => {
+      const { cookie } = await openLink()
+
+      const response = await POST(
+        confirmPost(cookie, csrfFor(confirmCsrf(cookie))),
+      )
+
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+      expect(response.status).toBe(303)
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/confirm/?retry=1",
+      )
+    })
+
+    it.each<Record<string, string>>([
+      { "sec-fetch-site": "cross-site" },
+      { "sec-fetch-site": "same-site" },
+      { origin: "https://evil.example.com" },
+      { origin: "https://other.superserve.ai" },
+      {},
+    ])("refuses a post that is not from this site: %o", async (headers) => {
+      const { cookie } = await openLink()
+
+      const response = await POST(
+        confirmPost(cookie, confirmCsrf(cookie), headers),
+      )
+
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/confirm/?retry=1",
+      )
+    })
+
+    it("accepts a same-origin post from a browser that sends only Origin", async () => {
+      const { cookie } = await openLink()
+
+      await POST(
+        confirmPost(cookie, confirmCsrf(cookie), {
+          origin: "https://console.superserve.ai",
+        }),
+      )
+
+      expect(mockVerifyOtp).toHaveBeenCalledTimes(1)
+    })
+
+    it("asks for the email link again when the saved link is gone", async () => {
+      const response = await POST(confirmPost(null, "anything"))
+
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/confirm/",
+      )
+    })
+
+    it("refuses a saved link that holds an OAuth code", async () => {
+      const forged = Buffer.from(
+        JSON.stringify({
+          csrf: "c".repeat(43),
+          query: "token_hash=hashed&type=magiclink&code=abc",
+        }),
+      ).toString("base64url")
+
+      const response = await POST(confirmPost(forged, "c".repeat(43)))
+
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/confirm/",
+      )
+    })
+  })
+
+  describe("next allowlist", () => {
+    async function signInWithNext(next: string) {
+      const callback = new URL("https://console.superserve.ai/auth/callback")
+      callback.searchParams.set("code", "abc")
+      callback.searchParams.set("next", next)
+      const response = await GET(new Request(callback))
+      return response.headers.get("location")
+    }
+
+    it.each([
+      "https://evil.superserve.ai/steal",
+      "https://docs.superserve.ai/",
+      "https://superserve.ai/",
+      "https://user:pass@console.superserve.ai/device",
+      "http://console.superserve.ai/device",
+      "https://evil.example.com/",
+      "//evil.example.com/",
+      "/\\evil.example.com/",
+      "/\t/evil.example.com/",
+    ])("does not leave the console for next=%s", async (next) => {
+      const location = await signInWithNext(next)
+      expect(new URL(location!).origin).toBe("https://console.superserve.ai")
+      expect(location).toBe("https://console.superserve.ai/sandboxes")
+    })
+
+    it("turns a console URL into a path and keeps the path allowlist", async () => {
+      expect(
+        await signInWithNext(
+          "https://console.superserve.ai/device?code=BCDF-GHJK",
+        ),
+      ).toBe("https://console.superserve.ai/device?code=BCDF-GHJK")
+      expect(
+        await signInWithNext("https://console.superserve.ai/admin/teams"),
+      ).toBe("https://console.superserve.ai/sandboxes")
     })
   })
 })
