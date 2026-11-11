@@ -1,4 +1,11 @@
-import { act, render, screen, waitFor, within } from "@testing-library/react"
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { StrictMode } from "react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -237,6 +244,7 @@ describe("SignUpPage", () => {
     expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_validation_failed", {
       method: "email",
       fields: ["full_name", "email", "password"],
+      email_rule: "required",
       password_rule: "required",
       password_missing: [],
     })
@@ -292,6 +300,7 @@ describe("SignUpPage", () => {
     expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_validation_failed", {
       method: "email",
       fields: ["password"],
+      email_rule: null,
       password_rule: "missing_characters",
       password_missing: ["uppercase"],
     })
@@ -299,6 +308,41 @@ describe("SignUpPage", () => {
     for (const value of ["Test User", "test@test.com", "sandbox12345"]) {
       expect(payload).not.toContain(value)
     }
+  })
+
+  it("captures native email validation failures without calling the server", async () => {
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    const email = screen.getByPlaceholderText("Email")
+    await user.type(email, "not-an-email")
+    await user.type(screen.getByPlaceholderText("Password"), "sandbox12345")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "sandbox12345",
+    )
+
+    fireEvent.invalid(email)
+
+    expect(mockCapture).toHaveBeenCalledTimes(1)
+    expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_validation_failed", {
+      method: "email",
+      fields: ["email", "password"],
+      email_rule: "format",
+      password_rule: "missing_characters",
+      password_missing: ["uppercase"],
+    })
+    const payload = JSON.stringify(mockCapture.mock.lastCall![1])
+    for (const value of ["Test User", "not-an-email", "sandbox12345"]) {
+      expect(payload).not.toContain(value)
+    }
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    expect(
+      screen.queryByText("Add an uppercase letter."),
+    ).not.toBeInTheDocument()
   })
 
   it("rejects a password over 72 bytes without calling the server", async () => {
@@ -345,6 +389,7 @@ describe("SignUpPage", () => {
     expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_validation_failed", {
       method: "email",
       fields: ["confirm_password"],
+      email_rule: null,
       password_rule: null,
       password_missing: [],
     })

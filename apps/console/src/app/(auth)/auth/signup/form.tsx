@@ -268,9 +268,7 @@ export default function SignUpContent() {
     }
   }, [searchParams])
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrors({})
+  const captureValidationFailure = (emailInvalid = false) => {
     const newErrors: Record<string, string> = {}
     if (!fullName) newErrors.fullName = "Name is required."
     if (!email) newErrors.email = "Email is required."
@@ -278,23 +276,35 @@ export default function SignUpContent() {
     if (passwordError) newErrors.password = passwordError
     if (password && password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match."
-    if (Object.keys(newErrors).length > 0) {
-      setErrors(newErrors)
+    const fields = [
+      ["fullName", "full_name"],
+      ["email", "email"],
+      ["password", "password"],
+      ["confirmPassword", "confirm_password"],
+    ]
+      .filter(
+        ([field]) => newErrors[field] || (field === "email" && emailInvalid),
+      )
+      .map(([, field]) => field)
+    if (fields.length > 0) {
       const failure = passwordRuleFailure(password)
-      const fields = [
-        ["fullName", "full_name"],
-        ["email", "email"],
-        ["password", "password"],
-        ["confirmPassword", "confirm_password"],
-      ]
-        .filter(([field]) => newErrors[field])
-        .map(([, field]) => field)
       posthog.capture(AUTH_EVENTS.SIGN_UP_VALIDATION_FAILED, {
         method: "email",
         fields,
+        email_rule: !email ? "required" : emailInvalid ? "format" : null,
         password_rule: failure?.rule ?? null,
         password_missing: failure?.missing ?? [],
       })
+    }
+    return newErrors
+  }
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrors({})
+    const newErrors = captureValidationFailure()
+    if (Object.keys(newErrors).length > 0) {
+      setErrors(newErrors)
       return
     }
     setIsLoading(true)
@@ -704,6 +714,7 @@ export default function SignUpContent() {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setFormValue("email", e.target.value)}
+                onInvalid={() => captureValidationFailure(true)}
                 error={errors.email}
               />
               <Input
