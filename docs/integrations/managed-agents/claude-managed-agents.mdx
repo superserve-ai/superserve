@@ -76,6 +76,7 @@ const agent = await client.beta.agents.create({
   name: "sandbox-agent",
   model: "claude-sonnet-4-6",
   system: "You are a coding assistant with a Linux sandbox.",
+  tools: [{ type: "agent_toolset_20260401" }],
 })
 ```
 
@@ -84,6 +85,7 @@ agent = client.beta.agents.create(
     name="sandbox-agent",
     model="claude-sonnet-4-6",
     system="You are a coding assistant with a Linux sandbox.",
+    tools=[{"type": "agent_toolset_20260401"}],
 )
 ```
 </CodeGroup>
@@ -315,10 +317,8 @@ Subscribe to `session.status_run_started` [webhooks](https://platform.claude.com
 
 <CodeGroup>
 ```typescript TypeScript
-import Anthropic from "@anthropic-ai/sdk"
-
-const client = new Anthropic({ authToken: environmentKey })
-
+// Use in place of the polling loop in the orchestrator above. Reuses its
+// client, environmentId, environmentKey, and handleWork.
 export async function handleWebhook(req: Request): Promise<Response> {
   const body = await req.text()
   const event = client.beta.webhooks.unwrap(body, {

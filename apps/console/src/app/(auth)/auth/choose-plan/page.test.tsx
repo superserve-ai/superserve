@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react"
+import { StrictMode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 let params = new URLSearchParams()
@@ -42,6 +43,8 @@ vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTrialOutcomeAction: async ({ team }: { team: string }) =>
     team in trial.perTeam ? trial.perTeam[team] : trial.outcome,
 }))
+const { capture } = vi.hoisted(() => ({ capture: vi.fn() }))
+vi.mock("posthog-js", () => ({ default: { capture } }))
 
 import type { TrialOutcome } from "@/lib/billing/signup-checkout-paths"
 
@@ -51,6 +54,7 @@ describe("plan picker", () => {
   beforeEach(() => {
     params = new URLSearchParams()
     replace.mockReset()
+    capture.mockClear()
     trial.outcome = null
     trial.perTeam = {}
   })
@@ -237,5 +241,73 @@ describe("plan picker", () => {
         .getByRole("link", { name: "Back to console" })
         .getAttribute("href"),
     ).toBe("/sandboxes")
+  })
+
+  it("records why the picker opened and which plan was asked for", async () => {
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      offer: "starter",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    await screen.findByRole("button", { name: "Developer" })
+    expect(capture).toHaveBeenCalledTimes(1)
+    expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
+      reason: "trial_ended",
+      requested_offer: "developer",
+      plan_options_requested: true,
+    })
+  })
+
+  it("records one picker view under StrictMode", async () => {
+    params = new URLSearchParams({
+      reason: "upgrade",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(
+      <StrictMode>
+        <ChoosePlanPage />
+      </StrictMode>,
+    )
+    await screen.findByRole("button", { name: "Developer" })
+    expect(capture).toHaveBeenCalledTimes(1)
+  })
+
+  it("records a picker with no plans and an unknown reason as an upgrade", () => {
+    params = new URLSearchParams({ reason: "<script>" })
+    render(<ChoosePlanPage />)
+    expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
+      reason: "upgrade",
+      requested_offer: "not_specified",
+      plan_options_requested: false,
+    })
+  })
+
+  it("records no picker view for an old payment-confirming link", () => {
+    params = new URLSearchParams({
+      reason: "payment_confirming",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(replace).toHaveBeenCalled()
+    expect(capture).not.toHaveBeenCalled()
+  })
+
+  it("still shows the plans when analytics throws", async () => {
+    capture.mockImplementationOnce(() => {
+      throw new Error("blocked")
+    })
+    params = new URLSearchParams({
+      reason: "upgrade",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    expect(
+      await screen.findByRole("button", { name: "Developer" }),
+    ).toBeTruthy()
   })
 })

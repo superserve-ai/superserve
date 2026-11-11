@@ -1,0 +1,194 @@
+---
+title: "QM"
+sidebarTitle: QM
+description: Run QM, the multiplayer agent harness, with an agent sandbox for each scope on Superserve.
+icon: "/logos/integrations/qm.png"
+---
+
+[QM](https://github.com/yc-software/qm) is an open-source multiplayer agent harness that you use from the web and Slack. Each QM scope gets its own sandbox: a durable computer where the agent runs commands, keeps files, and keeps the tools it installs. QM's built-in `superserve` backend runs these sandboxes on Superserve.
+
+This guide runs QM on your machine with the web UI. The agent's sandboxes run on Superserve.
+
+## Setup
+
+You need Node.js 24.22.1 or later, npm 11.10 or later, Git, and Docker. QM's local instance starts Postgres in a Docker container.
+
+Clone QM at its `v0.1.17` release and install its dependencies:
+
+```bash
+git clone --branch v0.1.17 --depth 1 https://github.com/yc-software/qm
+cd qm
+npm ci
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+See [API keys](/api-key) to create a Superserve API key.
+
+## Build the agent template
+
+QM boots each sandbox from a [template](/templates/overview) that has the agent's tools installed. Build it with QM's template builder:
+
+```bash
+node superserve/templates/qm-agent.ts --release 0.1.17 --wait
+```
+
+This builds the template `qm-agent-0.1.17` on your team. It starts from Ubuntu 24.04 and installs Node.js, Python, the GitHub CLI, the AWS CLI, Claude Code, and Codex. The build takes about a minute. Then check that the template boots and has every tool:
+
+```bash
+node superserve/templates/verify-qm-agent.ts --release 0.1.17
+```
+
+The verifier boots a temporary sandbox, checks the tools, and deletes the sandbox. It prints `OK` when the template is ready.
+
+<Note>
+  The template defaults to 8 vCPUs, 16 GiB of memory, and 32 GiB of disk. If that is more than your plan's [resource limits](/templates/build-spec#resource-limits), set a smaller shape with `--vcpu`, `--memory-mib`, and `--disk-mib`, for example `--vcpu 2 --memory-mib 4096 --disk-mib 8192`. Sandboxes get their size from the template. To change it later, build a new template.
+</Note>
+
+## Run QM with the web UI
+
+Export a model key and the template, then start a local QM instance with the `superserve` backend:
+
+```bash
+export ANTHROPIC_API_KEY=sk-ant-...
+export SUPERSERVE_TEMPLATE=qm-agent-0.1.17
+export SUPERSERVE_NAME_PREFIX=my-qm
+npm run dev-instance:web -- --sandbox superserve
+```
+
+QM also works with `OPENAI_API_KEY` instead of `ANTHROPIC_API_KEY`. The command starts Postgres, builds the web UI, and starts QM's core service. When the instance is ready, it prints `dev instance up` and the web UI URL, for example `http://localhost:8113/`. Open that URL. From `localhost`, the web UI signs you in as your local user.
+
+Send the agent a message that needs a computer, for example:
+
+```text
+Run uname -sr and nproc, then write hello-from-qm to hello.txt in your workspace.
+```
+
+The agent runs commands with its `execute` tool and writes files with its `files` tool. Both tools work in the scope's Superserve sandbox, and the workspace is `/root/workspace`. Files there stay between turns, so a later message such as `cat hello.txt` reads the same file.
+
+<Tip>
+  Run `npm run dev-instance:status` to see the instance's state and ports. Run the `dev-instance:web` command again after you change an environment variable. QM reloads the instance with the new values.
+</Tip>
+
+## How sandboxes map to scopes
+
+- QM gives each scope its own sandbox, for example one sandbox for your personal web chat. Sandboxes are named `<prefix>-sandbox-...` and tagged with `metadata` such as `qm_prefix`, `qm_scope`, and `qm_template`. You can see them in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link).
+- QM finds its sandboxes by this metadata again after a restart. Use a different `SUPERSERVE_NAME_PREFIX` for each QM instance on the same Superserve team.
+- A scope sandbox pauses after `SUPERSERVE_IDLE_PAUSE_SEC` of active time and resumes on the next command. A sandbox that stays paused for `SUPERSERVE_RETENTION_SEC` is deleted with its disk.
+- Short-lived scratch sandboxes are named `<prefix>-scratch-...`. QM deletes them when they are no longer in use.
+
+<Warning>
+  When you change `SUPERSERVE_TEMPLATE`, QM replaces the existing scope sandboxes, and their files are deleted. Copy the files that you need before you change the template.
+</Warning>
+
+## Configure
+
+QM's core service reads these settings from its environment:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `SUPERSERVE_API_KEY` | Required | Superserve API key for your team. Only QM's core service holds it. |
+| `SUPERSERVE_TEMPLATE` | Required | Name of a ready agent template, for example `qm-agent-0.1.17`. |
+| `SUPERSERVE_NAME_PREFIX` | `qm` | Prefix for sandbox names and the `qm_prefix` metadata. |
+| `SUPERSERVE_BASE_URL` | SDK default | Superserve API URL. |
+| `SUPERSERVE_HOME_DIR` | `/root` | Home directory in the sandbox. The workspace is `<home>/workspace`. |
+| `SUPERSERVE_IDLE_PAUSE_SEC` | `900` | Active time in seconds after which a sandbox pauses. This is not an inactivity timer. |
+| `SUPERSERVE_RETENTION_SEC` | `2592000` | Time in seconds a paused sandbox is kept before it is deleted. The default is 30 days. |
+| `SUPERSERVE_EGRESS_ALLOW` | Unset | Comma-separated outbound allow rules. |
+| `SUPERSERVE_EGRESS_DENY` | Unset | Comma-separated outbound deny rules. |
+| `SANDBOX_TIMEOUT_SEC` | `600` | Default time limit for a command, in seconds. |
+
+The output of a command is limited to 2 MiB for each stream. Tell the agent to write larger results to files.
+
+## Network
+
+By default, a QM sandbox can reach any public address. Set `SUPERSERVE_EGRESS_ALLOW` and `SUPERSERVE_EGRESS_DENY` to apply Superserve [network rules](/sandbox/networking) to every scope sandbox. For example, to allow only `example.com`:
+
+```bash
+export SUPERSERVE_EGRESS_DENY=0.0.0.0/0
+export SUPERSERVE_EGRESS_ALLOW=example.com,1.1.1.1/32,8.8.8.8/32
+npm run dev-instance:web -- --sandbox superserve
+```
+
+- The sandbox resolves names with `1.1.1.1` and `8.8.8.8`. With a hostname rule, also allow these resolvers, or the hostname does not resolve.
+- Hostname rules allow ports 80 and 443 only. IPv4 address and CIDR rules allow all ports.
+- QM updates the rules of an existing sandbox. If a paused sandbox cannot accept the update, QM replaces the sandbox and its files are deleted.
+
+The agent's model calls go from QM's core service, not from the sandbox. You do not need to allow your model provider.
+
+## Deploy to your cloud
+
+The local instance is for development. To run QM for a team, create a deployment repository with `qm init`, and follow QM's [deployment guide](https://github.com/yc-software/qm/blob/v0.1.17/deployment.md). Add the `superserve` backend to the deployment's `qm.config.jsonc`:
+
+```json
+{
+  "sandbox": { "backend": "superserve" },
+  "env": {
+    "core": {
+      "SUPERSERVE_TEMPLATE": "qm-agent-0.1.17",
+      "SUPERSERVE_NAME_PREFIX": "my-qm"
+    }
+  }
+}
+```
+
+Merge these fields into the config that `qm init` writes. Then supply `SUPERSERVE_API_KEY` as a secret of the core service. Run `npm exec qm -- check` to validate the config. A production deployment also needs `DATABASE_URL` for its Postgres database. To use QM from Slack, see QM's [Slack setup](https://github.com/yc-software/qm/blob/v0.1.17/cli/templates/deployment/references/slack.md).
+
+## Clean up
+
+Stop the local instance:
+
+```bash
+npm run dev-instance:down
+```
+
+This stops QM but keeps its local Postgres container, `qm-dev-postgres`, and its volume for the next run. To remove them:
+
+```bash
+docker rm -f qm-dev-postgres
+docker volume rm qm-dev-postgres-data
+```
+
+`dev-instance:down` does not delete the instance's Superserve sandboxes. Delete them by their `qm_prefix` metadata with the SDK:
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandboxes = await Sandbox.list({ metadata: { qm_prefix: "my-qm" } })
+for (const info of sandboxes) {
+  await Sandbox.killById(info.id)
+  console.log(`Deleted ${info.name}`)
+}
+```
+
+```python Python
+from superserve import Sandbox
+
+for info in Sandbox.list(metadata={"qm_prefix": "my-qm"}):
+    Sandbox.kill_by_id(info.id)
+    print(f"Deleted {info.name}")
+```
+</CodeGroup>
+
+Then delete the template in the console or with the [CLI](/cli):
+
+```bash
+superserve template delete qm-agent-0.1.17
+```
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="QM on Superserve" icon="book" href="https://github.com/yc-software/qm/blob/v0.1.17/docs/superserve.md">
+    Read QM's guide to its `superserve` backend.
+  </Card>
+  <Card title="QM source" icon="github" href="https://github.com/yc-software/qm/tree/v0.1.17/src/sandbox">
+    Read the sandbox backend source at the `v0.1.17` release.
+  </Card>
+  <Card title="Templates" icon="layer-group" href="/templates/overview">
+    Learn how Superserve builds templates.
+  </Card>
+  <Card title="Networking" icon="network-wired" href="/sandbox/networking">
+    Limit sandbox egress with allow and deny rules.
+  </Card>
+</CardGroup>

@@ -12,6 +12,7 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
@@ -42,9 +43,8 @@ function ResetPasswordContent() {
     e.preventDefault()
     setErrors({})
     const newErrors: Record<string, string> = {}
-    if (!password) newErrors.password = "Password is required."
-    else if (password.length < 8)
-      newErrors.password = "Must be at least 8 characters."
+    const passwordError = passwordRuleError(password)
+    if (passwordError) newErrors.password = passwordError
     if (password && password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match."
     if (Object.keys(newErrors).length > 0) {
@@ -114,6 +114,9 @@ function ResetPasswordContent() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 error={errors.password}
+                aria-describedby={
+                  errors.password ? undefined : "reset-password-rule"
+                }
                 suffix={
                   <button
                     type="button"
@@ -128,6 +131,14 @@ function ResetPasswordContent() {
                   </button>
                 }
               />
+              {!errors.password && (
+                <p
+                  id="reset-password-rule"
+                  className="-mt-1 text-xs text-muted"
+                >
+                  {PASSWORD_RULE_HINT}
+                </p>
+              )}
               <Input
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm New Password"
