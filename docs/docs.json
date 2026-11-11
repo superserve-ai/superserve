@@ -53,6 +53,31 @@
   },
   "redirects": [
     {
+      "source": "/integrations/managed-agents/claude-managed-agents",
+      "destination": "/integrations/agent-platforms/claude-managed-agents",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/managed-agents/cursor-cloud-agents",
+      "destination": "/integrations/agent-platforms/cursor-cloud-agents",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/managed-agents/omnara",
+      "destination": "/integrations/agent-platforms/omnara",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/personal-agents/qm",
+      "destination": "/integrations/agent-platforms/qm",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/managed-agents",
+      "destination": "/integrations/overview#agent-platforms",
+      "permanent": true
+    },
+    {
       "source": "/integrations/virtual-filesystems/mesa",
       "destination": "/storage/archil"
     },
@@ -286,10 +311,10 @@
                 "group": "Agent platforms",
                 "expanded": true,
                 "pages": [
-                  "integrations/managed-agents/claude-managed-agents",
-                  "integrations/managed-agents/cursor-cloud-agents",
-                  "integrations/managed-agents/omnara",
-                  "integrations/personal-agents/qm"
+                  "integrations/agent-platforms/claude-managed-agents",
+                  "integrations/agent-platforms/cursor-cloud-agents",
+                  "integrations/agent-platforms/omnara",
+                  "integrations/agent-platforms/qm"
                 ]
               },
               {
