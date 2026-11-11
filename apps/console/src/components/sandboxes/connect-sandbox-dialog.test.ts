@@ -30,12 +30,11 @@ describe("INSTALL_COMMANDS", () => {
 })
 
 describe("getConnectSnippet", () => {
-  const KEY = "ss_live_abc123"
   const SBX = "sbx-42"
 
   describe("typescript", () => {
     it("uses Sandbox.connect (not the old SuperserveClient)", () => {
-      const snip = getConnectSnippet("typescript", KEY, SBX)
+      const snip = getConnectSnippet("typescript", SBX)
       expect(snip).toContain('import { Sandbox } from "@superserve/sdk"')
       expect(snip).toContain("Sandbox.connect(")
       expect(snip).not.toContain("SuperserveClient")
@@ -43,53 +42,58 @@ describe("getConnectSnippet", () => {
     })
 
     it("uses sandbox.commands.run (not client.exec.command)", () => {
-      const snip = getConnectSnippet("typescript", KEY, SBX)
+      const snip = getConnectSnippet("typescript", SBX)
       expect(snip).toContain("sandbox.commands.run(")
       expect(snip).not.toContain("client.exec.command")
       expect(snip).not.toContain("sandbox.exec(")
     })
 
-    it("interpolates the API key and sandbox id", () => {
-      const snip = getConnectSnippet("typescript", KEY, SBX)
-      expect(snip).toContain(`apiKey: "${KEY}"`)
-      expect(snip).toContain(`"${SBX}"`)
+    it("connects with only the sandbox id", () => {
+      const snip = getConnectSnippet("typescript", SBX)
+      expect(snip).toContain('Sandbox.connect("sbx-42")')
+      expect(snip).not.toContain("apiKey")
     })
 
-    it("falls back to a placeholder when no API key is supplied", () => {
-      const snip = getConnectSnippet("typescript", "", SBX)
-      expect(snip).toContain("ss_live_xxxxxxxx")
+    it("documents the environment variable without embedding a key", () => {
+      const snip = getConnectSnippet("typescript", SBX)
+      expect(snip.split("\n")[0]).toBe("// export SUPERSERVE_API_KEY=...")
+      expect(snip).not.toContain("ss_live_")
+      expect(snip).not.toContain("YOUR_API_KEY")
     })
   })
 
   describe("python", () => {
     it("imports Sandbox from superserve", () => {
-      const snip = getConnectSnippet("python", KEY, SBX)
+      const snip = getConnectSnippet("python", SBX)
       expect(snip).toContain("from superserve import Sandbox")
       expect(snip).toContain("Sandbox.connect(")
       expect(snip).not.toContain("import Superserve")
     })
 
     it("uses sandbox.commands.run with sandbox id", () => {
-      const snip = getConnectSnippet("python", KEY, SBX)
+      const snip = getConnectSnippet("python", SBX)
       expect(snip).toContain("sandbox.commands.run(")
       expect(snip).toContain(`"${SBX}"`)
       expect(snip).not.toContain("client.exec.command")
     })
 
-    it("interpolates the API key", () => {
-      const snip = getConnectSnippet("python", KEY, SBX)
-      expect(snip).toContain(`api_key="${KEY}"`)
+    it("connects with only the sandbox id", () => {
+      const snip = getConnectSnippet("python", SBX)
+      expect(snip).toContain('Sandbox.connect("sbx-42")')
+      expect(snip).not.toContain("api_key")
     })
 
-    it("falls back to a placeholder when no API key is supplied", () => {
-      const snip = getConnectSnippet("python", "", SBX)
-      expect(snip).toContain("ss_live_xxxxxxxx")
+    it("documents the environment variable without embedding a key", () => {
+      const snip = getConnectSnippet("python", SBX)
+      expect(snip.split("\n")[0]).toBe("# export SUPERSERVE_API_KEY=...")
+      expect(snip).not.toContain("ss_live_")
+      expect(snip).not.toContain("YOUR_API_KEY")
     })
   })
 
   it("never emits Go code", () => {
     for (const lang of ["typescript", "python"] as const) {
-      const snip = getConnectSnippet(lang, KEY, SBX)
+      const snip = getConnectSnippet(lang, SBX)
       expect(snip).not.toContain("package main")
       expect(snip).not.toContain("func main")
       expect(snip).not.toContain("github.com/superserve")

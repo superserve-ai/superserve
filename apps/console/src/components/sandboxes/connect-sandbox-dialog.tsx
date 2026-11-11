@@ -39,28 +39,22 @@ export const INSTALL_COMMANDS: Record<Language, string> = {
 
 export function getConnectSnippet(
   language: Language,
-  apiKey: string,
   sandboxId: string,
 ): string {
-  const key = apiKey || "ss_live_xxxxxxxx..."
-
   if (language === "typescript") {
-    return `import { Sandbox } from "@superserve/sdk"
+    return `// export SUPERSERVE_API_KEY=...
+import { Sandbox } from "@superserve/sdk"
 
-const sandbox = await Sandbox.connect("${sandboxId}", {
-  apiKey: "${key}",
-})
+const sandbox = await Sandbox.connect("${sandboxId}")
 
 const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
 console.log(result.stdout)`
   }
 
-  return `from superserve import Sandbox
+  return `# export SUPERSERVE_API_KEY=...
+from superserve import Sandbox
 
-sandbox = Sandbox.connect(
-    "${sandboxId}",
-    api_key="${key}",
-)
+sandbox = Sandbox.connect("${sandboxId}")
 
 result = sandbox.commands.run("echo 'Hello from Superserve!'")
 print(result.stdout)`
@@ -114,7 +108,6 @@ export function ConnectSandboxDialog({
   // Check if user has a non-dashboard API key
   const userKey = existingKeys?.find((k) => !k.name.startsWith("__console_"))
   const newlyCreatedKey = createKeyMutation.data?.key ?? ""
-  const snippetKey = newlyCreatedKey || (userKey ? "YOUR_API_KEY" : "")
   const hasKey = !!userKey || !!newlyCreatedKey
   const apiKeyStep = !hasKey || newlyCreatedKey ? 1 : 0
   const installStep = apiKeyStep + 1
@@ -135,7 +128,7 @@ export function ConnectSandboxDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Connect to Sandbox</DialogTitle>
+          <DialogTitle>Connect to this sandbox from code</DialogTitle>
         </DialogHeader>
 
         {/* Language Tabs */}
@@ -201,8 +194,8 @@ export function ConnectSandboxDialog({
                 {apiKeyStep}. Create an API key
               </span>
               <p className="text-xs text-muted">
-                Your code uses this key to connect to sandboxes. You see it
-                once.
+                Your code uses this key to create, pause, and resume sandboxes.
+                You see it once.
               </p>
               <Button
                 onClick={handleCreateKey}
@@ -272,13 +265,11 @@ export function ConnectSandboxDialog({
               <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
                 <div className="min-w-0 flex-1">
                   <HighlightedCode
-                    code={getConnectSnippet(language, snippetKey, sandboxId)}
+                    code={getConnectSnippet(language, sandboxId)}
                     lang={language}
                   />
                 </div>
-                <CopyButton
-                  text={getConnectSnippet(language, snippetKey, sandboxId)}
-                />
+                <CopyButton text={getConnectSnippet(language, sandboxId)} />
               </div>
             ) : (
               <p className="text-xs text-muted">

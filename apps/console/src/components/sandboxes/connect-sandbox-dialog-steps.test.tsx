@@ -47,12 +47,15 @@ it("prioritizes creating a key and hides the run snippet until a key exists", as
   const user = userEvent.setup()
   renderDialog()
 
+  expect(
+    screen.getByRole("dialog", { name: "Connect to this sandbox from code" }),
+  ).toBeInTheDocument()
   expect(screen.getByText("1. Create an API key")).toBeInTheDocument()
   expect(screen.getByText("2. Install the SDK")).toBeInTheDocument()
   expect(screen.getByText("3. Run this code")).toBeInTheDocument()
   expect(
     screen.getByText(
-      "Your code uses this key to connect to sandboxes. You see it once.",
+      "Your code uses this key to create, pause, and resume sandboxes. You see it once.",
     ),
   ).toBeInTheDocument()
   expect(
@@ -104,7 +107,7 @@ it("disables the create button while creating a key", () => {
   expect(screen.getByRole("button", { name: "Creating..." })).toBeDisabled()
 })
 
-it("shows the newly created key and uses it in the run snippet", () => {
+it("shows the newly created key only in the copy-key field", () => {
   const key = "ss_live_newly_created"
   keyState.data = [{ name: "SDK Key" }]
   mutation.data = { key }
@@ -117,12 +120,15 @@ it("shows the newly created key and uses it in the run snippet", () => {
   expect(
     screen.getByRole("button", { name: "Copy API key" }),
   ).toBeInTheDocument()
-  expect(screen.getByRole("dialog")).toHaveTextContent(`apiKey: "${key}"`)
+  const dialog = screen.getByRole("dialog")
+  expect(dialog).toHaveTextContent('Sandbox.connect("sbx-42")')
+  expect(dialog).toHaveTextContent("export SUPERSERVE_API_KEY=...")
+  expect(dialog.textContent?.split(key)).toHaveLength(2)
   expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(2)
   expect(screen.getByRole("button", { name: "Done" })).toHaveClass("bg-primary")
 })
 
-it("shows two steps and a key placeholder when the team already has a key", () => {
+it("shows two steps and the run snippet when the team already has a key", () => {
   keyState.data = [{ name: "Existing key" }]
   renderDialog()
 
@@ -131,7 +137,10 @@ it("shows two steps and a key placeholder when the team already has a key", () =
   expect(
     screen.queryByRole("button", { name: "Create API key" }),
   ).not.toBeInTheDocument()
-  expect(screen.getByRole("dialog")).toHaveTextContent('apiKey: "YOUR_API_KEY"')
+  expect(screen.getByRole("dialog")).not.toHaveTextContent("YOUR_API_KEY")
+  expect(screen.getByRole("dialog")).toHaveTextContent(
+    'Sandbox.connect("sbx-42")',
+  )
   expect(screen.getByRole("button", { name: "Done" })).toHaveClass("bg-primary")
 })
 
@@ -142,5 +151,12 @@ it("shows the Python connection syntax when switching tabs with a key", async ()
 
   await user.click(screen.getByRole("button", { name: "Python" }))
 
-  expect(screen.getByRole("dialog")).toHaveTextContent('api_key="YOUR_API_KEY"')
+  expect(screen.getByRole("dialog")).not.toHaveTextContent("YOUR_API_KEY")
+  expect(screen.getByRole("dialog")).toHaveTextContent(
+    "# export SUPERSERVE_API_KEY=...",
+  )
+  expect(screen.getByRole("dialog")).toHaveTextContent(
+    'Sandbox.connect("sbx-42")',
+  )
+  expect(screen.getByRole("dialog")).not.toHaveTextContent("api_key=")
 })
