@@ -13,7 +13,7 @@ Open `http://127.0.0.1:4177/?scenario=page`. Scenarios:
 - `results`: mixed roles (Team admin, Viewer, Billing admin and User admin) with sent, already member, already invited and email delivery failure results.
 - `legacy`: email-only invitations and the legacy Owner notice.
 
-Webpack aliases replace data hooks and actions with local simulations. No credentials or backend connection are needed. The fixture fills the production modal using paste/change events; it does not add fixture props to the production components.
+Webpack aliases replace data hooks and actions with local simulations. No credentials or backend connection are needed. The fixture fills the production modal with paste events and chooses roles in the shared Select with keyboard events; it does not add fixture props to the production components.
 
 Capture and verify all scenarios while the dev server runs:
 
