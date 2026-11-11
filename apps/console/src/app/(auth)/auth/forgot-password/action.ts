@@ -42,12 +42,12 @@ async function deliverPasswordReset(
   invite: string | null,
 ) {
   try {
-    // Using a recovery link confirms the address, so accounts awaiting signup
-    // review get nothing; accounts that predate review keep recovery.
     // Before the lookup, so the caller's own limit is used the same way
     // whether or not the address has an account.
     if (!(await takeRecoveryNetworkLimit(clientIp))) return
 
+    // Using a recovery link confirms the address, so accounts awaiting signup
+    // review get nothing; accounts that predate review keep recovery.
     const user = await findAuthUserByEmail(email)
     if (!user || isSignupReviewBlocked(user)) return
 
