@@ -1,5 +1,6 @@
 "use client"
 
+import { MinusIcon, PlusIcon } from "@phosphor-icons/react"
 import {
   Button,
   cn,
@@ -11,15 +12,15 @@ import {
   DialogTrigger,
   Field,
   Input,
+  Switch,
 } from "@superserve/ui"
 import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useEffect, useMemo, useState } from "react"
+import { useId, useMemo, useState } from "react"
 
 import { useTemplateEntitlement } from "@/hooks/use-template-entitlement"
 import { useCreateTemplate } from "@/hooks/use-templates"
 import { ApiError } from "@/lib/api/client"
-import { formatMemory as formatMib } from "@/lib/format"
 
 const CURATED_IMAGES = [
   "python:3.11-slim",
@@ -30,21 +31,45 @@ const CURATED_IMAGES = [
   "debian:12-slim",
 ] as const
 
-// Trimmed to the default per-team caps from the backend (vcpu=2, memory_mib=4096,
-// disk_mib=8192). Teams with raised caps drop to the SDK/API for higher values.
-const MEMORY_OPTIONS = [256, 512, 1024, 2048, 4096] as const
-const DISK_OPTIONS = [1024, 2048, 4096, 8192] as const
-const VCPU_OPTIONS = [1, 2] as const
-// Live-growth ceilings; the API allows up to 4x the boot memory.
-const MEMORY_MAX_OPTIONS = [512, 1024, 2048, 4096, 8192, 16384] as const
+// API bounds from the create-template request schema; a team's plan caps
+// narrow them, and a plan that reports no cap keeps the API maximum.
+const API_MAX_VCPU = 32
+const API_MIN_MEMORY_MIB = 256
+const API_MIN_DISK_MIB = 1024
+const API_MAX_MIB = 131072
+// Live growth must stay a multiple of this above the boot size.
+const MEMORY_GROWTH_STEP_MIB = 128
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 
-function withinCap(
-  options: readonly number[],
-  cap: number | null | undefined,
-): readonly number[] {
-  return cap == null ? options : options.filter((option) => option <= cap)
+function limitOf(cap: number | null | undefined, apiMax: number): number {
+  return Math.min(cap ?? apiMax, apiMax)
+}
+
+// Doubling steps from the API minimum that end exactly at the limit, so a
+// team's cap is always selectable even when it isn't a power of two.
+function doublingSteps(min: number, limit: number): number[] {
+  const steps: number[] = []
+  for (let v = min; v < limit; v *= 2) steps.push(v)
+  steps.push(Math.max(min, limit))
+  return steps
+}
+
+function maxMemorySteps(memory: number, memoryLimit: number): number[] {
+  const top = Math.min(4 * memory, memoryLimit)
+  const highest =
+    memory +
+    Math.floor((top - memory) / MEMORY_GROWTH_STEP_MIB) * MEMORY_GROWTH_STEP_MIB
+  const candidates = doublingSteps(API_MIN_MEMORY_MIB, top).filter(
+    (s) => s < highest && (s - memory) % MEMORY_GROWTH_STEP_MIB === 0,
+  )
+  return [...new Set([...candidates, highest])].filter((s) => s > memory)
+}
+
+// The offered step closest to a pick from below, so a cap that shrinks under
+// a selection lands on the largest shape still allowed.
+function clampTo(value: number, steps: readonly number[]): number {
+  return steps.findLast((s) => s <= value) ?? steps[0]
 }
 
 function validateName(name: string): string | null {
@@ -60,8 +85,133 @@ function validateImage(image: string): string | null {
   return null
 }
 
-function formatMemory(mib: number): string {
-  return mib >= 1024 ? `${mib / 1024} GB` : `${mib} MiB`
+function formatMib(mib: number): string {
+  return mib >= 1024 ? `${Number((mib / 1024).toFixed(2))} GB` : `${mib} MB`
+}
+
+function formatVcpu(n: number): string {
+  return `${n} vCPU`
+}
+
+function limitHint(
+  cap: number | null | undefined,
+  limit: number,
+  format: (n: number) => string,
+): string {
+  return cap == null
+    ? `No plan limit reported · API maximum ${format(limit)}`
+    : `Up to ${format(limit)} on your plan`
+}
+
+interface StepperProps {
+  label: string
+  hint: string
+  steps: readonly number[]
+  value: number
+  onChange: (value: number) => void
+  format: (value: number) => string
+}
+
+function Stepper({
+  label,
+  hint,
+  steps,
+  value,
+  onChange,
+  format,
+}: StepperProps) {
+  const id = useId()
+  const index = steps.indexOf(value)
+  const last = steps.length - 1
+  const go = (i: number) => onChange(steps[Math.max(0, Math.min(last, i))])
+  const iconButton =
+    "flex size-9 cursor-pointer items-center justify-center text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-30"
+  return (
+    <div className="space-y-2">
+      <div className="flex items-center justify-between gap-4">
+        <div className="min-w-0">
+          <div id={id} className="text-sm font-medium text-foreground">
+            {label}
+          </div>
+          <div className="text-xs text-muted">{hint}</div>
+        </div>
+        <div className="flex shrink-0 items-center border border-control">
+          <button
+            type="button"
+            aria-label={`Decrease ${label}`}
+            disabled={index <= 0}
+            onClick={() => go(index - 1)}
+            className={iconButton}
+          >
+            <MinusIcon className="size-3.5" weight="bold" />
+          </button>
+          <div
+            // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- steps are uneven, which a number input can't express
+            role="spinbutton"
+            tabIndex={0}
+            aria-labelledby={id}
+            aria-valuenow={value}
+            aria-valuemin={steps[0]}
+            aria-valuemax={steps[last]}
+            aria-valuetext={format(value)}
+            onKeyDown={(e) => {
+              const next = {
+                ArrowUp: index + 1,
+                ArrowRight: index + 1,
+                ArrowDown: index - 1,
+                ArrowLeft: index - 1,
+                Home: 0,
+                End: last,
+              }[e.key]
+              if (next === undefined) return
+              e.preventDefault()
+              go(next)
+            }}
+            className="flex h-9 w-24 items-center justify-center border-x border-control font-mono text-sm text-foreground tabular-nums focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+          >
+            {format(value)}
+          </div>
+          <button
+            type="button"
+            aria-label={`Increase ${label}`}
+            disabled={index >= last}
+            onClick={() => go(index + 1)}
+            className={iconButton}
+          >
+            <PlusIcon className="size-3.5" weight="bold" />
+          </button>
+        </div>
+      </div>
+      {steps.length > 1 && (
+        // Mouse shortcut across the range; the spinbutton is the keyboard path.
+        <div aria-hidden className="flex gap-0.5">
+          {steps.map((s, i) => (
+            <button
+              key={s}
+              type="button"
+              tabIndex={-1}
+              title={format(s)}
+              onClick={() => onChange(s)}
+              className={cn(
+                "h-1.5 flex-1 cursor-pointer transition-colors",
+                i <= index
+                  ? "bg-foreground"
+                  : "bg-border hover:bg-foreground/40",
+              )}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  )
+}
+
+function SectionTitle({ children }: { children: React.ReactNode }) {
+  return (
+    <h3 className="font-mono text-[10px] tracking-wider text-muted uppercase">
+      {children}
+    </h3>
+  )
 }
 
 interface CreateTemplateDialogProps {
@@ -79,12 +229,16 @@ export function CreateTemplateDialog({
   const create = useCreateTemplate()
   const entitlement = useTemplateEntitlement()
   const templatesUnavailable = entitlement.status === "unavailable"
-  // Offer only shapes within the team's plan caps; a missing cap keeps the
-  // full list. Teams with raised caps use the SDK/API for higher values.
   const caps = entitlement.limits
-  const memoryOptions = withinCap(MEMORY_OPTIONS, caps?.max_memory_mib)
-  const vcpuOptions = withinCap(VCPU_OPTIONS, caps?.max_vcpu)
-  const diskOptions = withinCap(DISK_OPTIONS, caps?.max_disk_mib)
+  const vcpuLimit = limitOf(caps?.max_vcpu, API_MAX_VCPU)
+  const memoryLimit = limitOf(caps?.max_memory_mib, API_MAX_MIB)
+  const diskLimit = limitOf(caps?.max_disk_mib, API_MAX_MIB)
+  const vcpuSteps = Array.from(
+    { length: Math.max(1, vcpuLimit) },
+    (_, i) => i + 1,
+  )
+  const memorySteps = doublingSteps(API_MIN_MEMORY_MIB, memoryLimit)
+  const diskSteps = doublingSteps(API_MIN_DISK_MIB, diskLimit)
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -94,40 +248,25 @@ export function CreateTemplateDialog({
   const [imageMode, setImageMode] = useState<"curated" | "custom">("curated")
   const [curatedImage, setCuratedImage] = useState<string>(CURATED_IMAGES[1])
   const [customImage, setCustomImage] = useState("")
-  const [vcpu, setVcpu] = useState<number>(1)
-  const [memory, setMemory] = useState<number>(1024)
-  const [disk, setDisk] = useState<number>(4096)
-  const [memoryMax, setMemoryMax] = useState<number | null>(null)
-  const memoryMaxOptions = withinCap(
-    MEMORY_MAX_OPTIONS,
-    caps?.max_memory_mib,
-  ).filter((m) => m > memory && m <= 4 * memory)
+  const [vcpuPick, setVcpu] = useState(1)
+  const [memoryPick, setMemory] = useState(1024)
+  const [diskPick, setDisk] = useState(4096)
+  const [growth, setGrowth] = useState(false)
+  const [memoryMaxPick, setMemoryMax] = useState(2048)
+  // Picks are clamped at render rather than rewritten, so a cap or boot size
+  // change always shows, and submits, a shape the API accepts.
+  const vcpu = clampTo(vcpuPick, vcpuSteps)
+  const memory = clampTo(memoryPick, memorySteps)
+  const disk = clampTo(diskPick, diskSteps)
+  const memoryMaxSteps = maxMemorySteps(memory, memoryLimit)
+  const canGrow = memoryMaxSteps.length > 0
+  const memoryMax =
+    growth && canGrow ? clampTo(memoryMaxPick, memoryMaxSteps) : null
   const [errors, setErrors] = useState<{
     name?: string
     image?: string
     form?: string
   }>({})
-  // A cap can shrink after a selection (plan refresh, team switch); keep the
-  // selection on an offered shape so the submit matches what is shown.
-  useEffect(() => {
-    if (!memoryOptions.includes(memory))
-      setMemory(memoryOptions[memoryOptions.length - 1] ?? MEMORY_OPTIONS[0])
-    if (!vcpuOptions.includes(vcpu))
-      setVcpu(vcpuOptions[vcpuOptions.length - 1] ?? VCPU_OPTIONS[0])
-    if (!diskOptions.includes(disk))
-      setDisk(diskOptions[diskOptions.length - 1] ?? DISK_OPTIONS[0])
-    if (memoryMax !== null && !memoryMaxOptions.includes(memoryMax))
-      setMemoryMax(null)
-  }, [
-    memoryOptions,
-    vcpuOptions,
-    diskOptions,
-    memoryMaxOptions,
-    memory,
-    vcpu,
-    disk,
-    memoryMax,
-  ])
 
   const reset = () => {
     setName("")
@@ -137,7 +276,8 @@ export function CreateTemplateDialog({
     setVcpu(1)
     setMemory(1024)
     setDisk(4096)
-    setMemoryMax(null)
+    setGrowth(false)
+    setMemoryMax(2048)
     setErrors({})
   }
 
@@ -246,178 +386,155 @@ export function CreateTemplateDialog({
           <DialogTitle>New template</DialogTitle>
         </DialogHeader>
 
-        <div className="space-y-5 px-6 pb-4">
-          <Field label="Name" required>
-            <Input
-              // oxlint-disable-next-line jsx-a11y/no-autofocus -- modal opens with focus on first field
-              autoFocus
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              placeholder="e.g. python-ml"
-              error={
-                errors.name ?? (name ? (liveNameError ?? undefined) : undefined)
-              }
-              onKeyDown={(e) => {
-                if (e.key === "Enter") {
-                  e.preventDefault()
-                  handleCreate()
+        <div className="max-h-[70vh] space-y-6 overflow-y-auto px-6 pb-4">
+          <section className="space-y-4">
+            <SectionTitle>Image</SectionTitle>
+            <Field label="Name" required>
+              <Input
+                // oxlint-disable-next-line jsx-a11y/no-autofocus -- modal opens with focus on first field
+                autoFocus
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. python-ml"
+                error={
+                  errors.name ??
+                  (name ? (liveNameError ?? undefined) : undefined)
                 }
-              }}
-            />
-          </Field>
-
-          <Field
-            label="Base image"
-            required
-            description="Linux/amd64 image with /bin/sh, mkdir, mount, chmod, and sync."
-          >
-            <div className="grid grid-cols-2 gap-2">
-              {CURATED_IMAGES.map((img) => {
-                const active = imageMode === "curated" && curatedImage === img
-                return (
-                  <button
-                    key={img}
-                    type="button"
-                    onClick={() => {
-                      setImageMode("curated")
-                      setCuratedImage(img)
-                    }}
-                    className={cn(
-                      "cursor-pointer border border-dashed px-3 py-2 text-left font-mono text-xs transition-colors",
-                      active
-                        ? "border-foreground bg-foreground text-background"
-                        : "border-border text-muted hover:border-foreground/50 hover:text-foreground",
-                    )}
-                  >
-                    {img}
-                  </button>
-                )
-              })}
-              <button
-                type="button"
-                onClick={() => setImageMode("custom")}
-                className={cn(
-                  "col-span-2 cursor-pointer border border-dashed px-3 py-2 text-left font-mono text-xs transition-colors",
-                  imageMode === "custom"
-                    ? "border-foreground bg-foreground text-background"
-                    : "border-border text-muted hover:border-foreground/50 hover:text-foreground",
-                )}
-              >
-                Custom image…
-              </button>
-            </div>
-            {imageMode === "custom" && (
-              <div className="mt-2">
-                <Input
-                  value={customImage}
-                  onChange={(e) => setCustomImage(e.target.value)}
-                  placeholder="ghcr.io/myorg/base:v1"
-                  error={errors.image ?? liveImageError ?? undefined}
-                />
-              </div>
-            )}
-          </Field>
-
-          <Field label="Memory">
-            <div className="flex border border-dashed border-border">
-              {memoryOptions.map((m) => (
-                <button
-                  key={m}
-                  type="button"
-                  onClick={() => setMemory(m)}
-                  className={cn(
-                    "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
-                    memory === m
-                      ? "bg-foreground text-background"
-                      : "text-muted hover:text-foreground",
-                  )}
-                  title={formatMemory(m)}
-                >
-                  {m >= 1024 ? `${m / 1024} GB` : `${m} MB`}
-                </button>
-              ))}
-            </div>
-          </Field>
-
-          {memoryMaxOptions.length > 0 && (
-            <Field label="Max memory">
-              <div className="flex border border-dashed border-border">
-                {[null, ...memoryMaxOptions].map((m) => (
-                  <button
-                    key={m ?? "fixed"}
-                    type="button"
-                    onClick={() => setMemoryMax(m)}
-                    className={cn(
-                      "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
-                      memoryMax === m
-                        ? "bg-foreground text-background"
-                        : "text-muted hover:text-foreground",
-                    )}
-                    aria-label={
-                      m === null ? "Fixed memory" : `Max ${formatMib(m)}`
-                    }
-                    title={
-                      m === null
-                        ? "Memory stays at the boot size"
-                        : `Sandboxes can grow memory to ${formatMib(m)} while running`
-                    }
-                  >
-                    {m === null ? "Fixed" : formatMib(m)}
-                  </button>
-                ))}
-              </div>
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") {
+                    e.preventDefault()
+                    handleCreate()
+                  }
+                }}
+              />
             </Field>
-          )}
 
-          <div className="space-y-1.5">
-            <div className="grid grid-cols-2 gap-3">
-              <Field label="vCPU">
-                <div className="flex border border-dashed border-border">
-                  {vcpuOptions.map((n) => (
+            <Field
+              label="Base image"
+              required
+              description="Linux/amd64 image with /bin/sh, mkdir, mount, chmod, and sync."
+            >
+              <div className="grid grid-cols-2 gap-2">
+                {CURATED_IMAGES.map((img) => {
+                  const active = imageMode === "curated" && curatedImage === img
+                  return (
                     <button
-                      key={n}
+                      key={img}
                       type="button"
-                      onClick={() => setVcpu(n)}
+                      aria-pressed={active}
+                      onClick={() => {
+                        setImageMode("curated")
+                        setCuratedImage(img)
+                      }}
                       className={cn(
-                        "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
-                        vcpu === n
-                          ? "bg-foreground text-background"
-                          : "text-muted hover:text-foreground",
+                        "cursor-pointer border border-dashed px-3 py-2 text-left font-mono text-xs transition-colors",
+                        active
+                          ? "border-foreground bg-foreground text-background"
+                          : "border-border text-muted hover:border-foreground/50 hover:text-foreground",
                       )}
                     >
-                      {n}
+                      {img}
                     </button>
-                  ))}
+                  )
+                })}
+                <button
+                  type="button"
+                  aria-pressed={imageMode === "custom"}
+                  onClick={() => setImageMode("custom")}
+                  className={cn(
+                    "col-span-2 cursor-pointer border border-dashed px-3 py-2 text-left font-mono text-xs transition-colors",
+                    imageMode === "custom"
+                      ? "border-foreground bg-foreground text-background"
+                      : "border-border text-muted hover:border-foreground/50 hover:text-foreground",
+                  )}
+                >
+                  Custom image…
+                </button>
+              </div>
+              {imageMode === "custom" && (
+                <div className="mt-2">
+                  <Input
+                    value={customImage}
+                    onChange={(e) => setCustomImage(e.target.value)}
+                    placeholder="ghcr.io/myorg/base:v1"
+                    error={errors.image ?? liveImageError ?? undefined}
+                  />
                 </div>
-              </Field>
+              )}
+            </Field>
+          </section>
 
-              <Field label="Disk">
-                <div className="flex border border-dashed border-border">
-                  {diskOptions.map((d) => (
-                    <button
-                      key={d}
-                      type="button"
-                      onClick={() => setDisk(d)}
-                      className={cn(
-                        "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
-                        disk === d
-                          ? "bg-foreground text-background"
-                          : "text-muted hover:text-foreground",
-                      )}
-                      title={`${d / 1024} GB`}
-                    >
-                      {d / 1024} GB
-                    </button>
-                  ))}
-                </div>
-              </Field>
+          <section className="space-y-5 border-t border-dashed border-border pt-5">
+            <div className="space-y-1">
+              <SectionTitle>Resources</SectionTitle>
+              <p className="text-xs text-muted">
+                Every sandbox started from this template gets these resources.
+              </p>
             </div>
 
+            <Stepper
+              label="vCPU"
+              hint={limitHint(caps?.max_vcpu, vcpuLimit, formatVcpu)}
+              steps={vcpuSteps}
+              value={vcpu}
+              onChange={setVcpu}
+              format={formatVcpu}
+            />
+
+            <Stepper
+              label="Memory"
+              hint={limitHint(caps?.max_memory_mib, memoryLimit, formatMib)}
+              steps={memorySteps}
+              value={memory}
+              onChange={setMemory}
+              format={formatMib}
+            />
+
+            <div className="space-y-4 border-l border-dashed border-border pl-4">
+              <Field
+                label="Memory growth"
+                description={
+                  canGrow
+                    ? `Fixed by default. Turn on to let running sandboxes grow memory past ${formatMib(memory)}.`
+                    : "Boot memory is at your plan's limit, so there is no room to grow."
+                }
+              >
+                <Switch
+                  id="template-memory-growth"
+                  checked={memoryMax !== null}
+                  disabled={!canGrow}
+                  onCheckedChange={(checked) => {
+                    setGrowth(checked)
+                    if (checked) setMemoryMax(2 * memory)
+                  }}
+                  label="Grow memory while running"
+                />
+              </Field>
+              {memoryMax !== null && (
+                <Stepper
+                  label="Max memory"
+                  hint={`${formatMib(memoryMaxSteps[0])} to ${formatMib(memoryMaxSteps[memoryMaxSteps.length - 1])}: up to 4× boot memory, within your plan`}
+                  steps={memoryMaxSteps}
+                  value={memoryMax}
+                  onChange={setMemoryMax}
+                  format={formatMib}
+                />
+              )}
+            </div>
+
+            <Stepper
+              label="Disk"
+              hint={limitHint(caps?.max_disk_mib, diskLimit, formatMib)}
+              steps={diskSteps}
+              value={disk}
+              onChange={setDisk}
+              format={formatMib}
+            />
             <p className="text-xs text-muted">
               Make sure the disk is large enough for your base image and build
               steps.
             </p>
-          </div>
+          </section>
 
           {errors.form && (
             <p className="border border-dashed border-destructive p-3 text-xs text-destructive">
