@@ -44,6 +44,23 @@ import {
   toTemplateInfo,
 } from "./types.js"
 
+// Match the UUID spellings accepted by the API's UUID parser.
+function isTemplateId(value: string): boolean {
+  if (value.length === 32) return /^[0-9a-f]{32}$/i.test(value)
+  if (value.length === 45 && /^urn:uuid:/i.test(value)) {
+    value = value.slice(9)
+  } else if (
+    value.length === 38 &&
+    value.startsWith("{") &&
+    value.endsWith("}")
+  ) {
+    value = value.slice(1, -1)
+  }
+  return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+    value,
+  )
+}
+
 export class Template {
   readonly id: string
   readonly name: string
@@ -119,6 +136,21 @@ export class Template {
     options: ConnectionOptions = {},
   ): Promise<Template> {
     const config = resolveConfig(options)
+    if (!isTemplateId(nameOrId)) {
+      // Match sandbox creation's precedence: caller-owned before system templates.
+      for (const owner of ["team", "system"]) {
+        const qs = new URLSearchParams({ name_prefix: nameOrId, owner })
+        const templates = await request<ApiTemplateResponse[]>({
+          method: "GET",
+          url: `${config.baseUrl}/templates?${qs.toString()}`,
+          headers: { "X-API-Key": config.apiKey },
+          signal: options.signal,
+        })
+        const match = templates.find((template) => template.name === nameOrId)
+        if (match) return new Template(toTemplateInfo(match), config)
+      }
+      throw new NotFoundError(`Template ${nameOrId} not found`, "not_found")
+    }
     const raw = await request<ApiTemplateResponse>({
       method: "GET",
       url: `${config.baseUrl}/templates/${encodeURIComponent(nameOrId)}`,

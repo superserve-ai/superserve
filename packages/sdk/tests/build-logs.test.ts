@@ -112,7 +112,7 @@ describe("Template.streamBuildLogs", () => {
     // Connect: no build_id in response → latestBuildId is undefined
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse(baseTemplate)),
+      vi.fn(async () => jsonResponse([baseTemplate])),
     )
     const t = await Template.connect("my-env", commonOpts)
     vi.unstubAllGlobals()
@@ -150,7 +150,7 @@ describe("Template.streamBuildLogs", () => {
   it("throws helpful error when template has no builds", async () => {
     vi.stubGlobal(
       "fetch",
-      vi.fn(async () => jsonResponse(baseTemplate)),
+      vi.fn(async () => jsonResponse([baseTemplate])),
     )
     const t = await Template.connect("my-env", commonOpts)
     vi.unstubAllGlobals()

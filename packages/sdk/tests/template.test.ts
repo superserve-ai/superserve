@@ -1,5 +1,10 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
+import {
+  AuthenticationError,
+  NotFoundError,
+  ServerError,
+} from "../src/errors.js"
 import { Template } from "../src/Template.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
@@ -116,16 +121,188 @@ describe("Template.create", () => {
 describe("Template.connect", () => {
   afterEach(() => vi.unstubAllGlobals())
 
-  it("GETs /templates/{id}", async () => {
+  const templateId = "11111111-2222-4aaa-8bbb-555555555555"
+
+  it.each([
+    templateId,
+    templateId.toUpperCase(),
+    templateId.replaceAll("-", ""),
+    `urn:uuid:${templateId}`,
+    `URN:UUID:${templateId.toUpperCase()}`,
+    `{${templateId}}`,
+  ])("GETs UUID reference %s directly without listing", async (reference) => {
     const mock = vi.fn(async () => jsonResponse(baseTemplate))
+    vi.stubGlobal("fetch", mock)
+
+    const template = await Template.connect(reference, commonOpts)
+
+    expect(template.id).toBe("t-1")
+    expect(mock).toHaveBeenCalledTimes(1)
+    const [url, init] = mock.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(
+      `https://api.superserve.ai/templates/${encodeURIComponent(reference)}`,
+    )
+    expect(init.method).toBe("GET")
+  })
+
+  it("preserves a UUID lookup's not-found error without name fallback", async () => {
+    const mock = vi.fn(async () => errorResponse(404, "not_found"))
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      Template.connect(templateId, commonOpts),
+    ).rejects.toBeInstanceOf(NotFoundError)
+    expect(mock).toHaveBeenCalledTimes(1)
+  })
+
+  it("resolves the exact team-owned name instead of a prefix neighbor", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse([
+        { ...baseTemplate, id: "neighbor", name: "my-env-extra" },
+        baseTemplate,
+      ]),
+    )
     vi.stubGlobal("fetch", mock)
 
     const template = await Template.connect("my-env", commonOpts)
 
-    expect(template.id).toBe("t-1")
+    expect(template.id).toBe(baseTemplate.id)
+    expect(template.name).toBe("my-env")
+    expect(mock).toHaveBeenCalledTimes(1)
     const [url, init] = mock.mock.calls[0] as [string, RequestInit]
-    expect(url).toBe("https://api.superserve.ai/templates/my-env")
+    const lookup = new URL(url)
+    expect(lookup.pathname).toBe("/templates")
+    expect(lookup.searchParams.get("name_prefix")).toBe("my-env")
+    expect(lookup.searchParams.get("owner")).toBe("team")
     expect(init.method).toBe("GET")
+    expect(new Headers(init.headers).get("X-API-Key")).toBe(commonOpts.apiKey)
+  })
+
+  it("falls back to the system owner and encodes namespaced names", async () => {
+    const name = "superserve/node-22"
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockResolvedValueOnce(jsonResponse([{ ...baseTemplate, name }]))
+    vi.stubGlobal("fetch", mock)
+
+    const template = await Template.connect(name, {
+      ...commonOpts,
+      baseUrl: "https://api-usw.superserve.ai",
+    })
+
+    expect(template.name).toBe(name)
+    expect(mock).toHaveBeenCalledTimes(2)
+    for (const [index, [url, init]] of mock.mock.calls.entries()) {
+      const lookup = new URL(url)
+      expect(lookup.origin).toBe("https://api-usw.superserve.ai")
+      expect(lookup.pathname).toBe("/templates")
+      expect(lookup.searchParams.get("name_prefix")).toBe(name)
+      expect(lookup.searchParams.get("owner")).toBe(
+        index === 0 ? "team" : "system",
+      )
+      expect(new Headers(init.headers).get("X-API-Key")).toBe(commonOpts.apiKey)
+    }
+  })
+
+  it("rejects prefix and SQL wildcard neighbors as missing names", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse([
+        { ...baseTemplate, name: "my-env-extra" },
+        { ...baseTemplate, name: "myXenv" },
+      ]),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const promise = Template.connect("my_env", commonOpts)
+    await expect(promise).rejects.toBeInstanceOf(NotFoundError)
+    await expect(promise).rejects.toMatchObject({
+      statusCode: 404,
+      code: "not_found",
+    })
+    expect(mock).toHaveBeenCalledTimes(2)
+  })
+
+  it.each(["building", "failed"])(
+    "connects to a %s template without enforcing readiness",
+    async (status) => {
+      vi.stubGlobal(
+        "fetch",
+        vi.fn(async () => jsonResponse([{ ...baseTemplate, status }])),
+      )
+
+      const template = await Template.connect("my-env", commonOpts)
+      expect(template.status).toBe(status)
+    },
+  )
+
+  it.each([
+    { status: 401, errorType: AuthenticationError },
+    { status: 403, errorType: AuthenticationError },
+    { status: 500, errorType: ServerError },
+  ])(
+    "propagates a $status lookup error without trying another owner",
+    async ({ status, errorType }) => {
+      const mock = vi.fn(async () => errorResponse(status))
+      vi.stubGlobal("fetch", mock)
+
+      await expect(
+        Template.connect("my-env", commonOpts),
+      ).rejects.toBeInstanceOf(errorType)
+      expect(mock).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it("forwards cancellation to the system lookup", async () => {
+    const controller = new AbortController()
+    const mock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse([]))
+      .mockImplementationOnce(async (_url, init: RequestInit) => {
+        controller.abort()
+        expect(init.signal?.aborted).toBe(true)
+        throw init.signal?.reason
+      })
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      Template.connect("my-env", { ...commonOpts, signal: controller.signal }),
+    ).rejects.toMatchObject({
+      message: "Request aborted",
+      cause: { name: "AbortError" },
+    })
+    expect(mock).toHaveBeenCalledTimes(2)
+  })
+
+  it("can recover from duplicate creation and check readiness using the resolved UUID", async () => {
+    const ready = { ...baseTemplate, id: templateId, status: "ready" }
+    const mock = vi.fn(async (url: string, init: RequestInit) => {
+      const parsed = new URL(url)
+      if (init.method === "POST" && parsed.pathname === "/templates") {
+        return errorResponse(409, "conflict", "Template already exists")
+      }
+      if (parsed.pathname === "/templates") return jsonResponse([ready])
+      if (parsed.pathname === `/templates/${templateId}/builds`) {
+        return jsonResponse([])
+      }
+      if (parsed.pathname === `/templates/${templateId}`) {
+        return jsonResponse(ready)
+      }
+      return errorResponse(400, "bad_request", "template_id must be a UUID")
+    })
+    vi.stubGlobal("fetch", mock)
+
+    await expect(
+      Template.create({ ...commonOpts, name: "my-env", from: "node:22" }),
+    ).rejects.toMatchObject({ statusCode: 409 })
+    const template = await Template.connect("my-env", commonOpts)
+    const info = await template.waitUntilReady()
+
+    expect(info.id).toBe(templateId)
+    expect(info.status).toBe("ready")
+    expect(mock.mock.calls.map(([url]) => new URL(url).pathname)).not.toContain(
+      "/templates/my-env",
+    )
   })
 })
 
