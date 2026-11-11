@@ -133,20 +133,26 @@ function trustedOrigins(origin: string): Set<string> {
   return origins
 }
 
+function safeRelativePath(path: string): string {
+  return path.startsWith("/") &&
+    !path.startsWith("//") &&
+    !UNSAFE_PATH_CHARACTERS.test(path)
+    ? path
+    : "/"
+}
+
 function sanitizeNext(raw: string | null, origin: string): string {
   const next = raw ?? "/"
-  if (next.startsWith("/")) {
-    return !next.startsWith("//") && !UNSAFE_PATH_CHARACTERS.test(next)
-      ? next
-      : "/"
-  }
+  if (next.startsWith("/")) return safeRelativePath(next)
   if (!next.startsWith("https://") || UNSAFE_PATH_CHARACTERS.test(next))
     return "/"
   try {
     const url = new URL(next)
     if (url.username || url.password || !trustedOrigins(origin).has(url.origin))
       return "/"
-    return `${url.pathname}${url.search}${url.hash}`
+    // Checked again: a console URL such as "https://console.../\/evil.example"
+    // has the pathname "//evil.example", which is another host as a path.
+    return safeRelativePath(`${url.pathname}${url.search}${url.hash}`)
   } catch {
     return "/"
   }
@@ -184,7 +190,9 @@ async function pendingSignupResponse(
  */
 export async function GET(request: Request) {
   const url = new URL(request.url)
-  if (url.searchParams.get("token_hash") && !url.searchParams.has("code")) {
+  // The same test as completeCallback's, so an empty `code=` cannot send a
+  // token link past this step.
+  if (url.searchParams.get("token_hash") && !url.searchParams.get("code")) {
     const secure = url.protocol === "https:"
     const response = NextResponse.redirect(
       new URL(EMAIL_LINK_CONFIRM_PATH, url.origin),

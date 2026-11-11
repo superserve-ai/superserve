@@ -3161,6 +3161,26 @@ describe("auth callback", () => {
       expect(saved.csrf.length).toBeGreaterThanOrEqual(32)
     })
 
+    it("does not let an empty code parameter skip the confirm step", async () => {
+      const response = await handleGet(new Request(`${link}&code=`))
+
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/confirm/",
+      )
+      const saved = JSON.parse(
+        Buffer.from(confirmCookie(response)!, "base64url").toString("utf8"),
+      )
+      expect(new URLSearchParams(saved.query).has("code")).toBe(false)
+
+      const cookie = confirmCookie(response)!
+      await POST(confirmPost(cookie, confirmCsrf(cookie)))
+      expect(mockVerifyOtp).toHaveBeenCalledWith({
+        token_hash: "hashed",
+        type: "magiclink",
+      })
+    })
+
     it("keeps the OAuth code flow on GET", async () => {
       const response = await handleGet(
         new Request("https://console.superserve.ai/auth/callback?code=abc"),
@@ -3286,6 +3306,25 @@ describe("auth callback", () => {
       expect(new URL(location!).origin).toBe("https://console.superserve.ai")
       expect(location).toBe("https://console.superserve.ai/sandboxes")
     })
+
+    it.each([
+      "https://console.superserve.ai//evil.example.com/",
+      "https://console.superserve.ai/\\evil.example.com/",
+    ])(
+      "does not turn a console URL into another host for a signed-out visitor: %s",
+      async (next) => {
+        currentUser = null
+        const callback = new URL("https://console.superserve.ai/auth/callback")
+        callback.searchParams.set("code", "abc")
+        callback.searchParams.set("next", next)
+
+        const response = await GET(new Request(callback))
+
+        expect(response.headers.get("location")).toBe(
+          "https://console.superserve.ai/",
+        )
+      },
+    )
 
     it("turns a console URL into a path and keeps the path allowlist", async () => {
       expect(

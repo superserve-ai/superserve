@@ -7,8 +7,9 @@ import { randomBytes, timingSafeEqual } from "node:crypto"
  * query in a short-lived, httpOnly cookie and shows a confirm page. The token
  * is used only when that page posts back with the matching CSRF value.
  *
- * The token stays out of the confirm page URL, so analytics, browser history
- * and page scripts never see it.
+ * The token stays out of the confirm page URL, so browser history and page
+ * scripts never see it. The cookie uses path `/`, so the middleware removes
+ * cookies from analytics requests before they leave the console.
  */
 
 export const EMAIL_LINK_CONFIRM_PATH = "/auth/confirm/"
@@ -64,9 +65,13 @@ export interface PendingEmailLink {
 }
 
 export function newPendingEmailLink(params: URLSearchParams): PendingEmailLink {
+  const query = new URLSearchParams(params)
+  // An empty `code=` is not an OAuth code; drop it so the saved link is a
+  // plain token link.
+  query.delete("code")
   return {
     csrf: randomBytes(32).toString("base64url"),
-    query: params.toString(),
+    query: query.toString(),
   }
 }
 
@@ -93,7 +98,7 @@ export function decodePendingEmailLink(
     if (csrf.length < 32 || query.length > MAX_QUERY_LENGTH) return null
     const params = new URLSearchParams(query)
     // Only token links use this step; the OAuth code flow stays on GET.
-    if (!params.get("token_hash") || params.has("code")) return null
+    if (!params.get("token_hash") || params.get("code")) return null
     return { csrf, query }
   } catch {
     return null
