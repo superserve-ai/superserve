@@ -7,7 +7,10 @@ import { readClientIp } from "@/lib/auth/client-ip"
 import { findAuthUserByEmail } from "@/lib/auth/find-auth-user"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
-import { reserveRecoveryEmail } from "@/lib/auth/recovery-email-limits"
+import {
+  reserveRecoveryEmail,
+  takeRecoveryNetworkLimit,
+} from "@/lib/auth/recovery-email-limits"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
@@ -41,6 +44,10 @@ async function deliverPasswordReset(
   try {
     // Using a recovery link confirms the address, so accounts awaiting signup
     // review get nothing; accounts that predate review keep recovery.
+    // Before the lookup, so the caller's own limit is used the same way
+    // whether or not the address has an account.
+    if (!(await takeRecoveryNetworkLimit(clientIp))) return
+
     const user = await findAuthUserByEmail(email)
     if (!user || isSignupReviewBlocked(user)) return
 
@@ -50,7 +57,6 @@ async function deliverPasswordReset(
       (await reserveRecoveryEmail({
         userId: user.id,
         email,
-        clientIp,
         addressLimit: RESET_EMAIL_LIMIT,
       })) !== "reserved"
     ) {

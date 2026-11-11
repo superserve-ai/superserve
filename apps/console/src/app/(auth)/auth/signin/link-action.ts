@@ -9,6 +9,7 @@ import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
 import {
   type RecoveryEmailReservation,
   reserveRecoveryEmail,
+  takeRecoveryNetworkLimit,
 } from "@/lib/auth/recovery-email-limits"
 import {
   isSignupReviewBlocked,
@@ -38,7 +39,6 @@ const RESERVATION_FAILURE_REASONS: Record<
   Exclude<RecoveryEmailReservation, "reserved">,
   string
 > = {
-  ip_limit: "ip_hourly_limit",
   address_limit: "address_limit",
   cooldown: "cooldown",
   account_limit: "account_hourly_limit",
@@ -83,6 +83,12 @@ async function deliverSignInLink(
       await trackLinkFailure("rate_limited")
       return
     }
+    // Before the lookup, so the caller's own limit is used the same way
+    // whether or not the address has an account.
+    if (!(await takeRecoveryNetworkLimit(clientIp))) {
+      await trackLinkFailure("ip_hourly_limit")
+      return
+    }
     const user = await findAuthUserByEmail(email)
     if (!user) {
       await trackLinkFailure("no_account")
@@ -108,7 +114,6 @@ async function deliverSignInLink(
     const reservation = await reserveRecoveryEmail({
       userId: user.id,
       email,
-      clientIp,
     })
     if (reservation !== "reserved") {
       await trackLinkFailure(RESERVATION_FAILURE_REASONS[reservation], user.id)
