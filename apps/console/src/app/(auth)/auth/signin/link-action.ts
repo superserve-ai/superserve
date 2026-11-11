@@ -9,7 +9,6 @@ import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
 import {
   type RecoveryEmailReservation,
   reserveRecoveryEmail,
-  startRecoveryEmailCooldown,
 } from "@/lib/auth/recovery-email-limits"
 import {
   isSignupReviewBlocked,
@@ -40,6 +39,7 @@ const RESERVATION_FAILURE_REASONS: Record<
   string
 > = {
   ip_limit: "ip_hourly_limit",
+  cooldown: "cooldown",
   account_limit: "account_hourly_limit",
   budget_used_up: "email_budget",
   budget_busy: "email_budget_busy",
@@ -82,11 +82,6 @@ async function deliverSignInLink(
       await trackLinkFailure("rate_limited")
       return
     }
-    if (!(await startRecoveryEmailCooldown(email))) {
-      await trackLinkFailure("cooldown")
-      return
-    }
-
     const user = await findAuthUserByEmail(email)
     if (!user) {
       await trackLinkFailure("no_account")
@@ -111,6 +106,7 @@ async function deliverSignInLink(
     // the email limits before creating the token, never after.
     const reservation = await reserveRecoveryEmail({
       userId: user.id,
+      email,
       clientIp,
     })
     if (reservation !== "reserved") {

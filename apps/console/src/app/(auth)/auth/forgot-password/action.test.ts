@@ -403,16 +403,20 @@ describe("sendPasswordResetEmail", () => {
     ])
   })
 
-  it("takes the shared hourly limits per network and per account before the project budget", async () => {
+  it("takes the network limit, the cooldown and the account limit before the project budget", async () => {
     requestHeaders = { "x-forwarded-for": "2001:db8:1:2:aaaa::7" }
     mockGenerateLink.mockResolvedValue({ data: null, error: null })
 
     await reset("user@example.com", "token")
 
-    expect(mockConsumeAuthRateLimit.mock.calls.slice(-3)).toEqual([
+    expect(mockConsumeAuthRateLimit.mock.calls.slice(-4)).toEqual([
       [
         { bucket: "recovery_email_ip", max: 10, windowSeconds: 3600 },
         "2001:db8:1:2::/64",
+      ],
+      [
+        expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+        "user@example.com",
       ],
       [
         { bucket: "recovery_email_account", max: 5, windowSeconds: 3600 },
@@ -444,6 +448,21 @@ describe("sendPasswordResetEmail", () => {
       expect(mockSendEmail).not.toHaveBeenCalled()
     },
   )
+
+  it("does not start another address's cooldown once the caller's network limit is used up", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) => limit.bucket !== "recovery_email_ip",
+    )
+
+    await reset("victim@example.com", "token")
+
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+      expect.anything(),
+    )
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
 
   it("silently skips the email once the per-address limit is used up", async () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7" }

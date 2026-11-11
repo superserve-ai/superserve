@@ -7,10 +7,7 @@ import { readClientIp } from "@/lib/auth/client-ip"
 import { findAuthUserByEmail } from "@/lib/auth/find-auth-user"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
-import {
-  reserveRecoveryEmail,
-  startRecoveryEmailCooldown,
-} from "@/lib/auth/recovery-email-limits"
+import { reserveRecoveryEmail } from "@/lib/auth/recovery-email-limits"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
@@ -42,12 +39,9 @@ async function deliverPasswordReset(
   invite: string | null,
 ) {
   try {
-    // The address limit runs before the shared cooldown, so a reset refused
-    // here does not start the cooldown and block a sign-in link.
-    if (
-      !(await consumeAuthRateLimit(RESET_EMAIL_LIMIT, email.toLowerCase())) ||
-      !(await startRecoveryEmailCooldown(email))
-    ) {
+    // The shared cooldown starts later, in reserveRecoveryEmail, so a reset
+    // refused here does not start it and block a sign-in link.
+    if (!(await consumeAuthRateLimit(RESET_EMAIL_LIMIT, email.toLowerCase()))) {
       return
     }
 
@@ -59,7 +53,8 @@ async function deliverPasswordReset(
     // A new token replaces the one in any email already sent, so take from
     // the email limits before creating the token, never after.
     if (
-      (await reserveRecoveryEmail({ userId: user.id, clientIp })) !== "reserved"
+      (await reserveRecoveryEmail({ userId: user.id, email, clientIp })) !==
+      "reserved"
     ) {
       return
     }

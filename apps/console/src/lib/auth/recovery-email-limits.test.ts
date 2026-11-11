@@ -19,10 +19,13 @@ import {
   recoveryClientNetworkKey,
   recoveryEmailHourlyLimit,
   reserveRecoveryEmail,
-  startRecoveryEmailCooldown,
 } from "./recovery-email-limits"
 
-const CALLER = { userId: "user-1", clientIp: "203.0.113.7" }
+const CALLER = {
+  userId: "user-1",
+  email: "User@Example.COM",
+  clientIp: "203.0.113.7",
+}
 
 describe("recovery email limits", () => {
   beforeEach(() => {
@@ -38,13 +41,22 @@ describe("recovery email limits", () => {
   })
 
   it("allows one recovery token per address per minute, ignoring case", async () => {
-    mockConsumeAuthRateLimit.mockResolvedValueOnce(false)
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) =>
+        limit.bucket !== "recovery_email_cooldown",
+    )
 
-    expect(await startRecoveryEmailCooldown("User@Example.COM")).toBe(false)
-    expect(mockConsumeAuthRateLimit).toHaveBeenCalledExactlyOnceWith(
+    expect(await reserveRecoveryEmail(CALLER)).toBe("cooldown")
+    expect(mockConsumeAuthRateLimit).toHaveBeenLastCalledWith(
       { bucket: "recovery_email_cooldown", max: 1, windowSeconds: 60 },
       "user@example.com",
     )
+    // The account allowance is untouched by a request inside the minute.
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_account" }),
+      expect.anything(),
+    )
+    expect(mockConsumeAuthRateLimitOutcome).not.toHaveBeenCalled()
   })
 
   it("defaults to a backstop of 100 emails per hour", () => {
@@ -85,17 +97,18 @@ describe("recovery email limits", () => {
     expect(recoveryClientNetworkKey(ip)).toBe(key)
   })
 
-  it("takes the network limit, the account limit, then the project budget", async () => {
+  it("takes the network limit, the cooldown, the account limit, then the project budget", async () => {
     expect(
-      await reserveRecoveryEmail({
-        userId: "user-1",
-        clientIp: "2001:db8:1:2::9",
-      }),
+      await reserveRecoveryEmail({ ...CALLER, clientIp: "2001:db8:1:2::9" }),
     ).toBe("reserved")
     expect(mockConsumeAuthRateLimit.mock.calls).toEqual([
       [
         { bucket: "recovery_email_ip", max: 10, windowSeconds: 3600 },
         "2001:db8:1:2::/64",
+      ],
+      [
+        { bucket: "recovery_email_cooldown", max: 1, windowSeconds: 60 },
+        "user@example.com",
       ],
       [
         { bucket: "recovery_email_account", max: 5, windowSeconds: 3600 },
@@ -109,17 +122,26 @@ describe("recovery email limits", () => {
   })
 
   it("skips the network limit when no client IP is known", async () => {
-    expect(
-      await reserveRecoveryEmail({ userId: "user-1", clientIp: undefined }),
-    ).toBe("reserved")
-    expect(mockConsumeAuthRateLimit).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ bucket: "recovery_email_account" }),
-      "user-1",
+    expect(await reserveRecoveryEmail({ ...CALLER, clientIp: undefined })).toBe(
+      "reserved",
     )
+    expect(
+      mockConsumeAuthRateLimit.mock.calls.map(([limit]) => limit.bucket),
+    ).toEqual(["recovery_email_cooldown", "recovery_email_account"])
+  })
+
+  it("does not start the address cooldown once the network limit is used up", async () => {
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) => limit.bucket !== "recovery_email_ip",
+    )
+
+    expect(await reserveRecoveryEmail(CALLER)).toBe("ip_limit")
+    expect(mockConsumeAuthRateLimit).toHaveBeenCalledOnce()
   })
 
   it.each([
     ["recovery_email_ip", "ip_limit"],
+    ["recovery_email_cooldown", "cooldown"],
     ["recovery_email_account", "account_limit"],
   ])(
     "stops at %s without touching the project budget",
