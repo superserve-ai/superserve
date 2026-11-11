@@ -603,8 +603,12 @@ export function CreateSandboxDialog({
       },
       onError: (error) => {
         // The billing toast holds the next step. An open modal would trap
-        // focus away from its button, so close it and keep the form values.
-        if (billingBlockFromError(error)) setOpen(false)
+        // focus away from its button, so close it and reset it as Cancel
+        // does: the page clears the chosen template or snapshot on close.
+        if (billingBlockFromError(error)) {
+          setOpen(false)
+          handleReset()
+        }
       },
     })
   }

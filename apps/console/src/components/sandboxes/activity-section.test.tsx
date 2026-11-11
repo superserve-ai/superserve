@@ -95,7 +95,56 @@ describe("ActivitySection", () => {
     })
   })
 
+  it("records one shown event for a view with several billing pauses", () => {
+    mocks.capture.mockClear()
+    mocks.summary.mockReturnValue({
+      data: { trial_block: "trial_exhausted", permissions: {} },
+    })
+    const second = { ...entry("billing_ineligible_paused"), id: "a-2" }
+    render(
+      <ActivitySection
+        activity={[entry("billing_ineligible_paused"), second]}
+        isPending={false}
+        error={null}
+      />,
+    )
+
+    expect(
+      screen.getAllByRole("link", { name: "Add card / choose plan" }),
+    ).toHaveLength(2)
+    expect(mocks.capture).toHaveBeenCalledOnce()
+    expect(mocks.capture).toHaveBeenCalledWith("billing_block_shown", {
+      reason: "trial_used_up",
+      code: "trial_exhausted",
+      surface: "activity",
+    })
+  })
+
+  it("names a generic block when the summary gives no trial reason", () => {
+    mocks.capture.mockClear()
+    mocks.summary.mockReturnValue({
+      data: {
+        trial_block: null,
+        payment_setup_required: true,
+        permissions: {},
+      },
+    })
+    render(
+      <ActivitySection
+        activity={[entry("billing_ineligible_paused")]}
+        isPending={false}
+        error={null}
+      />,
+    )
+    expect(mocks.capture).toHaveBeenCalledWith("billing_block_shown", {
+      reason: "billing_inactive",
+      code: "billing_ineligible",
+      surface: "activity",
+    })
+  })
+
   it("hides the plan action once the team can run sandboxes again", () => {
+    mocks.capture.mockClear()
     mocks.summary.mockReturnValue({
       data: { trial_block: null, plan: { status: "active" }, permissions: {} },
     })
@@ -113,6 +162,7 @@ describe("ActivitySection", () => {
     expect(
       screen.queryByRole("link", { name: "Add card / choose plan" }),
     ).not.toBeInTheDocument()
+    expect(mocks.capture).not.toHaveBeenCalled()
   })
 
   it("keeps other actions as they are", () => {

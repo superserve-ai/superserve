@@ -171,7 +171,7 @@ export function ActivityDetail({ log }: { log: ActivityResponse }) {
             <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
               <span>{activityActionLabel(log.action)}</span>
               <span className="font-mono text-xs text-muted">{log.action}</span>
-              <BillingActivityAction />
+              <BillingActivityAction trackShown />
             </span>
           ) : (
             <span className="font-mono">{activityActionLabel(log.action)}</span>

@@ -55,7 +55,7 @@ describe("TerminalPage billing block", () => {
     })
   })
 
-  it("offers Start again once a newer billing summary shows the team unblocked", () => {
+  it("offers Start again only once a newer billing summary shows the team eligible", () => {
     const mutate = vi.fn()
     const reset = vi.fn()
     const error = new ApiError(402, "trial_check_unavailable", "")
@@ -92,9 +92,23 @@ describe("TerminalPage billing block", () => {
     view.rerender(<TerminalPage />)
     expect(reset).not.toHaveBeenCalled()
 
+    // Nor does one that names no reason: generic blocks stay unnamed, and a
+    // legacy Free plan without a price proves nothing.
     mocks.summary.mockReturnValue({
-      data: { trial_block: null, plan: { status: "active" } },
+      data: {
+        trial_block: null,
+        trial: { state: "exhausted", eligible: false },
+        plan: { status: "active", price_usd: null },
+      },
       dataUpdatedAt: failedAt + 2_000,
+    })
+    view.rerender(<TerminalPage />)
+    expect(reset).not.toHaveBeenCalled()
+    expect(screen.getByText("Free trial not confirmed")).toBeInTheDocument()
+
+    mocks.summary.mockReturnValue({
+      data: { trial_block: null, plan: { status: "active", price_usd: 20 } },
+      dataUpdatedAt: failedAt + 3_000,
     })
     view.rerender(<TerminalPage />)
     expect(reset).toHaveBeenCalledOnce()
@@ -146,6 +160,23 @@ describe("TerminalPage billing block", () => {
     )
     expect(assign).toHaveBeenCalledWith("/billing-usage/")
     vi.restoreAllMocks()
+  })
+
+  it("keeps Start for a 402 that a card or plan does not fix", () => {
+    mocks.resume.mockReturnValue({
+      mutate: vi.fn(),
+      reset: vi.fn(),
+      isPending: false,
+      error: new ApiError(
+        402,
+        "free_allowance_exhausted",
+        "The Free plan's daily compute allowance is used up.",
+      ),
+    })
+    render(<TerminalPage />)
+    expect(screen.getByText("Sandbox is paused")).toBeInTheDocument()
+    expect(screen.queryByText("Add card / choose plan")).toBeNull()
+    expect(mocks.capture).not.toHaveBeenCalled()
   })
 
   it.each([

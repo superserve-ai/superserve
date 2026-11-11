@@ -72,6 +72,10 @@ it("gives each advanced row removal button a specific, one-based name", async ()
 it.each([
   [new ApiError(402, "trial_exhausted", "Trial credit used up."), [false]],
   [new ApiError(500, "internal", "Server error"), undefined],
+  [
+    new ApiError(402, "sandbox_exceeds_plan_limits", "Use a smaller template."),
+    undefined,
+  ],
 ])(
   "closes the dialog only for a billing block (%s)",
   async (error, closeCall) => {

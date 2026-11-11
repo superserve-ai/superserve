@@ -36,6 +36,10 @@ export function ActivitySection({
   error,
   onRetry,
 }: ActivitySectionProps) {
+  // Only the first billing pause records that the link was shown.
+  const firstBillingPauseId = activity?.find(
+    (entry) => entry.action === BILLING_PAUSE_ACTIVITY,
+  )?.id
   return (
     <>
       <div className="flex h-10 items-center border-b border-border px-4">
@@ -103,7 +107,9 @@ export function ActivitySection({
                       {entry.action === BILLING_PAUSE_ACTIVITY ? (
                         <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
                           <span>{activityActionLabel(entry.action)}</span>
-                          <BillingActivityAction />
+                          <BillingActivityAction
+                            trackShown={entry.id === firstBillingPauseId}
+                          />
                         </span>
                       ) : (
                         activityActionLabel(entry.action)

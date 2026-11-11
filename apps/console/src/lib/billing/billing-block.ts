@@ -1,4 +1,7 @@
-import type { BillingSummaryResponse } from "@/lib/api/billing"
+import type {
+  BillingSummaryResponse,
+  BillingTrialBlock,
+} from "@/lib/api/billing"
 import { ApiError } from "@/lib/api/client"
 
 import { legacyBillingUsagePath } from "./legacy-billing-usage-path"
@@ -28,10 +31,21 @@ export interface BillingBlock {
   href: string
 }
 
-const TRIAL_REASONS: Record<string, BillingBlockReason> = {
+// The 402 codes that a card or a plan resolves. Other 402s, such as the Free
+// plan's daily allowance (`free_allowance_exhausted`) or a template larger
+// than the plan (`sandbox_exceeds_plan_limits`), have a different next step
+// and keep their own error path.
+export type BillingBlockCode = BillingTrialBlock | "billing_ineligible"
+
+const BLOCK_REASONS: Record<BillingBlockCode, BillingBlockReason> = {
   trial_unavailable: "trial_denied",
   trial_exhausted: "trial_used_up",
   trial_check_unavailable: "system_unavailable",
+  billing_ineligible: "billing_inactive",
+}
+
+function isBillingBlockCode(code: string): code is BillingBlockCode {
+  return Object.hasOwn(BLOCK_REASONS, code)
 }
 
 const TITLES: Record<BillingBlockReason, string> = {
@@ -53,8 +67,9 @@ const DEFAULT_DESCRIPTIONS: Record<BillingBlockReason, string> = {
   billing_inactive: "Sandbox usage is unavailable until billing is active.",
 }
 
-export function billingBlockReason(code: string): BillingBlockReason {
-  return TRIAL_REASONS[code] ?? "billing_inactive"
+/** The tracking reason for a billing block code, or null for any other code. */
+export function billingBlockReason(code: string): BillingBlockReason | null {
+  return isBillingBlockCode(code) ? BLOCK_REASONS[code] : null
 }
 
 function currentOrigin(): string | null {
@@ -108,16 +123,42 @@ const BLOCKED_PLAN_STATES = new Set([
   "trial_ended",
   "payment_failed",
   "plan_required",
+  "payment_method_required",
 ])
 
-/** The team still cannot run sandboxes for a billing reason. */
+/**
+ * The summary shows a billing reason that the team cannot run sandboxes:
+ * a trial block, a plan state that needs payment, or no credit and no
+ * subscription in live billing (this covers a used-up legacy trial).
+ */
 export function billingStillBlocked(
   summary: BillingSummaryResponse | undefined,
 ): boolean {
   if (!summary) return false
   return (
-    !!summary.trial_block || BLOCKED_PLAN_STATES.has(summary.plan?.status ?? "")
+    !!summary.trial_block ||
+    BLOCKED_PLAN_STATES.has(summary.plan?.status ?? "") ||
+    summary.payment_setup_required === true
   )
+}
+
+/**
+ * The summary shows that the team can run sandboxes: no block, and either
+ * trial or prepaid credit the server marks eligible, or an active contract.
+ * A summary with no reason either way is not proof: the server keeps some
+ * blocks generic on purpose, and `plan` is optional.
+ */
+export function billingEligible(
+  summary: BillingSummaryResponse | undefined,
+): boolean {
+  if (!summary || billingStillBlocked(summary)) return false
+  const plan = summary.plan
+  // A contract always has a price; the legacy Free fallback has none.
+  const activeContract =
+    plan?.status === "active" &&
+    plan.price_usd !== null &&
+    plan.price_usd !== undefined
+  return summary.trial?.eligible === true || activeContract
 }
 
 // The server appends ": <action_url>" to the message. The link becomes a
@@ -136,8 +177,8 @@ export function billingBlockMessage(
 }
 
 /** A billing block from a code alone, such as the summary's trial_block. */
-export function billingBlockFromCode(code: string): BillingBlock {
-  const reason = billingBlockReason(code)
+export function billingBlockFromCode(code: BillingBlockCode): BillingBlock {
+  const reason = BLOCK_REASONS[code]
   return {
     code,
     reason,
@@ -147,13 +188,14 @@ export function billingBlockFromCode(code: string): BillingBlock {
   }
 }
 
-/** The billing block a 402 reports, or null for any other error. */
+/** The billing block a 402 reports, or null for any other error or code. */
 export function billingBlockFromError(
   error: unknown,
   origin: string | null = currentOrigin(),
 ): BillingBlock | null {
   if (!(error instanceof ApiError) || error.status !== 402) return null
   const reason = billingBlockReason(error.code)
+  if (!reason) return null
   return {
     code: error.code,
     reason,

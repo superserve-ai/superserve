@@ -15,7 +15,7 @@ import { useResumeSandbox, useSandbox } from "@/hooks/use-sandboxes"
 import {
   billingBlockFromCode,
   billingBlockFromError,
-  billingStillBlocked,
+  billingEligible,
 } from "@/lib/billing/billing-block"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
 
@@ -46,8 +46,9 @@ export default function TerminalPage() {
   const summary = summaryQuery.data
   const trialBlock = summary?.trial_block
   // When Start last failed for a billing reason. A billing summary fetched
-  // after that which shows the team unblocked clears the old error, so the
-  // page offers Start again without a reload.
+  // after that which shows the team eligible clears the old error, so the
+  // page offers Start again without a reload. A summary that names no
+  // reason is not enough: some blocks stay generic on purpose.
   const [billingFailedAt, setBillingFailedAt] = useState(0)
   const { reset: resetResume } = resumeMutation
   useEffect(() => {
@@ -55,7 +56,7 @@ export default function TerminalPage() {
       billingFailedAt &&
       summary &&
       summaryQuery.dataUpdatedAt > billingFailedAt &&
-      !billingStillBlocked(summary)
+      billingEligible(summary)
     ) {
       setBillingFailedAt(0)
       resetResume()

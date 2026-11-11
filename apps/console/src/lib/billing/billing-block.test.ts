@@ -8,6 +8,7 @@ import {
   billingBlockFromError,
   billingBlockMessage,
   billingBlockReason,
+  billingEligible,
   billingStillBlocked,
   safeBillingActionHref,
 } from "./billing-block"
@@ -134,6 +135,12 @@ describe("billingBlockFromError", () => {
     expect(block?.description).not.toBe("")
   })
 
+  it("gives no reason for codes a card or plan does not fix", () => {
+    expect(billingBlockReason("free_allowance_exhausted")).toBeNull()
+    expect(billingBlockReason("sandbox_exceeds_plan_limits")).toBeNull()
+    expect(billingBlockReason("toString")).toBeNull()
+  })
+
   it("keeps the three trial cases apart", () => {
     const reasons = [
       "trial_unavailable",
@@ -176,6 +183,10 @@ describe("billingBlockFromError", () => {
   it.each([
     new ApiError(403, "trial_exhausted", "x"),
     new ApiError(500, "internal", "x"),
+    // Other 402s have a different next step than a card or a plan.
+    new ApiError(402, "free_allowance_exhausted", "x"),
+    new ApiError(402, "sandbox_exceeds_plan_limits", "x"),
+    new ApiError(402, "payment_required", "x"),
     new Error("network"),
     "trial_exhausted",
     null,
@@ -201,11 +212,42 @@ describe("billingStillBlocked", () => {
     [{ trial_block: null, plan: { status: "trial_ended" } }, true],
     [{ trial_block: null, plan: { status: "payment_failed" } }, true],
     [{ trial_block: null, plan: { status: "plan_required" } }, true],
+    [{ trial_block: null, plan: { status: "payment_method_required" } }, true],
+    // A used-up legacy trial with no subscription in live billing.
+    [{ trial_block: null, payment_setup_required: true }, true],
     [{ trial_block: null, plan: { status: "active" } }, false],
     [{ trial_block: null, plan: null }, false],
   ])("%o is %s", (summary, expected) => {
     expect(
       billingStillBlocked(summary as Parameters<typeof billingStillBlocked>[0]),
+    ).toBe(expected)
+  })
+})
+
+describe("billingEligible", () => {
+  const contract = { status: "active", price_usd: 20 }
+  it.each([
+    [undefined, false],
+    // No reason either way is not proof (generic blocks, plan optional).
+    [{ trial_block: null }, false],
+    [
+      { trial_block: null, trial: { state: "exhausted", eligible: false } },
+      false,
+    ],
+    // The legacy Free fallback has no price and proves nothing.
+    [{ trial_block: null, plan: { status: "active", price_usd: null } }, false],
+    [{ trial_block: null, trial: { state: "active", eligible: true } }, true],
+    [{ trial_block: null, plan: contract }, true],
+    [{ trial_block: null, plan: { ...contract, price_usd: 0 } }, true],
+    [{ trial_block: "trial_exhausted", plan: contract }, false],
+    [
+      { trial_block: null, plan: { ...contract, status: "payment_failed" } },
+      false,
+    ],
+    [{ plan: contract, payment_setup_required: true }, false],
+  ])("%o is %s", (summary, expected) => {
+    expect(
+      billingEligible(summary as Parameters<typeof billingEligible>[0]),
     ).toBe(expected)
   })
 })

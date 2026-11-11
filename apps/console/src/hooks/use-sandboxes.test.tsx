@@ -188,6 +188,30 @@ describe("billing block toasts", () => {
     expect(assign).toHaveBeenCalledWith("/billing-usage/")
   })
 
+  it.each([
+    [
+      "free_allowance_exhausted",
+      "The Free plan's daily compute allowance is used up. Sandboxes can start again when it resets, or upgrade for unlimited runtime.",
+    ],
+    [
+      "sandbox_exceeds_plan_limits",
+      "This sandbox is larger than your plan allows. Upgrade your plan or use a smaller template.",
+    ],
+  ])("keeps the plain error toast for a %s 402", async (code, message) => {
+    const { wrapper } = createQueryWrapper()
+    mockCreate.mockRejectedValue(new ApiError(402, code, message))
+    const { result } = renderHook(() => useCreateSandbox(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: "x" }).catch(() => {})
+    })
+
+    await waitFor(() =>
+      expect(mockAddToast).toHaveBeenCalledWith(message, "error"),
+    )
+    expect(mockCapture).not.toHaveBeenCalled()
+  })
+
   it("shows no toast when the page shows the billing block itself", async () => {
     const { wrapper } = createQueryWrapper()
     mockResume.mockRejectedValue(trialExhausted())
