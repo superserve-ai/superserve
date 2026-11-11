@@ -1,6 +1,7 @@
 import { ToastProvider } from "@superserve/ui"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import type { ComponentProps } from "react"
 import { beforeEach, expect, it, vi } from "vitest"
 
 import { ConnectSandboxDialog } from "./connect-sandbox-dialog"
@@ -25,6 +26,12 @@ vi.mock("@/hooks/use-api-keys", () => ({
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push }),
+}))
+
+vi.mock("next/link", () => ({
+  default: ({ children, ...props }: ComponentProps<"a">) => (
+    <a {...props}>{children}</a>
+  ),
 }))
 
 beforeEach(() => {
@@ -55,12 +62,18 @@ it("prioritizes creating a key and hides the run snippet until a key exists", as
   expect(screen.getByText("3. Run this code")).toBeInTheDocument()
   expect(
     screen.getByText(
-      "Your code uses this key to create, pause, and resume sandboxes. You see it once.",
+      "Your code uses an API key to create, pause, and resume sandboxes. The key shows one time only. Copy it when it appears.",
     ),
   ).toBeInTheDocument()
   expect(
-    screen.getByText("Create an API key first. The code appears here."),
+    screen.getByText("Create an API key in step 1 to see this code."),
   ).toBeInTheDocument()
+  expect(
+    screen.queryByText(/Use one of your API keys\./),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole("link", { name: "API keys page" }),
+  ).not.toBeInTheDocument()
   expect(screen.getByRole("dialog")).not.toHaveTextContent("Sandbox.connect(")
   expect(screen.getByRole("dialog")).not.toHaveTextContent("ss_live_xxxxxxxx")
   expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(1)
@@ -120,12 +133,50 @@ it("shows the newly created key only in the copy-key field", () => {
   expect(
     screen.getByRole("button", { name: "Copy API key" }),
   ).toBeInTheDocument()
+  expect(
+    screen.getByText(
+      "Copy this API key now. You cannot see it again after you close this dialog.",
+    ),
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByText(/Use one of your API keys\./),
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole("link", { name: "API keys page" }),
+  ).not.toBeInTheDocument()
   const dialog = screen.getByRole("dialog")
   expect(dialog).toHaveTextContent('Sandbox.connect("sbx-42")')
-  expect(dialog).toHaveTextContent("export SUPERSERVE_API_KEY=...")
+  const runSnippet = screen.getByText(/Sandbox\.connect\("sbx-42"\)/, {
+    selector: "code",
+  })
+  expect(runSnippet).toHaveTextContent("export SUPERSERVE_API_KEY=ss_live_...")
+  expect(runSnippet).not.toHaveTextContent(key)
   expect(dialog.textContent?.split(key)).toHaveLength(2)
   expect(screen.getAllByRole("button", { name: "Copy" })).toHaveLength(2)
   expect(screen.getByRole("button", { name: "Done" })).toHaveClass("bg-primary")
+})
+
+it("focuses the copy-key button after creating an API key", async () => {
+  const user = userEvent.setup()
+  const { rerender } = renderDialog()
+
+  const createButton = screen.getByRole("button", { name: "Create API key" })
+  await user.click(createButton)
+  expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith("SDK Key")
+  expect(document.activeElement).toBe(createButton)
+
+  mutation.data = { key: "ss_live_newly_created" }
+  rerender(
+    <ToastProvider>
+      <ConnectSandboxDialog sandboxId="sbx-42" open onOpenChange={vi.fn()} />
+    </ToastProvider>,
+  )
+
+  await waitFor(() => {
+    expect(document.activeElement).toBe(
+      screen.getByRole("button", { name: "Copy API key" }),
+    )
+  })
 })
 
 it("shows two steps and the run snippet when the team already has a key", () => {
@@ -141,6 +192,13 @@ it("shows two steps and the run snippet when the team already has a key", () => 
   expect(screen.getByRole("dialog")).toHaveTextContent(
     'Sandbox.connect("sbx-42")',
   )
+  expect(screen.getByText(/Use one of your API keys\./)).toHaveTextContent(
+    "Use one of your API keys. Manage keys on the API keys page.",
+  )
+  expect(screen.getByRole("link", { name: "API keys page" })).toHaveAttribute(
+    "href",
+    "/api-keys/",
+  )
   expect(screen.getByRole("button", { name: "Done" })).toHaveClass("bg-primary")
 })
 
@@ -153,7 +211,14 @@ it("shows the Python connection syntax when switching tabs with a key", async ()
 
   expect(screen.getByRole("dialog")).not.toHaveTextContent("YOUR_API_KEY")
   expect(screen.getByRole("dialog")).toHaveTextContent(
-    "# export SUPERSERVE_API_KEY=...",
+    "# export SUPERSERVE_API_KEY=ss_live_...",
+  )
+  expect(screen.getByText(/Use one of your API keys\./)).toHaveTextContent(
+    "Use one of your API keys. Manage keys on the API keys page.",
+  )
+  expect(screen.getByRole("link", { name: "API keys page" })).toHaveAttribute(
+    "href",
+    "/api-keys/",
   )
   expect(screen.getByRole("dialog")).toHaveTextContent(
     'Sandbox.connect("sbx-42")',

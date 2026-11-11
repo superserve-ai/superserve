@@ -19,8 +19,9 @@ import {
   HighlightedCode,
 } from "@superserve/ui"
 import { motion } from "motion/react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useApiKeys, useCreateApiKey } from "@/hooks/use-api-keys"
@@ -42,7 +43,8 @@ export function getConnectSnippet(
   sandboxId: string,
 ): string {
   if (language === "typescript") {
-    return `// export SUPERSERVE_API_KEY=...
+    return `// Set your API key in your shell first:
+// export SUPERSERVE_API_KEY=ss_live_...
 import { Sandbox } from "@superserve/sdk"
 
 const sandbox = await Sandbox.connect("${sandboxId}")
@@ -51,7 +53,8 @@ const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
 console.log(result.stdout)`
   }
 
-  return `# export SUPERSERVE_API_KEY=...
+  return `# Set your API key in your shell first:
+# export SUPERSERVE_API_KEY=ss_live_...
 from superserve import Sandbox
 
 sandbox = Sandbox.connect("${sandboxId}")
@@ -116,6 +119,14 @@ export function ConnectSandboxDialog({
   const handleCreateKey = () => {
     createKeyMutation.mutate("SDK Key")
   }
+
+  const copyKeyButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (newlyCreatedKey) {
+      copyKeyButtonRef.current?.focus()
+    }
+  }, [newlyCreatedKey])
 
   const handleCopyKey = async () => {
     if (!newlyCreatedKey) return
@@ -194,8 +205,8 @@ export function ConnectSandboxDialog({
                 {apiKeyStep}. Create an API key
               </span>
               <p className="text-xs text-muted">
-                Your code uses this key to create, pause, and resume sandboxes.
-                You see it once.
+                Your code uses an API key to create, pause, and resume
+                sandboxes. The key shows one time only. Copy it when it appears.
               </p>
               <Button
                 onClick={handleCreateKey}
@@ -222,6 +233,7 @@ export function ConnectSandboxDialog({
                   {newlyCreatedKey}
                 </code>
                 <button
+                  ref={copyKeyButtonRef}
                   type="button"
                   onClick={handleCopyKey}
                   aria-label={copiedKey ? "Copied" : "Copy API key"}
@@ -235,7 +247,8 @@ export function ConnectSandboxDialog({
                 </button>
               </div>
               <Alert variant="warning">
-                Make sure to copy your API key — it won&apos;t be shown again.
+                Copy this API key now. You cannot see it again after you close
+                this dialog.
               </Alert>
             </div>
           )}
@@ -261,6 +274,18 @@ export function ConnectSandboxDialog({
             <span className="block text-sm font-medium text-foreground">
               {runStep}. Run this code
             </span>
+            {hasKey && !newlyCreatedKey && (
+              <p className="text-xs text-muted">
+                Use one of your API keys. Manage keys on the{" "}
+                <Link
+                  href="/api-keys/"
+                  className="text-foreground underline underline-offset-4"
+                >
+                  API keys page
+                </Link>
+                .
+              </p>
+            )}
             {hasKey ? (
               <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
                 <div className="min-w-0 flex-1">
@@ -273,7 +298,7 @@ export function ConnectSandboxDialog({
               </div>
             ) : (
               <p className="text-xs text-muted">
-                Create an API key first. The code appears here.
+                Create an API key in step 1 to see this code.
               </p>
             )}
           </div>

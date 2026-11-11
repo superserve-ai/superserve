@@ -56,8 +56,15 @@ describe("getConnectSnippet", () => {
 
     it("documents the environment variable without embedding a key", () => {
       const snip = getConnectSnippet("typescript", SBX)
-      expect(snip.split("\n")[0]).toBe("// export SUPERSERVE_API_KEY=...")
-      expect(snip).not.toContain("ss_live_")
+      expect(snip.split("\n").slice(0, 2)).toEqual([
+        "// Set your API key in your shell first:",
+        "// export SUPERSERVE_API_KEY=ss_live_...",
+      ])
+      expect(
+        snip.split("\n").filter((line) => line.includes("ss_live_")),
+      ).toEqual(["// export SUPERSERVE_API_KEY=ss_live_..."])
+      expect(snip.match(/ss_live_/g)).toHaveLength(1)
+      expect(snip).not.toContain("apiKey:")
       expect(snip).not.toContain("YOUR_API_KEY")
     })
   })
@@ -85,8 +92,15 @@ describe("getConnectSnippet", () => {
 
     it("documents the environment variable without embedding a key", () => {
       const snip = getConnectSnippet("python", SBX)
-      expect(snip.split("\n")[0]).toBe("# export SUPERSERVE_API_KEY=...")
-      expect(snip).not.toContain("ss_live_")
+      expect(snip.split("\n").slice(0, 2)).toEqual([
+        "# Set your API key in your shell first:",
+        "# export SUPERSERVE_API_KEY=ss_live_...",
+      ])
+      expect(
+        snip.split("\n").filter((line) => line.includes("ss_live_")),
+      ).toEqual(["# export SUPERSERVE_API_KEY=ss_live_..."])
+      expect(snip.match(/ss_live_/g)).toHaveLength(1)
+      expect(snip).not.toContain("apiKey:")
       expect(snip).not.toContain("YOUR_API_KEY")
     })
   })
