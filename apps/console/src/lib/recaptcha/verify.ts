@@ -45,10 +45,12 @@ const getScoreThreshold = (): number => {
   return parsed
 }
 
-// reCAPTCHA Enterprise. A fully unconfigured integration and transient
-// availability failures fail open; partial configuration, rejected requests,
-// and credential/configuration failures fail closed so they cannot silently
-// disable the abuse control.
+// reCAPTCHA Enterprise. Outside production, a fully unconfigured integration
+// passes so local and preview builds work without keys. In production a
+// missing configuration fails closed, so losing the keys cannot silently turn
+// the check off. Transient availability failures still return verified; the
+// caller decides whether to accept them. Partial configuration, rejected
+// requests, and credential/configuration failures fail closed.
 export const verifyRecaptcha = async (
   // Server actions expose an RPC endpoint with no runtime type enforcement —
   // a caller can send any JSON, not just what the TS signature promises.
@@ -77,6 +79,14 @@ export const verifyRecaptcha = async (
 
   const configuredValues = [apiKey, projectId, siteKey].filter(Boolean).length
   if (configuredValues === 0) {
+    if (process.env.VERCEL_ENV === "production") {
+      console.error("reCAPTCHA is not configured in production")
+      return {
+        verified: false,
+        providerOutcome: "configuration_error",
+        reason: "missing_configuration",
+      }
+    }
     return { verified: true, providerOutcome: "unconfigured" }
   }
   if (configuredValues < 3) {

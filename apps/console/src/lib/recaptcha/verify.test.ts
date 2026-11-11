@@ -3,7 +3,7 @@
  *
  * Tests exercise the configured path (all three env vars set), which the
  * signup action/page tests don't cover since they run without reCAPTCHA
- * configured and only prove the unconfigured fail-open behavior.
+ * configured and only prove the unconfigured behavior outside production.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -56,6 +56,33 @@ describe("verifyRecaptcha (unconfigured)", () => {
       providerOutcome: "unconfigured",
     })
     expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("fails closed in production so lost keys cannot turn the check off", async () => {
+    vi.stubEnv("VERCEL_ENV", "production")
+    try {
+      const result = await verifyRecaptcha("some-token", "signup")
+      expect(result).toEqual({
+        verified: false,
+        providerOutcome: "configuration_error",
+        reason: "missing_configuration",
+      })
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it("still passes on preview builds without keys", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview")
+    try {
+      await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
+        verified: true,
+        providerOutcome: "unconfigured",
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 
   it("fails closed when reCAPTCHA is only partially configured", async () => {
