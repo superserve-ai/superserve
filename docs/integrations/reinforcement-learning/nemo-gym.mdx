@@ -35,7 +35,7 @@ See [API keys](/api-key) to create a Superserve API key. Run all the commands on
 
 Create the folder `resources_servers/superserve_python` and save this file in it as `superserve_provider.py`. The highlighted lines are the Superserve calls.
 
-```python resources_servers/superserve_python/superserve_provider.py {42-53,58,60,75,91,98,103,111}
+```python resources_servers/superserve_python/superserve_provider.py {42-53,58,60,75,91,98,105,115}
 import math
 import shlex
 import uuid
@@ -136,6 +136,8 @@ class SuperserveProvider:
         target_path.write_bytes(await sandbox.files.read(source_path))
 
     async def status(self, handle: SandboxHandle) -> SandboxStatus:
+        if handle.raw is None:  # Closed by close().
+            return SandboxStatus.STOPPED
         sandbox: AsyncSandbox = handle.raw
         try:
             info = await sandbox.get_info()
@@ -144,11 +146,14 @@ class SuperserveProvider:
         return STATUSES.get(info.status, SandboxStatus.UNKNOWN)
 
     async def close(self, handle: SandboxHandle) -> None:
-        sandbox: AsyncSandbox = handle.raw
+        sandbox: AsyncSandbox | None = handle.raw
+        if sandbox is None:
+            return
         try:
             await sandbox.kill()
         except NotFoundError:
             pass  # Already deleted.
+        handle.raw = None
 
     async def aclose(self) -> None:
         return None
@@ -222,8 +227,9 @@ The environment gives the model one tool, `run_python`, and rewards the correct 
 
 Save this file as `resources_servers/superserve_python/app.py`. The highlighted lines register the provider, read its config block, and run the tool call in a sandbox.
 
-```python resources_servers/superserve_python/app.py {22,56-58,63-65}
+```python resources_servers/superserve_python/app.py {23,57-59,64-66}
 import re
+from decimal import Decimal
 
 from fastapi import FastAPI
 from pydantic import BaseModel
@@ -297,17 +303,18 @@ class SuperservePythonServer(SimpleResourcesServer):
     async def verify(  # type: ignore[override]
         self, body: SuperservePythonVerifyRequest
     ) -> BaseVerifyResponse:
-        # Reward 1.0 when the last number in the final answer is the expected one.
-        numbers = re.findall(r"-?\d+", body.response.output_text.replace(",", ""))
-        reward = 1.0 if numbers and numbers[-1] == body.expected_answer else 0.0
-        return BaseVerifyResponse(**body.model_dump(), reward=reward)
+        # Reward 1.0 when the last number in the final answer equals the expected one.
+        text = body.response.output_text.replace(",", "")
+        numbers = re.findall(r"-?\d+(?:\.\d+)?", text)
+        correct = numbers and Decimal(numbers[-1]) == Decimal(body.expected_answer)
+        return BaseVerifyResponse(**body.model_dump(), reward=1.0 if correct else 0.0)
 
 
 if __name__ == "__main__":
     SuperservePythonServer.run_webserver()
 ```
 
-`verify()` reads `expected_answer` from the task. The `# type: ignore[override]` comment is there because `verify()` takes a request type with that extra field.
+`verify()` reads `expected_answer` from the task and compares it with the last number in the final answer by value, so `249.0` matches `249` and `0.249` does not. The `# type: ignore[override]` comment is there because `verify()` takes a request type with that extra field.
 
 ### Config
 
