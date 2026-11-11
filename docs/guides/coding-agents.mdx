@@ -50,10 +50,10 @@ await sandbox.commands.run(
   { timeoutMs: 60_000 },
 )
 
-const task = "Add a Python file hello.py that prints Hello, World"
+const task = "Add a Python file hello.py that prints Hello, World. Don't change the README."
 const agent = await sandbox.commands.run(
-  `claude -p '${task}' --permission-mode acceptEdits`,
-  { cwd: "/home/user/repo", timeoutMs: 600_000 },
+  'claude -p "$TASK" --permission-mode acceptEdits',
+  { cwd: "/home/user/repo", env: { TASK: task }, timeoutMs: 600_000 },
 )
 console.log(agent.stdout)
 
@@ -80,10 +80,11 @@ sandbox.commands.run(
     timeout_seconds=60,
 )
 
-task = "Add a Python file hello.py that prints Hello, World"
+task = "Add a Python file hello.py that prints Hello, World. Don't change the README."
 agent = sandbox.commands.run(
-    f"claude -p '{task}' --permission-mode acceptEdits",
+    'claude -p "$TASK" --permission-mode acceptEdits',
     cwd="/home/user/repo",
+    env={"TASK": task},
     timeout_seconds=600,
 )
 print(agent.stdout)
@@ -98,6 +99,7 @@ sandbox.kill()
 ```
 </CodeGroup>
 
+- The task goes in through the `TASK` environment variable, so quotes and other shell characters in it reach the agent unchanged.
 - `--permission-mode acceptEdits` lets Claude Code edit files without a prompt. Give more permissions only for commands that the task needs.
 - Agents can work for many minutes. Give `commands.run` a `timeout` that is longer than the task, or [stream the output](/commands/streaming) to watch the agent work.
 - To keep the agent's work, push a branch from the sandbox, or take a [snapshot](/sandbox/snapshots) to continue later.
