@@ -51,6 +51,21 @@ const getScoreThreshold = (): number => {
 // the check off. Transient availability failures still return verified; the
 // caller decides whether to accept them. Partial configuration, rejected
 // requests, and credential/configuration failures fail closed.
+/**
+ * Whether missing reCAPTCHA keys must refuse every check. Vercel production
+ * always needs them. Any other production build needs them too, unless it is
+ * a Vercel preview or development deployment, or it sets
+ * RECAPTCHA_ALLOW_UNCONFIGURED=true for a local or self-hosted run. Vercel
+ * production ignores that opt-out.
+ */
+function requiresRecaptcha(): boolean {
+  const vercelEnv = process.env.VERCEL_ENV
+  if (vercelEnv === "production") return true
+  if (vercelEnv === "preview" || vercelEnv === "development") return false
+  if (process.env.NODE_ENV !== "production") return false
+  return process.env.RECAPTCHA_ALLOW_UNCONFIGURED !== "true"
+}
+
 export const verifyRecaptcha = async (
   // Server actions expose an RPC endpoint with no runtime type enforcement —
   // a caller can send any JSON, not just what the TS signature promises.
@@ -79,7 +94,7 @@ export const verifyRecaptcha = async (
 
   const configuredValues = [apiKey, projectId, siteKey].filter(Boolean).length
   if (configuredValues === 0) {
-    if (process.env.VERCEL_ENV === "production") {
+    if (requiresRecaptcha()) {
       console.error("reCAPTCHA is not configured in production")
       return {
         verified: false,

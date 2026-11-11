@@ -777,27 +777,32 @@ describe("SignInPage", () => {
       ).not.toBeInTheDocument()
     })
 
-    it("shows a retry error when the captcha provider is unavailable", async () => {
-      mockSendSignInLink.mockResolvedValue({
-        success: false,
-        errorCode: "captcha_unavailable",
-      })
-      const region = await failPasswordSignIn()
+    it.each([
+      "We couldn't reach our bot-check. Please try again in a minute.",
+      "Email sign-in links are not available right now. Please try again later.",
+    ])(
+      "shows the action's message when the bot-check is unavailable: %s",
+      async (message) => {
+        mockSendSignInLink.mockResolvedValue({
+          success: false,
+          errorCode: "captcha_unavailable",
+          error: message,
+        })
+        const region = await failPasswordSignIn()
 
-      await user.click(
-        within(region).getByRole("button", { name: "Email me a sign-in link" }),
-      )
+        await user.click(
+          within(region).getByRole("button", {
+            name: "Email me a sign-in link",
+          }),
+        )
 
-      expect(
-        await within(region).findByText(
-          "Could not send the link. Please try again.",
-        ),
-      ).toBeInTheDocument()
-      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
-        method: "email_link",
-        reason: "captcha_unavailable",
-      })
-    })
+        expect(await within(region).findByText(message)).toBeInTheDocument()
+        expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
+          method: "email_link",
+          reason: "captcha_unavailable",
+        })
+      },
+    )
 
     it("locks the email field while a link request is pending", async () => {
       let resolveRequest!: (value: { success: true }) => void

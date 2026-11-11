@@ -1407,6 +1407,42 @@ describe("confirmation email delivery", () => {
       )
     })
 
+    it("says resend is unavailable, not a failed check, when reCAPTCHA is not configured", async () => {
+      mockVerifyRecaptcha.mockResolvedValue({
+        verified: false,
+        providerOutcome: "configuration_error",
+        reason: "missing_configuration",
+      })
+
+      const result = await resendSignupConfirmation("resend-token", SHOWN_EMAIL)
+
+      expect(result).toEqual({
+        success: false,
+        error:
+          "Resending the email is not available right now. Please try again later.",
+        errorCode: "captcha_unavailable",
+      })
+      expect(mockGetUserById).not.toHaveBeenCalled()
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+    })
+
+    it("still reports a failed check as captcha_failed on resend", async () => {
+      mockVerifyRecaptcha.mockResolvedValue({
+        verified: false,
+        providerOutcome: "rejected",
+        reason: "low_score",
+      })
+
+      const result = await resendSignupConfirmation("resend-token", SHOWN_EMAIL)
+
+      expect(result).toEqual({
+        success: false,
+        error: "We couldn't verify you're human. Please try again.",
+        errorCode: "captcha_failed",
+      })
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+    })
+
     it("sends a new link through the app email path with the original params", async () => {
       const result = await resendSignupConfirmation("resend-token", SHOWN_EMAIL)
 

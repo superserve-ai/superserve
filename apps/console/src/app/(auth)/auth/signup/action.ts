@@ -830,6 +830,7 @@ export type ResendSignupConfirmationResult =
       error: string
       errorCode:
         | "captcha_failed"
+        | "captcha_unavailable"
         | "resend_unavailable"
         | "already_confirmed"
         | "cooldown"
@@ -856,6 +857,18 @@ export const resendSignupConfirmation = async (
   shownEmail?: string,
 ): Promise<ResendSignupConfirmationResult> => {
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_resend")
+  // A broken setup on our side gets its own message, so the visitor does not
+  // retry a check that cannot pass.
+  if (
+    !recaptcha.verified &&
+    recaptcha.providerOutcome === "configuration_error"
+  )
+    return {
+      success: false,
+      error:
+        "Resending the email is not available right now. Please try again later.",
+      errorCode: "captcha_unavailable",
+    }
   if (!recaptcha.verified)
     return {
       success: false,

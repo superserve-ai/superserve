@@ -93,7 +93,30 @@ describe("sendSignInLink", () => {
 
     const result = await sendSignInLink("user@example.com", "any-token")
 
-    expect(result).toEqual({ success: false, errorCode: "captcha_unavailable" })
+    expect(result).toEqual({
+      success: false,
+      errorCode: "captcha_unavailable",
+      error: "We couldn't reach our bot-check. Please try again in a minute.",
+    })
+    expect(afterCallbacks).toHaveLength(0)
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it("says links are unavailable, not a failed check, when reCAPTCHA is not configured", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "missing_configuration",
+    })
+
+    const result = await sendSignInLink("user@example.com", "token")
+
+    expect(result).toEqual({
+      success: false,
+      errorCode: "captcha_unavailable",
+      error:
+        "Email sign-in links are not available right now. Please try again later.",
+    })
     expect(afterCallbacks).toHaveLength(0)
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
