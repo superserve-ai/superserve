@@ -97,7 +97,7 @@ describe("middleware", () => {
   })
 
   it.each(["/ingest", "/ingest/i/v0/e/", "/ingest/static/array.js"])(
-    "strips Referer and bypasses auth for %s",
+    "strips Referer and cookies and bypasses auth for %s",
     async (path) => {
       const request = new NextRequest(
         new URL(`https://console.superserve.ai${path}`),
@@ -107,6 +107,11 @@ describe("middleware", () => {
             "user-agent": "test-browser",
           },
         },
+      )
+      // Set after construction: the test DOM's Request drops Cookie.
+      request.headers.set(
+        "cookie",
+        "__Host-ss_email_link=pending; sb-project-auth-token=session",
       )
       const res = await middleware(request)
 
@@ -118,6 +123,8 @@ describe("middleware", () => {
         .split(",")
       expect(overrides).not.toContain("referer")
       expect(res.headers.has("x-middleware-request-referer")).toBe(false)
+      expect(overrides).not.toContain("cookie")
+      expect(res.headers.has("x-middleware-request-cookie")).toBe(false)
       expect(overrides).toContain("user-agent")
       expect(res.headers.get("x-middleware-request-user-agent")).toBe(
         "test-browser",

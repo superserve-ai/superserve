@@ -36,9 +36,12 @@ export async function middleware(request: NextRequest) {
   }
 
   if (pathname === "/ingest" || pathname.startsWith("/ingest/")) {
-    // Invite tokens appear in auth page URLs; the rewrite would forward Referer to PostHog.
+    // Invite tokens appear in auth page URLs, and console cookies hold the
+    // session and pending email-link tokens. The rewrite would forward both
+    // headers to PostHog, which needs neither.
     const headers = new Headers(request.headers)
     headers.delete("referer")
+    headers.delete("cookie")
     return NextResponse.next({ request: { headers } })
   }
 
