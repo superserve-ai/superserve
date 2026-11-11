@@ -39,12 +39,6 @@ async function deliverPasswordReset(
   invite: string | null,
 ) {
   try {
-    // The shared cooldown starts later, in reserveRecoveryEmail, so a reset
-    // refused here does not start it and block a sign-in link.
-    if (!(await consumeAuthRateLimit(RESET_EMAIL_LIMIT, email.toLowerCase()))) {
-      return
-    }
-
     // Using a recovery link confirms the address, so accounts awaiting signup
     // review get nothing; accounts that predate review keep recovery.
     const user = await findAuthUserByEmail(email)
@@ -53,8 +47,12 @@ async function deliverPasswordReset(
     // A new token replaces the one in any email already sent, so take from
     // the email limits before creating the token, never after.
     if (
-      (await reserveRecoveryEmail({ userId: user.id, email, clientIp })) !==
-      "reserved"
+      (await reserveRecoveryEmail({
+        userId: user.id,
+        email,
+        clientIp,
+        addressLimit: RESET_EMAIL_LIMIT,
+      })) !== "reserved"
     ) {
       return
     }

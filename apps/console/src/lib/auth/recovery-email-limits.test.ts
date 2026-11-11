@@ -139,6 +139,51 @@ describe("recovery email limits", () => {
     expect(mockConsumeAuthRateLimit).toHaveBeenCalledOnce()
   })
 
+  it("takes the caller's address limit after the network limit and before the cooldown", async () => {
+    const addressLimit = {
+      bucket: "password_reset_email",
+      max: 3,
+      windowSeconds: 900,
+    }
+
+    expect(await reserveRecoveryEmail({ ...CALLER, addressLimit })).toBe(
+      "reserved",
+    )
+    expect(
+      mockConsumeAuthRateLimit.mock.calls.map(([limit, key]) => [
+        limit.bucket,
+        key,
+      ]),
+    ).toEqual([
+      ["recovery_email_ip", "203.0.113.7"],
+      ["password_reset_email", "user@example.com"],
+      ["recovery_email_cooldown", "user@example.com"],
+      ["recovery_email_account", "user-1"],
+    ])
+  })
+
+  it("refuses at the caller's address limit without starting the cooldown", async () => {
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) =>
+        limit.bucket !== "password_reset_email",
+    )
+
+    expect(
+      await reserveRecoveryEmail({
+        ...CALLER,
+        addressLimit: {
+          bucket: "password_reset_email",
+          max: 3,
+          windowSeconds: 900,
+        },
+      }),
+    ).toBe("address_limit")
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+      expect.anything(),
+    )
+  })
+
   it.each([
     ["recovery_email_ip", "ip_limit"],
     ["recovery_email_cooldown", "cooldown"],
