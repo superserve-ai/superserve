@@ -393,28 +393,58 @@ describe("sendSignInLink", () => {
     )
   })
 
-  it.each([
-    ["recovery_email_ip", "ip_hourly_limit"],
-    ["recovery_email_account", "account_hourly_limit"],
-  ])(
-    "drops the email without using the project budget when %s is used up",
-    async (bucket, reason) => {
-      requestHeaders = { "x-forwarded-for": "203.0.113.7" }
-      refuse(bucket)
-      withAccount(confirmedUser)
+  it("drops the email without using the project budget when recovery_email_account is used up", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+    refuse("recovery_email_account")
+    withAccount(confirmedUser)
 
-      await sendSignInLink("user@example.com", "token")
+    await sendSignInLink("user@example.com", "token")
+    await runAfter()
+
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_project" }),
+      expect.anything(),
+    )
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_sign_in_link_failed",
+      "user-1",
+      { method: "email_link", reason: "account_hourly_limit" },
+    )
+  })
+
+  it("stops at the caller's network limit before the account lookup", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+    refuse("recovery_email_ip")
+    withAccount(confirmedUser)
+
+    await sendSignInLink("user@example.com", "token")
+    await runAfter()
+
+    expect(mockFindUser).not.toHaveBeenCalled()
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_sign_in_link_failed",
+      expect.any(String),
+      { method: "email_link", reason: "ip_hourly_limit" },
+    )
+  })
+
+  it.each([
+    ["an eligible account", confirmedUser],
+    ["no account", null],
+  ])(
+    "takes the caller's network limit the same way for %s",
+    async (_label, account) => {
+      requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+      withAccount(account)
+
+      await sendSignInLink("someone@example.com", "token")
       await runAfter()
 
-      expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
-        expect.objectContaining({ bucket: "recovery_email_project" }),
-        expect.anything(),
-      )
-      expect(mockGenerateLink).not.toHaveBeenCalled()
-      expect(mockTrackEvent).toHaveBeenCalledWith(
-        "auth_sign_in_link_failed",
-        "user-1",
-        { method: "email_link", reason },
+      expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
+        { bucket: "recovery_email_ip", max: 10, windowSeconds: 3600 },
+        "203.0.113.7",
       )
     },
   )

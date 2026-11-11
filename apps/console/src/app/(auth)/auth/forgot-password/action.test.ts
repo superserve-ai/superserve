@@ -472,7 +472,19 @@ describe("sendPasswordResetEmail", () => {
     },
   )
 
-  it("uses no address limit for an address with no account", async () => {
+  it("stops at the caller's network limit before the account lookup", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) => limit.bucket !== "recovery_email_ip",
+    )
+
+    await reset("user@example.com", "token")
+
+    expect(mockFindUser).not.toHaveBeenCalled()
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+  })
+
+  it("takes only the caller's limits for an address with no account", async () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7" }
     mockFindUser.mockResolvedValue(null)
 
@@ -480,7 +492,7 @@ describe("sendPasswordResetEmail", () => {
 
     expect(
       mockConsumeAuthRateLimit.mock.calls.map(([limit]) => limit.bucket),
-    ).toEqual(["password_reset_ip"])
+    ).toEqual(["password_reset_ip", "recovery_email_ip"])
     expect(mockGenerateLink).not.toHaveBeenCalled()
   })
 
