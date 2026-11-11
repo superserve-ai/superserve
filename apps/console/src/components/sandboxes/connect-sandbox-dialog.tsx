@@ -114,6 +114,9 @@ export function ConnectSandboxDialog({
   const newlyCreatedKey = createKeyMutation.data?.key ?? ""
   const snippetKey = newlyCreatedKey || (userKey ? "YOUR_API_KEY" : "")
   const hasKey = !!userKey || !!newlyCreatedKey
+  const apiKeyStep = !hasKey || newlyCreatedKey ? 1 : 0
+  const installStep = apiKeyStep + 1
+  const runStep = installStep + 1
 
   const handleCreateKey = () => {
     createKeyMutation.mutate("SDK Key")
@@ -193,19 +196,19 @@ export function ConnectSandboxDialog({
           {!hasKey && (
             <div className="space-y-2">
               <span className="block text-sm font-medium text-foreground">
-                API Key
+                {apiKeyStep}. Create an API key
               </span>
               <p className="text-xs text-muted">
-                Create an API key to authenticate with the SDK
+                Your code uses this key to connect to sandboxes. You see it
+                once.
               </p>
               <Button
                 onClick={handleCreateKey}
-                variant="outline"
                 size="sm"
                 disabled={createKeyMutation.isPending}
               >
                 <PlusIcon className="size-3.5" weight="light" />
-                {createKeyMutation.isPending ? "Creating..." : "Create API Key"}
+                {createKeyMutation.isPending ? "Creating..." : "Create API key"}
               </Button>
             </div>
           )}
@@ -213,7 +216,7 @@ export function ConnectSandboxDialog({
           {newlyCreatedKey && (
             <div className="space-y-3">
               <span className="block text-sm font-medium text-foreground">
-                API Key
+                {apiKeyStep}. Copy your API key
               </span>
               <div className="flex items-center gap-2 border border-border bg-background px-4 py-3">
                 <KeyIcon
@@ -245,7 +248,7 @@ export function ConnectSandboxDialog({
           {/* Install SDK */}
           <div className="space-y-2">
             <span className="block text-sm font-medium text-foreground">
-              Install SDK
+              {installStep}. Install the SDK
             </span>
             <div className="flex items-start border border-dashed border-border bg-background px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -261,19 +264,25 @@ export function ConnectSandboxDialog({
           {/* Connect & Run */}
           <div className="space-y-2">
             <span className="block text-sm font-medium text-foreground">
-              Connect and Run
+              {runStep}. Run this code
             </span>
-            <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <HighlightedCode
-                  code={getConnectSnippet(language, snippetKey, sandboxId)}
-                  lang={language}
+            {hasKey ? (
+              <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <HighlightedCode
+                    code={getConnectSnippet(language, snippetKey, sandboxId)}
+                    lang={language}
+                  />
+                </div>
+                <CopyButton
+                  text={getConnectSnippet(language, snippetKey, sandboxId)}
                 />
               </div>
-              <CopyButton
-                text={getConnectSnippet(language, snippetKey, sandboxId)}
-              />
-            </div>
+            ) : (
+              <p className="text-xs text-muted">
+                Create an API key first. The code appears here.
+              </p>
+            )}
           </div>
         </div>
 
@@ -285,7 +294,12 @@ export function ConnectSandboxDialog({
             <TerminalIcon className="size-3.5" weight="light" />
             Open Terminal
           </Button>
-          <Button onClick={() => onOpenChange(false)}>Done</Button>
+          <Button
+            variant={hasKey ? "default" : "outline"}
+            onClick={() => onOpenChange(false)}
+          >
+            Done
+          </Button>
         </DialogFooter>
       </DialogPopup>
     </Dialog>
