@@ -10,7 +10,7 @@ interface SandboxResourceBarProps {
 }
 
 function formatMemory(mib: number): string {
-  return mib >= 1024 ? `${(mib / 1024).toFixed(0)} GB` : `${mib} MB`
+  return mib >= 1024 ? `${+(mib / 1024).toFixed(2)} GB` : `${mib} MB`
 }
 
 export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
@@ -28,7 +28,10 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
     },
     {
       label: "Memory",
-      value: formatMemory(sandbox.memory_mib),
+      value:
+        sandbox.memory_max_mib != null
+          ? `${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`
+          : formatMemory(sandbox.memory_mib),
     },
     {
       label: "Timeout",

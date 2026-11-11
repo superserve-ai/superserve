@@ -155,12 +155,15 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
       from: "python:3.11",
       vcpu: 4,
       memory_mib: 8192,
+      memory_max_mib: 16384,
       run_steps: ["pip install numpy"],
     })
     expect(r.isError).toBe(false)
     const t = r.structured.template as Record<string, unknown>
     expect(t.name).toBe("my-4cpu")
     expect(t.vcpu).toBe(4)
+    expect(t.memoryMaxMib).toBe(16384)
+    expect(r.text).toContain("8192-16384 MiB")
     expect(t.status).toBe("building")
     // The agent is told to poll until ready before using it.
     expect(r.text).toMatch(/ready/)
