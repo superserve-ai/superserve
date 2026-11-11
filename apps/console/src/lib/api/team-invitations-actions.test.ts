@@ -146,6 +146,33 @@ beforeEach(() => {
 })
 
 describe("createInvitationAction", () => {
+  it("includes role only when provided, and uses the response role in the email", async () => {
+    fetchSpy.mockImplementation(async (url: string) =>
+      url.endsWith("/delivery")
+        ? new Response(null, { status: 204 })
+        : json({ invitation: { ...invitation, role: "viewer" }, token }, 201),
+    )
+    const result = await createInvitationAction(
+      here,
+      "new@example.com",
+      "viewer",
+    )
+    expect(JSON.parse(calls()[0].init.body as string)).toEqual({
+      email: "new@example.com",
+      role: "viewer",
+    })
+    expect(result).toMatchObject({ invitation: { role: "viewer" } })
+    expect(JSON.stringify(mocks.sendEmail.mock.calls[0][0].react)).toContain(
+      "Viewer",
+    )
+  })
+  it("maps invalid_role from the backend error envelope", async () => {
+    fetchSpy.mockResolvedValue(json({ error: { code: "invalid_role" } }, 400))
+    expect(
+      await createInvitationAction(here, "new@example.com", "unknown"),
+    ).toEqual({ ok: false, code: "invalid_role", message: "Role not allowed" })
+  })
+
   it("never returns the token or anything beyond the invitation summary", async () => {
     const result = await createInvitationAction(here, "New@Example.com")
 
@@ -296,7 +323,7 @@ describe("createInvitationAction", () => {
 
     expect(await createInvitationAction(here, "new@example.com")).toMatchObject(
       {
-        message: "Upgrade to invite owners",
+        message: "Upgrade to invite members",
       },
     )
   })
