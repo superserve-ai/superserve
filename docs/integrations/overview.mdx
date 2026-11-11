@@ -1,17 +1,17 @@
 ---
 title: "Integrations"
 sidebarTitle: All integrations
-description: Guides for running AI agents, agent evaluations, and MCP tools in persistent, isolated Superserve sandboxes.
+description: Every tool, framework, and model that runs on Superserve sandboxes, on one page.
 icon: "grid-2"
 ---
 
-Each guide covers one tool, from setup to a first run. Pick a section by what you are doing: running or hosting an agent, building one with a framework, evaluating agents, or connecting an MCP client.
+Each integration guide covers one tool, from setup to a first run. To learn what a sandbox does for a job, such as running a coding agent or a CI job, start with the use cases in the sidebar. To let an agent start its own sandboxes, connect it through the [MCP Server](/integrations/mcp).
 
 ## Coding agents
 
-Run a terminal coding agent in a sandbox, so its shell commands and file edits stay off your machine.
+Terminal coding agents that run in a sandbox, so their shell commands and file edits stay off your machine.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Claude Code" icon="/logos/integrations/claude.svg" href="/integrations/coding-agents/claude" />
   <Card title="Codex" icon="/logos/integrations/codex.svg" href="/integrations/coding-agents/codex" />
   <Card title="Kilo Code" icon="/logos/integrations/kilocode.svg" href="/integrations/coding-agents/kilocode" />
@@ -19,11 +19,22 @@ Run a terminal coding agent in a sandbox, so its shell commands and file edits s
   <Card title="Pi" icon="/logos/integrations/pi.svg" href="/integrations/coding-agents/pi" />
 </CardGroup>
 
+## Agent platforms
+
+Platforms and harnesses that run the agent loop for you and run the agent's commands in Superserve sandboxes.
+
+<CardGroup cols={4}>
+  <Card title="Claude Managed Agents" icon="/logos/integrations/claude.svg" href="/integrations/managed-agents/claude-managed-agents" />
+  <Card title="Cursor Cloud Agents" icon="/logos/integrations/cursor.svg" href="/integrations/managed-agents/cursor-cloud-agents" />
+  <Card title="Omnara" icon="/logos/integrations/omnara.svg" href="/integrations/managed-agents/omnara" />
+  <Card title="QM" icon="/logos/integrations/qm.png" href="/integrations/personal-agents/qm" />
+</CardGroup>
+
 ## Agent frameworks
 
-Use a sandbox as the execution runtime for agents you build with an SDK or framework.
+SDKs and frameworks that use a sandbox as the place where the agent's tools run.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Agno" icon="/logos/integrations/agno.svg" href="/integrations/agent-harnesses/agno" />
   <Card title="Claude Agent SDK" icon="/logos/integrations/claude-agent-sdk.svg" href="/integrations/agent-harnesses/claude-agent-sdk" />
   <Card title="CrewAI" icon="/logos/integrations/crewai.svg" href="/integrations/agent-harnesses/crewai" />
@@ -40,54 +51,28 @@ Use a sandbox as the execution runtime for agents you build with an SDK or frame
 
 ## Personal agents
 
-Host a long-running personal assistant in its own sandbox.
+Long-running personal assistants, each in its own sandbox.
 
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Hermes" icon="/logos/integrations/hermes.svg" href="/integrations/personal-agents/hermes" />
   <Card title="OpenClaw" icon="/logos/integrations/openclaw.svg" href="/integrations/personal-agents/openclaw" />
-  <Card title="QM" icon="/logos/integrations/qm.png" href="/integrations/personal-agents/qm" />
 </CardGroup>
 
-## Managed agents
+## Computer use models
 
-Give a hosted agent platform a Superserve sandbox as its self-hosted environment.
+Model computer-use tools that control a sandbox desktop.
 
-<CardGroup cols={3}>
-  <Card title="Claude Managed Agents" icon="/logos/integrations/claude.svg" href="/integrations/managed-agents/claude-managed-agents" />
-  <Card title="Cursor Cloud Agents" icon="/logos/integrations/cursor.svg" href="/integrations/managed-agents/cursor-cloud-agents" />
-  <Card title="Omnara" icon="/logos/integrations/omnara.svg" href="/integrations/managed-agents/omnara" />
-</CardGroup>
-
-## Evaluations
-
-Run agent evaluations and benchmarks in parallel, one sandbox per trial.
-
-<CardGroup cols={3}>
-  <Card title="Harbor" icon="flask" href="/integrations/evaluations/harbor" />
-  <Card title="OpenEnv" icon="dumbbell" href="/integrations/evaluations/openenv" />
-</CardGroup>
-
-## Reinforcement learning
-
-Score model outputs in sandboxes as the reward signal for reinforcement learning training.
-
-<CardGroup cols={3}>
-  <Card title="Hugging Face TRL" icon="/logos/integrations/huggingface.svg" href="/integrations/reinforcement-learning/trl" />
-</CardGroup>
-
-## MCP and tools
-
-Let any MCP client create and control sandboxes.
-
-<CardGroup cols={3}>
-  <Card title="MCP Server" icon="plug" href="/integrations/mcp" />
-</CardGroup>
-
-## Computer use
-
-Let a model operate a full desktop in a sandbox with its computer-use tools.
-
-<CardGroup cols={3}>
+<CardGroup cols={4}>
   <Card title="Claude computer use" icon="/logos/integrations/claude.svg" href="/integrations/computer-use/claude" />
   <Card title="OpenAI computer use" icon="/logos/integrations/openai-agents-sdk.svg" href="/integrations/computer-use/openai" />
+</CardGroup>
+
+## Evaluation and RL frameworks
+
+Frameworks that run each evaluation trial or training rollout in its own sandbox.
+
+<CardGroup cols={4}>
+  <Card title="Harbor" icon="flask" href="/integrations/evaluations/harbor" />
+  <Card title="Hugging Face TRL" icon="/logos/integrations/huggingface.svg" href="/integrations/reinforcement-learning/trl" />
+  <Card title="OpenEnv" icon="dumbbell" href="/integrations/evaluations/openenv" />
 </CardGroup>
