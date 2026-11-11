@@ -140,7 +140,7 @@ superserve template create ci-node --from node:22 --run "npm install -g pnpm@10"
 superserve sandbox create --name ci-1234 --template ci-node --timeout 30m --auto-delete 0
 ```
 
-Rebuild the template when the tools change, not on every job. See [Create a template](/templates/create) for all the options and [resource limits](/templates/build-spec#resource-limits) for sizes. For jobs that need containers, bake Docker into the template as shown in [Docker in a sandbox](/sandbox/docker).
+Rebuild the template when the tools change, not on every job. See [Create a template](/templates/create) for all the options and [resource limits](/templates/build-spec#resource-limits) for sizes. For jobs that need containers, bake Docker into the template as shown in [Run Docker services in a sandbox](/sandbox/docker).
 
 ### Snapshots and forks
 
@@ -285,7 +285,7 @@ Keep the GitHub side safe too. Don't run untrusted pull requests with `pull_requ
 ## Related guides
 
 <CardGroup cols={2}>
-  <Card title="Run Docker" icon="docker" href="/sandbox/docker">
+  <Card title="Docker services" icon="docker" href="/sandbox/docker">
     Start databases and other services for your tests.
   </Card>
   <Card title="Coding agents" icon="terminal" href="/guides/coding-agents">
