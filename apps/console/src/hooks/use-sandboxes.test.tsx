@@ -20,6 +20,7 @@ const mockCreate = vi.fn()
 const mockDelete = vi.fn()
 const mockPause = vi.fn()
 const mockResume = vi.fn()
+const mockGet = vi.fn()
 
 vi.mock("@/lib/api/sandboxes", () => ({
   createSandbox: (...a: unknown[]) => mockCreate(...a),
@@ -27,7 +28,7 @@ vi.mock("@/lib/api/sandboxes", () => ({
   pauseSandbox: (...a: unknown[]) => mockPause(...a),
   resumeSandbox: (...a: unknown[]) => mockResume(...a),
   listSandboxesPaged: vi.fn(),
-  getSandbox: vi.fn(),
+  getSandbox: (...a: unknown[]) => mockGet(...a),
   patchSandbox: vi.fn(),
 }))
 
@@ -38,12 +39,13 @@ vi.mock("@superserve/ui", () => ({
 }))
 
 import {
-  sandboxRefetchInterval,
   useBulkDeleteSandboxes,
   useCreateSandbox,
   useDeleteSandbox,
   usePauseSandbox,
   useResumeSandbox,
+  useSandbox,
+  useSandboxMemory,
 } from "./use-sandboxes"
 
 const sandbox = (
@@ -305,21 +307,65 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-describe("sandboxRefetchInterval", () => {
-  it("refreshes an active growable sandbox so its current memory stays in step", () => {
-    expect(
-      sandboxRefetchInterval({ status: "active", memory_max_mib: 4096 }),
-    ).toBe(10_000)
+describe("growable sandbox memory refresh", () => {
+  afterEach(() => vi.useRealTimers())
+
+  it("refreshes current memory without refetching the detail query terminals read", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const initial = {
+      id: "sbx-1",
+      name: "growable",
+      status: "active",
+      vcpu_count: 2,
+      memory_mib: 1024,
+      memory_max_mib: 4096,
+      memory_current_mib: 1024,
+      metadata: {},
+      created_at: "2026-01-01T00:00:00Z",
+      access_token: "token-a",
+    } as SandboxResponse
+    mockGet.mockResolvedValue(initial)
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(
+      () => ({
+        detail: useSandbox(initial.id),
+        memory: useSandboxMemory(initial),
+      }),
+      { wrapper },
+    )
+    await waitFor(() => expect(result.current.memory.data).toBe(1024))
+    expect(result.current.detail.data?.access_token).toBe("token-a")
+
+    // The sandbox grows and its hourly access token rotates.
+    mockGet.mockResolvedValue({
+      ...initial,
+      memory_current_mib: 3072,
+      access_token: "token-b",
+    })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(25_000)
+    })
+
+    await waitFor(() => expect(result.current.memory.data).toBe(3072))
+    expect(result.current.detail.data?.access_token).toBe("token-a")
   })
 
-  it("leaves active fixed-size and paused growable sandboxes alone", () => {
-    expect(sandboxRefetchInterval({ status: "active" })).toBe(false)
-    expect(
-      sandboxRefetchInterval({ status: "paused", memory_max_mib: 4096 }),
-    ).toBe(false)
-  })
-
-  it("keeps polling a resuming sandbox", () => {
-    expect(sandboxRefetchInterval({ status: "resuming" })).toBe(2000)
+  it("does not poll fixed-size or paused sandboxes", async () => {
+    const { wrapper } = createQueryWrapper()
+    const { result } = renderHook(
+      () => ({
+        fixed: useSandboxMemory({ id: "sbx-2", status: "active" }),
+        paused: useSandboxMemory({
+          id: "sbx-3",
+          status: "paused",
+          memory_max_mib: 4096,
+        }),
+      }),
+      { wrapper },
+    )
+    expect(result.current.fixed.fetchStatus).toBe("idle")
+    expect(result.current.paused.fetchStatus).toBe("idle")
+    expect(mockGet).not.toHaveBeenCalledWith("sbx-2")
+    expect(mockGet).not.toHaveBeenCalledWith("sbx-3")
   })
 })

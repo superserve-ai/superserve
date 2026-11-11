@@ -75,25 +75,35 @@ export function useSandboxesPage(params: SandboxListParams) {
   })
 }
 
-// A growable sandbox changes size while active, so its detail view refreshes
-// at the list's cadence to keep the current memory in step.
-export function sandboxRefetchInterval(
-  sandbox: Pick<SandboxResponse, "status" | "memory_max_mib"> | undefined,
-): number | false {
-  if (sandbox?.status === "resuming") return 2000
-  if (sandbox?.status === "active" && sandbox.memory_max_mib != null)
-    return 10_000
-  return false
-}
-
 export function useSandbox(id: string | null) {
   const queryScope = useQueryScope()
   return useQuery({
     queryKey: [...sandboxKeys.detail(id ?? ""), queryScope],
     queryFn: () => getSandbox(id as string),
     enabled: !!id,
-    refetchInterval: (query) => sandboxRefetchInterval(query.state.data),
+    refetchInterval: (query) => {
+      const status = query.state.data?.status
+      return status === "resuming" ? 2000 : false
+    },
     refetchOnWindowFocus: true,
+  })
+}
+
+// The current memory of an active growable sandbox, refreshed at the list's
+// cadence. It has its own cache entry so the refresh never reaches the
+// sandbox detail query, whose access token feeds open terminal sessions.
+export function useSandboxMemory(
+  sandbox: Pick<SandboxResponse, "id" | "status" | "memory_max_mib">,
+) {
+  const queryScope = useQueryScope()
+  const growing = sandbox.status === "active" && sandbox.memory_max_mib != null
+  return useQuery({
+    queryKey: [...sandboxKeys.detail(sandbox.id), "memory", queryScope],
+    queryFn: () => getSandbox(sandbox.id),
+    select: (s) => s.memory_current_mib ?? null,
+    enabled: growing,
+    refetchInterval: growing ? 10_000 : false,
+    refetchIntervalInBackground: false,
   })
 }
 

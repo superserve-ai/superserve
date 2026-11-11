@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 
+import { useSandboxMemory } from "@/hooks/use-sandboxes"
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatTime, formatTimeout } from "@/lib/format"
 
@@ -14,6 +15,8 @@ function formatMemory(mib: number): string {
 }
 
 export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
+  const { data: polledMemory } = useSandboxMemory(sandbox)
+  const currentMemory = polledMemory ?? sandbox.memory_current_mib
   const created = formatTime(new Date(sandbox.created_at))
 
   const items: {
@@ -31,8 +34,8 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
       value:
         sandbox.memory_max_mib == null
           ? formatMemory(sandbox.memory_mib)
-          : sandbox.memory_current_mib != null
-            ? `${formatMemory(sandbox.memory_current_mib)} of ${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`
+          : currentMemory != null
+            ? `${formatMemory(currentMemory)} of ${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`
             : `${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`,
     },
     {
