@@ -42,14 +42,17 @@ describe("verifyRecaptcha (unconfigured)", () => {
     delete process.env.RECAPTCHA_API_KEY
     delete process.env.RECAPTCHA_PROJECT_ID
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+    // Outside production unless a test says otherwise, whatever the shell has.
+    vi.stubEnv("VERCEL_ENV", "")
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     restoreEnv()
     fetchSpy.mockReset()
   })
 
-  it("fails open without calling the assessment API", async () => {
+  it("fails open outside production without calling the assessment API", async () => {
     const result = await verifyRecaptcha("some-token", "signup")
     expect(result).toEqual({
       verified: true,
