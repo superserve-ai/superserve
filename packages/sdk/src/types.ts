@@ -41,6 +41,8 @@ export interface SandboxInfo {
   memoryMib: number
   /** Ceiling memory can grow to while running; absent when memory is fixed. */
   memoryMaxMib?: number
+  /** Memory the sandbox last held; absent when memory is fixed. */
+  memoryCurrentMib?: number
   createdAt: Date
   timeoutSeconds?: number
   /** Pause the sandbox after this many seconds with no activity. */
@@ -377,6 +379,7 @@ export interface ApiSandboxResponse {
   vcpu_count?: number
   memory_mib?: number
   memory_max_mib?: number | null
+  memory_current_mib?: number | null
   access_token?: string
   routing_hint?: string
   created_at?: string
@@ -469,6 +472,7 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
     vcpuCount: raw.vcpu_count ?? 0,
     memoryMib: raw.memory_mib ?? 0,
     memoryMaxMib: raw.memory_max_mib ?? undefined,
+    memoryCurrentMib: raw.memory_current_mib ?? undefined,
     createdAt: new Date(raw.created_at),
     timeoutSeconds: raw.timeout_seconds ?? undefined,
     idleTimeoutSeconds: raw.idle_timeout_seconds ?? undefined,

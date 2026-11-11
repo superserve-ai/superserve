@@ -54,6 +54,8 @@ class SandboxInfo(BaseModel):
     memory_mib: int = 0
     # Ceiling memory can grow to while running; None when memory is fixed.
     memory_max_mib: Optional[int] = None
+    # Memory the sandbox last held; None when memory is fixed.
+    memory_current_mib: Optional[int] = None
     created_at: datetime
     timeout_seconds: Optional[int] = None
     # Pause the sandbox after this many seconds with no activity.
@@ -205,6 +207,7 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         vcpu_count=raw.get("vcpu_count", 0),
         memory_mib=raw.get("memory_mib", 0),
         memory_max_mib=raw.get("memory_max_mib"),
+        memory_current_mib=raw.get("memory_current_mib"),
         created_at=_parse_iso8601(raw["created_at"]),
         timeout_seconds=raw.get("timeout_seconds"),
         idle_timeout_seconds=raw.get("idle_timeout_seconds"),

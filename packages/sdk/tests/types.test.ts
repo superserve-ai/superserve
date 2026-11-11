@@ -16,6 +16,7 @@ describe("toSandboxInfo", () => {
     vcpu_count: 2,
     memory_mib: 512,
     memory_max_mib: 2048,
+    memory_current_mib: 1024,
     created_at: "2026-01-01T00:00:00.000Z",
     timeout_seconds: 600,
     idle_timeout_seconds: 300,
@@ -31,6 +32,7 @@ describe("toSandboxInfo", () => {
     expect(info.vcpuCount).toBe(2)
     expect(info.memoryMib).toBe(512)
     expect(info.memoryMaxMib).toBe(2048)
+    expect(info.memoryCurrentMib).toBe(1024)
     expect(info.createdAt).toBeInstanceOf(Date)
     expect(info.createdAt.toISOString()).toBe("2026-01-01T00:00:00.000Z")
     expect(info.timeoutSeconds).toBe(600)
@@ -75,6 +77,7 @@ describe("toSandboxInfo", () => {
     expect(info.vcpuCount).toBe(0)
     expect(info.memoryMib).toBe(0)
     expect(info.memoryMaxMib).toBeUndefined()
+    expect(info.memoryCurrentMib).toBeUndefined()
     expect(info.timeoutSeconds).toBeUndefined()
     expect(info.idleTimeoutSeconds).toBeUndefined()
     expect(info.autoDeleteSeconds).toBeUndefined()
