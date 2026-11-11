@@ -35,7 +35,7 @@ See [API keys](/api-key) to create a Superserve API key. Run all the commands on
 
 Create the folder `resources_servers/superserve_python` and save this file in it as `superserve_provider.py`. The highlighted lines are the Superserve calls.
 
-```python resources_servers/superserve_python/superserve_provider.py {42-53,58,60,75,91,98,105,115}
+```python resources_servers/superserve_python/superserve_provider.py {42-53,59,65,80,96,103,110,120}
 import math
 import shlex
 import uuid
@@ -93,7 +93,12 @@ class SuperserveProvider:
             raise SandboxCreateError(str(error)) from error
         try:
             if spec.workdir:
-                await sandbox.commands.run(f"mkdir -p {shlex.quote(spec.workdir)}")
+                mkdir = f"mkdir -p {shlex.quote(spec.workdir)}"
+                result = await sandbox.commands.run(mkdir)
+                if result.exit_code != 0:
+                    raise SandboxCreateError(
+                        f"Could not create workdir {spec.workdir!r}: {result.stderr}"
+                    )
         except BaseException:
             await sandbox.kill()
             raise
@@ -305,7 +310,8 @@ class SuperservePythonServer(SimpleResourcesServer):
     ) -> BaseVerifyResponse:
         # Reward 1.0 when the last number in the final answer equals the expected one.
         text = body.response.output_text.replace(",", "")
-        numbers = re.findall(r"-?\d+(?:\.\d+)?", text)
+        # Match whole numbers such as 249, -3, 249.0, .249, and 2.49e2.
+        numbers = re.findall(r"-?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][-+]?\d+)?", text)
         correct = numbers and Decimal(numbers[-1]) == Decimal(body.expected_answer)
         return BaseVerifyResponse(**body.model_dump(), reward=1.0 if correct else 0.0)
 
@@ -314,7 +320,7 @@ if __name__ == "__main__":
     SuperservePythonServer.run_webserver()
 ```
 
-`verify()` reads `expected_answer` from the task and compares it with the last number in the final answer by value, so `249.0` matches `249` and `0.249` does not. The `# type: ignore[override]` comment is there because `verify()` takes a request type with that extra field.
+`verify()` reads `expected_answer` from the task and compares it with the last number in the final answer by value, so `249.0` and `2.49e2` match `249`, and `0.249` and `.249` do not. The `# type: ignore[override]` comment is there because `verify()` takes a request type with that extra field.
 
 ### Config
 
