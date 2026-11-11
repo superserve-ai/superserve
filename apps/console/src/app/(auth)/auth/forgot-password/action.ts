@@ -1,10 +1,14 @@
 "use server"
 
-import { headers } from "next/headers"
 import * as z from "zod"
 
+import { readClientIp } from "@/lib/auth/client-ip"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
+import {
+  reserveRecoveryEmail,
+  startRecoveryEmailCooldown,
+} from "@/lib/auth/recovery-email-limits"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
@@ -26,22 +30,6 @@ const RESET_EMAIL_LIMIT: AuthRateLimit = {
   bucket: "password_reset_email",
   max: 3,
   windowSeconds: 15 * 60,
-}
-
-// Vercel overwrites x-real-ip and x-forwarded-for with the connecting client's
-// IP. Other client IP headers, such as cf-connecting-ip, pass through as sent,
-// so a caller could rotate them to get a fresh bucket.
-async function readClientIp() {
-  try {
-    const requestHeaders = await headers()
-    return (
-      requestHeaders.get("x-real-ip")?.trim() ||
-      requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      undefined
-    )
-  } catch {
-    return undefined
-  }
 }
 
 export const sendPasswordResetEmail = async (
@@ -89,8 +77,10 @@ export const sendPasswordResetEmail = async (
     }
   }
   // Silent, so the answer is the same whether or not the address has an
-  // account.
+  // account. The cooldown runs first, so a quick second click does not use
+  // the address's 15-minute budget.
   if (
+    !(await startRecoveryEmailCooldown(parsed.data.email)) ||
     !(await consumeAuthRateLimit(
       RESET_EMAIL_LIMIT,
       parsed.data.email.toLowerCase(),
@@ -122,6 +112,11 @@ export const sendPasswordResetEmail = async (
     // review silently get nothing; accounts that predate review keep recovery.
     if (isSignupReviewBlocked(data.user)) {
       return { success: true } // Always return success to prevent email enumeration
+    }
+
+    // Silent too: only addresses with an account reach this point.
+    if (!(await reserveRecoveryEmail())) {
+      return { success: true }
     }
 
     const resetUrlObj = new URL(redirectTo)

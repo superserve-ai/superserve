@@ -3,6 +3,12 @@
 import { after } from "next/server"
 import * as z from "zod"
 
+import { readClientIp } from "@/lib/auth/client-ip"
+import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
+import {
+  reserveRecoveryEmail,
+  startRecoveryEmailCooldown,
+} from "@/lib/auth/recovery-email-limits"
 import {
   isSignupReviewBlocked,
   signupReviewStatus,
@@ -18,6 +24,14 @@ import { createAdminClient } from "@/lib/supabase/admin"
 const linkSchema = z.object({
   email: z.string().email(),
 })
+
+// Per client IP, the same as Supabase Auth's default for its own email
+// endpoints: 30 requests per 5 minutes.
+const LINK_IP_LIMIT: AuthRateLimit = {
+  bucket: "signin_link_ip",
+  max: 30,
+  windowSeconds: 5 * 60,
+}
 
 function safeNext(raw: unknown): string | null {
   if (typeof raw !== "string") return null
@@ -44,8 +58,23 @@ async function trackLinkFailure(reason: string, userId?: string) {
 
 // Runs after the response is sent, so the response and its timing are the
 // same whether or not the address belongs to an eligible account.
-async function deliverSignInLink(email: string, next: string | null) {
+async function deliverSignInLink(
+  email: string,
+  next: string | null,
+  clientIp: string | undefined,
+) {
   try {
+    // Checked here, after the response, so a limited request gets the same
+    // answer as any other.
+    if (clientIp && !(await consumeAuthRateLimit(LINK_IP_LIMIT, clientIp))) {
+      await trackLinkFailure("rate_limited")
+      return
+    }
+    if (!(await startRecoveryEmailCooldown(email))) {
+      await trackLinkFailure("cooldown")
+      return
+    }
+
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
     const callbackUrl = new URL("/auth/callback", appUrl)
@@ -91,6 +120,11 @@ async function deliverSignInLink(email: string, next: string | null) {
     callbackUrl.searchParams.set("utm_source", "email")
     callbackUrl.searchParams.set("utm_medium", "sign_in_link")
 
+    if (!(await reserveRecoveryEmail())) {
+      await trackLinkFailure("email_budget", user.id)
+      return
+    }
+
     const to = user.email || email
     const sent = await sendEmail({
       to,
@@ -123,8 +157,9 @@ export const sendSignInLink = async (
   if (!recaptcha.verified) {
     return { success: false, errorCode: "captcha_failed" }
   }
-  // verifyRecaptcha also passes when the provider is down. This action has no
-  // other throttle, so it must not send email without a real verdict.
+  // verifyRecaptcha also passes when the provider is down. The other limits
+  // only slow a caller down, so this action must not send email without a
+  // real verdict.
   if (recaptcha.providerOutcome === "unavailable") {
     return { success: false, errorCode: "captcha_unavailable" }
   }
@@ -132,7 +167,8 @@ export const sendSignInLink = async (
   const parsed = linkSchema.safeParse({ email })
   if (parsed.success) {
     const address = parsed.data.email
-    after(() => deliverSignInLink(address, safeNext(next)))
+    const clientIp = await readClientIp()
+    after(() => deliverSignInLink(address, safeNext(next), clientIp))
   }
 
   // Always the same result, to prevent email enumeration.
