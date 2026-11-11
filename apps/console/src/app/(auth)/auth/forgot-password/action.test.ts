@@ -315,15 +315,22 @@ describe("sendPasswordResetEmail", () => {
 
     await sendPasswordResetEmail("User@Example.com", "token")
 
-    expect(mockConsumeAuthRateLimit).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ bucket: "password_reset_email" }),
-      "user@example.com",
-    )
+    expect(mockConsumeAuthRateLimit.mock.calls).toEqual([
+      [
+        expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+        "user@example.com",
+      ],
+      [
+        expect.objectContaining({ bucket: "password_reset_email" }),
+        "user@example.com",
+      ],
+    ])
   })
 
   it("silently skips the email once the per-address limit is used up", async () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7" }
     mockConsumeAuthRateLimit
+      .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false)
 
@@ -345,5 +352,73 @@ describe("sendPasswordResetEmail", () => {
 
     expect(result).toEqual({ success: true })
     expect(mockConsumeAuthRateLimit).not.toHaveBeenCalled()
+  })
+
+  it("silently skips a second request for the same address within a minute", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) =>
+        limit.bucket !== "recovery_email_cooldown",
+    )
+
+    const result = await sendPasswordResetEmail("User@Example.com", "token")
+
+    expect(result).toEqual({ success: true })
+    expect(mockConsumeAuthRateLimit).toHaveBeenLastCalledWith(
+      expect.objectContaining({
+        bucket: "recovery_email_cooldown",
+        max: 1,
+        windowSeconds: 60,
+      }),
+      "user@example.com",
+    )
+    // The token in the email already sent stays valid.
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it("takes from the hourly email budget only for an address with an account", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: null,
+      error: { message: "User not found" },
+    })
+
+    await sendPasswordResetEmail("ghost@example.com", "token")
+
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_project" }),
+      expect.anything(),
+    )
+  })
+
+  it("silently drops the email once the hourly email budget is used up", async () => {
+    vi.useFakeTimers()
+    try {
+      mockConsumeAuthRateLimit.mockImplementation(
+        async (limit: { bucket: string }) =>
+          limit.bucket !== "recovery_email_project",
+      )
+      mockGenerateLink.mockResolvedValue({
+        data: { properties: { hashed_token: "token-abc" } },
+        error: null,
+      })
+      vi.spyOn(console, "error").mockImplementation(() => {})
+
+      const pending = sendPasswordResetEmail("user@example.com", "token")
+      await vi.runAllTimersAsync()
+
+      expect(await pending).toEqual({ success: true })
+      expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          bucket: "recovery_email_project",
+          max: 30,
+          windowSeconds: 3600,
+        }),
+        "project",
+      )
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })

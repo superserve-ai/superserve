@@ -10,7 +10,20 @@ const mockGenerateLink = vi.fn()
 const mockSendEmail = vi.fn()
 const mockVerifyRecaptcha = vi.fn()
 const mockTrackEvent = vi.fn()
+const mockConsumeAuthRateLimit = vi.fn()
 const afterCallbacks: Array<() => unknown> = []
+let requestHeaders: Record<string, string> = {}
+
+vi.mock("next/headers", () => ({
+  headers: async () => ({
+    get: (name: string) => requestHeaders[name] ?? null,
+  }),
+}))
+
+vi.mock("@/lib/auth/rate-limit", () => ({
+  consumeAuthRateLimit: (...args: unknown[]) =>
+    mockConsumeAuthRateLimit(...args),
+}))
 
 vi.mock("next/server", () => ({
   after: (callback: () => unknown) => afterCallbacks.push(callback),
@@ -67,6 +80,8 @@ describe("sendSignInLink", () => {
       providerOutcome: "success",
     })
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockConsumeAuthRateLimit.mockReset().mockResolvedValue(true)
+    requestHeaders = {}
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://console.example.com")
   })
 
@@ -305,5 +320,85 @@ describe("sendSignInLink", () => {
 
     expect(result).toEqual({ success: true })
     consoleError.mockRestore()
+  })
+
+  const refuse = (bucket: string) =>
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) => limit.bucket !== bucket,
+    )
+
+  it("limits each client IP the same as Supabase Auth, after the response", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7, 10.0.0.1" }
+    refuse("signin_link_ip")
+    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+
+    const result = await sendSignInLink("user@example.com", "token")
+    expect(result).toEqual({ success: true })
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalled()
+    await runAfter()
+
+    expect(mockConsumeAuthRateLimit).toHaveBeenCalledExactlyOnceWith(
+      { bucket: "signin_link_ip", max: 30, windowSeconds: 300 },
+      "203.0.113.7",
+    )
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_sign_in_link_failed",
+      expect.any(String),
+      { method: "email_link", reason: "rate_limited" },
+    )
+  })
+
+  it("does not replace a token sent to the same address within a minute", async () => {
+    refuse("recovery_email_cooldown")
+    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+
+    await sendSignInLink("User@Example.com", "token")
+    await runAfter()
+
+    expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+      "user@example.com",
+    )
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it("takes from the hourly email budget only for an eligible account", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: { user: null, properties: null },
+      error: { status: 404, code: "user_not_found", message: "not found" },
+    })
+
+    await sendSignInLink("nobody@example.com", "token")
+    await runAfter()
+
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_project" }),
+      expect.anything(),
+    )
+  })
+
+  it("drops the email once the hourly email budget is used up", async () => {
+    vi.useFakeTimers()
+    try {
+      refuse("recovery_email_project")
+      mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+      vi.spyOn(console, "error").mockImplementation(() => {})
+
+      await sendSignInLink("user@example.com", "token")
+      const pending = runAfter()
+      await vi.runAllTimersAsync()
+      await pending
+
+      expect(mockSendEmail).not.toHaveBeenCalled()
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_sign_in_link_failed",
+        "user-1",
+        { method: "email_link", reason: "email_budget" },
+      )
+    } finally {
+      vi.useRealTimers()
+    }
   })
 })
