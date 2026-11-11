@@ -75,16 +75,24 @@ export function useSandboxesPage(params: SandboxListParams) {
   })
 }
 
+// A growable sandbox changes size while active, so its detail view refreshes
+// at the list's cadence to keep the current memory in step.
+export function sandboxRefetchInterval(
+  sandbox: Pick<SandboxResponse, "status" | "memory_max_mib"> | undefined,
+): number | false {
+  if (sandbox?.status === "resuming") return 2000
+  if (sandbox?.status === "active" && sandbox.memory_max_mib != null)
+    return 10_000
+  return false
+}
+
 export function useSandbox(id: string | null) {
   const queryScope = useQueryScope()
   return useQuery({
     queryKey: [...sandboxKeys.detail(id ?? ""), queryScope],
     queryFn: () => getSandbox(id as string),
     enabled: !!id,
-    refetchInterval: (query) => {
-      const status = query.state.data?.status
-      return status === "resuming" ? 2000 : false
-    },
+    refetchInterval: (query) => sandboxRefetchInterval(query.state.data),
     refetchOnWindowFocus: true,
   })
 }

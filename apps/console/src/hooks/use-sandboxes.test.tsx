@@ -38,6 +38,7 @@ vi.mock("@superserve/ui", () => ({
 }))
 
 import {
+  sandboxRefetchInterval,
   useBulkDeleteSandboxes,
   useCreateSandbox,
   useDeleteSandbox,
@@ -302,4 +303,23 @@ describe("usePauseSandbox / useResumeSandbox", () => {
 
 afterEach(() => {
   vi.clearAllMocks()
+})
+
+describe("sandboxRefetchInterval", () => {
+  it("refreshes an active growable sandbox so its current memory stays in step", () => {
+    expect(
+      sandboxRefetchInterval({ status: "active", memory_max_mib: 4096 }),
+    ).toBe(10_000)
+  })
+
+  it("leaves active fixed-size and paused growable sandboxes alone", () => {
+    expect(sandboxRefetchInterval({ status: "active" })).toBe(false)
+    expect(
+      sandboxRefetchInterval({ status: "paused", memory_max_mib: 4096 }),
+    ).toBe(false)
+  })
+
+  it("keeps polling a resuming sandbox", () => {
+    expect(sandboxRefetchInterval({ status: "resuming" })).toBe(2000)
+  })
 })
