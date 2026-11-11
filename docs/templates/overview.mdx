@@ -30,6 +30,8 @@ A sandbox inherits its VM shape (vCPU, memory, disk) from the template it boots 
 
 Team-owned templates let you bake in team-specific dependencies (e.g. `my-python-env` with scientific libs pre-installed). They're created via `Template.create()` and referenced by name.
 
+To run containers or Docker Compose services in a sandbox, bake Docker into a team template. See [Run Docker services in a sandbox](/sandbox/docker).
+
 Team template names **cannot** start with `superserve/`; that prefix is reserved. Names are unique per team among non-deleted templates and are released for reuse the moment a template is deleted.
 
 ## Names vs UUIDs
@@ -43,3 +45,4 @@ When booting a sandbox, `Sandbox.create({ fromTemplate })` accepts either the te
 - [BuildSpec reference](/templates/build-spec)
 - [SDK reference: Template](/sdk-reference/template)
 - [Run CI jobs in sandboxes](/guides/run-ci-jobs)
+- [Run Docker services in a sandbox](/sandbox/docker)
