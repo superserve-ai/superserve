@@ -1,8 +1,10 @@
 "use server"
 
+import { after } from "next/server"
 import * as z from "zod"
 
 import { readClientIp } from "@/lib/auth/client-ip"
+import { findAuthUserByEmail } from "@/lib/auth/find-auth-user"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
 import {
@@ -30,6 +32,65 @@ const RESET_EMAIL_LIMIT: AuthRateLimit = {
   bucket: "password_reset_email",
   max: 3,
   windowSeconds: 15 * 60,
+}
+
+// Runs after the response is sent, so the response and its timing are the
+// same whether or not the address has an account.
+async function deliverPasswordReset(
+  email: string,
+  invite: string | undefined,
+) {
+  try {
+    // The address limit runs before the shared cooldown, so a reset refused
+    // here does not start the cooldown and block a sign-in link.
+    if (
+      !(await consumeAuthRateLimit(RESET_EMAIL_LIMIT, email.toLowerCase())) ||
+      !(await startRecoveryEmailCooldown(email))
+    ) {
+      return
+    }
+
+    // Using a recovery link confirms the address, so accounts awaiting signup
+    // review get nothing; accounts that predate review keep recovery.
+    const user = await findAuthUserByEmail(email)
+    if (!user || isSignupReviewBlocked(user)) return
+
+    // A new token replaces the one in any email already sent, so take from
+    // the email budget before creating the token, never after.
+    if (!(await reserveRecoveryEmail())) return
+
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
+    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password${invite ? `&${new URLSearchParams({ invite })}` : ""}`
+
+    const { data, error } = await createAdminClient().auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo },
+    })
+
+    if (error || !data?.properties?.hashed_token) {
+      console.error("Error generating reset link:", error?.message)
+      return
+    }
+
+    const resetUrlObj = new URL(redirectTo)
+    resetUrlObj.searchParams.set("token_hash", data.properties.hashed_token)
+    resetUrlObj.searchParams.set("type", "recovery")
+    resetUrlObj.searchParams.set("utm_source", "email")
+    resetUrlObj.searchParams.set("utm_medium", "password_reset")
+
+    await sendEmail({
+      to: email,
+      subject: "Reset your Superserve password",
+      react: PasswordResetEmail({
+        email,
+        resetUrl: resetUrlObj.toString(),
+      }),
+    })
+  } catch (error) {
+    console.error("Error sending password reset email:", error)
+  }
 }
 
 export const sendPasswordResetEmail = async (
@@ -76,67 +137,10 @@ export const sendPasswordResetEmail = async (
       errorCode: "rate_limited",
     }
   }
-  // Silent, so the answer is the same whether or not the address has an
-  // account. The cooldown runs first, so a quick second click does not use
-  // the address's 15-minute budget.
-  if (
-    !(await startRecoveryEmailCooldown(parsed.data.email)) ||
-    !(await consumeAuthRateLimit(
-      RESET_EMAIL_LIMIT,
-      parsed.data.email.toLowerCase(),
-    ))
-  ) {
-    return { success: true }
-  }
+  const address = parsed.data.email
+  const invite = inviteReturnPath(typeof next === "string" ? next : undefined)
+  after(() => deliverPasswordReset(address, invite))
 
-  try {
-    const supabase = createAdminClient()
-
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
-    const invite = inviteReturnPath(typeof next === "string" ? next : undefined)
-    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password${invite ? `&${new URLSearchParams({ invite })}` : ""}`
-
-    const { data, error } = await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email: parsed.data.email,
-      options: { redirectTo },
-    })
-
-    if (error || !data?.properties?.hashed_token) {
-      console.error("Error generating reset link:", error?.message)
-      return { success: true } // Always return success to prevent email enumeration
-    }
-
-    // Using a recovery link confirms the address, so accounts awaiting signup
-    // review silently get nothing; accounts that predate review keep recovery.
-    if (isSignupReviewBlocked(data.user)) {
-      return { success: true } // Always return success to prevent email enumeration
-    }
-
-    // Silent too: only addresses with an account reach this point.
-    if (!(await reserveRecoveryEmail())) {
-      return { success: true }
-    }
-
-    const resetUrlObj = new URL(redirectTo)
-    resetUrlObj.searchParams.set("token_hash", data.properties.hashed_token)
-    resetUrlObj.searchParams.set("type", "recovery")
-    resetUrlObj.searchParams.set("utm_source", "email")
-    resetUrlObj.searchParams.set("utm_medium", "password_reset")
-
-    await sendEmail({
-      to: parsed.data.email,
-      subject: "Reset your Superserve password",
-      react: PasswordResetEmail({
-        email: parsed.data.email,
-        resetUrl: resetUrlObj.toString(),
-      }),
-    })
-
-    return { success: true }
-  } catch (error) {
-    console.error("Error sending password reset email:", error)
-    return { success: true } // Always return success to prevent email enumeration
-  }
+  // Always the same result, to prevent email enumeration.
+  return { success: true }
 }

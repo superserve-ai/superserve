@@ -7,6 +7,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockGenerateLink = vi.fn()
+const mockFindUser = vi.fn()
 const mockSendEmail = vi.fn()
 const mockVerifyRecaptcha = vi.fn()
 const mockTrackEvent = vi.fn()
@@ -27,6 +28,10 @@ vi.mock("@/lib/auth/rate-limit", () => ({
 
 vi.mock("next/server", () => ({
   after: (callback: () => unknown) => afterCallbacks.push(callback),
+}))
+
+vi.mock("@/lib/auth/find-auth-user", () => ({
+  findAuthUserByEmail: (...args: unknown[]) => mockFindUser(...args),
 }))
 
 vi.mock("@/lib/supabase/admin", () => ({
@@ -65,6 +70,19 @@ const linkFor = (user: Record<string, unknown>) => ({
   error: null,
 })
 
+// The account lookup and the link it then generates.
+const withAccount = (user: Record<string, unknown> | null) => {
+  mockFindUser.mockResolvedValue(user)
+  mockGenerateLink.mockResolvedValue(
+    user
+      ? linkFor(user)
+      : {
+          data: { user: null, properties: null },
+          error: { status: 404, code: "user_not_found", message: "not found" },
+        },
+  )
+}
+
 const runAfter = async () => {
   const callbacks = afterCallbacks.splice(0)
   for (const callback of callbacks) await callback()
@@ -74,6 +92,7 @@ describe("sendSignInLink", () => {
   beforeEach(() => {
     afterCallbacks.length = 0
     mockGenerateLink.mockReset()
+    mockFindUser.mockReset()
     mockSendEmail.mockReset().mockResolvedValue({ success: true })
     mockVerifyRecaptcha.mockReset().mockResolvedValue({
       verified: true,
@@ -126,32 +145,26 @@ describe("sendSignInLink", () => {
   })
 
   it.each([
-    [
-      "unknown",
-      {
-        data: { user: null, properties: null },
-        error: { status: 404, code: "user_not_found", message: "not found" },
-      },
-    ],
-    ["unconfirmed", linkFor({ ...confirmedUser, email_confirmed_at: null })],
+    ["unknown", null],
+    ["unconfirmed", { ...confirmedUser, email_confirmed_at: null }],
     [
       "in review",
-      linkFor({ ...confirmedUser, app_metadata: { signup_review: "pending" } }),
+      { ...confirmedUser, app_metadata: { signup_review: "pending" } },
     ],
-    ["confirmed", linkFor(confirmedUser)],
+    ["confirmed", confirmedUser],
   ])(
     "returns the same result for an %s address before any lookup",
-    async (_label, link) => {
-      mockGenerateLink.mockResolvedValue(link)
+    async (_label, user) => {
+      withAccount(user)
 
       const result = await sendSignInLink("user@example.com", "token")
 
       expect(result).toEqual({ success: true })
       // The account lookup has not started when the response is returned.
-      expect(mockGenerateLink).not.toHaveBeenCalled()
+      expect(mockFindUser).not.toHaveBeenCalled()
       expect(afterCallbacks).toHaveLength(1)
       await runAfter()
-      expect(mockGenerateLink).toHaveBeenCalledTimes(1)
+      expect(mockFindUser).toHaveBeenCalledExactlyOnceWith("user@example.com")
     },
   )
 
@@ -163,7 +176,7 @@ describe("sendSignInLink", () => {
   })
 
   it("emails a confirmed account a magic-link callback URL", async () => {
-    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+    withAccount(confirmedUser)
 
     await sendSignInLink("user@example.com", "token", "/sandboxes")
     await runAfter()
@@ -195,7 +208,7 @@ describe("sendSignInLink", () => {
     "/billing/pro/",
     "/auth/choose-plan/?reason=upgrade&offer=pro_monthly&team=team-1",
   ])("keeps the sign-in destination %s", async (next) => {
-    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+    withAccount(confirmedUser)
 
     await sendSignInLink("user@example.com", "token", next)
     await runAfter()
@@ -211,7 +224,7 @@ describe("sendSignInLink", () => {
     "https://evil.example.com",
     "/",
   ])("drops the unsafe or default next path %s", async (next) => {
-    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+    withAccount(confirmedUser)
 
     await sendSignInLink("user@example.com", "token", next)
     await runAfter()
@@ -238,13 +251,13 @@ describe("sendSignInLink", () => {
       },
     ],
   ])("sends nothing to an %s account", async (_label, overrides) => {
-    mockGenerateLink.mockResolvedValue(
-      linkFor({ ...confirmedUser, ...overrides }),
-    )
+    withAccount({ ...confirmedUser, ...overrides })
 
     await sendSignInLink("user@example.com", "token")
     await runAfter()
 
+    // No new token, so a link the account already has keeps working.
+    expect(mockGenerateLink).not.toHaveBeenCalled()
     expect(mockSendEmail).not.toHaveBeenCalled()
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_sign_in_link_failed",
@@ -256,13 +269,11 @@ describe("sendSignInLink", () => {
   it("replaces the approval link of an approved but unconfirmed account", async () => {
     // The recovery token replaces the confirming magic link from the staff
     // approval email, so the account must get this link instead.
-    mockGenerateLink.mockResolvedValue(
-      linkFor({
-        ...confirmedUser,
-        email_confirmed_at: null,
-        app_metadata: { signup_review: "approved" },
-      }),
-    )
+    withAccount({
+      ...confirmedUser,
+      email_confirmed_at: null,
+      app_metadata: { signup_review: "approved" },
+    })
 
     await sendSignInLink("user@example.com", "token")
     await runAfter()
@@ -278,10 +289,7 @@ describe("sendSignInLink", () => {
   })
 
   it("sends nothing to an unknown address and tracks it without the email", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: { user: null, properties: null },
-      error: { status: 404, code: "user_not_found", message: "not found" },
-    })
+    withAccount(null)
 
     await sendSignInLink("nobody@example.com", "token")
     await runAfter()
@@ -298,7 +306,7 @@ describe("sendSignInLink", () => {
   })
 
   it("tracks a failed send", async () => {
-    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+    withAccount(confirmedUser)
     mockSendEmail.mockResolvedValue({ success: false })
 
     await sendSignInLink("user@example.com", "token")
@@ -312,6 +320,7 @@ describe("sendSignInLink", () => {
   })
 
   it("contains errors thrown after the response", async () => {
+    withAccount(confirmedUser)
     mockGenerateLink.mockRejectedValue(new Error("network"))
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
 
@@ -330,7 +339,7 @@ describe("sendSignInLink", () => {
   it("limits each client IP the same as Supabase Auth, after the response", async () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7, 10.0.0.1" }
     refuse("signin_link_ip")
-    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+    withAccount(confirmedUser)
 
     const result = await sendSignInLink("user@example.com", "token")
     expect(result).toEqual({ success: true })
@@ -351,7 +360,7 @@ describe("sendSignInLink", () => {
 
   it("does not replace a token sent to the same address within a minute", async () => {
     refuse("recovery_email_cooldown")
-    mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+    withAccount(confirmedUser)
 
     await sendSignInLink("User@Example.com", "token")
     await runAfter()
@@ -365,10 +374,7 @@ describe("sendSignInLink", () => {
   })
 
   it("takes from the hourly email budget only for an eligible account", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: { user: null, properties: null },
-      error: { status: 404, code: "user_not_found", message: "not found" },
-    })
+    withAccount(null)
 
     await sendSignInLink("nobody@example.com", "token")
     await runAfter()
@@ -383,7 +389,7 @@ describe("sendSignInLink", () => {
     vi.useFakeTimers()
     try {
       refuse("recovery_email_project")
-      mockGenerateLink.mockResolvedValue(linkFor(confirmedUser))
+      withAccount(confirmedUser)
       vi.spyOn(console, "error").mockImplementation(() => {})
 
       await sendSignInLink("user@example.com", "token")
@@ -391,6 +397,8 @@ describe("sendSignInLink", () => {
       await vi.runAllTimersAsync()
       await pending
 
+      // No new token, so a link the account already has keeps working.
+      expect(mockGenerateLink).not.toHaveBeenCalled()
       expect(mockSendEmail).not.toHaveBeenCalled()
       expect(mockTrackEvent).toHaveBeenCalledWith(
         "auth_sign_in_link_failed",
@@ -400,5 +408,38 @@ describe("sendSignInLink", () => {
     } finally {
       vi.useRealTimers()
     }
+  })
+
+  it("sends nothing and creates no token when the account lookup fails", async () => {
+    withAccount(confirmedUser)
+    mockFindUser.mockRejectedValue(new Error("lookup failed"))
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    await sendSignInLink("user@example.com", "token")
+    await runAfter()
+
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    consoleError.mockRestore()
+  })
+
+  it("tracks a failed link generation", async () => {
+    withAccount(confirmedUser)
+    mockGenerateLink.mockResolvedValue({
+      data: null,
+      error: { status: 500, message: "boom" },
+    })
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    await sendSignInLink("user@example.com", "token")
+    await runAfter()
+
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_sign_in_link_failed",
+      "user-1",
+      { method: "email_link", reason: "generate_failed" },
+    )
+    consoleError.mockRestore()
   })
 })
