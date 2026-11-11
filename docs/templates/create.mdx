@@ -106,7 +106,7 @@ const sandbox2 = await Sandbox.create({
 // Option 3: pass the ID
 const sandbox3 = await Sandbox.create({
   name: "run-3",
-  fromTemplate: "8b050452",
+  fromTemplate: template.id,
 })
 ```
 
@@ -135,7 +135,7 @@ sandbox2 = Sandbox.create(
 # Option 3: pass the ID
 sandbox3 = Sandbox.create(
     name="run-3",
-    from_template="8b050452",
+    from_template=template.id,
 )
 ```
 

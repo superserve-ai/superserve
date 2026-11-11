@@ -217,7 +217,7 @@ export function BuildLogViewer({
         <button
           type="button"
           onClick={jumpToLatest}
-          className="absolute right-3 bottom-3 flex cursor-pointer items-center gap-1 border border-dashed border-border bg-surface px-2 py-1 font-mono text-[10px] text-muted uppercase hover:text-foreground"
+          className="absolute right-3 bottom-3 flex cursor-pointer items-center gap-1 border border-dashed border-control bg-surface px-2 py-1 font-mono text-[10px] text-muted uppercase hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
         >
           <ArrowDownIcon className="size-3" weight="light" />
           Jump to latest

@@ -87,7 +87,7 @@ const mockBeginGoogleSignup = vi.fn<
     diagnostics?: unknown,
   ) => Promise<
     | { success: true; signupAttemptId: string }
-    | { success: false; error?: string }
+    | { success: false; error?: string; errorCode?: string }
   >
 >(() =>
   Promise.resolve({
@@ -98,9 +98,13 @@ const mockBeginGoogleSignup = vi.fn<
 const mockClaimGoogleRecoveryContinuation = vi.fn<
   (reason: string) => Promise<boolean>
 >(() => Promise.resolve(false))
+const mockGoogleRecoveryAccount = vi.fn<() => Promise<string | undefined>>(() =>
+  Promise.resolve(undefined),
+)
 vi.mock("./action", () => ({
   claimGoogleRecoveryContinuation: (reason: string) =>
     mockClaimGoogleRecoveryContinuation(reason),
+  googleRecoveryAccount: () => mockGoogleRecoveryAccount(),
   signUpWithEmail: (...args: unknown[]) => mockSignUpWithEmail(...args),
   resendSignupConfirmation: (...args: unknown[]) =>
     mockResendSignupConfirmation(...args),
@@ -173,6 +177,7 @@ describe("SignUpPage", () => {
     mockRouterPush.mockReset()
     mockSearchParams = new URLSearchParams()
     mockClaimGoogleRecoveryContinuation.mockReset().mockResolvedValue(false)
+    mockGoogleRecoveryAccount.mockReset().mockResolvedValue(undefined)
     sessionStorage.clear()
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
     vi.resetModules()
@@ -245,6 +250,58 @@ describe("SignUpPage", () => {
     ).toBeInTheDocument()
   })
 
+  it("shows the password rule before submit", async () => {
+    render(<SignUpPage />)
+
+    const password = await screen.findByPlaceholderText("Password")
+    const hint = screen.getByText(
+      "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number.",
+    )
+    expect(password).toHaveAttribute("aria-describedby", hint.id)
+  })
+
+  it("names the missing part of a weak password without calling the server", async () => {
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "sandbox12345")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "sandbox12345",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    expect(
+      await screen.findByText("Add an uppercase letter."),
+    ).toBeInTheDocument()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
+
+  it("rejects a password over 72 bytes without calling the server", async () => {
+    const tooLong = "Sandbox42".padEnd(73, "x")
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.click(screen.getByPlaceholderText("Password"))
+    await user.paste(tooLong)
+    await user.click(screen.getByPlaceholderText("Confirm Password"))
+    await user.paste(tooLong)
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    expect(
+      await screen.findByText("Use 72 characters or fewer."),
+    ).toBeInTheDocument()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
+
   it("shows an inline error when passwords do not match", async () => {
     render(<SignUpPage />)
 
@@ -253,7 +310,7 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
       "different",
@@ -318,10 +375,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -334,7 +391,7 @@ describe("SignUpPage", () => {
     )
     expect(mockSignUpWithEmail).toHaveBeenCalledWith(
       "test@test.com",
-      "password123",
+      "Password123",
       "Test User",
       undefined,
       undefined,
@@ -395,10 +452,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -409,7 +466,7 @@ describe("SignUpPage", () => {
     await waitFor(() => {
       expect(mockSignUpWithEmail).toHaveBeenCalledWith(
         "test@test.com",
-        "password123",
+        "Password123",
         "Test User",
         undefined,
         undefined,
@@ -433,10 +490,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -458,10 +515,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -481,10 +538,10 @@ describe("SignUpPage", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -534,7 +591,7 @@ describe("SignUpPage", () => {
 
     expect(
       await screen.findByText(
-        "Looks like you're new here. One quick check to finish creating your account.",
+        "This Google account is new to Superserve. One quick check to finish creating your account.",
       ),
     ).toBeInTheDocument()
     await waitFor(() => {
@@ -554,6 +611,133 @@ describe("SignUpPage", () => {
       }),
     ).toBeInTheDocument()
     expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+  })
+
+  it("sends the recovery trip to the Google account that just signed in", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&reason=started_from_signin",
+    )
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    mockGoogleRecoveryAccount.mockResolvedValue("new.user@example.com")
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    const account = await screen.findByText("new.user@example.com")
+    // Session replay masks this element, so the email stays out of recordings.
+    expect(account).toHaveAttribute("data-mask")
+    await user.click(
+      screen.getByRole("button", { name: /Complete signup with Google/ }),
+    )
+
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+    expect(mockSignInWithOAuth.mock.lastCall![0].options.queryParams).toEqual({
+      login_hint: "new.user@example.com",
+    })
+    expect(mockGoogleRecoveryAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it("waits for a slow account lookup before it starts the Google trip", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    let resolveAccount!: (email: string | undefined) => void
+    mockGoogleRecoveryAccount.mockReturnValue(
+      new Promise((resolve) => {
+        resolveAccount = resolve
+      }),
+    )
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(
+      <StrictMode>
+        <RecoverySignUpPage />
+      </StrictMode>,
+    )
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+    await waitFor(() => expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1))
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+
+    resolveAccount("new.user@example.com")
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    expect(mockSignInWithOAuth.mock.lastCall![0].options.queryParams).toEqual({
+      login_hint: "new.user@example.com",
+    })
+    expect(mockGoogleRecoveryAccount).toHaveBeenCalledTimes(1)
+  })
+
+  it("opens the account chooser when the account lookup fails", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    mockGoogleRecoveryAccount.mockRejectedValue(new Error("network"))
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    expect(mockSignInWithOAuth.mock.lastCall![0].options.queryParams).toEqual({
+      prompt: "select_account",
+    })
+    expect(screen.queryByText(/Continuing as/)).not.toBeInTheDocument()
+  })
+
+  it("lets the user pick a different Google account on the recovery trip", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&reason=started_from_signin",
+    )
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    mockGoogleRecoveryAccount.mockResolvedValue("new.user@example.com")
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: "Use a different Google account",
+      }),
+    )
+
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    // The account chooser still runs behind the same signup proof.
+    expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1)
+    expect(mockSignInWithOAuth.mock.lastCall![0].options.queryParams).toEqual({
+      prompt: "select_account",
+    })
+  })
+
+  it("explains what to change when the bot check fails", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&reason=started_from_signin",
+    )
+    mockBeginGoogleSignup.mockResolvedValue({
+      success: false,
+      error: "Signup verification failed.",
+      errorCode: "captcha_failed",
+    })
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    expect(
+      await screen.findByText(/Turn off any VPN or ad blocker for this site/),
+    ).toBeInTheDocument()
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+    // The button stays so the user can retry the same step.
+    expect(
+      screen.getByRole("button", { name: /Complete signup with Google/ }),
+    ).toBeEnabled()
   })
 
   it("waits for a click when a link reports a reason the browser never hit", async () => {
@@ -684,10 +868,10 @@ describe("SignUpPage", () => {
         "Test User",
       )
       await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-      await user.type(screen.getByPlaceholderText("Password"), "password123")
+      await user.type(screen.getByPlaceholderText("Password"), "Password123")
       await user.type(
         screen.getByPlaceholderText("Confirm Password"),
-        "password123",
+        "Password123",
       )
       await user.click(screen.getByRole("button", { name: "Sign Up" }))
     }
@@ -975,10 +1159,10 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
@@ -1133,17 +1317,17 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
-    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
       screen.getByPlaceholderText("Confirm Password"),
-      "password123",
+      "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
 
     await waitFor(() => {
       expect(mockSignUpWithEmail).toHaveBeenCalledWith(
         "test@test.com",
-        "password123",
+        "Password123",
         "Test User",
         "real-token",
         undefined,

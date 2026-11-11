@@ -123,7 +123,7 @@ export function ProviderPicker({
                 : "Select a provider"
             }
             className={cn(
-              "flex h-9 w-full items-center justify-between border border-input bg-background px-3 text-sm",
+              "flex h-9 w-full items-center justify-between border border-control bg-background px-3 text-sm",
               "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none",
               selected ? "text-foreground" : "text-muted",
             )}

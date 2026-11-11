@@ -1,0 +1,228 @@
+---
+title: "OpenEnv"
+sidebarTitle: OpenEnv
+description: Run multi-turn OpenEnv rollouts with one Superserve sandbox per episode.
+icon: "dumbbell"
+---
+
+[OpenEnv](https://github.com/openenv/OpenEnv) is an open-source framework for agentic reinforcement learning environments. Each environment is a server with a `reset()` and `step()` API, and your training loop talks to it over a WebSocket through an `EnvClient`. Environments ship as container images, for example on [Hugging Face Spaces](https://huggingface.co/openenv).
+
+This page runs the OpenEnv [Wordle environment](https://huggingface.co/spaces/openenv/wordle) in Superserve sandboxes. A model plays each game turn by turn from your machine, and the loop collects the reward for every turn. Each episode gets its own sandbox, so episodes run in parallel and never share state.
+
+## Setup
+
+Install the Superserve SDK, the Anthropic SDK, and the client for OpenEnv's TextArena environments, which include Wordle. The client needs Python 3.10 or later.
+
+```bash
+pip install superserve anthropic "openenv-textarena @ git+https://github.com/openenv/OpenEnv.git@v0.12.0#subdirectory=envs/textarena_env"
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+See [API keys](/api-key) to create a Superserve API key.
+
+## How it works
+
+1. A [template](/templates/overview) is built once from the environment's container image.
+2. Each episode creates a sandbox from the template and starts the environment server in it.
+3. The server port is published as a private [preview URL](/sandbox/preview-urls). The OpenEnv client connects to it with the preview token in a request header.
+4. The loop calls `reset()`, then asks the model for a move and calls `step()` until the episode is done. It records the reward for each turn.
+5. The sandbox is killed when the episode ends.
+
+## Build the template
+
+Save this file as `build_template.py` and run it once. It builds a template from the Wordle Space's image and downloads the NLTK word lists that the server needs, so the server can start without network access.
+
+```python build_template.py
+from superserve import EnvStep, EnvStepValue, RunStep, Template
+
+template = Template.create(
+    name="openenv-wordle",
+    from_="registry.hf.space/openenv-wordle:latest",
+    memory_mib=2048,
+    steps=[
+        # Bake the NLTK word lists into the template so the server starts offline.
+        EnvStep(env=EnvStepValue(key="NLTK_DATA", value="/app/nltk_data")),
+        EnvStep(env=EnvStepValue(key="TEXTARENA_DOWNLOAD_NLTK", value="0")),
+        RunStep(
+            run="python -m nltk.downloader -d /app/nltk_data"
+            " words averaged_perceptron_tagger_eng"
+        ),
+    ],
+)
+info = template.wait_until_ready(on_log=lambda event: print(event.text, end=""))
+print(f"\n{info.name} is {info.status}")
+```
+
+The build takes a few minutes. Later sandboxes boot from the cached template.
+
+<Note>
+  An image's `ENTRYPOINT` and `CMD` do not run in a template-booted sandbox. To find the command that starts another OpenEnv environment's server, look at the `CMD` in its Space's `Dockerfile`.
+</Note>
+
+## Run rollouts
+
+Save this file as `rollout.py`. The highlighted lines are the Superserve calls: create a sandbox, start the server, publish its port, connect to it, and kill the sandbox.
+
+```python rollout.py {39-59,75-76}
+import asyncio
+import re
+from dataclasses import dataclass
+
+from anthropic import AsyncAnthropic
+from anthropic.types import TextBlock
+from superserve import AsyncSandbox, NetworkConfig
+from textarena_env import TextArenaAction, TextArenaEnv
+
+MODEL = "claude-sonnet-5-5"
+SYSTEM = (
+    "You are playing Wordle. Reason briefly, then end your reply with one guess: "
+    "a five-letter English word in square brackets, for example [crane]."
+)
+
+anthropic = AsyncAnthropic()
+
+
+@dataclass
+class Turn:
+    guess: str
+    reward: float
+    signals: dict[str, float]
+
+
+async def choose_guess(transcript: str) -> str:
+    message = await anthropic.messages.create(
+        model=MODEL,
+        max_tokens=1024,
+        system=SYSTEM,
+        messages=[{"role": "user", "content": transcript}],
+    )
+    reply = "".join(b.text for b in message.content if isinstance(b, TextBlock))
+    guesses = re.findall(r"\[[a-z]{5}\]", reply.lower())
+    return guesses[-1] if guesses else reply
+
+
+async def run_episode(episode: int) -> list[Turn]:
+    sandbox = await AsyncSandbox.create(
+        name=f"wordle-episode-{episode}",
+        from_template="openenv-wordle",
+        preview_access="private",
+        network=NetworkConfig(deny_out=["0.0.0.0/0"]),
+    )
+    try:
+        # Start the server in each sandbox so every episode draws its own word.
+        async with await sandbox.commands.spawn(
+            "uvicorn server.app:app --host 0.0.0.0 --port 8000", cwd="/app/env"
+        ):
+            await sandbox.commands.run(
+                "until curl -fsS http://localhost:8000/health; do sleep 1; done",
+                timeout_seconds=60,
+            )
+            await sandbox.publish_preview_port(8000)
+            credential = await sandbox.get_preview_token(8000)
+            async with TextArenaEnv(
+                base_url=sandbox.get_preview_url(8000),
+                headers={credential.header: credential.token},
+            ) as env:
+                result = await env.reset()
+                turns: list[Turn] = []
+                while not result.done:
+                    # The last message holds the full game transcript so far.
+                    transcript = result.observation.messages[-1].content
+                    guess = await choose_guess(transcript)
+                    result = await env.step(TextArenaAction(message=guess))
+                    turn = Turn(
+                        guess=guess,
+                        reward=result.reward or 0.0,
+                        signals=result.observation.info.get("reward_signals", {}),
+                    )
+                    turns.append(turn)
+                    print(f"episode {episode} turn {len(turns)}: {turn}")
+                return turns
+    finally:
+        await sandbox.kill()
+
+
+async def main() -> None:
+    episodes = await asyncio.gather(*(run_episode(i) for i in range(4)))
+    for i, turns in enumerate(episodes):
+        print(f"episode {i}: {len(turns)} turns, final reward {turns[-1].reward}")
+
+
+asyncio.run(main())
+```
+
+Run it:
+
+```bash
+python rollout.py
+```
+
+The four episodes run at the same time, so their turns interleave. Sample output:
+
+```text
+episode 1 turn 1: Turn(guess='[crane]', reward=0.0, signals={'wordle.greens': 0.0, 'wordle.yellows': 0.4, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 0 turn 1: Turn(guess='[crane]', reward=0.0, signals={'wordle.greens': 0.2, 'wordle.yellows': 0.4, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 3 turn 1: Turn(guess='[crane]', reward=0.0, signals={'wordle.greens': 0.0, 'wordle.yellows': 0.4, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 2 turn 1: Turn(guess='[crane]', reward=0.0, signals={'wordle.greens': 0.2, 'wordle.yellows': 0.2, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 1 turn 2: Turn(guess='[salon]', reward=0.0, signals={'wordle.greens': 0.2, 'wordle.yellows': 0.4, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 3 turn 2: Turn(guess='[other]', reward=0.0, signals={'wordle.greens': 0.4, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 0 turn 2: Turn(guess='[nurse]', reward=0.0, signals={'wordle.greens': 0.6, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 2 turn 2: Turn(guess='[spend]', reward=0.0, signals={'wordle.greens': 0.4, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 1 turn 3: Turn(guess='[woman]', reward=1.0, signals={'wordle.greens': 0.2, 'wordle.yellows': 0.4, 'wordle.repetitions': 1.0, 'wordle.correct': 1.0})
+episode 0 turn 3: Turn(guess='[nerve]', reward=1.0, signals={'wordle.greens': 0.6, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 1.0})
+episode 3 turn 3: Turn(guess='[miser]', reward=0.0, signals={'wordle.greens': 0.6, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 2 turn 3: Turn(guess='[event]', reward=1.0, signals={'wordle.greens': 0.4, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 1.0})
+episode 3 turn 4: Turn(guess='[liver]', reward=0.0, signals={'wordle.greens': 0.8, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 0.0})
+episode 3 turn 5: Turn(guess='[river]', reward=1.0, signals={'wordle.greens': 0.8, 'wordle.yellows': 0.0, 'wordle.repetitions': 1.0, 'wordle.correct': 1.0})
+episode 0: 3 turns, final reward 1.0
+episode 1: 3 turns, final reward 1.0
+episode 2: 3 turns, final reward 1.0
+episode 3: 5 turns, final reward 1.0
+```
+
+The script starts the server with `commands.spawn` in each sandbox, not as the template's start command. A [template's snapshot](/templates/build-spec) captures the running process, so every sandbox restored from it would resume with the same random state and draw the same secret word.
+
+The sandbox has no outbound network access: `deny_out=["0.0.0.0/0"]` blocks all egress, and the model runs on your machine. Inbound traffic reaches the server only through the private preview URL, which needs the preview token.
+
+## Rewards
+
+`result.reward` is the episode reward. It is `1.0` when the model guesses the word, and `0.0` on the turns before. The episode also ends when the guesses run out, or on the second invalid move, such as a repeated guess or a word that is not in the word list. The reward is then a completion score from the latest feedback: each correct letter in the correct position counts `1`, each correct letter in the wrong position counts `0.5`, and the total is divided by the word length.
+
+`observation.info["reward_signals"]` has per-turn signals that you can use to shape the reward:
+
+| Signal | Meaning |
+| --- | --- |
+| `wordle.greens` | Fraction of letters in the correct position. |
+| `wordle.yellows` | Fraction of letters in the word but in the wrong position. |
+| `wordle.repetitions` | `1.0` for a new guess, `0.0` for a repeated guess. |
+| `wordle.correct` | Same as `result.reward`. |
+
+## Train a policy
+
+To train, replace `choose_guess` with a call to the model you train, and pass the turns and rewards from `run_episode` to your trainer. The rollout loop and the sandbox lifecycle stay the same. Increase the number of episodes in `main` to collect more rollouts in parallel.
+
+## Clean up
+
+The script kills each sandbox when its episode ends. To remove the template, delete it in the console or with the [CLI](/cli):
+
+```bash
+superserve template delete openenv-wordle
+```
+
+## Learn more
+
+<CardGroup cols={2}>
+  <Card title="OpenEnv documentation" icon="book" href="https://huggingface.co/docs/openenv">
+    Read about OpenEnv environments, clients, and training integrations.
+  </Card>
+  <Card title="Wordle environment" icon="cube" href="https://huggingface.co/spaces/openenv/wordle">
+    See the Wordle environment's Space and image.
+  </Card>
+  <Card title="Preview URLs" icon="globe" href="/sandbox/preview-urls">
+    Publish sandbox ports and use private preview tokens.
+  </Card>
+  <Card title="Templates" icon="layer-group" href="/templates/overview">
+    Learn how Superserve builds and caches templates.
+  </Card>
+</CardGroup>

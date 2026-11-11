@@ -43,7 +43,7 @@ plane** (rotating access token) — you never build data-plane URLs or manage to
    - TypeScript: `npm install @superserve/sdk` (Node ≥ 18; bun/pnpm/yarn also work)
    - Python: `pip install superserve` (Python ≥ 3.9; uv/poetry also work)
 2. **Set `SUPERSERVE_API_KEY`** (key prefix `ss_live_`) in the environment — get it
-   from the Superserve console. With it set, `create()` needs no other config.
+   from the Superserve console. Sign-up is free, no card required. With it set, `create()` needs no other config.
 3. _(Optional)_ Override the API base with `SUPERSERVE_BASE_URL` (default `https://api.superserve.ai`).
 
 ## Quickstart
