@@ -40,9 +40,11 @@ export function startRecoveryEmailCooldown(email: string): Promise<boolean> {
 }
 
 /**
- * Takes one email from the project-wide hourly budget. Call it only right
- * before an email is sent, so requests for addresses with no account do not
- * use the budget and cannot block resets for everyone else.
+ * Takes one email from the project-wide hourly budget. Call it after the
+ * account lookup, so requests for addresses with no account do not use the
+ * budget and cannot block resets for everyone else. Call it before
+ * generateLink, so a refused email does not replace the token in an email
+ * already sent.
  */
 export async function reserveRecoveryEmail(): Promise<boolean> {
   const limit = recoveryEmailHourlyLimit()

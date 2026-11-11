@@ -4,6 +4,7 @@ import { after } from "next/server"
 import * as z from "zod"
 
 import { readClientIp } from "@/lib/auth/client-ip"
+import { findAuthUserByEmail } from "@/lib/auth/find-auth-user"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
 import {
   reserveRecoveryEmail,
@@ -75,6 +76,33 @@ async function deliverSignInLink(
       return
     }
 
+    const user = await findAuthUserByEmail(email)
+    if (!user) {
+      await trackLinkFailure("no_account")
+      return
+    }
+
+    // Verifying the link would confirm an unconfirmed address, so only
+    // confirmed accounts that are not waiting for signup review get one.
+    // Staff approval already emails an unconfirmed account a confirming magic
+    // link, and the token generated below replaces it, so approved accounts
+    // get this link in its place.
+    const banned =
+      !!user.banned_until && new Date(user.banned_until).getTime() > Date.now()
+    const confirmedOrApproved =
+      !!user.email_confirmed_at || signupReviewStatus(user) === "approved"
+    if (!confirmedOrApproved || banned || isSignupReviewBlocked(user)) {
+      await trackLinkFailure("not_eligible", user.id)
+      return
+    }
+
+    // A new token replaces the one in any email already sent, so take from
+    // the email budget before creating the token, never after.
+    if (!(await reserveRecoveryEmail())) {
+      await trackLinkFailure("email_budget", user.id)
+      return
+    }
+
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
     const callbackUrl = new URL("/auth/callback", appUrl)
@@ -88,28 +116,9 @@ async function deliverSignInLink(
       options: { redirectTo: callbackUrl.toString() },
     })
 
-    if (error || !data?.properties?.hashed_token || !data.user) {
-      const noAccount =
-        error?.status === 404 || error?.code === "user_not_found"
-      if (!noAccount) {
-        console.error("Error generating sign-in link:", error?.message)
-      }
-      await trackLinkFailure(noAccount ? "no_account" : "generate_failed")
-      return
-    }
-
-    // Verifying the link would confirm an unconfirmed address, so only
-    // confirmed accounts that are not waiting for signup review get one.
-    // Staff approval already emails an unconfirmed account a confirming magic
-    // link, and the token generated above replaced it, so approved accounts
-    // get this link in its place.
-    const user = data.user
-    const banned =
-      !!user.banned_until && new Date(user.banned_until).getTime() > Date.now()
-    const confirmedOrApproved =
-      !!user.email_confirmed_at || signupReviewStatus(user) === "approved"
-    if (!confirmedOrApproved || banned || isSignupReviewBlocked(user)) {
-      await trackLinkFailure("not_eligible", user.id)
+    if (error || !data?.properties?.hashed_token) {
+      console.error("Error generating sign-in link:", error?.message)
+      await trackLinkFailure("generate_failed", user.id)
       return
     }
 
@@ -119,11 +128,6 @@ async function deliverSignInLink(
     if (next) callbackUrl.searchParams.set("next", next)
     callbackUrl.searchParams.set("utm_source", "email")
     callbackUrl.searchParams.set("utm_medium", "sign_in_link")
-
-    if (!(await reserveRecoveryEmail())) {
-      await trackLinkFailure("email_budget", user.id)
-      return
-    }
 
     const to = user.email || email
     const sent = await sendEmail({

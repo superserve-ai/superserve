@@ -11,6 +11,8 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockGenerateLink = vi.fn()
+const mockFindUser = vi.fn()
+const afterCallbacks: Array<() => unknown> = []
 const mockSendEmail = vi.fn()
 const mockVerifyRecaptcha = vi.fn()
 const mockConsumeAuthRateLimit = vi.fn()
@@ -31,6 +33,14 @@ vi.mock("@/lib/auth/rate-limit", () => ({
     mockConsumeAuthRateLimit(...args),
 }))
 
+vi.mock("next/server", () => ({
+  after: (callback: () => unknown) => afterCallbacks.push(callback),
+}))
+
+vi.mock("@/lib/auth/find-auth-user", () => ({
+  findAuthUserByEmail: (...args: unknown[]) => mockFindUser(...args),
+}))
+
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
     auth: {
@@ -49,9 +59,27 @@ vi.mock("@/lib/email/templates/password-reset", () => ({
 
 import { sendPasswordResetEmail } from "./action"
 
+const account = { id: "user-1", email: "user@example.com", app_metadata: {} }
+
+const runAfter = async () => {
+  const callbacks = afterCallbacks.splice(0)
+  for (const callback of callbacks) await callback()
+}
+
+// The action's result, after the work it schedules for after the response.
+const reset = async (
+  ...args: Parameters<typeof sendPasswordResetEmail>
+): ReturnType<typeof sendPasswordResetEmail> => {
+  const result = await sendPasswordResetEmail(...args)
+  await runAfter()
+  return result
+}
+
 describe("sendPasswordResetEmail", () => {
   beforeEach(() => {
+    afterCallbacks.length = 0
     mockGenerateLink.mockReset()
+    mockFindUser.mockReset().mockResolvedValue(account)
     mockSendEmail.mockReset()
     mockVerifyRecaptcha
       .mockReset()
@@ -87,7 +115,7 @@ describe("sendPasswordResetEmail", () => {
     })
     mockSendEmail.mockResolvedValue(undefined)
 
-    const result = await sendPasswordResetEmail("user@example.com")
+    const result = await reset("user@example.com")
 
     expect(result).toEqual({ success: true })
     expect(mockGenerateLink).toHaveBeenCalledWith(
@@ -100,10 +128,48 @@ describe("sendPasswordResetEmail", () => {
   })
 
   it("returns success for an invalid email without calling Supabase", async () => {
-    const result = await sendPasswordResetEmail("not-an-email")
+    const result = await reset("not-an-email")
     expect(result).toEqual({ success: true })
     expect(mockGenerateLink).not.toHaveBeenCalled()
     expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it("sends nothing and creates no token for an address with no account", async () => {
+    mockFindUser.mockResolvedValue(null)
+
+    const result = await reset("ghost@example.com")
+
+    expect(result).toEqual({ success: true })
+    expect(mockFindUser).toHaveBeenCalledWith("ghost@example.com")
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it("answers before any account lookup", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: "token-abc" } },
+      error: null,
+    })
+    const result = await sendPasswordResetEmail("user@example.com", "token")
+
+    expect(result).toEqual({ success: true })
+    expect(afterCallbacks).toHaveLength(1)
+    expect(mockFindUser).not.toHaveBeenCalled()
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    await runAfter()
+    expect(mockSendEmail).toHaveBeenCalledOnce()
+  })
+
+  it("sends nothing and creates no token when the account lookup fails", async () => {
+    mockFindUser.mockRejectedValue(new Error("lookup failed"))
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    const result = await reset("user@example.com")
+
+    expect(result).toEqual({ success: true })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    consoleError.mockRestore()
   })
 
   it("returns success when Supabase generateLink errors (no enumeration leak)", async () => {
@@ -112,7 +178,7 @@ describe("sendPasswordResetEmail", () => {
       error: { message: "User not found" },
     })
 
-    const result = await sendPasswordResetEmail("ghost@example.com")
+    const result = await reset("ghost@example.com")
 
     expect(result).toEqual({ success: true })
     expect(mockSendEmail).not.toHaveBeenCalled()
@@ -124,7 +190,7 @@ describe("sendPasswordResetEmail", () => {
       error: null,
     })
 
-    const result = await sendPasswordResetEmail("user@example.com")
+    const result = await reset("user@example.com")
 
     expect(result).toEqual({ success: true })
     expect(mockSendEmail).not.toHaveBeenCalled()
@@ -137,7 +203,7 @@ describe("sendPasswordResetEmail", () => {
     })
     mockSendEmail.mockRejectedValue(new Error("SMTP down"))
 
-    const result = await sendPasswordResetEmail("user@example.com")
+    const result = await reset("user@example.com")
 
     expect(result).toEqual({ success: true })
   })
@@ -147,7 +213,7 @@ describe("sendPasswordResetEmail", () => {
       throw new Error("boom")
     })
 
-    const result = await sendPasswordResetEmail("user@example.com")
+    const result = await reset("user@example.com")
 
     expect(result).toEqual({ success: true })
   })
@@ -159,7 +225,7 @@ describe("sendPasswordResetEmail", () => {
     })
     mockSendEmail.mockResolvedValue(undefined)
 
-    await sendPasswordResetEmail("user@example.com")
+    await reset("user@example.com")
 
     const call = mockSendEmail.mock.calls[0][0] as {
       to: string
@@ -176,17 +242,16 @@ describe("sendPasswordResetEmail", () => {
   ])(
     "returns success without sending a link to %s",
     async (_label, app_metadata) => {
+      mockFindUser.mockResolvedValue({ ...account, app_metadata })
       mockGenerateLink.mockResolvedValue({
-        data: {
-          user: { id: "user-1", app_metadata },
-          properties: { hashed_token: "token-abc" },
-        },
+        data: { properties: { hashed_token: "token-abc" } },
         error: null,
       })
 
-      const result = await sendPasswordResetEmail("user@example.com")
+      const result = await reset("user@example.com")
 
       expect(result).toEqual({ success: true })
+      expect(mockGenerateLink).not.toHaveBeenCalled()
       expect(mockSendEmail).not.toHaveBeenCalled()
     },
   )
@@ -201,7 +266,7 @@ describe("sendPasswordResetEmail", () => {
     })
     mockSendEmail.mockResolvedValue(undefined)
 
-    await sendPasswordResetEmail("user@example.com")
+    await reset("user@example.com")
 
     expect(mockSendEmail).toHaveBeenCalledOnce()
   })
@@ -213,7 +278,7 @@ describe("sendPasswordResetEmail", () => {
       reason: "low_score",
     })
 
-    const result = await sendPasswordResetEmail("user@example.com", "token")
+    const result = await reset("user@example.com", "token")
 
     expect(result).toEqual({
       success: false,
@@ -232,7 +297,7 @@ describe("sendPasswordResetEmail", () => {
       providerOutcome: "unavailable",
     })
 
-    const result = await sendPasswordResetEmail("user@example.com", "token")
+    const result = await reset("user@example.com", "token")
 
     expect(result).toEqual({
       success: false,
@@ -253,7 +318,7 @@ describe("sendPasswordResetEmail", () => {
       error: null,
     })
 
-    const result = await sendPasswordResetEmail("user@example.com")
+    const result = await reset("user@example.com")
 
     expect(result).toEqual({ success: true })
     expect(mockSendEmail).toHaveBeenCalledOnce()
@@ -263,7 +328,7 @@ describe("sendPasswordResetEmail", () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7, 10.0.0.1" }
     mockConsumeAuthRateLimit.mockResolvedValueOnce(false)
 
-    const result = await sendPasswordResetEmail("user@example.com", "token")
+    const result = await reset("user@example.com", "token")
 
     expect(result).toEqual({
       success: false,
@@ -296,9 +361,7 @@ describe("sendPasswordResetEmail", () => {
         "x-real-ip": "203.0.113.7",
         "x-forwarded-for": "203.0.113.7",
       }
-      results.push(
-        await sendPasswordResetEmail(`user${i}@example.com`, "token"),
-      )
+      results.push(await reset(`user${i}@example.com`, "token"))
     }
 
     expect(results.slice(0, 10)).toEqual(Array(10).fill({ success: true }))
@@ -313,16 +376,20 @@ describe("sendPasswordResetEmail", () => {
   it("skips the IP limit when no client IP is known", async () => {
     mockGenerateLink.mockResolvedValue({ data: null, error: null })
 
-    await sendPasswordResetEmail("User@Example.com", "token")
+    await reset("User@Example.com", "token")
 
     expect(mockConsumeAuthRateLimit.mock.calls).toEqual([
+      [
+        expect.objectContaining({ bucket: "password_reset_email" }),
+        "user@example.com",
+      ],
       [
         expect.objectContaining({ bucket: "recovery_email_cooldown" }),
         "user@example.com",
       ],
       [
-        expect.objectContaining({ bucket: "password_reset_email" }),
-        "user@example.com",
+        expect.objectContaining({ bucket: "recovery_email_project" }),
+        "project",
       ],
     ])
   })
@@ -331,15 +398,19 @@ describe("sendPasswordResetEmail", () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7" }
     mockConsumeAuthRateLimit
       .mockResolvedValueOnce(true)
-      .mockResolvedValueOnce(true)
       .mockResolvedValueOnce(false)
 
-    const result = await sendPasswordResetEmail("User@Example.com", "token")
+    const result = await reset("User@Example.com", "token")
 
     expect(result).toEqual({ success: true })
     expect(mockConsumeAuthRateLimit).toHaveBeenLastCalledWith(
       expect.objectContaining({ bucket: "password_reset_email" }),
       "user@example.com",
+    )
+    // A refused reset does not start the cooldown shared with sign-in links.
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+      expect.objectContaining({ bucket: "recovery_email_cooldown" }),
+      expect.anything(),
     )
     expect(mockGenerateLink).not.toHaveBeenCalled()
     expect(mockSendEmail).not.toHaveBeenCalled()
@@ -348,7 +419,7 @@ describe("sendPasswordResetEmail", () => {
   it("does not spend rate-limit budget on an invalid email", async () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7" }
 
-    const result = await sendPasswordResetEmail("not-an-email", "token")
+    const result = await reset("not-an-email", "token")
 
     expect(result).toEqual({ success: true })
     expect(mockConsumeAuthRateLimit).not.toHaveBeenCalled()
@@ -361,7 +432,7 @@ describe("sendPasswordResetEmail", () => {
         limit.bucket !== "recovery_email_cooldown",
     )
 
-    const result = await sendPasswordResetEmail("User@Example.com", "token")
+    const result = await reset("User@Example.com", "token")
 
     expect(result).toEqual({ success: true })
     expect(mockConsumeAuthRateLimit).toHaveBeenLastCalledWith(
@@ -378,12 +449,9 @@ describe("sendPasswordResetEmail", () => {
   })
 
   it("takes from the hourly email budget only for an address with an account", async () => {
-    mockGenerateLink.mockResolvedValue({
-      data: null,
-      error: { message: "User not found" },
-    })
+    mockFindUser.mockResolvedValue(null)
 
-    await sendPasswordResetEmail("ghost@example.com", "token")
+    await reset("ghost@example.com", "token")
 
     expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
       expect.objectContaining({ bucket: "recovery_email_project" }),
@@ -404,10 +472,12 @@ describe("sendPasswordResetEmail", () => {
       })
       vi.spyOn(console, "error").mockImplementation(() => {})
 
-      const pending = sendPasswordResetEmail("user@example.com", "token")
+      const pending = reset("user@example.com", "token")
       await vi.runAllTimersAsync()
 
       expect(await pending).toEqual({ success: true })
+      // No new token, so a link the address already has keeps working.
+      expect(mockGenerateLink).not.toHaveBeenCalled()
       expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
         expect.objectContaining({
           bucket: "recovery_email_project",
