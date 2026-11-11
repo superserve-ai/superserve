@@ -421,7 +421,7 @@ describe("auth callback", () => {
         invite,
       })
       const response = await GET(
-        new Request(`https://console.example.com/auth/callback?${params}`),
+        new Request(`https://console.superserve.ai/auth/callback?${params}`),
       )
       const location = new URL(response.headers.get("location")!)
       expect(location.pathname).toBe("/auth/reset-password")
