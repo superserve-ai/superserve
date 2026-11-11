@@ -109,6 +109,8 @@ export function ConnectSandboxDialog({
   const { data: existingKeys } = useApiKeys()
   const [copiedKey, setCopiedKey] = useState(false)
 
+  const { isPending: isLoadingKeys } = useApiKeys()
+
   // Check if user has a non-dashboard API key
   const userKey = existingKeys?.find((k) => !k.name.startsWith("__console_"))
   const newlyCreatedKey = createKeyMutation.data?.key ?? ""
@@ -205,7 +207,7 @@ export function ConnectSandboxDialog({
               <Button
                 onClick={handleCreateKey}
                 size="sm"
-                disabled={createKeyMutation.isPending}
+                disabled={isLoadingKeys || createKeyMutation.isPending}
               >
                 <PlusIcon className="size-3.5" weight="light" />
                 {createKeyMutation.isPending ? "Creating..." : "Create API key"}

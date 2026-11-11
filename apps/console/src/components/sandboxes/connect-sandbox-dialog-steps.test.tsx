@@ -6,7 +6,10 @@ import { beforeEach, expect, it, vi } from "vitest"
 import { ConnectSandboxDialog } from "./connect-sandbox-dialog"
 
 const { keyState, mutation, push } = vi.hoisted(() => ({
-  keyState: { data: [] as { name: string }[] | undefined },
+  keyState: {
+    data: [] as { name: string }[] | undefined,
+    isPending: false,
+  },
   mutation: {
     data: undefined as { key: string } | undefined,
     isPending: false,
@@ -27,6 +30,7 @@ vi.mock("next/navigation", () => ({
 beforeEach(() => {
   vi.clearAllMocks()
   keyState.data = []
+  keyState.isPending = false
   mutation.data = undefined
   mutation.isPending = false
 })
@@ -68,6 +72,29 @@ it("prioritizes creating a key and hides the run snippet until a key exists", as
   expect(createButton).toHaveClass("bg-primary")
   await user.click(createButton)
   expect(mutation.mutate).toHaveBeenCalledExactlyOnceWith("SDK Key")
+})
+
+it("disables the create button while loading keys without changing the steps", async () => {
+  const user = userEvent.setup()
+  keyState.data = undefined
+  keyState.isPending = true
+  renderDialog()
+
+  expect(screen.getByText("1. Create an API key")).toBeInTheDocument()
+  expect(screen.getByText("2. Install the SDK")).toBeInTheDocument()
+  expect(screen.getByText("3. Run this code")).toBeInTheDocument()
+  const createButton = screen.getByRole("button", { name: "Create API key" })
+  expect(createButton).toBeDisabled()
+  await user.click(createButton)
+  expect(mutation.mutate).not.toHaveBeenCalled()
+})
+
+it("enables the create button when loading keys fails without data", () => {
+  keyState.data = undefined
+  keyState.isPending = false
+  renderDialog()
+
+  expect(screen.getByRole("button", { name: "Create API key" })).toBeEnabled()
 })
 
 it("disables the create button while creating a key", () => {
