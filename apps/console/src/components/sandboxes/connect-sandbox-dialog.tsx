@@ -237,7 +237,7 @@ export function ConnectSandboxDialog({
                   type="button"
                   onClick={handleCopyKey}
                   aria-label={copiedKey ? "Copied" : "Copy API key"}
-                  className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground"
+                  className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                 >
                   {copiedKey ? (
                     <CheckIcon className="size-4 text-success" weight="light" />
@@ -279,7 +279,7 @@ export function ConnectSandboxDialog({
                 Use one of your API keys. Manage keys on the{" "}
                 <Link
                   href="/api-keys/"
-                  className="text-foreground underline underline-offset-4"
+                  className="text-foreground underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                 >
                   API keys page
                 </Link>

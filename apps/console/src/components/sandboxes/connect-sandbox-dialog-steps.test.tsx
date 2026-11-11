@@ -177,6 +177,11 @@ it("focuses the copy-key button after creating an API key", async () => {
       screen.getByRole("button", { name: "Copy API key" }),
     )
   })
+  expect(screen.getByRole("button", { name: "Copy API key" })).toHaveClass(
+    "focus-visible:outline-none",
+    "focus-visible:ring-2",
+    "focus-visible:ring-border-focus",
+  )
 })
 
 it("shows two steps and the run snippet when the team already has a key", () => {
@@ -198,6 +203,11 @@ it("shows two steps and the run snippet when the team already has a key", () => 
   expect(screen.getByRole("link", { name: "API keys page" })).toHaveAttribute(
     "href",
     "/api-keys/",
+  )
+  expect(screen.getByRole("link", { name: "API keys page" })).toHaveClass(
+    "focus-visible:outline-none",
+    "focus-visible:ring-2",
+    "focus-visible:ring-border-focus",
   )
   expect(screen.getByRole("button", { name: "Done" })).toHaveClass("bg-primary")
 })
