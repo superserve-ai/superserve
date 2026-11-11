@@ -1,0 +1,237 @@
+---
+title: "Run a headless browser in a sandbox"
+sidebarTitle: Headless browser
+description: Run Playwright and Chromium in a sandbox to scrape pages, take screenshots, and test web apps, and drive the browser from your own code over a preview URL.
+icon: "globe"
+---
+
+Agents and tests often need a real browser: to read a page that needs JavaScript, fill in a form, take a screenshot, or test a web app. Run that browser in a sandbox instead of on your server. This guide builds a template with [Playwright](https://playwright.dev) and Chromium, then shows two ways to use it: run a browser script in the sandbox, or connect to the browser from your own code.
+
+For a full desktop with a visible browser window that a model controls with the mouse and keyboard, see [Computer use agents](/sandbox/desktop).
+
+## Why use a sandbox
+
+- **Isolation:** pages that the browser opens, and files that they download, stay in the sandbox's microVM, away from your servers and their credentials.
+- **No browser on your servers:** Chromium and its system libraries live in the template, so your app needs only the SDK and, to connect, the Playwright client.
+- **Parallel sessions:** start one sandbox per browser session, each with its own cookies, storage, and IP traffic.
+- **Network control:** a [network rule](/sandbox/networking) can limit which sites the browser can reach.
+
+## How it works
+
+<Steps>
+  <Step title="Build a browser template">
+    Install Playwright and Chromium once, in a [template](/templates/overview).
+  </Step>
+  <Step title="Create a sandbox from it">
+    Each sandbox starts with the browser installed.
+  </Step>
+  <Step title="Run the browser">
+    Run a Playwright script in the sandbox, or start a Playwright server there and connect to it from your code through a [preview URL](/sandbox/preview-urls).
+  </Step>
+  <Step title="Read the results and delete the sandbox">
+    Read screenshots and other files with `files.read`, then delete the sandbox.
+  </Step>
+</Steps>
+
+## 1. Build a browser template
+
+`playwright install --with-deps` installs Chromium and the system libraries that it needs. `--only-shell` installs only the headless build, which is smaller. You build the template once and reuse it.
+
+<CodeGroup>
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "browser",
+  from: "python:3.12-slim",
+  vcpu: 2,
+  memoryMib: 4096,
+  diskMib: 8192,
+  steps: [
+    { env: { key: "PLAYWRIGHT_BROWSERS_PATH", value: "/opt/ms-playwright" } },
+    { run: "apt-get update && apt-get install -y libatomic1" },
+    { run: "pip install playwright==1.65.0" },
+    { run: "python -m playwright install --with-deps --only-shell chromium" },
+  ],
+})
+
+await template.waitUntilReady()
+```
+
+```python Python
+from superserve import EnvStep, EnvStepValue, RunStep, Template
+
+template = Template.create(
+    name="browser",
+    from_="python:3.12-slim",
+    vcpu=2,
+    memory_mib=4096,
+    disk_mib=8192,
+    steps=[
+        EnvStep(env=EnvStepValue(key="PLAYWRIGHT_BROWSERS_PATH", value="/opt/ms-playwright")),
+        RunStep(run="apt-get update && apt-get install -y libatomic1"),
+        RunStep(run="pip install playwright==1.65.0"),
+        RunStep(run="python -m playwright install --with-deps --only-shell chromium"),
+    ],
+)
+
+template.wait_until_ready()
+```
+</CodeGroup>
+
+- `PLAYWRIGHT_BROWSERS_PATH` puts Chromium in a fixed directory. Build steps run as root with a different home directory than sandbox commands, so the default cache path in the home directory doesn't work.
+- The Node.js runtime inside the Playwright package needs `libatomic1`, which slim images don't include.
+
+## 2. Run a browser script in the sandbox
+
+Send a Playwright script in with `files.write` and run it. The script prints the page title as JSON and saves a screenshot, which you read back with `files.read`.
+
+<CodeGroup>
+```typescript TypeScript
+import { writeFile } from "node:fs/promises"
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "browser", fromTemplate: "browser" })
+
+const script = `
+import json
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    page.goto("https://example.com")
+    page.screenshot(path="/tmp/page.png", full_page=True)
+    print(json.dumps({"title": page.title()}))
+    browser.close()
+`
+
+await sandbox.files.write("/tmp/browse.py", script)
+const run = await sandbox.commands.run("python /tmp/browse.py", { timeoutMs: 60_000 })
+console.log(JSON.parse(run.stdout)) // { title: 'Example Domain' }
+
+await writeFile("page.png", await sandbox.files.read("/tmp/page.png"))
+```
+
+```python Python
+import json
+
+from superserve import Sandbox
+
+sandbox = Sandbox.create(name="browser", from_template="browser")
+
+script = """
+import json
+from playwright.sync_api import sync_playwright
+
+with sync_playwright() as p:
+    browser = p.chromium.launch()
+    page = browser.new_page(viewport={"width": 1280, "height": 800})
+    page.goto("https://example.com")
+    page.screenshot(path="/tmp/page.png", full_page=True)
+    print(json.dumps({"title": page.title()}))
+    browser.close()
+"""
+
+sandbox.files.write("/tmp/browse.py", script)
+run = sandbox.commands.run("python /tmp/browse.py", timeout_seconds=60)
+print(json.loads(run.stdout))  # {'title': 'Example Domain'}
+
+with open("page.png", "wb") as f:
+    f.write(sandbox.files.read("/tmp/page.png"))
+```
+</CodeGroup>
+
+Give a `timeout` to every `commands.run` that opens pages. Without one, `commands.run` stops a command after 30 seconds. See [Timeouts](/commands/overview#timeouts).
+
+## 3. Drive the browser from your code
+
+To control the browser step by step from your app, for example from an agent's tools, start a Playwright server in the sandbox and connect to it over a private [preview URL](/sandbox/preview-urls). Your code then uses the normal Playwright API, and the browser runs in the sandbox.
+
+Install the Playwright client in your app with the same version as the template: `npm install playwright@1.65.0` or `pip install playwright==1.65.0`. The client doesn't need its own browsers.
+
+<CodeGroup>
+```typescript TypeScript
+import { chromium } from "playwright"
+
+await sandbox.commands.run(
+  "nohup python -m playwright run-server --port 3000 --host 0.0.0.0 > /tmp/pw.log 2>&1 &",
+)
+await sandbox.commands.run(
+  "timeout 30 sh -c 'until grep -q Listening /tmp/pw.log; do sleep 0.5; done'",
+  { timeoutMs: 40_000 },
+)
+await sandbox.publishPreviewPort(3000, { access: "private" })
+const credential = await sandbox.getPreviewToken(3000)
+
+const browser = await chromium.connect(
+  sandbox.getPreviewUrl(3000).replace("https://", "wss://"),
+  { headers: { [credential.header]: credential.token } },
+)
+const page = await browser.newPage()
+await page.goto("https://example.com")
+console.log(await page.title()) // Example Domain
+await browser.close()
+```
+
+```python Python
+from playwright.sync_api import sync_playwright
+
+sandbox.commands.run(
+    "nohup python -m playwright run-server --port 3000 --host 0.0.0.0 > /tmp/pw.log 2>&1 &"
+)
+sandbox.commands.run(
+    "timeout 30 sh -c 'until grep -q Listening /tmp/pw.log; do sleep 0.5; done'",
+    timeout_seconds=40,
+)
+sandbox.publish_preview_port(3000, access="private")
+credential = sandbox.get_preview_token(3000)
+
+with sync_playwright() as p:
+    browser = p.chromium.connect(
+        sandbox.get_preview_url(3000).replace("https://", "wss://"),
+        headers={credential.header: credential.token},
+    )
+    page = browser.new_page()
+    page.goto("https://example.com")
+    print(page.title())  # Example Domain
+    browser.close()
+```
+</CodeGroup>
+
+- Keep the port private. Anyone who can open a public Playwright server port can control the browser.
+- The client and the server must have the same Playwright version, or `connect` fails.
+- `page.goto` runs in the sandbox, so the page loads from the sandbox's network, and [network rules](/sandbox/networking) apply to it.
+
+## Clean up
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+## Integrations
+
+To let a model control a full desktop browser with the mouse and keyboard, see [Claude computer use](/integrations/computer-use/claude) and [OpenAI computer use](/integrations/computer-use/openai).
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Computer use agents" icon="desktop" href="/sandbox/desktop">
+    A full desktop with a browser that a model drives.
+  </Card>
+  <Card title="Preview URLs" icon="link" href="/sandbox/preview-urls">
+    Publish ports with public or private access.
+  </Card>
+  <Card title="Templates" icon="layer-group" href="/templates/overview">
+    Bake tools into a reusable environment.
+  </Card>
+  <Card title="Code interpreter" icon="code" href="/guides/code-interpreter">
+    Run model-generated code and read the output back.
+  </Card>
+</CardGroup>

@@ -1,7 +1,8 @@
 ---
 title: "Give an agent a desktop with computer use"
-sidebarTitle: Give an agent a desktop
+sidebarTitle: Computer use agents
 description: Let an agent see and drive a GUI desktop inside a sandbox, with screenshots, mouse and keyboard actions, and a live browser viewer.
+icon: "desktop"
 ---
 
 A computer-use agent works a desktop the way a person does: it looks at the
@@ -17,7 +18,7 @@ with `commands` and `files`.
 ## Create a desktop sandbox
 
 The sandbox must come from a desktop-enabled template. `superserve/desktop`
-ships the xfce desktop, Chrome, and a browser-based viewer, and runs the
+includes the xfce desktop, Chrome, and a browser-based viewer, and runs the
 session as the non-root `desktop` user (also the default user for
 `commands.run`). The display starts at 1280x800.
 
@@ -285,8 +286,13 @@ action per call (`screenshot`, `left_click`, `type`, `key`, `scroll`,
 Input actions return a fresh screenshot of the result by default. See
 [MCP Sandboxes](/integrations/mcp#computer-use).
 
+## Integrations
+
+To connect a model's computer-use tool to this desktop, see [Claude computer use](/integrations/computer-use/claude) and [OpenAI computer use](/integrations/computer-use/openai).
+
 ## Related
 
+- [Headless browser](/guides/headless-browser) — run a browser without a desktop
 - [SDK reference: Sandbox](/sdk-reference/sandbox#desktop-methods)
 - [Preview URLs](/sandbox/preview-urls) — access policy for the viewer port
 - [Templates](/templates/overview) — the `superserve/desktop` template
