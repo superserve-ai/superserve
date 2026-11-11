@@ -334,6 +334,11 @@
                   "integrations/reinforcement-learning/trl",
                   "integrations/evaluations/openenv"
                 ]
+              },
+              {
+                "group": "Developer tools",
+                "expanded": true,
+                "pages": ["integrations/dev-tools/crabbox"]
               }
             ]
           }
