@@ -258,12 +258,12 @@
           {
             "group": "Use cases",
             "pages": [
-              "sandbox/desktop",
               "guides/run-ci-jobs",
+              "guides/code-interpreter",
+              "guides/coding-agents",
+              "sandbox/desktop",
               "sandbox/docker",
               "guides/evals-and-rl",
-              "guides/coding-agents",
-              "guides/code-interpreter",
               "guides/headless-browser"
             ]
           },
@@ -331,8 +331,8 @@
                 "expanded": true,
                 "pages": [
                   "integrations/evaluations/harbor",
-                  "integrations/evaluations/openenv",
-                  "integrations/reinforcement-learning/trl"
+                  "integrations/reinforcement-learning/trl",
+                  "integrations/evaluations/openenv"
                 ]
               }
             ]
