@@ -62,12 +62,51 @@ describe("findAuthUserByEmail", () => {
     expect(user?.id).toBe("c")
   })
 
+  // The real user JSON has no is_sso_user field, only the identities.
   it("skips an SSO account with the same address", async () => {
     mockFetch.mockResolvedValue(
-      page([{ id: "sso", email: "user@example.com", is_sso_user: true }]),
+      page([
+        {
+          id: "sso",
+          email: "user@example.com",
+          app_metadata: { provider: "sso:provider-1" },
+          identities: [{ provider: "sso:provider-1" }],
+        },
+        {
+          id: "password",
+          email: "user@example.com",
+          app_metadata: { provider: "email" },
+          identities: [{ provider: "email" }],
+        },
+      ]),
     )
 
-    await expect(findAuthUserByEmail("user@example.com")).resolves.toBeNull()
+    const user = await findAuthUserByEmail("user@example.com")
+
+    expect(user?.id).toBe("password")
+  })
+
+  it("throws when two non-SSO accounts share the address", async () => {
+    mockFetch.mockResolvedValue(
+      page([
+        { id: "a", email: "user@example.com" },
+        { id: "b", email: "User@example.com" },
+      ]),
+    )
+
+    await expect(findAuthUserByEmail("user@example.com")).rejects.toThrow(
+      "more than one",
+    )
+  })
+
+  it("escapes LIKE wildcards so they match only themselves", async () => {
+    mockFetch.mockResolvedValue(page([]))
+
+    await findAuthUserByEmail("first_last%x@example.com")
+
+    expect(new URL(mockFetch.mock.calls[0][0]).searchParams.get("filter")).toBe(
+      "first\\_last\\%x@example.com",
+    )
   })
 
   it("returns null when no account matches", async () => {
@@ -79,7 +118,7 @@ describe("findAuthUserByEmail", () => {
 
   it("reads the next page when a full page has no exact match", async () => {
     mockFetch
-      .mockResolvedValueOnce(page(filler(50)))
+      .mockResolvedValueOnce(page(filler(100)))
       .mockResolvedValueOnce(page([{ id: "u", email: "user@example.com" }]))
 
     const user = await findAuthUserByEmail("user@example.com")
@@ -99,12 +138,12 @@ describe("findAuthUserByEmail", () => {
   })
 
   it("throws when too many accounts partly match", async () => {
-    mockFetch.mockImplementation(async () => page(filler(50)))
+    mockFetch.mockImplementation(async () => page(filler(100)))
 
     await expect(findAuthUserByEmail("user@example.com")).rejects.toThrow(
       "too many",
     )
-    expect(mockFetch).toHaveBeenCalledTimes(5)
+    expect(mockFetch).toHaveBeenCalledTimes(10)
   })
 
   it("throws when the Supabase settings are missing", async () => {
