@@ -39,6 +39,7 @@ const RESERVATION_FAILURE_REASONS: Record<
   string
 > = {
   ip_limit: "ip_hourly_limit",
+  address_limit: "address_limit",
   cooldown: "cooldown",
   account_limit: "account_hourly_limit",
   budget_used_up: "email_budget",

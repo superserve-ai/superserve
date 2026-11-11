@@ -103,6 +103,7 @@ export function recoveryClientNetworkKey(ip: string): string {
 export type RecoveryEmailReservation =
   | "reserved"
   | "ip_limit"
+  | "address_limit"
   | "cooldown"
   | "account_limit"
   | "budget_used_up"
@@ -122,8 +123,10 @@ async function reportBudgetUsedUp(max: number) {
 
 /**
  * Takes one email from, in order: the hourly limit for this client network,
- * the one-minute cooldown for this address, the hourly limit for this
- * account, and the project-wide budget. Call it after the account lookup and
+ * the caller's own `addressLimit` (if any), the one-minute cooldown for this
+ * address, the hourly limit for this account, and the project-wide budget.
+ * Every limit tied to the target address runs after the network limit, so a
+ * caller who used up its own limit cannot use up another address's. Call it after the account lookup and
  * eligibility checks, so requests for addresses with no eligible account do
  * not count. Call it before generateLink, so a refused email does not
  * replace the token in an email already sent.
@@ -132,10 +135,12 @@ export async function reserveRecoveryEmail({
   userId,
   email,
   clientIp,
+  addressLimit,
 }: {
   userId: string
   email: string
   clientIp: string | undefined
+  addressLimit?: AuthRateLimit
 }): Promise<RecoveryEmailReservation> {
   if (
     clientIp &&
@@ -146,8 +151,14 @@ export async function reserveRecoveryEmail({
   ) {
     return "ip_limit"
   }
-  // After the network limit, so a caller who used up its own limit cannot
-  // keep restarting another address's cooldown and block its emails.
+  if (
+    addressLimit &&
+    !(await consumeAuthRateLimit(addressLimit, email.toLowerCase()))
+  ) {
+    return "address_limit"
+  }
+  // After the address limit, so a refused request does not start the
+  // cooldown shared by both actions.
   if (
     !(await consumeAuthRateLimit(RECOVERY_EMAIL_COOLDOWN, email.toLowerCase()))
   ) {
