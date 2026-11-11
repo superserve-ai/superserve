@@ -1,0 +1,243 @@
+---
+title: "Run model-generated code in a sandbox"
+sidebarTitle: Code interpreter
+description: Give a model a code interpreter. Run the Python it writes in a sandbox, then read stdout, errors, and files such as charts back.
+icon: "code"
+---
+
+A code interpreter lets a model answer with code instead of a guess: it writes Python, your app runs it, and the model reads the output. Run that code in a sandbox, not in your app's process. This guide uses the `superserve/code-interpreter` template, which has pandas, numpy, matplotlib, seaborn, plotly, scikit-learn, and openpyxl installed.
+
+## Why use a sandbox
+
+- **Isolation:** each sandbox is its own microVM. Code that deletes files, starts processes, or fills the disk can't touch your app or other users' sandboxes.
+- **No credentials inside:** your API keys stay in your app. Only the code and the files you send go into the sandbox.
+- **Network control:** a [network rule](/sandbox/networking) can block all outbound traffic, so code can't send data out.
+- **Files persist:** one sandbox per conversation keeps uploaded data and results between runs, and you can [pause](/sandbox/lifecycle) it between turns.
+
+## How it works
+
+<Steps>
+  <Step title="Create a sandbox">
+    Create one sandbox per conversation or user, from `superserve/code-interpreter`.
+  </Step>
+  <Step title="Send the model's code">
+    Write the code to a file with `files.write`, then run it with `commands.run` and a timeout.
+  </Step>
+  <Step title="Return the result to the model">
+    Give the model the exit code, stdout, and stderr. Read files that the code wrote, such as charts, with `files.read`.
+  </Step>
+  <Step title="Delete the sandbox">
+    Delete the sandbox when the conversation ends, or let [auto-delete](/sandbox/lifecycle#auto-delete) remove it.
+  </Step>
+</Steps>
+
+## Run code and read the output
+
+This example blocks all outbound traffic and runs one piece of code. Commands in this template run as root in `/home/user`.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "code-interpreter",
+  fromTemplate: "superserve/code-interpreter",
+  network: { denyOut: ["0.0.0.0/0"] },
+})
+
+const code = `
+import pandas as pd
+df = pd.DataFrame({"x": [1, 2, 3, 4], "y": [2, 4, 6, 8]})
+print(df.describe())
+` // the model's code
+
+await sandbox.files.write("/home/user/cell.py", code)
+const result = await sandbox.commands.run("python cell.py", { timeoutMs: 60_000 })
+console.log(result.exitCode, result.stdout, result.stderr)
+```
+
+```python Python
+from superserve import NetworkConfig, Sandbox
+
+sandbox = Sandbox.create(
+    name="code-interpreter",
+    from_template="superserve/code-interpreter",
+    network=NetworkConfig(deny_out=["0.0.0.0/0"]),
+)
+
+code = """
+import pandas as pd
+df = pd.DataFrame({"x": [1, 2, 3, 4], "y": [2, 4, 6, 8]})
+print(df.describe())
+"""  # the model's code
+
+sandbox.files.write("/home/user/cell.py", code)
+result = sandbox.commands.run("python cell.py", timeout_seconds=60)
+print(result.exit_code, result.stdout, result.stderr)
+```
+</CodeGroup>
+
+- Write the code to a file instead of passing it to `python -c`. A file needs no shell quoting, and it has no limit on the length of one command argument.
+- An exception in the code gives a non-zero exit code and a traceback in `stderr`. Return both to the model, so it can fix the code and try again.
+- A run that takes longer than the timeout stops with exit code `124`. Without a timeout, `commands.run` stops a command after 30 seconds. See [Timeouts](/commands/overview#timeouts).
+
+## Give the model a tool
+
+Most model APIs take tools as a name, a description, and a JSON schema. Wrap the steps above in one function, and call it when the model asks for the tool:
+
+<CodeGroup>
+```typescript TypeScript
+const runPythonTool = {
+  name: "run_python",
+  description: "Run Python code in a sandbox. Returns the exit code, stdout, and stderr.",
+  input_schema: {
+    type: "object",
+    properties: { code: { type: "string" } },
+    required: ["code"],
+  },
+}
+
+async function runPython(code: string) {
+  await sandbox.files.write("/home/user/cell.py", code)
+  const r = await sandbox.commands.run("python cell.py", { timeoutMs: 60_000 })
+  return {
+    exit_code: r.exitCode,
+    stdout: r.stdout.slice(-10_000), // keep the model's context small
+    stderr: r.stderr.slice(-10_000),
+  }
+}
+```
+
+```python Python
+run_python_tool = {
+    "name": "run_python",
+    "description": "Run Python code in a sandbox. Returns the exit code, stdout, and stderr.",
+    "input_schema": {
+        "type": "object",
+        "properties": {"code": {"type": "string"}},
+        "required": ["code"],
+    },
+}
+
+
+def run_python(code: str) -> dict:
+    sandbox.files.write("/home/user/cell.py", code)
+    r = sandbox.commands.run("python cell.py", timeout_seconds=60)
+    return {
+        "exit_code": r.exit_code,
+        "stdout": r.stdout[-10_000:],  # keep the model's context small
+        "stderr": r.stderr[-10_000:],
+    }
+```
+</CodeGroup>
+
+Each run starts a new Python process, so variables don't carry over to the next run. Files do. Tell the model to save data that it needs later to disk, for example with `df.to_csv("clean.csv")`.
+
+## Upload data and get a chart back
+
+Send the user's file in with `files.write`. Code that saves an image with matplotlib writes it to the sandbox's disk, and `files.read` returns the bytes.
+
+<CodeGroup>
+```typescript TypeScript
+import { writeFile } from "node:fs/promises"
+
+await sandbox.files.write(
+  "/home/user/sales.csv",
+  "month,revenue\nJan,120\nFeb,150\nMar,90\nApr,180\n",
+)
+
+await sandbox.files.write(
+  "/home/user/cell.py",
+  `
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv("sales.csv")
+df.plot(x="month", y="revenue", kind="bar", legend=False)
+plt.ylabel("Revenue")
+plt.savefig("chart.png", dpi=150)
+print(df["revenue"].sum())
+`,
+)
+const run = await sandbox.commands.run("python cell.py", { timeoutMs: 60_000 })
+console.log(run.stdout) // 540
+
+const png = await sandbox.files.read("/home/user/chart.png")
+await writeFile("chart.png", png)
+```
+
+```python Python
+sandbox.files.write(
+    "/home/user/sales.csv",
+    "month,revenue\nJan,120\nFeb,150\nMar,90\nApr,180\n",
+)
+
+sandbox.files.write(
+    "/home/user/cell.py",
+    """
+import pandas as pd
+import matplotlib.pyplot as plt
+
+df = pd.read_csv("sales.csv")
+df.plot(x="month", y="revenue", kind="bar", legend=False)
+plt.ylabel("Revenue")
+plt.savefig("chart.png", dpi=150)
+print(df["revenue"].sum())
+""",
+)
+run = sandbox.commands.run("python cell.py", timeout_seconds=60)
+print(run.stdout)  # 540
+
+png = sandbox.files.read("/home/user/chart.png")
+with open("chart.png", "wb") as f:
+    f.write(png)
+```
+</CodeGroup>
+
+To send the image to a model, base64-encode the bytes and attach them as an image in the next message. To find the files that a run made, run `ls -t /home/user` or ask the model to print the paths.
+
+## Clean up
+
+Delete the sandbox when the conversation ends:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+If your app can stop before it deletes the sandbox, set `idleTimeoutSeconds` / `idle_timeout_seconds` and `autoDeleteSeconds` / `auto_delete_seconds` on create. The sandbox then pauses when it has no activity and is deleted after it stays paused. See [Lifecycle](/sandbox/lifecycle).
+
+## Related tools
+
+Agent frameworks that call a Superserve sandbox as a tool:
+
+<CardGroup cols={3}>
+  <Card title="OpenAI Agents SDK" icon="/logos/integrations/openai-agents-sdk.svg" href="/integrations/agent-harnesses/openai-agents-sdk" />
+  <Card title="LangChain" icon="/logos/integrations/langchain.png" href="/integrations/agent-harnesses/langchain" />
+  <Card title="Vercel AI SDK" icon="/logos/integrations/vercel.svg" href="/integrations/agent-harnesses/vercel-ai-sdk" />
+  <Card title="Pydantic AI" icon="/logos/integrations/pydantic-ai.svg" href="/integrations/agent-harnesses/pydantic-ai" />
+  <Card title="Google ADK" icon="/logos/integrations/google-adk.svg" href="/integrations/agent-harnesses/google-adk" />
+  <Card title="All agent frameworks" icon="cubes" href="/integrations/overview#agent-frameworks" />
+</CardGroup>
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Exit codes, working directory, env vars, and timeouts.
+  </Card>
+  <Card title="Read and write files" icon="file" href="/filesystem/read-write">
+    Upload and download files and folders.
+  </Card>
+  <Card title="Network rules" icon="shield" href="/sandbox/networking">
+    Allow or block outbound traffic.
+  </Card>
+  <Card title="Evaluations and RL" icon="flask-vial" href="/guides/evals-and-rl">
+    Run and score model outputs at scale.
+  </Card>
+</CardGroup>

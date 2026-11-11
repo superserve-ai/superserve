@@ -1,6 +1,6 @@
 ---
 title: "Run CI jobs in sandboxes"
-sidebarTitle: Run CI jobs
+sidebarTitle: CI workers
 description: Run each CI job in its own sandbox with the Superserve CLI. Includes a GitHub Actions workflow, sharding and network isolation for untrusted code.
 icon: "gears"
 ---
@@ -8,6 +8,30 @@ icon: "gears"
 A CI job fits a sandbox well: create a sandbox, run the build and tests in it, then delete it. Each job gets a clean microVM, so jobs can't leave files, processes or credentials behind for the next job.
 
 This guide uses the [CLI](/cli). The same steps work from the SDK.
+
+## Why use a sandbox
+
+- **A clean machine for each job:** no cache, file, or process from an earlier job can change the result.
+- **Isolation for untrusted code:** code from a pull request runs in a microVM, away from your runners and their secrets.
+- **Parallel jobs:** start one sandbox per job or per shard, up to your team's active sandbox limit.
+- **Fast starts:** bake dependencies into a [template](/templates/overview), or fork a prepared sandbox from a [snapshot](/sandbox/snapshots).
+
+## How it works
+
+<Steps>
+  <Step title="Create a sandbox">
+    Create it from a template that has your toolchain, with a timeout as a safety net.
+  </Step>
+  <Step title="Send the code in">
+    Clone the repository in the sandbox, or send the runner's checkout in with `tar`.
+  </Step>
+  <Step title="Run the build and tests">
+    `superserve exec` returns the command's exit code, so the CI step fails when a test fails.
+  </Step>
+  <Step title="Delete the sandbox">
+    Delete it when the job ends, also when the job fails.
+  </Step>
+</Steps>
 
 ## One sandbox per job
 
@@ -257,3 +281,20 @@ Keep the GitHub side safe too. Don't run untrusted pull requests with `pull_requ
 - **Sandbox size:** a sandbox gets the vCPU and memory of its template. The Free plan allows up to 2 vCPU and 4 GiB per sandbox. See [resource limits](/templates/build-spec#resource-limits).
 - **Daily allowance:** on the Free plan, running sandboxes pause when the team uses its daily compute allowance, and `create` fails with [`free_allowance_exhausted`](/errors#billing-errors-402).
 - **Exit codes:** the CLI's own errors use [exit codes](/cli#exit-codes) such as `4` for not found and `6` for rate limited. `exec` returns the command's exit code.
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Run Docker" icon="docker" href="/sandbox/docker">
+    Start databases and other services for your tests.
+  </Card>
+  <Card title="Coding agents" icon="terminal" href="/guides/coding-agents">
+    Let an agent change the code, then run the tests.
+  </Card>
+  <Card title="Evals & RL" icon="flask-vial" href="/guides/evals-and-rl">
+    Score many runs in parallel sandboxes.
+  </Card>
+  <Card title="Networking" icon="network-wired" href="/sandbox/networking">
+    Control which hosts a job can reach.
+  </Card>
+</CardGroup>

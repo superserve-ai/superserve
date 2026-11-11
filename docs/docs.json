@@ -256,36 +256,21 @@
         "icon": "puzzle-piece",
         "groups": [
           {
-            "group": "Guides",
+            "group": "Use cases",
             "pages": [
               "integrations/overview",
-              {
-                "group": "Computer Use Agents",
-                "icon": "computer-mouse",
-                "expanded": false,
-                "pages": [
-                  "sandbox/desktop",
-                  "integrations/computer-use/claude",
-                  "integrations/computer-use/openai"
-                ]
-              },
-              {
-                "group": "CI Workers",
-                "icon": "server",
-                "expanded": false,
-                "pages": ["guides/run-ci-jobs"]
-              },
+              "sandbox/desktop",
+              "guides/run-ci-jobs",
               "sandbox/docker",
-              {
-                "group": "Evals & RL",
-                "icon": "flask-vial",
-                "expanded": false,
-                "pages": [
-                  "integrations/evaluations/harbor",
-                  "integrations/evaluations/openenv",
-                  "integrations/reinforcement-learning/trl"
-                ]
-              },
+              "guides/evals-and-rl",
+              "guides/coding-agents",
+              "guides/code-interpreter",
+              "guides/headless-browser"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
               {
                 "group": "Coding Agents",
                 "icon": "terminal",
@@ -335,6 +320,25 @@
                   "integrations/personal-agents/hermes",
                   "integrations/personal-agents/openclaw",
                   "integrations/personal-agents/qm"
+                ]
+              },
+              {
+                "group": "Computer Use Models",
+                "icon": "computer-mouse",
+                "expanded": false,
+                "pages": [
+                  "integrations/computer-use/claude",
+                  "integrations/computer-use/openai"
+                ]
+              },
+              {
+                "group": "Eval & RL Frameworks",
+                "icon": "flask-vial",
+                "expanded": false,
+                "pages": [
+                  "integrations/evaluations/harbor",
+                  "integrations/evaluations/openenv",
+                  "integrations/reinforcement-learning/trl"
                 ]
               }
             ]

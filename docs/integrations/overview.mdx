@@ -1,49 +1,43 @@
 ---
 title: "Guides"
 sidebarTitle: Overview
-description: Guides for running computer use agents, CI jobs, coding agents, agent frameworks, and agent evaluations in persistent, isolated Superserve sandboxes.
+description: Guides for running computer use agents, CI jobs, Docker, evaluations, coding agents, code interpreters, and headless browsers in Superserve sandboxes, and for connecting agent tools and frameworks.
 icon: "grid-2"
 ---
 
-Each guide covers one job or tool, from setup to a first run. Pick a section by what you are doing: giving an agent a desktop, running CI jobs or Docker, evaluating or training agents, or running, building, or hosting an agent. To let an agent start its own sandboxes when a task needs one, connect it through the [MCP Server](/integrations/mcp).
+Start with a use case to learn what a sandbox does for that job and how the parts fit. Then open an integration guide for the setup of one tool. To let an agent start its own sandboxes when a task needs one, connect it through the [MCP Server](/integrations/mcp).
 
-## Computer use agents
+## Use cases
 
-Let a model operate a full desktop in a sandbox with its computer-use tools.
-
-<CardGroup cols={3}>
-  <Card title="Give an agent a desktop" icon="desktop" href="/sandbox/desktop" />
-  <Card title="Claude computer use" icon="/logos/integrations/claude.svg" href="/integrations/computer-use/claude" />
-  <Card title="OpenAI computer use" icon="/logos/integrations/openai-agents-sdk.svg" href="/integrations/computer-use/openai" />
+<CardGroup cols={2}>
+  <Card title="Computer use agents" icon="desktop" href="/sandbox/desktop">
+    Give an agent a desktop that it controls with screenshots, mouse, and keyboard.
+  </Card>
+  <Card title="CI workers" icon="gears" href="/guides/run-ci-jobs">
+    Run each CI job in its own sandbox, with sharding and isolation for untrusted code.
+  </Card>
+  <Card title="Run Docker" icon="docker" href="/sandbox/docker">
+    Build images and run containers and services inside a sandbox.
+  </Card>
+  <Card title="Evals & RL" icon="flask-vial" href="/guides/evals-and-rl">
+    Run each evaluation trial or training rollout in its own sandbox and score it.
+  </Card>
+  <Card title="Coding agents" icon="terminal" href="/guides/coding-agents">
+    Let a coding agent edit and run a repository in a sandbox.
+  </Card>
+  <Card title="Code interpreter" icon="code" href="/guides/code-interpreter">
+    Run code that a model wrote and read the output, files, and charts back.
+  </Card>
+  <Card title="Headless browser" icon="globe" href="/guides/headless-browser">
+    Run Playwright and Chromium to read pages, take screenshots, and test web apps.
+  </Card>
 </CardGroup>
 
-## CI workers
+## Integrations
 
-Run each CI job in its own sandbox, with sharding and network isolation for untrusted code.
+Each guide covers one tool, from setup to a first run.
 
-<CardGroup cols={3}>
-  <Card title="Run CI jobs" icon="gears" href="/guides/run-ci-jobs" />
-</CardGroup>
-
-## Docker
-
-Build images and run containers inside a sandbox started from a template with Docker.
-
-<CardGroup cols={3}>
-  <Card title="Docker" icon="docker" href="/sandbox/docker" />
-</CardGroup>
-
-## Evaluations and reinforcement learning
-
-Run agent evaluations, benchmarks, and training rollouts in parallel, one sandbox per trial, and score model outputs as the reward signal.
-
-<CardGroup cols={3}>
-  <Card title="Harbor" icon="flask" href="/integrations/evaluations/harbor" />
-  <Card title="OpenEnv" icon="dumbbell" href="/integrations/evaluations/openenv" />
-  <Card title="Hugging Face TRL" icon="/logos/integrations/huggingface.svg" href="/integrations/reinforcement-learning/trl" />
-</CardGroup>
-
-## Coding agents
+### Coding agents
 
 Run a terminal coding agent in a sandbox, so its shell commands and file edits stay off your machine.
 
@@ -55,7 +49,7 @@ Run a terminal coding agent in a sandbox, so its shell commands and file edits s
   <Card title="Pi" icon="/logos/integrations/pi.svg" href="/integrations/coding-agents/pi" />
 </CardGroup>
 
-## Managed agents
+### Managed agents
 
 Give a hosted agent platform a Superserve sandbox as its self-hosted environment.
 
@@ -65,7 +59,7 @@ Give a hosted agent platform a Superserve sandbox as its self-hosted environment
   <Card title="Omnara" icon="/logos/integrations/omnara.svg" href="/integrations/managed-agents/omnara" />
 </CardGroup>
 
-## Agent frameworks
+### Agent frameworks
 
 Use a sandbox as the execution runtime for agents you build with an SDK or framework.
 
@@ -84,7 +78,7 @@ Use a sandbox as the execution runtime for agents you build with an SDK or frame
   <Card title="Vercel AI SDK" icon="/logos/integrations/vercel.svg" href="/integrations/agent-harnesses/vercel-ai-sdk" />
 </CardGroup>
 
-## Personal agents
+### Personal agents
 
 Host a long-running personal assistant in its own sandbox.
 
@@ -92,4 +86,23 @@ Host a long-running personal assistant in its own sandbox.
   <Card title="Hermes" icon="/logos/integrations/hermes.svg" href="/integrations/personal-agents/hermes" />
   <Card title="OpenClaw" icon="/logos/integrations/openclaw.svg" href="/integrations/personal-agents/openclaw" />
   <Card title="QM" icon="/logos/integrations/qm.png" href="/integrations/personal-agents/qm" />
+</CardGroup>
+
+### Computer use models
+
+Connect a model's computer-use tool to a sandbox desktop.
+
+<CardGroup cols={3}>
+  <Card title="Claude computer use" icon="/logos/integrations/claude.svg" href="/integrations/computer-use/claude" />
+  <Card title="OpenAI computer use" icon="/logos/integrations/openai-agents-sdk.svg" href="/integrations/computer-use/openai" />
+</CardGroup>
+
+### Eval & RL frameworks
+
+Run agent evaluations, benchmarks, and training rollouts with a framework, one sandbox per trial.
+
+<CardGroup cols={3}>
+  <Card title="Harbor" icon="flask" href="/integrations/evaluations/harbor" />
+  <Card title="OpenEnv" icon="dumbbell" href="/integrations/evaluations/openenv" />
+  <Card title="Hugging Face TRL" icon="/logos/integrations/huggingface.svg" href="/integrations/reinforcement-learning/trl" />
 </CardGroup>

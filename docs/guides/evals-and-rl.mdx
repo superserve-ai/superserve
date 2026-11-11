@@ -1,0 +1,146 @@
+---
+title: "Run agent evaluations and RL rollouts in sandboxes"
+sidebarTitle: Evals & RL
+description: Run each evaluation trial or training rollout in its own sandbox, in parallel, and score the result as a reward.
+icon: "flask-vial"
+---
+
+An evaluation runs an agent or a model on many tasks and scores each result. Reinforcement learning (RL) does the same in a loop and uses the score as the reward. Both run code that a model wrote, many times and at the same time. Give each trial its own sandbox: create it, run the task, score the result, then delete it.
+
+## Why use a sandbox
+
+- **A clean start for each trial:** every sandbox is a new microVM from the same template, so one trial can't leave files or processes behind for the next one.
+- **Isolation for model code:** code that a model wrote can't touch your training machine, its GPUs, or its credentials.
+- **Parallel runs:** start one sandbox per trial and run them at the same time, up to your team's active sandbox limit.
+- **Same setup every time:** bake the task's tools into a [template](/templates/overview), or fork a prepared sandbox from a [snapshot](/sandbox/snapshots).
+
+## How it works
+
+<Steps>
+  <Step title="Prepare the environment">
+    Use a public template such as `superserve/python-3.11`, or build your own template with the task's dependencies.
+  </Step>
+  <Step title="Start one sandbox per trial">
+    Create the sandboxes in parallel. Block outbound traffic with a [network rule](/sandbox/networking) if the task doesn't need it.
+  </Step>
+  <Step title="Run the task and score it">
+    Send the model's output in with `files.write`, run the checks with `commands.run`, and turn the result into a score.
+  </Step>
+  <Step title="Delete the sandbox">
+    Delete each sandbox when its trial ends, also when the trial fails.
+  </Step>
+</Steps>
+
+## Score model outputs in parallel
+
+This example scores two candidate programs for the same task, each in its own sandbox. The check prints the function's result, and the expected value stays in your code, outside the sandbox.
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const candidates = [
+  "def add(a, b):\n    return a + b\n",
+  "def add(a, b):\n    return a - b\n",
+] // model outputs
+
+const check = "import json\nfrom solution import add\nprint(json.dumps(add(2, 3)))\n"
+const expected = "5"
+
+async function score(program: string): Promise<number> {
+  const sandbox = await Sandbox.create({
+    name: "eval-trial",
+    fromTemplate: "superserve/python-3.11",
+    network: { denyOut: ["0.0.0.0/0"] },
+  })
+  try {
+    await sandbox.files.write("/work/solution.py", program)
+    await sandbox.files.write("/work/check.py", check)
+    const r = await sandbox.commands.run("python check.py", {
+      cwd: "/work",
+      timeoutMs: 30_000,
+    })
+    const last = r.stdout.trim().split("\n").pop()
+    return r.exitCode === 0 && last === expected ? 1 : 0
+  } finally {
+    await sandbox.kill()
+  }
+}
+
+const rewards = await Promise.all(candidates.map(score))
+console.log(rewards) // [ 1, 0 ]
+```
+
+```python Python
+import asyncio
+
+from superserve import AsyncSandbox, NetworkConfig
+
+candidates = [
+    "def add(a, b):\n    return a + b\n",
+    "def add(a, b):\n    return a - b\n",
+]  # model outputs
+
+check = "import json\nfrom solution import add\nprint(json.dumps(add(2, 3)))\n"
+expected = "5"
+
+
+async def score(program: str) -> float:
+    sandbox = await AsyncSandbox.create(
+        name="eval-trial",
+        from_template="superserve/python-3.11",
+        network=NetworkConfig(deny_out=["0.0.0.0/0"]),
+    )
+    try:
+        await sandbox.files.write("/work/solution.py", program)
+        await sandbox.files.write("/work/check.py", check)
+        r = await sandbox.commands.run("python check.py", cwd="/work", timeout_seconds=30)
+        lines = r.stdout.strip().splitlines()
+        return 1.0 if r.exit_code == 0 and lines and lines[-1] == expected else 0.0
+    finally:
+        await sandbox.kill()
+
+
+async def main() -> None:
+    rewards = await asyncio.gather(*(score(p) for p in candidates))
+    print(rewards)  # [1.0, 0.0]
+
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+- Keep the expected values out of the sandbox. Code in the sandbox can read every file there, so a check that holds the answer lets the model's code find it.
+- Past your team's active sandbox limit, `create` fails with [`too_many_sandboxes`](/errors#ratelimiterror). For large batches, limit how many trials run at the same time.
+- For a trial that runs an agent for several turns, keep the sandbox for the whole episode and delete it at the end. See [OpenEnv](/integrations/evaluations/openenv).
+
+## Related tools
+
+<CardGroup cols={3}>
+  <Card title="Harbor" icon="flask" href="/integrations/evaluations/harbor">
+    Run agent benchmarks, one sandbox per trial.
+  </Card>
+  <Card title="OpenEnv" icon="dumbbell" href="/integrations/evaluations/openenv">
+    Multi-turn rollouts, one sandbox per episode.
+  </Card>
+  <Card title="Hugging Face TRL" icon="/logos/integrations/huggingface.svg" href="/integrations/reinforcement-learning/trl">
+    Score generated code as the reward for GRPO training.
+  </Card>
+</CardGroup>
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Code interpreter" icon="code" href="/guides/code-interpreter">
+    Run model-generated code and read the output back.
+  </Card>
+  <Card title="CI workers" icon="gears" href="/guides/run-ci-jobs">
+    Shard a test suite across sandboxes.
+  </Card>
+  <Card title="Snapshots" icon="camera" href="/sandbox/snapshots">
+    Fork prepared sandboxes for each trial.
+  </Card>
+  <Card title="Network rules" icon="shield" href="/sandbox/networking">
+    Block or allow outbound traffic for each trial.
+  </Card>
+</CardGroup>
