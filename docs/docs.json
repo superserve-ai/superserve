@@ -78,6 +78,11 @@
       "permanent": true
     },
     {
+      "source": "/integrations/managed-agents/:slug*",
+      "destination": "/integrations/agent-platforms/:slug*",
+      "permanent": true
+    },
+    {
       "source": "/integrations/virtual-filesystems/mesa",
       "destination": "/storage/archil"
     },
