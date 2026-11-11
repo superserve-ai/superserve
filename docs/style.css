@@ -6,9 +6,15 @@
  * Blocks without line numbers paint the line and its ::before/::after;
  * blocks with line numbers paint only ::after.
  */
-html.dark [data-component-part="code-block-root"]:not(.has-line-numbers) .line-highlight,
-html.dark [data-component-part="code-block-root"]:not(.has-line-numbers) .line-highlight::before,
-html.dark [data-component-part="code-block-root"]:not(.has-line-numbers) .line-highlight::after,
+html.dark
+  [data-component-part="code-block-root"]:not(.has-line-numbers)
+  .line-highlight,
+html.dark
+  [data-component-part="code-block-root"]:not(.has-line-numbers)
+  .line-highlight::before,
+html.dark
+  [data-component-part="code-block-root"]:not(.has-line-numbers)
+  .line-highlight::after,
 html.dark .has-line-numbers .line-highlight::after {
   background: rgb(var(--primary-light) / 0.08) !important;
 }

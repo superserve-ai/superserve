@@ -348,6 +348,31 @@ import { STAFF_SESSION_COOKIE } from "@/lib/yc/staff-session"
 import { GET } from "./route"
 
 describe("auth callback", () => {
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}`,
+    "/sandboxes",
+    "https://example.com",
+    "/invite/invalid",
+  ])(
+    "keeps only a validated invite through password recovery (%s)",
+    async (invite) => {
+      const params = new URLSearchParams({
+        token_hash: "recovery-token",
+        type: "recovery",
+        next: "/auth/reset-password",
+        invite,
+      })
+      const response = await GET(
+        new Request(`https://console.example.com/auth/callback?${params}`),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).toBe("/auth/reset-password")
+      expect(location.searchParams.get("next")).toBe(
+        invite.startsWith("/invite/ssinv_") ? invite : null,
+      )
+    },
+  )
+
   beforeEach(() => {
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
     mockGetSignupPlanAction.mockReset().mockResolvedValue(undefined)

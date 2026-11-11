@@ -25,6 +25,16 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   trailingSlash: true,
   reactStrictMode: true,
+  async redirects() {
+    return [
+      { source: "/user-management", destination: "/team", permanent: true },
+      {
+        source: "/user-management/:path*",
+        destination: "/team",
+        permanent: true,
+      },
+    ]
+  },
   async headers() {
     return [
       {
