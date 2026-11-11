@@ -73,11 +73,13 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": ["introduction", "quickstart", "api-key", "cli"]
-          },
-          {
-            "group": "Guides",
-            "pages": ["sandbox/desktop", "guides/run-ci-jobs", "sandbox/docker"]
+            "pages": [
+              "introduction",
+              "quickstart",
+              "api-key",
+              "cli",
+              "integrations/mcp"
+            ]
           },
           {
             "group": "Sandbox",
@@ -250,76 +252,91 @@
         "openapi": "https://api.superserve.ai/openapi.yaml"
       },
       {
-        "anchor": "Integrations",
+        "anchor": "Guides",
         "icon": "puzzle-piece",
         "groups": [
           {
-            "group": "Overview",
-            "pages": ["integrations/overview"]
-          },
-          {
-            "group": "Coding Agents",
+            "group": "Guides",
             "pages": [
-              "integrations/coding-agents/claude",
-              "integrations/coding-agents/codex",
-              "integrations/coding-agents/kilocode",
-              "integrations/coding-agents/opencode",
-              "integrations/coding-agents/pi"
-            ]
-          },
-          {
-            "group": "Agent Frameworks",
-            "pages": [
-              "integrations/agent-harnesses/agno",
-              "integrations/agent-harnesses/claude-agent-sdk",
-              "integrations/agent-harnesses/crewai",
-              "integrations/agent-harnesses/dspy",
-              "integrations/agent-harnesses/flue",
-              "integrations/agent-harnesses/google-adk",
-              "integrations/agent-harnesses/langchain",
-              "integrations/agent-harnesses/letta",
-              "integrations/agent-harnesses/mastra",
-              "integrations/agent-harnesses/openai-agents-sdk",
-              "integrations/agent-harnesses/pydantic-ai",
-              "integrations/agent-harnesses/vercel-ai-sdk"
-            ]
-          },
-          {
-            "group": "Personal Agents",
-            "pages": [
-              "integrations/personal-agents/hermes",
-              "integrations/personal-agents/openclaw",
-              "integrations/personal-agents/qm"
-            ]
-          },
-          {
-            "group": "Managed Agents",
-            "pages": [
-              "integrations/managed-agents/claude-managed-agents",
-              "integrations/managed-agents/cursor-cloud-agents",
-              "integrations/managed-agents/omnara"
-            ]
-          },
-          {
-            "group": "Evaluations",
-            "pages": [
-              "integrations/evaluations/harbor",
-              "integrations/evaluations/openenv"
-            ]
-          },
-          {
-            "group": "Reinforcement Learning",
-            "pages": ["integrations/reinforcement-learning/trl"]
-          },
-          {
-            "group": "MCP & Tools",
-            "pages": ["integrations/mcp"]
-          },
-          {
-            "group": "Computer Use",
-            "pages": [
-              "integrations/computer-use/claude",
-              "integrations/computer-use/openai"
+              "integrations/overview",
+              {
+                "group": "Computer Use Agents",
+                "icon": "computer-mouse",
+                "expanded": false,
+                "pages": [
+                  "sandbox/desktop",
+                  "integrations/computer-use/claude",
+                  "integrations/computer-use/openai"
+                ]
+              },
+              {
+                "group": "CI Workers",
+                "icon": "server",
+                "expanded": false,
+                "pages": ["guides/run-ci-jobs"]
+              },
+              "sandbox/docker",
+              {
+                "group": "Evals & RL",
+                "icon": "flask-vial",
+                "expanded": false,
+                "pages": [
+                  "integrations/evaluations/harbor",
+                  "integrations/evaluations/openenv",
+                  "integrations/reinforcement-learning/trl"
+                ]
+              },
+              {
+                "group": "Coding Agents",
+                "icon": "terminal",
+                "expanded": false,
+                "pages": [
+                  "integrations/coding-agents/claude",
+                  "integrations/coding-agents/codex",
+                  "integrations/coding-agents/kilocode",
+                  "integrations/coding-agents/opencode",
+                  "integrations/coding-agents/pi"
+                ]
+              },
+              {
+                "group": "Managed Agents",
+                "icon": "cloud",
+                "expanded": false,
+                "pages": [
+                  "integrations/managed-agents/claude-managed-agents",
+                  "integrations/managed-agents/cursor-cloud-agents",
+                  "integrations/managed-agents/omnara"
+                ]
+              },
+              {
+                "group": "Agent Frameworks",
+                "icon": "cubes",
+                "expanded": false,
+                "pages": [
+                  "integrations/agent-harnesses/agno",
+                  "integrations/agent-harnesses/claude-agent-sdk",
+                  "integrations/agent-harnesses/crewai",
+                  "integrations/agent-harnesses/dspy",
+                  "integrations/agent-harnesses/flue",
+                  "integrations/agent-harnesses/google-adk",
+                  "integrations/agent-harnesses/langchain",
+                  "integrations/agent-harnesses/letta",
+                  "integrations/agent-harnesses/mastra",
+                  "integrations/agent-harnesses/openai-agents-sdk",
+                  "integrations/agent-harnesses/pydantic-ai",
+                  "integrations/agent-harnesses/vercel-ai-sdk"
+                ]
+              },
+              {
+                "group": "Personal Agents",
+                "icon": "user",
+                "expanded": false,
+                "pages": [
+                  "integrations/personal-agents/hermes",
+                  "integrations/personal-agents/openclaw",
+                  "integrations/personal-agents/qm"
+                ]
+              }
             ]
           }
         ]

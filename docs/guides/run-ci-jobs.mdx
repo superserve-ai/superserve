@@ -2,6 +2,7 @@
 title: "Run CI jobs in sandboxes"
 sidebarTitle: Run CI jobs
 description: Run each CI job in its own sandbox with the Superserve CLI. Includes a GitHub Actions workflow, sharding and network isolation for untrusted code.
+icon: "gears"
 ---
 
 A CI job fits a sandbox well: create a sandbox, run the build and tests in it, then delete it. Each job gets a clean microVM, so jobs can't leave files, processes or credentials behind for the next job.
