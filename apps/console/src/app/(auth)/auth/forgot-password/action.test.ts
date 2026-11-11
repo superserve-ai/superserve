@@ -16,6 +16,7 @@ const afterCallbacks: Array<() => unknown> = []
 const mockSendEmail = vi.fn()
 const mockVerifyRecaptcha = vi.fn()
 const mockConsumeAuthRateLimit = vi.fn()
+const mockSendToSlack = vi.fn()
 let requestHeaders: Record<string, string> = {}
 
 vi.mock("next/headers", () => ({
@@ -31,6 +32,12 @@ vi.mock("@/lib/recaptcha/verify", () => ({
 vi.mock("@/lib/auth/rate-limit", () => ({
   consumeAuthRateLimit: (...args: unknown[]) =>
     mockConsumeAuthRateLimit(...args),
+  consumeAuthRateLimitOutcome: async (...args: unknown[]) =>
+    (await mockConsumeAuthRateLimit(...args)) ? "allowed" : "refused",
+}))
+
+vi.mock("@/lib/slack/send-to-webhook", () => ({
+  default: (...args: unknown[]) => mockSendToSlack(...args),
 }))
 
 vi.mock("next/server", () => ({
@@ -85,6 +92,7 @@ describe("sendPasswordResetEmail", () => {
       .mockReset()
       .mockResolvedValue({ verified: true, providerOutcome: "success" })
     mockConsumeAuthRateLimit.mockReset().mockResolvedValue(true)
+    mockSendToSlack.mockReset().mockResolvedValue({ success: true })
     requestHeaders = {}
   })
 
@@ -387,12 +395,55 @@ describe("sendPasswordResetEmail", () => {
         expect.objectContaining({ bucket: "recovery_email_cooldown" }),
         "user@example.com",
       ],
+      [expect.objectContaining({ bucket: "recovery_email_account" }), "user-1"],
       [
         expect.objectContaining({ bucket: "recovery_email_project" }),
         "project",
       ],
     ])
   })
+
+  it("takes the shared hourly limits per network and per account before the project budget", async () => {
+    requestHeaders = { "x-forwarded-for": "2001:db8:1:2:aaaa::7" }
+    mockGenerateLink.mockResolvedValue({ data: null, error: null })
+
+    await reset("user@example.com", "token")
+
+    expect(mockConsumeAuthRateLimit.mock.calls.slice(-3)).toEqual([
+      [
+        { bucket: "recovery_email_ip", max: 10, windowSeconds: 3600 },
+        "2001:db8:1:2::/64",
+      ],
+      [
+        { bucket: "recovery_email_account", max: 5, windowSeconds: 3600 },
+        "user-1",
+      ],
+      [
+        expect.objectContaining({ bucket: "recovery_email_project" }),
+        "project",
+      ],
+    ])
+  })
+
+  it.each(["recovery_email_ip", "recovery_email_account"])(
+    "drops the email without using the project budget when %s is used up",
+    async (bucket) => {
+      requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+      mockConsumeAuthRateLimit.mockImplementation(
+        async (limit: { bucket: string }) => limit.bucket !== bucket,
+      )
+
+      expect(await reset("user@example.com", "token")).toEqual({
+        success: true,
+      })
+      expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+        expect.objectContaining({ bucket: "recovery_email_project" }),
+        expect.anything(),
+      )
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    },
+  )
 
   it("silently skips the email once the per-address limit is used up", async () => {
     requestHeaders = { "x-forwarded-for": "203.0.113.7" }
@@ -481,7 +532,7 @@ describe("sendPasswordResetEmail", () => {
       expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
         expect.objectContaining({
           bucket: "recovery_email_project",
-          max: 30,
+          max: 100,
           windowSeconds: 3600,
         }),
         "project",

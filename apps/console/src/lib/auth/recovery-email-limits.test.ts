@@ -1,21 +1,34 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mockConsumeAuthRateLimit = vi.fn()
+const mockConsumeAuthRateLimitOutcome = vi.fn()
+const mockSendToSlack = vi.fn()
 
 vi.mock("@/lib/auth/rate-limit", () => ({
   consumeAuthRateLimit: (...args: unknown[]) =>
     mockConsumeAuthRateLimit(...args),
+  consumeAuthRateLimitOutcome: (...args: unknown[]) =>
+    mockConsumeAuthRateLimitOutcome(...args),
+}))
+
+vi.mock("@/lib/slack/send-to-webhook", () => ({
+  default: (...args: unknown[]) => mockSendToSlack(...args),
 }))
 
 import {
+  recoveryClientNetworkKey,
   recoveryEmailHourlyLimit,
   reserveRecoveryEmail,
   startRecoveryEmailCooldown,
 } from "./recovery-email-limits"
 
+const CALLER = { userId: "user-1", clientIp: "203.0.113.7" }
+
 describe("recovery email limits", () => {
   beforeEach(() => {
     mockConsumeAuthRateLimit.mockReset().mockResolvedValue(true)
+    mockConsumeAuthRateLimitOutcome.mockReset().mockResolvedValue("allowed")
+    mockSendToSlack.mockReset().mockResolvedValue({ success: true })
   })
 
   afterEach(() => {
@@ -34,11 +47,11 @@ describe("recovery email limits", () => {
     )
   })
 
-  it("defaults to Supabase Auth's 30 emails per hour", () => {
+  it("defaults to a backstop of 100 emails per hour", () => {
     vi.stubEnv("AUTH_RECOVERY_EMAILS_PER_HOUR", "")
     expect(recoveryEmailHourlyLimit()).toEqual({
       bucket: "recovery_email_project",
-      max: 30,
+      max: 100,
       windowSeconds: 3600,
     })
   })
@@ -52,42 +65,147 @@ describe("recovery email limits", () => {
     "ignores an invalid hourly budget of %j",
     (value) => {
       vi.stubEnv("AUTH_RECOVERY_EMAILS_PER_HOUR", value)
-      expect(recoveryEmailHourlyLimit().max).toBe(30)
+      expect(recoveryEmailHourlyLimit().max).toBe(100)
     },
   )
 
-  it("shares one project-wide key for the hourly budget", async () => {
-    expect(await reserveRecoveryEmail()).toBe(true)
-    expect(mockConsumeAuthRateLimit).toHaveBeenCalledExactlyOnceWith(
-      expect.objectContaining({ bucket: "recovery_email_project" }),
+  it.each([
+    ["203.0.113.7", "203.0.113.7"],
+    [" 203.0.113.7 ", "203.0.113.7"],
+    ["2001:db8:1:2:aaaa:bbbb:cccc:dddd", "2001:db8:1:2::/64"],
+    ["2001:DB8:1:2::7", "2001:db8:1:2::/64"],
+    ["2001:0db8:0001:0002:0000:0000:0000:0001", "2001:db8:1:2::/64"],
+    ["2001:db8::1", "2001:db8:0:0::/64"],
+    ["::1", "0:0:0:0::/64"],
+    ["::ffff:198.51.100.4", "198.51.100.4"],
+    ["::ffff:c633:6404", "198.51.100.4"],
+    ["64:ff9b::198.51.100.4", "64:ff9b:0:0::/64"],
+    ["not-an-ip", "not-an-ip"],
+  ])("keys client %j by network as %j", (ip, key) => {
+    expect(recoveryClientNetworkKey(ip)).toBe(key)
+  })
+
+  it("takes the network limit, the account limit, then the project budget", async () => {
+    expect(
+      await reserveRecoveryEmail({
+        userId: "user-1",
+        clientIp: "2001:db8:1:2::9",
+      }),
+    ).toBe("reserved")
+    expect(mockConsumeAuthRateLimit.mock.calls).toEqual([
+      [
+        { bucket: "recovery_email_ip", max: 10, windowSeconds: 3600 },
+        "2001:db8:1:2::/64",
+      ],
+      [
+        { bucket: "recovery_email_account", max: 5, windowSeconds: 3600 },
+        "user-1",
+      ],
+    ])
+    expect(mockConsumeAuthRateLimitOutcome).toHaveBeenCalledExactlyOnceWith(
+      { bucket: "recovery_email_project", max: 100, windowSeconds: 3600 },
       "project",
     )
   })
 
-  it("tries once more when a concurrent send holds the key", async () => {
-    vi.useFakeTimers()
-    mockConsumeAuthRateLimit.mockResolvedValueOnce(false)
-
-    const pending = reserveRecoveryEmail()
-    await vi.runAllTimersAsync()
-
-    expect(await pending).toBe(true)
-    expect(mockConsumeAuthRateLimit).toHaveBeenCalledTimes(2)
+  it("skips the network limit when no client IP is known", async () => {
+    expect(
+      await reserveRecoveryEmail({ userId: "user-1", clientIp: undefined }),
+    ).toBe("reserved")
+    expect(mockConsumeAuthRateLimit).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ bucket: "recovery_email_account" }),
+      "user-1",
+    )
   })
 
-  it("refuses and logs once the budget is used up", async () => {
+  it.each([
+    ["recovery_email_ip", "ip_limit"],
+    ["recovery_email_account", "account_limit"],
+  ])(
+    "stops at %s without touching the project budget",
+    async (bucket, expected) => {
+      mockConsumeAuthRateLimit.mockImplementation(
+        async (limit: { bucket: string }) => limit.bucket !== bucket,
+      )
+
+      expect(await reserveRecoveryEmail(CALLER)).toBe(expected)
+      expect(mockConsumeAuthRateLimitOutcome).not.toHaveBeenCalled()
+    },
+  )
+
+  it("retries with backoff while a concurrent send holds the project key", async () => {
+    vi.useFakeTimers()
+    mockConsumeAuthRateLimitOutcome
+      .mockResolvedValueOnce("busy")
+      .mockResolvedValueOnce("busy")
+      .mockResolvedValueOnce("busy")
+      .mockResolvedValueOnce("allowed")
+
+    const pending = reserveRecoveryEmail(CALLER)
+    await vi.advanceTimersByTimeAsync(50 + 100)
+    expect(mockConsumeAuthRateLimitOutcome).toHaveBeenCalledTimes(3)
+    await vi.advanceTimersByTimeAsync(200)
+
+    expect(await pending).toBe("reserved")
+    expect(mockConsumeAuthRateLimitOutcome).toHaveBeenCalledTimes(4)
+  })
+
+  it("gives up after the last retry when the project key stays busy", async () => {
     vi.useFakeTimers()
     const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
-    mockConsumeAuthRateLimit.mockResolvedValue(false)
+    mockConsumeAuthRateLimitOutcome.mockResolvedValue("busy")
 
-    const pending = reserveRecoveryEmail()
+    const pending = reserveRecoveryEmail(CALLER)
     await vi.runAllTimersAsync()
 
-    expect(await pending).toBe(false)
-    expect(mockConsumeAuthRateLimit).toHaveBeenCalledTimes(2)
+    expect(await pending).toBe("budget_busy")
+    expect(mockConsumeAuthRateLimitOutcome).toHaveBeenCalledTimes(6)
+    expect(consoleError).toHaveBeenCalledWith(
+      "Recovery email budget stayed busy; email not sent",
+    )
+    expect(mockSendToSlack).not.toHaveBeenCalled()
+  })
+
+  it("does not retry, and alerts, once the budget is used up", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+    mockConsumeAuthRateLimitOutcome.mockResolvedValue("refused")
+
+    expect(await reserveRecoveryEmail(CALLER)).toBe("budget_used_up")
+    expect(mockConsumeAuthRateLimitOutcome).toHaveBeenCalledOnce()
     expect(consoleError).toHaveBeenCalledWith(
       "Recovery email hourly budget used up:",
-      30,
+      100,
+    )
+    expect(mockConsumeAuthRateLimit).toHaveBeenLastCalledWith(
+      { bucket: "recovery_email_budget_alert", max: 1, windowSeconds: 3600 },
+      "project",
+    )
+    expect(mockSendToSlack).toHaveBeenCalledExactlyOnceWith({
+      text: expect.stringContaining("AUTH_RECOVERY_EMAILS_PER_HOUR"),
+    })
+  })
+
+  it("sends at most one budget alert per hour", async () => {
+    vi.spyOn(console, "error").mockImplementation(() => {})
+    mockConsumeAuthRateLimitOutcome.mockResolvedValue("refused")
+    mockConsumeAuthRateLimit.mockImplementation(
+      async (limit: { bucket: string }) =>
+        limit.bucket !== "recovery_email_budget_alert",
+    )
+
+    expect(await reserveRecoveryEmail(CALLER)).toBe("budget_used_up")
+    expect(mockSendToSlack).not.toHaveBeenCalled()
+  })
+
+  it("still refuses when the budget alert fails", async () => {
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+    mockConsumeAuthRateLimitOutcome.mockResolvedValue("refused")
+    mockSendToSlack.mockRejectedValue(new Error("slack down"))
+
+    expect(await reserveRecoveryEmail(CALLER)).toBe("budget_used_up")
+    expect(consoleError).toHaveBeenCalledWith(
+      "Recovery email budget alert failed:",
+      expect.any(Error),
     )
   })
 })

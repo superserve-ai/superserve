@@ -39,7 +39,8 @@ const RESET_EMAIL_LIMIT: AuthRateLimit = {
 // same whether or not the address has an account.
 async function deliverPasswordReset(
   email: string,
-  invite: string | undefined,
+  clientIp: string | undefined,
+  invite: string | null,
 ) {
   try {
     // The address limit runs before the shared cooldown, so a reset refused
@@ -57,8 +58,12 @@ async function deliverPasswordReset(
     if (!user || isSignupReviewBlocked(user)) return
 
     // A new token replaces the one in any email already sent, so take from
-    // the email budget before creating the token, never after.
-    if (!(await reserveRecoveryEmail())) return
+    // the email limits before creating the token, never after.
+    if (
+      (await reserveRecoveryEmail({ userId: user.id, clientIp })) !== "reserved"
+    ) {
+      return
+    }
 
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
@@ -140,7 +145,7 @@ export const sendPasswordResetEmail = async (
   }
   const address = parsed.data.email
   const invite = inviteReturnPath(typeof next === "string" ? next : undefined)
-  after(() => deliverPasswordReset(address, invite))
+  after(() => deliverPasswordReset(address, clientIp, invite))
 
   // Always the same result, to prevent email enumeration.
   return { success: true }

@@ -12,6 +12,7 @@ const mockSendEmail = vi.fn()
 const mockVerifyRecaptcha = vi.fn()
 const mockTrackEvent = vi.fn()
 const mockConsumeAuthRateLimit = vi.fn()
+const mockSendToSlack = vi.fn()
 const afterCallbacks: Array<() => unknown> = []
 let requestHeaders: Record<string, string> = {}
 
@@ -24,6 +25,12 @@ vi.mock("next/headers", () => ({
 vi.mock("@/lib/auth/rate-limit", () => ({
   consumeAuthRateLimit: (...args: unknown[]) =>
     mockConsumeAuthRateLimit(...args),
+  consumeAuthRateLimitOutcome: async (...args: unknown[]) =>
+    (await mockConsumeAuthRateLimit(...args)) ? "allowed" : "refused",
+}))
+
+vi.mock("@/lib/slack/send-to-webhook", () => ({
+  default: (...args: unknown[]) => mockSendToSlack(...args),
 }))
 
 vi.mock("next/server", () => ({
@@ -100,6 +107,7 @@ describe("sendSignInLink", () => {
     })
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
     mockConsumeAuthRateLimit.mockReset().mockResolvedValue(true)
+    mockSendToSlack.mockReset().mockResolvedValue({ success: true })
     requestHeaders = {}
     vi.stubEnv("NEXT_PUBLIC_APP_URL", "https://console.example.com")
   })
@@ -382,6 +390,49 @@ describe("sendSignInLink", () => {
     expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
       expect.objectContaining({ bucket: "recovery_email_project" }),
       expect.anything(),
+    )
+  })
+
+  it.each([
+    ["recovery_email_ip", "ip_hourly_limit"],
+    ["recovery_email_account", "account_hourly_limit"],
+  ])(
+    "drops the email without using the project budget when %s is used up",
+    async (bucket, reason) => {
+      requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+      refuse(bucket)
+      withAccount(confirmedUser)
+
+      await sendSignInLink("user@example.com", "token")
+      await runAfter()
+
+      expect(mockConsumeAuthRateLimit).not.toHaveBeenCalledWith(
+        expect.objectContaining({ bucket: "recovery_email_project" }),
+        expect.anything(),
+      )
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_sign_in_link_failed",
+        "user-1",
+        { method: "email_link", reason },
+      )
+    },
+  )
+
+  it("shares the hourly network and account limits with password reset", async () => {
+    requestHeaders = { "x-forwarded-for": "203.0.113.7" }
+    withAccount(confirmedUser)
+
+    await sendSignInLink("user@example.com", "token")
+    await runAfter()
+
+    expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
+      { bucket: "recovery_email_ip", max: 10, windowSeconds: 3600 },
+      "203.0.113.7",
+    )
+    expect(mockConsumeAuthRateLimit).toHaveBeenCalledWith(
+      { bucket: "recovery_email_account", max: 5, windowSeconds: 3600 },
+      "user-1",
     )
   })
 

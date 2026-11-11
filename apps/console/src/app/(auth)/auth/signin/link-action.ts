@@ -7,6 +7,7 @@ import { readClientIp } from "@/lib/auth/client-ip"
 import { findAuthUserByEmail } from "@/lib/auth/find-auth-user"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
 import {
+  type RecoveryEmailReservation,
   reserveRecoveryEmail,
   startRecoveryEmailCooldown,
 } from "@/lib/auth/recovery-email-limits"
@@ -32,6 +33,16 @@ const LINK_IP_LIMIT: AuthRateLimit = {
   bucket: "signin_link_ip",
   max: 30,
   windowSeconds: 5 * 60,
+}
+
+const RESERVATION_FAILURE_REASONS: Record<
+  Exclude<RecoveryEmailReservation, "reserved">,
+  string
+> = {
+  ip_limit: "ip_hourly_limit",
+  account_limit: "account_hourly_limit",
+  budget_used_up: "email_budget",
+  budget_busy: "email_budget_busy",
 }
 
 function safeNext(raw: unknown): string | null {
@@ -97,9 +108,13 @@ async function deliverSignInLink(
     }
 
     // A new token replaces the one in any email already sent, so take from
-    // the email budget before creating the token, never after.
-    if (!(await reserveRecoveryEmail())) {
-      await trackLinkFailure("email_budget", user.id)
+    // the email limits before creating the token, never after.
+    const reservation = await reserveRecoveryEmail({
+      userId: user.id,
+      clientIp,
+    })
+    if (reservation !== "reserved") {
+      await trackLinkFailure(RESERVATION_FAILURE_REASONS[reservation], user.id)
       return
     }
 
