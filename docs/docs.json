@@ -272,18 +272,29 @@
             "pages": [
               "integrations/overview",
               {
-                "group": "Integrations",
-                "hidden": true,
-                "searchable": true,
+                "group": "Coding agents",
+                "expanded": true,
                 "pages": [
                   "integrations/coding-agents/claude",
                   "integrations/coding-agents/codex",
                   "integrations/coding-agents/kilocode",
                   "integrations/coding-agents/opencode",
-                  "integrations/coding-agents/pi",
+                  "integrations/coding-agents/pi"
+                ]
+              },
+              {
+                "group": "Managed agents",
+                "expanded": true,
+                "pages": [
                   "integrations/managed-agents/claude-managed-agents",
                   "integrations/managed-agents/cursor-cloud-agents",
-                  "integrations/managed-agents/omnara",
+                  "integrations/managed-agents/omnara"
+                ]
+              },
+              {
+                "group": "Agent frameworks",
+                "expanded": true,
+                "pages": [
                   "integrations/agent-harnesses/agno",
                   "integrations/agent-harnesses/claude-agent-sdk",
                   "integrations/agent-harnesses/crewai",
@@ -295,12 +306,30 @@
                   "integrations/agent-harnesses/mastra",
                   "integrations/agent-harnesses/openai-agents-sdk",
                   "integrations/agent-harnesses/pydantic-ai",
-                  "integrations/agent-harnesses/vercel-ai-sdk",
+                  "integrations/agent-harnesses/vercel-ai-sdk"
+                ]
+              },
+              {
+                "group": "Personal agents",
+                "expanded": true,
+                "pages": [
                   "integrations/personal-agents/hermes",
                   "integrations/personal-agents/openclaw",
-                  "integrations/personal-agents/qm",
+                  "integrations/personal-agents/qm"
+                ]
+              },
+              {
+                "group": "Computer use models",
+                "expanded": true,
+                "pages": [
                   "integrations/computer-use/claude",
-                  "integrations/computer-use/openai",
+                  "integrations/computer-use/openai"
+                ]
+              },
+              {
+                "group": "Evaluation and RL frameworks",
+                "expanded": true,
+                "pages": [
                   "integrations/evaluations/harbor",
                   "integrations/evaluations/openenv",
                   "integrations/reinforcement-learning/trl"
