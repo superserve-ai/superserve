@@ -20,7 +20,6 @@ async def main() -> None:
         await client.beta.environments.work.worker(
             environment_key=environment_key,
             workdir=WORKDIR,
-            unrestricted_paths=True,
             max_idle=300,
         ).handle_item()
 

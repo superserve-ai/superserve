@@ -89,7 +89,3 @@ print(page.stdout)
 `docker run -d` returns once the container starts, before the server inside it is listening, so the `curl` retries until nginx answers.
 
 Running containers are part of the sandbox, so they keep running across a [pause and resume](/sandbox/lifecycle).
-
-<Note>
-Commands run without `HOME` set. If the Docker CLI warns that it can't load its config, prefix the command with `HOME=/root`.
-</Note>

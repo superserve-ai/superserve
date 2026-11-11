@@ -64,6 +64,24 @@ sandbox.kill()
 ```
 </CodeGroup>
 
+## 4. Run it
+
+Save the TypeScript as `index.mts` or the Python as `main.py`, then run it:
+
+<CodeGroup>
+```bash TypeScript
+npx tsx index.mts
+```
+
+```bash Python
+python3 main.py
+```
+</CodeGroup>
+
+<Note>
+The TypeScript uses top-level `await`, which Node only allows in ES modules. The `.mts` extension makes the file one. To use `.ts` instead, set `"type": "module"` in your `package.json`.
+</Note>
+
 ## Where to go next
 
 <CardGroup cols={2}>

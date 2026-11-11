@@ -42,8 +42,8 @@ const template = await Template.create({
     { workdir: "/app" },
     { user: { name: "appuser", sudo: true } },
   ],
-  startCmd: "python server.py",
-  readyCmd: "curl -f http://localhost:8080/health",
+  startCmd: "python -m http.server 8080",
+  readyCmd: "curl -f http://localhost:8080/",
 })
 ```
 
@@ -62,8 +62,8 @@ template = Template.create(
         WorkdirStep(workdir="/app"),
         UserStep(user=UserStepValue(name="appuser", sudo=True)),
     ],
-    start_cmd="python server.py",
-    ready_cmd="curl -f http://localhost:8080/health",
+    start_cmd="python -m http.server 8080",
+    ready_cmd="curl -f http://localhost:8080/",
 )
 ```
 </CodeGroup>

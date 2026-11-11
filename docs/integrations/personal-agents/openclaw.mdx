@@ -17,10 +17,17 @@ OpenClaw is an open-source personal AI assistant. Run it in a Superserve sandbox
 
 ## Via the SDK
 
-```bash
+<CodeGroup>
+```bash TypeScript
 npm install @superserve/sdk
 export SUPERSERVE_API_KEY=ss_live_...
 ```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
 
 <CodeGroup>
 ```typescript TypeScript
@@ -79,3 +86,19 @@ tmux attach -t openclaw
 await sandbox.pause()
 await sandbox.resume()
 ```
+
+## Delete when finished
+
+A paused sandbox is kept until you delete it. When you no longer need the sandbox, delete it. This also deletes its files and saved state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).
