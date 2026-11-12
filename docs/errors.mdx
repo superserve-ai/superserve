@@ -137,7 +137,7 @@ Some codes add a field to the `error` object of the API response. `BillingError`
 
 The error `message` is safe to show to users. The SDK never retries a `402`.
 
-The CLI prints `action_url` in `--json` errors and waits for account setup after a browser sign-up (see [Scripting](/cli#scripting)). The MCP server tells the agent not to retry a trial or billing block (see [MCP troubleshooting](/integrations/mcp#troubleshooting)).
+The CLI prints `action_url` in `--json` errors and waits for account setup after a browser sign-up (see [Scripting](/cli#scripting)). For the trial codes and `billing_ineligible`, the MCP server tells the agent not to retry and to send the user to billing. For other `402` codes, it returns the API message (see [MCP troubleshooting](/integrations/mcp#troubleshooting)).
 
 A billing block does not delete sandboxes on its own. A sandbox set to auto-delete after a pause can still be deleted while billing is blocked.
 
