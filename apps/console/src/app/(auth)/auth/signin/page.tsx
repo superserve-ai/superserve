@@ -135,7 +135,9 @@ function SignInContent() {
             })
           }
         } else if (error.message.includes("Email not confirmed")) {
-          setErrors({ form: "Please verify your email before signing in." })
+          setErrors({
+            form: "Verify your email first. Open the link we sent to your inbox.",
+          })
         } else if (
           error.code === "user_banned" ||
           error.message.includes("User is banned")
@@ -356,7 +358,9 @@ function SignInContent() {
             </Link>
           </div>
           {errors.form && (
-            <p className="text-xs text-destructive">{errors.form}</p>
+            <p role="alert" className="text-xs text-destructive">
+              {errors.form}
+            </p>
           )}
           <Button
             type="submit"
@@ -397,7 +401,9 @@ function SignInContent() {
                   {isLinkSending ? "Sending..." : "Email me a sign-in link"}
                 </Button>
                 {linkError && (
-                  <p className="text-xs text-destructive">{linkError}</p>
+                  <p role="alert" className="text-xs text-destructive">
+                    {linkError}
+                  </p>
                 )}
               </>
             )}

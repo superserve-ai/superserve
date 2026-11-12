@@ -111,11 +111,9 @@ describe("ForgotPasswordPage", () => {
 
     submit()
 
-    expect(
-      await screen.findByText(
-        "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
-      ),
-    ).toBeTruthy()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Our bot check couldn't finish. Turn off ad blockers for this site, then refresh the page.",
+    )
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
   })
 

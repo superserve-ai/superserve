@@ -377,9 +377,9 @@ describe("SignInPage", () => {
     await user.type(screen.getByPlaceholderText("Password"), "wrongpassword")
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
-    expect(
-      await screen.findByText("Invalid email or password."),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Invalid email or password.",
+    )
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
@@ -396,9 +396,9 @@ describe("SignInPage", () => {
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
-    expect(
-      await screen.findByText("Please verify your email before signing in."),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Verify your email first. Open the link we sent to your inbox.",
+    )
   })
 
   it("shows generic error on unexpected failure", async () => {
@@ -797,7 +797,9 @@ describe("SignInPage", () => {
       )
       await user.type(screen.getByPlaceholderText("Password"), "password123")
       await user.click(screen.getByRole("button", { name: "Sign In" }))
-      await screen.findByText("Please verify your email before signing in.")
+      await screen.findByText(
+        "Verify your email first. Open the link we sent to your inbox.",
+      )
       expect(
         screen.queryByRole("region", { name: "Other ways to sign in" }),
       ).not.toBeInTheDocument()
@@ -868,11 +870,9 @@ describe("SignInPage", () => {
         within(region).getByRole("button", { name: "Email me a sign-in link" }),
       )
 
-      expect(
-        await within(region).findByText(
-          "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
-        ),
-      ).toBeInTheDocument()
+      expect(await within(region).findByRole("alert")).toHaveTextContent(
+        "Our bot check couldn't finish. Turn off ad blockers for this site, then refresh the page.",
+      )
       expect(recaptcha.getToken).toHaveBeenCalledWith("signin_link")
       expect(mockSendSignInLink).not.toHaveBeenCalled()
       expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
@@ -894,7 +894,7 @@ describe("SignInPage", () => {
 
       expect(
         await within(region).findByText(
-          "We couldn't verify you're human. Refresh the page and try again.",
+          "Our bot check didn't pass this request. Refresh the page and try again.",
         ),
       ).toBeInTheDocument()
       expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {

@@ -132,7 +132,9 @@ function ForgotPasswordContent() {
                 error={errors.email}
               />
               {errors.form && (
-                <p className="text-xs text-destructive">{errors.form}</p>
+                <p role="alert" className="text-xs text-destructive">
+                  {errors.form}
+                </p>
               )}
               <Button type="submit" disabled={isLoading} className="w-full">
                 {isLoading ? <Spinner /> : null}

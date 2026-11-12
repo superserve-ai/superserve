@@ -217,7 +217,8 @@ describe("sendPasswordResetEmail", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "We couldn't verify you're human. Refresh the page and try again.",
+      error:
+        "Our bot check didn't pass this request. Refresh the page and try again.",
       errorCode: "captcha_failed",
     })
     expect(mockVerifyRecaptcha).toHaveBeenCalledWith("token", "password_reset")
