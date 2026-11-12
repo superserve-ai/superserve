@@ -37,6 +37,20 @@ function routineAbsence(user: User): boolean {
   )
 }
 
+/**
+ * A sign-up whose device capture failed or never ran (an ad blocker, a script
+ * load failure or a scripted client) records routine absence at sign-up. Such
+ * an account has no device evidence, so the trial would be keyed to the
+ * account alone and a script could claim one per throwaway account. Accounts
+ * from before signup evidence carry no marker and keep their old behavior.
+ */
+function unverifiedSignupDevice(user: User): boolean {
+  return (
+    user.app_metadata?.promotion_routine_absence === true &&
+    user.app_metadata?.promotion_authority_failed !== true
+  )
+}
+
 /** Only the original signup flow calls this; normal login never writes provenance. */
 export async function publishOriginalSignupEvidence(
   user: User,
@@ -107,12 +121,25 @@ export async function publishOriginalSignupEvidence(
   }
 }
 
+/**
+ * Why a sign-up trial that the backend could otherwise grant is withheld.
+ * "device_unverified": the sign-up device capture failed or never ran, so the
+ * account has no device evidence.
+ */
+export type TrialWithheldReason = "device_unverified"
+
+export interface AccountPromotionPublication {
+  authorityUnavailable: boolean
+  // Set only when this reason alone withholds the trial.
+  trialWithheld?: TrialWithheldReason
+}
+
 /** Publication failure affects credit only. Accepted original evidence can recover an uncertain bind. */
 export async function publishAccountPromotion(
   region: string,
   user: User,
   observedAt: string,
-): Promise<{ authorityUnavailable: boolean }> {
+): Promise<AccountPromotionPublication> {
   return publishAccountPromotionFor(region, user, observedAt)
 }
 
@@ -121,7 +148,7 @@ export async function publishEnterpriseAccountPromotion(
   user: User,
   observedAt: string,
   authority: EnterpriseProvisioningAuthority,
-): Promise<{ authorityUnavailable: boolean }> {
+): Promise<AccountPromotionPublication> {
   enterpriseProvisioningContext(authority, user.id, region)
   return publishAccountPromotionFor(region, user, observedAt, authority)
 }
@@ -131,8 +158,9 @@ async function publishAccountPromotionFor(
   user: User,
   observedAt: string,
   authority?: EnterpriseProvisioningAuthority,
-): Promise<{ authorityUnavailable: boolean }> {
+): Promise<AccountPromotionPublication> {
   let authorityUnavailable = false
+  let deviceUnverified = false
   try {
     await publishPromotionIdentity(region, user.id, user, observedAt)
   } catch {
@@ -159,11 +187,23 @@ async function publishAccountPromotionFor(
       )
     )
       authorityUnavailable = true
+    else deviceUnverified = !authority && unverifiedSignupDevice(user)
   }
-  if (authorityUnavailable)
+  if (authorityUnavailable) {
     console.warn(
       "Promotion publication unavailable; automatic credit withheld",
       { region },
     )
+    return { authorityUnavailable }
+  }
+  if (deviceUnverified) {
+    // Fail closed for the trial only: the team is still created, and the
+    // backend records it as authority_unavailable, so the console shows the
+    // existing "trial check didn't complete" plan path.
+    console.warn("Signup device unverified; automatic credit withheld", {
+      region,
+    })
+    return { authorityUnavailable: true, trialWithheld: "device_unverified" }
+  }
   return { authorityUnavailable }
 }

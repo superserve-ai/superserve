@@ -1,4 +1,5 @@
 import type { User } from "@supabase/supabase-js"
+import { after } from "next/server"
 
 import {
   authorizeEnterpriseProvisioning,
@@ -39,6 +40,8 @@ import {
   signupReviewStatus,
 } from "@/lib/auth/signup-review"
 import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
+import { trackEvent } from "@/lib/posthog/actions"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TEAM_OWNER_ROLE = "team_owner"
@@ -346,6 +349,24 @@ export async function provisionHeldApplicantTeam(
   )
 }
 
+/** Telemetry runs after the response and never delays or fails provisioning. */
+function recordTrialWithheld(
+  userId: string,
+  properties: Record<string, string>,
+) {
+  try {
+    after(async () => {
+      try {
+        await trackEvent(AUTH_EVENTS.SIGNUP_TRIAL_WITHHELD, userId, properties)
+      } catch {
+        // Telemetry cannot alter provisioning.
+      }
+    })
+  } catch {
+    // Telemetry cannot alter provisioning.
+  }
+}
+
 async function provisionTeamFor(
   region: string,
   user: User,
@@ -376,7 +397,7 @@ async function provisionTeamFor(
   if (!prepared) {
     if (!operationId && !firstTeam)
       throw new Error("No initial team creation to recover")
-    const publication = enterpriseAuthority
+    const { authorityUnavailable, trialWithheld } = enterpriseAuthority
       ? await publishEnterpriseAccountPromotion(
           region,
           user,
@@ -387,7 +408,7 @@ async function provisionTeamFor(
     const preparation = {
       ...locator,
       name,
-      ...publication,
+      authorityUnavailable,
       additionalTeam:
         !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
     }
@@ -397,6 +418,16 @@ async function provisionTeamFor(
           enterpriseAuthority,
         )
       : await preparePromotionTeam(preparation)
+    // An additional team never takes the trial, so only a team that could
+    // have had one counts as withheld. Recovery replays the stored decision
+    // and does not reach this branch, so a retry does not count it again.
+    if (trialWithheld && !preparation.additionalTeam)
+      recordTrialWithheld(userId, {
+        reason: trialWithheld,
+        region,
+        team_id: prepared.teamId,
+        signup_method: isGoogleUser(user) ? "google" : "email",
+      })
   }
   if (prepared.authorityUnavailable) {
     // Repair only the regional FK target. The persisted no-credit decision

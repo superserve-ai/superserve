@@ -16,6 +16,8 @@ export const AUTH_EVENTS = {
   GOOGLE_SIGNUP_PROOF_CONSUMED: "auth_google_signup_proof_consumed",
   FINGERPRINT_SIGNUP_OBSERVED: "auth_fingerprint_signup_observed",
   SIGNUP_RESTRICTION_EVALUATED: "auth_signup_restriction_evaluated",
+  // The sign-up trial was withheld at team creation; `reason` says why.
+  SIGNUP_TRIAL_WITHHELD: "auth_signup_trial_withheld",
   CLOUDFLARE_SIGNUP_OBSERVED: "auth_cloudflare_signup_observed",
   CLOUDFLARE_SIGNUP_OBSERVATION_FAILED:
     "auth_cloudflare_signup_observation_failed",

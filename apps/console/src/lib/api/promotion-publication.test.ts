@@ -20,6 +20,11 @@ const mocks = vi.hoisted(() => ({
   signup: vi.fn(),
   snapshot: vi.fn(),
   update: vi.fn(),
+  enterpriseEvidence: vi.fn(),
+  enterpriseRegister: vi.fn(),
+}))
+vi.mock("@/lib/admin/enterprise-provisioning-authority", () => ({
+  enterpriseProvisioningContext: () => ({}),
 }))
 vi.mock("./promotion-identity", () => ({
   publishPromotionIdentity: mocks.identity,
@@ -31,6 +36,8 @@ vi.mock("./promotion-device-evidence", async (original) => ({
   bindPromotionSignupAccount: mocks.bind,
   registerPromotionSignupAccount: mocks.signup,
   getPromotionSignupEligibilityForTrustedSignup: mocks.snapshot,
+  getPromotionSignupAccountEvidenceForEnterprise: mocks.enterpriseEvidence,
+  registerPromotionSignupDeviceForEnterprise: mocks.enterpriseRegister,
 }))
 vi.mock("@/lib/supabase/admin", () => ({
   createAdminClient: () => ({
@@ -40,6 +47,7 @@ vi.mock("@/lib/supabase/admin", () => ({
 import { PromotionEvidenceError } from "./promotion-device-evidence"
 import {
   publishAccountPromotion,
+  publishEnterpriseAccountPromotion,
   publishOriginalSignupEvidence,
 } from "./promotion-publication"
 const user = {
@@ -74,7 +82,7 @@ it.each([
     ).toEqual({ authorityUnavailable: true })
   },
 )
-it("only classifies successfully persisted routine absence as ordinary missing", async () => {
+it("withholds the trial when a new signup's device capture failed", async () => {
   await expect(
     publishOriginalSignupEvidence(user, undefined, true),
   ).resolves.toEqual({
@@ -93,8 +101,42 @@ it("only classifies successfully persisted routine absence as ordinary missing",
       { ...user, app_metadata: { promotion_routine_absence: true } },
       "now",
     ),
-  ).toEqual({ authorityUnavailable: false })
+  ).toEqual({ authorityUnavailable: true, trialWithheld: "device_unverified" })
   expect(mocks.bind).not.toHaveBeenCalled()
+})
+it("keeps the trial path for a signup whose device evidence exists", async () => {
+  mocks.evidence.mockResolvedValue({ attemptId: "original" })
+  expect(
+    await publishAccountPromotion(
+      "use",
+      { ...user, app_metadata: { promotion_routine_absence: true } },
+      "now",
+    ),
+  ).toEqual({ authorityUnavailable: false })
+  expect(mocks.register).toHaveBeenCalledWith("use", user.id)
+})
+it("does not report the device as the reason when publication also failed", async () => {
+  mocks.identity.mockRejectedValue(new Error("identity backend unavailable"))
+  const result = await publishAccountPromotion(
+    "use",
+    { ...user, app_metadata: { promotion_routine_absence: true } },
+    "now",
+  )
+  expect(result).toEqual({ authorityUnavailable: true })
+  expect(result).not.toHaveProperty("trialWithheld")
+})
+it("leaves staff-approved Enterprise applicants to the backend device policy", async () => {
+  mocks.enterpriseEvidence.mockRejectedValue(
+    new PromotionEvidenceError("evidence_missing"),
+  )
+  expect(
+    await publishEnterpriseAccountPromotion(
+      "use",
+      { ...user, app_metadata: { promotion_routine_absence: true } },
+      "now",
+      {} as never,
+    ),
+  ).toEqual({ authorityUnavailable: false })
 })
 it("preserves legacy routine absence using the fixed trusted creation cohort", async () => {
   expect(
