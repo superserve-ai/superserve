@@ -8,6 +8,7 @@ import {
   type SignupPlanPageParams,
 } from "@/lib/api/signup-plan-page"
 import { trackEvent } from "@/lib/posthog/actions"
+import { recordCheckoutReturned } from "@/lib/posthog/checkout"
 import { ycOnboardingDestination } from "@/lib/yc/onboarding"
 
 export const metadata: Metadata = {
@@ -23,6 +24,13 @@ export default async function PlanSelectionPage({
   const params = await searchParams
   const result = await getSignupPlanPage(params)
   const context = result?.context
+  if (context && (params.billing === "success" || params.billing === "cancel"))
+    recordCheckoutReturned({
+      userId: context.userId,
+      surface: "onboarding_plan",
+      outcome: params.billing,
+      teamKey: context.teamKey,
+    })
   if (context && ["selecting", "pending", "yc_claim"].includes(context.state)) {
     let destination: string | null
     try {

@@ -1,6 +1,7 @@
 import type { Metadata } from "next"
 
 import { safeReturnPath } from "@/lib/billing/return-path"
+import { recordCheckoutReturnForUser } from "@/lib/posthog/checkout"
 
 import { ProPayment } from "./pro-payment"
 
@@ -18,11 +19,17 @@ export default async function ProPaymentPage({
   }>
 }) {
   const { billing, return: returnTo, team: checkoutTeam } = await searchParams
+  const billingReturn =
+    billing === "success" || billing === "cancel" ? billing : undefined
+  if (billingReturn && typeof checkoutTeam === "string")
+    await recordCheckoutReturnForUser({
+      surface: "billing_pro",
+      outcome: billingReturn,
+      teamKey: checkoutTeam,
+    })
   return (
     <ProPayment
-      billingReturn={
-        billing === "success" || billing === "cancel" ? billing : undefined
-      }
+      billingReturn={billingReturn}
       returnTo={
         typeof returnTo === "string" ? safeReturnPath(returnTo) : "/sandboxes/"
       }

@@ -65,6 +65,27 @@ export const PLAN_PICKER_EVENTS = {
   VIEWED: "plan_picker_viewed",
 } as const
 
+// Paid Stripe Checkout funnel, sent from the server by
+// src/lib/posthog/checkout.ts. Every event has `surface` (plan_picker,
+// billing_pro or onboarding_plan), `offer`, `plan`, `billing_interval`,
+// `checkout_session_id`, `team_id`, `region` and the PostHog `team` group.
+// A value that is not known is null. Count distinct `checkout_session_id`
+// values: a reload of a return page can send an event again.
+//   checkout_opened: Checkout session created or resumed. Adds `price_cents`
+//     (catalog list price), `reason` (the team's entry state on the plan
+//     picker, for example trial_ended) and `plan_switch`.
+//   checkout_returned: the customer came back from Checkout. Adds `outcome`
+//     (success or cancel).
+//   checkout_completed: the backend confirmed the paid plan after a return.
+//     Adds `price_cents` and `amount_cents` (the quoted charge, when the
+//     purchase has one). This is the only checkout-level completion event;
+//     `signup_plan_action` keeps its own actions on /onboarding/plan.
+export const CHECKOUT_EVENTS = {
+  OPENED: "checkout_opened",
+  RETURNED: "checkout_returned",
+  COMPLETED: "checkout_completed",
+} as const
+
 export const SNAPSHOT_EVENTS = {
   TAKEN: "snapshot_taken",
   RENAMED: "snapshot_renamed",

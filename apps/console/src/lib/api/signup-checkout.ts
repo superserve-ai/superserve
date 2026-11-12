@@ -12,6 +12,10 @@ import {
   type SignupCheckoutOffer,
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
+import {
+  recordCheckoutCompleted,
+  recordCheckoutOpened,
+} from "@/lib/posthog/checkout"
 
 import { isStripeCheckoutUrl } from "./plan-checkout"
 import { getAuthApiKeyAndTeamForUser } from "./proxy-auth"
@@ -130,6 +134,7 @@ export async function startSignupCheckout(
       }),
     })
     const result = (await response.json().catch(() => ({}))) as {
+      id?: string
       url?: string
       outcome?: string
       error?: { code?: string }
@@ -193,7 +198,20 @@ export async function startSignupCheckout(
       return planPickerPath("checkout_refused", undefined, locator)
     throw new SignupCheckoutError("checkout", status)
   }
-  if (result.url && isStripeCheckoutUrl(result.url)) return result.url
+  if (result.url && isStripeCheckoutUrl(result.url)) {
+    recordCheckoutOpened({
+      userId: user.id,
+      surface: "plan_picker",
+      team: backend.team,
+      offer: SIGNUP_CHECKOUT_OFFERS[offer],
+      base,
+      apiKey: headers["X-API-Key"],
+      response: result,
+      reason: entry,
+      planSwitch: switchPlan,
+    })
+    return result.url
+  }
   if (result.outcome === "active") return "/sandboxes"
   return success
 }
@@ -240,5 +258,13 @@ export async function settleSignupCheckout(
   if (entry === "activating" || (active && unpaid)) return null
   if (unpaid || entry === "payment_failed")
     return planPickerPath(entry, undefined, locator)
+  if (active)
+    recordCheckoutCompleted({
+      userId: user.id,
+      surface: "plan_picker",
+      team: backend.team,
+      base,
+      apiKey: headers["X-API-Key"],
+    })
   return "/sandboxes"
 }
