@@ -115,6 +115,26 @@ function TrialEndedMessage({
   return outcome ? TRIAL_COPY[outcome] : MESSAGES.trial_ended
 }
 
+interface PickerView {
+  reason: string
+  requested_offer: string
+  plan_options_requested: boolean
+}
+
+function recordPickerView(
+  recorded: { current: string | null },
+  view: PickerView,
+) {
+  const key = JSON.stringify(view)
+  if (recorded.current === key) return
+  recorded.current = key
+  try {
+    posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
+  } catch {
+    /* Analytics never controls the picker. */
+  }
+}
+
 function ChoosePlanContent() {
   const searchParams = useSearchParams()
   const raw = searchParams.get("reason")
@@ -146,26 +166,43 @@ function ChoosePlanContent() {
   // or an empty catalog can still hide them. The ref keeps StrictMode's effect
   // replay from recording the same picker state twice. A trial_ended picker
   // waits for the team's trial outcome so its reason says which one it is.
+  // If the picker changes or closes first, the view is still recorded, with
+  // an unknown trial reason.
   const recordedView = useRef<string | null>(null)
+  const pendingView = useRef<PickerView | null>(null)
   useEffect(() => {
     if (settling) return
-    if (trialEnded && trialOutcome === undefined) return
-    const view = {
+    const view: PickerView = {
       reason: trialEnded
         ? TRIAL_VIEW_REASON[trialOutcome ?? "unknown"]
         : reason,
       requested_offer: preselected ?? "not_specified",
       plan_options_requested: picking,
     }
-    const key = JSON.stringify(view)
-    if (recordedView.current === key) return
-    recordedView.current = key
-    try {
-      posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
-    } catch {
-      /* Analytics never controls the picker. */
+    const pending = pendingView.current
+    pendingView.current = null
+    if (trialEnded && trialOutcome === undefined) {
+      pendingView.current = view
+      return
     }
+    if (pending && !trialEnded) recordPickerView(recordedView, pending)
+    recordPickerView(recordedView, view)
   }, [settling, reason, preselected, picking, trialEnded, trialOutcome])
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      // StrictMode runs this cleanup and mounts again at once, so only a
+      // picker that is still unmounted after the timeout has really closed.
+      setTimeout(() => {
+        const pending = pendingView.current
+        if (mounted.current || !pending) return
+        pendingView.current = null
+        recordPickerView(recordedView, pending)
+      }, 0)
+    }
+  }, [])
   if (settling) return null
 
   return (

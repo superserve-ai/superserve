@@ -37,11 +37,16 @@ vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
 const trial = vi.hoisted(() => ({
   outcome: null as TrialOutcome | null,
   perTeam: {} as Record<string, TrialOutcome | null>,
+  never: false,
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTeamCatalogAction: async () => null,
-  getTrialOutcomeAction: async ({ team }: { team: string }) =>
-    team in trial.perTeam ? trial.perTeam[team] : trial.outcome,
+  getTrialOutcomeAction: ({ team }: { team: string }) =>
+    trial.never
+      ? new Promise<never>(() => {})
+      : Promise.resolve(
+          team in trial.perTeam ? trial.perTeam[team] : trial.outcome,
+        ),
 }))
 const { capture } = vi.hoisted(() => ({ capture: vi.fn() }))
 vi.mock("posthog-js", () => ({ default: { capture } }))
@@ -57,6 +62,7 @@ describe("plan picker", () => {
     capture.mockClear()
     trial.outcome = null
     trial.perTeam = {}
+    trial.never = false
   })
 
   it("offers both plans when the trial has ended", async () => {
@@ -289,6 +295,29 @@ describe("plan picker", () => {
       "checkout_canceled",
       "trial_unavailable",
     ])
+  })
+
+  it("still records a trial_ended picker that closes before its outcome loads", async () => {
+    trial.never = true
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:team-1",
+    })
+    const { unmount } = render(
+      <StrictMode>
+        <ChoosePlanPage />
+      </StrictMode>,
+    )
+    await screen.findByRole("button", { name: "Developer" })
+    expect(capture).not.toHaveBeenCalled()
+    unmount()
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1))
+    expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
+      reason: "trial_reason_unknown",
+      requested_offer: "not_specified",
+      plan_options_requested: true,
+    })
   })
 
   it("records one picker view under StrictMode", async () => {

@@ -26,30 +26,36 @@ export interface BillingCredits {
 export function billingCredits(
   summary: BillingSummaryResponse,
 ): BillingCredits {
-  const credits: BillingCredits =
-    summary.credit_source === "stripe"
-      ? {
-          applied: summary.stripe_credits_applied_usd ?? null,
-          remaining: summary.stripe_remaining_credit_usd ?? null,
-          payable: summary.expected_invoice_amount_usd,
-        }
-      : {
-          applied: summary.credits_applied_usd,
-          remaining: summary.credits_remaining_usd,
-          payable: summary.expected_invoice_amount_usd,
-        }
-  // A team still on its free trial spends the trial balance, the figure the
-  // trial banner and sandbox access use. The general credit fields can read
-  // $0 for such a team while its trial still has credit.
+  if (summary.credit_source === "stripe") {
+    return {
+      applied: summary.stripe_credits_applied_usd ?? null,
+      remaining: summary.stripe_remaining_credit_usd ?? null,
+      payable: summary.expected_invoice_amount_usd,
+    }
+  }
+  return {
+    applied: summary.credits_applied_usd,
+    remaining: summary.credits_remaining_usd,
+    payable: summary.expected_invoice_amount_usd,
+  }
+}
+
+// The credit a team is shown as having left. A team still on its free trial
+// spends the trial balance, the figure the trial banner and sandbox access
+// use; the general credit fields can read $0 for it while the trial still has
+// credit. Only for display: estimates keep the general credit figures.
+export function creditsRemaining(
+  summary: BillingSummaryResponse,
+): number | null {
   const trial = summary.trial
   if (
     summary.plan?.key === "trial" &&
     trial?.state === "active" &&
     typeof trial.remaining_usd === "number"
   ) {
-    return { ...credits, remaining: trial.remaining_usd }
+    return trial.remaining_usd
   }
-  return credits
+  return billingCredits(summary).remaining
 }
 
 export function formatCurrency(value: number, currency = "USD"): string {
@@ -269,7 +275,7 @@ export function BillingSummary({
           />
           <HeadlineFigure
             label="Credits left"
-            value={money(credits.remaining)}
+            value={money(creditsRemaining(summary))}
           />
         </dl>
       </div>
