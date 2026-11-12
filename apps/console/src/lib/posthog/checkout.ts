@@ -1,6 +1,8 @@
 import "server-only"
+import type { User } from "@supabase/supabase-js"
 import { after } from "next/server"
 
+import { getImpersonationTeamId } from "@/lib/admin/impersonation"
 import { isStripeCheckoutUrl } from "@/lib/api/plan-checkout"
 import { membershipExistsInCell } from "@/lib/api/team-directory"
 import { billingOffersSchema } from "@/lib/billing/plans"
@@ -167,6 +169,16 @@ export async function readCheckoutRecord(
   }
 }
 
+// An operator viewing another team is not a customer, so their session
+// records nothing, as in the API proxy. A failed check records nothing too.
+export async function isOperatorView(user: User): Promise<boolean> {
+  try {
+    return (await getImpersonationTeamId(user)) !== null
+  } catch {
+    return true
+  }
+}
+
 // Sends the event after the response, so that a slow or failing PostHog or
 // lookup never delays or fails a checkout. Outside a request it does nothing.
 function record(
@@ -311,6 +323,7 @@ export async function recordCheckoutReturnForUser(input: {
     } = await (await createServerClient()).auth.getUser()
     if (!user || (input.account !== undefined && input.account !== user.id))
       return
+    if (await isOperatorView(user)) return
     recordCheckoutReturned({ ...input, userId: user.id })
   } catch {
     // Analytics never affects the page.

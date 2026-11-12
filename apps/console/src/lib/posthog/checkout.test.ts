@@ -6,7 +6,11 @@ const m = vi.hoisted(() => ({
   member: vi.fn(async () => true),
   rows: {} as Record<string, { data: unknown; error: unknown }>,
   user: { id: "u1" } as { id: string } | null,
+  operatorTeam: null as string | null,
   outsideRequest: false,
+}))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationTeamId: async () => m.operatorTeam,
 }))
 vi.mock("next/server", () => ({
   after: (fn: () => Promise<void>) => {
@@ -45,6 +49,7 @@ vi.mock("@/lib/cells", () => ({
 import {
   checkoutSessionId,
   checkoutSurfaceFromUrl,
+  isOperatorView,
   offerProperties,
   recordCheckoutCompleted,
   recordCheckoutOpened,
@@ -92,6 +97,7 @@ beforeEach(() => {
   m.trackEvent.mockClear()
   m.member.mockReset().mockResolvedValue(true)
   m.user = { id: "u1" }
+  m.operatorTeam = null
   m.rows = {}
   fetchMock.mockClear()
 })
@@ -293,6 +299,27 @@ describe("checkout_returned", () => {
       "u1",
       expect.objectContaining({ surface: "billing_pro", outcome: "cancel" }),
     )
+  })
+
+  it("records nothing while an operator views another team", async () => {
+    m.operatorTeam = "another-team"
+    await recordCheckoutReturnForUser({
+      surface: "billing_pro",
+      outcome: "success",
+      teamKey: TEAM_KEY,
+    })
+    await flush()
+    expect(m.queue).toHaveLength(0)
+    expect(m.trackEvent).not.toHaveBeenCalled()
+  })
+})
+
+describe("isOperatorView", () => {
+  it("is true only while an operator views another team", async () => {
+    const user = { id: "u1" } as never
+    await expect(isOperatorView(user)).resolves.toBe(false)
+    m.operatorTeam = "another-team"
+    await expect(isOperatorView(user)).resolves.toBe(true)
   })
 })
 

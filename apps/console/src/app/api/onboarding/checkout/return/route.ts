@@ -6,7 +6,7 @@ import {
   planPickerPath,
   signupCheckoutReturnPath,
 } from "@/lib/billing/signup-checkout-paths"
-import { recordCheckoutReturned } from "@/lib/posthog/checkout"
+import { isOperatorView, recordCheckoutReturned } from "@/lib/posthog/checkout"
 import { createServerClient } from "@/lib/supabase/server"
 
 export async function GET(request: Request) {
@@ -28,7 +28,7 @@ export async function GET(request: Request) {
       ? paymentSettlingPath({ account, team })
       : planPickerPath("checkout_elsewhere")
   // Stripe sends the customer here only after a successful payment.
-  if (account === user.id)
+  if (account === user.id && !(await isOperatorView(user)))
     recordCheckoutReturned({
       userId: user.id,
       surface: "plan_picker",

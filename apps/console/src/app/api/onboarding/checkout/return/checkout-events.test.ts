@@ -5,6 +5,7 @@ const m = vi.hoisted(() => ({
   user: { id: "u1" } as { id: string } | null,
   settle: vi.fn(async (): Promise<string | null> => "/sandboxes"),
   returned: vi.fn(),
+  operator: false,
 }))
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
@@ -15,6 +16,7 @@ vi.mock("@/lib/api/signup-checkout", () => ({
   settleSignupCheckout: m.settle,
 }))
 vi.mock("@/lib/posthog/checkout", () => ({
+  isOperatorView: async () => m.operator,
   recordCheckoutReturned: m.returned,
 }))
 
@@ -30,6 +32,7 @@ const visit = (account: string) =>
 describe("checkout return events", () => {
   beforeEach(() => {
     m.user = { id: "u1" }
+    m.operator = false
     m.returned.mockReset()
     m.settle.mockReset().mockResolvedValue("/sandboxes")
   })
@@ -57,5 +60,12 @@ describe("checkout return events", () => {
     m.user = null
     await visit("u1")
     expect(m.returned).not.toHaveBeenCalled()
+  })
+
+  it("records nothing while an operator views another team", async () => {
+    m.operator = true
+    await visit("u1")
+    expect(m.returned).not.toHaveBeenCalled()
+    expect(m.settle).toHaveBeenCalledOnce()
   })
 })

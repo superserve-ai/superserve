@@ -13,6 +13,7 @@ import {
 } from "@/lib/billing/signup-checkout-paths"
 import { cellFor } from "@/lib/cells"
 import {
+  isOperatorView,
   recordCheckoutCompleted,
   recordCheckoutOpened,
 } from "@/lib/posthog/checkout"
@@ -199,17 +200,18 @@ export async function startSignupCheckout(
     throw new SignupCheckoutError("checkout", status)
   }
   if (result.url && isStripeCheckoutUrl(result.url)) {
-    recordCheckoutOpened({
-      userId: user.id,
-      surface: "plan_picker",
-      team: backend.team,
-      offer: SIGNUP_CHECKOUT_OFFERS[offer],
-      base,
-      apiKey: headers["X-API-Key"],
-      response: result,
-      reason: entry,
-      planSwitch: switchPlan,
-    })
+    if (!(await isOperatorView(user)))
+      recordCheckoutOpened({
+        userId: user.id,
+        surface: "plan_picker",
+        team: backend.team,
+        offer: SIGNUP_CHECKOUT_OFFERS[offer],
+        base,
+        apiKey: headers["X-API-Key"],
+        response: result,
+        reason: entry,
+        planSwitch: switchPlan,
+      })
     return result.url
   }
   if (result.outcome === "active") return "/sandboxes"
@@ -258,7 +260,7 @@ export async function settleSignupCheckout(
   if (entry === "activating" || (active && unpaid)) return null
   if (unpaid || entry === "payment_failed")
     return planPickerPath(entry, undefined, locator)
-  if (active)
+  if (active && !(await isOperatorView(user)))
     recordCheckoutCompleted({
       userId: user.id,
       surface: "plan_picker",

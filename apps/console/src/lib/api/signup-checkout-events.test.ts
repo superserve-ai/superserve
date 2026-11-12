@@ -7,6 +7,7 @@ const m = vi.hoisted(() => ({
   entry: "trial_ended" as string,
   checkout: { status: 200, body: {} as unknown },
   recovered: { status: 200, body: {} as unknown },
+  operator: false,
 }))
 vi.mock("./proxy-auth", () => ({
   getAuthApiKeyAndTeamForUser: async () => ({
@@ -18,6 +19,7 @@ vi.mock("@/lib/cells", () => ({
   cellFor: () => ({ apiBaseUrl: "https://api.example.test" }),
 }))
 vi.mock("@/lib/posthog/checkout", () => ({
+  isOperatorView: async () => m.operator,
   recordCheckoutOpened: m.opened,
   recordCheckoutCompleted: m.completed,
 }))
@@ -43,6 +45,7 @@ beforeEach(() => {
   m.opened.mockReset()
   m.completed.mockReset()
   m.entry = "trial_ended"
+  m.operator = false
   m.checkout = {
     status: 200,
     body: { id: "cs_test_1", url: CHECKOUT_URL },
@@ -82,6 +85,14 @@ describe("checkout_opened from the plan picker", () => {
     })
     expect(m.opened).not.toHaveBeenCalled()
   })
+
+  it("records nothing while an operator views another team", async () => {
+    m.operator = true
+    await expect(
+      startSignupCheckout(user, "starter", origin, mine, true),
+    ).resolves.toBe(CHECKOUT_URL)
+    expect(m.opened).not.toHaveBeenCalled()
+  })
 })
 
 describe("checkout_completed from the plan picker", () => {
@@ -97,6 +108,15 @@ describe("checkout_completed from the plan picker", () => {
       base: "https://api.example.test",
       apiKey: "server-only",
     })
+  })
+
+  it("is not recorded while an operator views another team", async () => {
+    m.entry = "none"
+    m.operator = true
+    await expect(settleSignupCheckout(user, "u1", "use:team-1")).resolves.toBe(
+      "/sandboxes",
+    )
+    expect(m.completed).not.toHaveBeenCalled()
   })
 
   it.each([

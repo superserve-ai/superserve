@@ -28,7 +28,13 @@ export default async function PlanSelectionPage({
   const params = await searchParams
   const result = await getSignupPlanPage(params)
   const context = result?.context
-  if (context && (params.billing === "success" || params.billing === "cancel"))
+  // A Free plan's card setup returns to the same URLs; it is not a paid
+  // Checkout. getSignupPlanPage already refuses an operator's session.
+  if (
+    context &&
+    context.offer !== "free" &&
+    (params.billing === "success" || params.billing === "cancel")
+  )
     recordCheckoutReturned({
       userId: context.userId,
       surface: "onboarding_plan",

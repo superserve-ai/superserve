@@ -53,6 +53,17 @@ it("records a successful return before the paid team is sent on", async () => {
   )
 })
 
+it("records nothing for a Free plan's card setup return", async () => {
+  m.resolve.mockResolvedValue(context("selecting", "free"))
+  await Page({ searchParams: Promise.resolve({ billing: "cancel" }) })
+  m.resolve.mockResolvedValue(context("committed", "free"))
+  await expect(
+    Page({ searchParams: Promise.resolve({ billing: "success" }) }),
+  ).rejects.toThrow("redirect:/sandboxes")
+  expect(m.returned).not.toHaveBeenCalled()
+  expect(m.completed).not.toHaveBeenCalled()
+})
+
 it("records nothing without a Checkout return or a resolved team", async () => {
   m.resolve.mockResolvedValue(context("selecting", null))
   await Page({ searchParams: Promise.resolve({}) })
