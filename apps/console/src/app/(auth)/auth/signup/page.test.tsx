@@ -85,7 +85,7 @@ vi.mock("@/lib/supabase/client", () => ({
 const mockConfirmedDestination = vi.fn<
   (offer: string | undefined) => Promise<string>
 >(() => Promise.resolve("/"))
-vi.mock("@/lib/auth/confirmed-signup-actions", () => ({
+vi.mock("@/lib/auth/signup-return-actions", () => ({
   confirmedSignupDestinationAction: (offer: string | undefined) =>
     mockConfirmedDestination(offer),
 }))

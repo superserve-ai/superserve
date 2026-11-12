@@ -13,10 +13,10 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { confirmedSignupDestinationAction } from "@/lib/auth/confirmed-signup-actions"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import { confirmedSignupDestinationAction } from "@/lib/auth/signup-return-actions"
 import { confirmedSignupReturnPath } from "@/lib/auth/signup-return-path"
 import {
   clearFingerprintSignupCapture,

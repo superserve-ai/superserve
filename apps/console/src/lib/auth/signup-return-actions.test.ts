@@ -28,7 +28,7 @@ vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
 }))
 
-import { confirmedSignupDestinationAction } from "./confirmed-signup-actions"
+import { confirmedSignupDestinationAction } from "./signup-return-actions"
 
 let plan: { ok: boolean; body: unknown }
 const fetchMock = vi.fn(async () => ({
