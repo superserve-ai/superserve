@@ -15,6 +15,7 @@ import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 import {
   trackCallbackFailure,
+  type CallbackFailure,
   type CallbackFailureReason,
 } from "@/lib/auth/callback-failure"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
@@ -114,6 +115,16 @@ function sanitizeNext(raw: string | null): string {
   return "/"
 }
 
+/**
+ * Redirects away from a callback that could not finish and schedules its
+ * `auth_callback_failed` event. The event goes out after the response, so a
+ * slow or failing PostHog never delays or changes the redirect.
+ */
+function failureRedirect(url: string, failure: CallbackFailure) {
+  trackCallbackFailure(failure)
+  return NextResponse.redirect(url)
+}
+
 /** Ends the session of an account awaiting Enterprise setup. */
 async function pendingSignupResponse(
   supabase: Awaited<ReturnType<typeof createServerClient>>,
@@ -163,6 +174,11 @@ export async function GET(request: Request) {
       : null
   // Supabase error code of a failed exchange or verify, for analytics only.
   let failureErrorCode: string | null = null
+  const method: CallbackFailure["method"] = code
+    ? "code"
+    : tokenHash
+      ? "token_hash"
+      : "none"
 
   if (code || tokenHash) {
     const supabase = await createServerClient()
@@ -182,11 +198,7 @@ export async function GET(request: Request) {
 
     if (error) {
       failureErrorCode = error.code ?? null
-      const failure = {
-        method: code ? ("code" as const) : ("token_hash" as const),
-        type,
-        errorCode: failureErrorCode,
-      }
+      const failure = { method, type, errorCode: failureErrorCode }
       // Supabase's generic trigger error is not authoritative SS-499 policy
       // evidence. Preserve the existing rejected-auth redirect and report an
       // unavailable annotation rather than a definitive blocked outcome.
@@ -202,12 +214,12 @@ export async function GET(request: Request) {
           },
           requestedOffer,
         ).catch(() => {})
-        trackCallbackFailure({ ...failure, reason: "signup_blocked" })
-        return NextResponse.redirect(
+        return failureRedirect(
           buildRedirectUrl(
             origin,
             "/auth/auth-code-error?reason=signup_blocked",
           ),
+          { ...failure, reason: "signup_blocked" },
         )
       }
       console.error("Auth callback error:", error.message, {
@@ -219,15 +231,15 @@ export async function GET(request: Request) {
       // again with the same email sends a new link while the account is
       // unconfirmed, so return there with the signup's offer and destination.
       if (!code && type === "signup") {
-        trackCallbackFailure({ ...failure, reason: "signup_link_failed" })
         const signup = new URLSearchParams({ error: "link_expired" })
         for (const param of ["offer", SIGNUP_OFFER_PARAM]) {
           const value = searchParams.get(param)
           if (value) signup.set(param, value)
         }
         if (next !== "/") signup.set("next", next)
-        return NextResponse.redirect(
+        return failureRedirect(
           buildRedirectUrl(origin, `/auth/signup?${signup}`),
+          { ...failure, reason: "signup_link_failed" },
         )
       }
     }
@@ -245,6 +257,8 @@ export async function GET(request: Request) {
 
       let newSignup = false
       if (user) {
+        // Failures after sign-in carry the user, so they join the person.
+        const signedIn = { method, type, userId: user.id }
         if (code && searchParams.has("staff_google_nonce")) {
           const staffProof = await completeStaffGoogle(
             exchangedSession,
@@ -321,11 +335,12 @@ export async function GET(request: Request) {
             }
             if (!provenExistingGoogle) {
               await supabase.auth.signOut().catch(() => {})
-              return NextResponse.redirect(
+              return failureRedirect(
                 buildRedirectUrl(
                   origin,
                   "/auth/auth-code-error?reason=pricing_unavailable&signup_offer=enterprise",
                 ),
+                { ...signedIn, reason: "pricing_unavailable" },
               )
             }
           }
@@ -382,6 +397,10 @@ export async function GET(request: Request) {
               })}`
             : null
         const membershipFailureResponse = (googleProofRecovery = false) => {
+          const degraded = {
+            ...signedIn,
+            reason: "membership_lookup_degraded",
+          } as const
           if (googleProofRecovery && paidSetupRecovery) {
             // The directory has not established a new Google account yet, so
             // its pre-auth proof must remain unbound. Resume through signup's
@@ -393,24 +412,27 @@ export async function GET(request: Request) {
                 next: saved.get("next")!,
               },
             )}`
-            return NextResponse.redirect(
+            return failureRedirect(
               buildRedirectUrl(
                 origin,
                 `/auth/signup?${new URLSearchParams({ complete_google: "1", next: preparation })}`,
               ),
+              degraded,
             )
           }
           // An invitee retries toward the invitation instead of first-team
           // setup; an unproven Google invitee needs signup's proof gate first.
           const invite = inviteReturnPath(next)
           if (googleProofRecovery && invite && !paidSetupRecovery)
-            return NextResponse.redirect(
+            return failureRedirect(
               buildRedirectUrl(
                 origin,
                 `/auth/signup?${new URLSearchParams({ complete_google: "1", next: invite })}`,
               ),
+              degraded,
             )
-          return NextResponse.redirect(
+          // The event reason matches the reason the error page shows.
+          return failureRedirect(
             buildRedirectUrl(
               origin,
               paidSetupRecovery ??
@@ -419,6 +441,9 @@ export async function GET(request: Request) {
                   ...(invite ? { next: invite } : {}),
                 })}`,
             ),
+            paidSetupRecovery
+              ? { ...signedIn, reason: "account_setup" }
+              : degraded,
           )
         }
         const signupAttemptId =
@@ -510,11 +535,12 @@ export async function GET(request: Request) {
                   signupOfferParam,
                 )
               if (next !== "/") recoveryUrl.searchParams.set("next", next)
-              return NextResponse.redirect(
+              return failureRedirect(
                 buildRedirectUrl(
                   origin,
                   `${recoveryUrl.pathname}${recoveryUrl.search}`,
                 ),
+                { ...signedIn, reason: proofFailure },
               )
             }
             console.info("Google OAuth signup proof validated at callback")
@@ -535,17 +561,12 @@ export async function GET(request: Request) {
                   ),
                 )
                 await supabase.auth.signOut().catch(() => {})
-                trackCallbackFailure({
-                  reason: "enterprise_hold_failed",
-                  method: "code",
-                  type,
-                  userId: user.id,
-                })
-                return NextResponse.redirect(
+                return failureRedirect(
                   buildRedirectUrl(
                     origin,
                     "/auth/auth-code-error?reason=enterprise_hold_failed",
                   ),
+                  { ...signedIn, reason: "enterprise_hold_failed" },
                 )
               }
             }
@@ -716,11 +737,12 @@ export async function GET(request: Request) {
                   { kind: "blocked" },
                   requestedOffer,
                 ).catch(() => {})
-                return NextResponse.redirect(
+                return failureRedirect(
                   buildRedirectUrl(
                     origin,
                     "/auth/auth-code-error?reason=signup_blocked",
                   ),
+                  { ...signedIn, reason: "signup_blocked" },
                 )
               }
               throw error
@@ -830,16 +852,18 @@ export async function GET(request: Request) {
               next,
             )
           } catch (error) {
+            const reason =
+              error instanceof SignupSetupBlockedError
+                ? error.reason
+                : "account_setup"
             const recovery = new URLSearchParams({
-              reason:
-                error instanceof SignupSetupBlockedError
-                  ? error.reason
-                  : "account_setup",
+              reason,
               account: user.id,
               next,
             })
-            return NextResponse.redirect(
+            return failureRedirect(
               buildRedirectUrl(origin, `/auth/auth-code-error?${recovery}`),
+              { ...signedIn, reason },
             )
           }
         }
@@ -893,15 +917,14 @@ export async function GET(request: Request) {
       : providerErrorCode
         ? "provider_error"
         : "missing_code"
-  trackCallbackFailure({
-    reason,
-    method: code ? "code" : tokenHash ? "token_hash" : "none",
-    type,
-    errorCode: code || tokenHash ? failureErrorCode : providerErrorCode,
-  })
   // A failed exchange keeps the invitation, so its retry can still join it.
   const invite = inviteReturnPath(next)
   const errorParams = new URLSearchParams({ reason })
   if (invite) errorParams.set("next", invite)
-  return NextResponse.redirect(`${origin}/auth/auth-code-error?${errorParams}`)
+  return failureRedirect(`${origin}/auth/auth-code-error?${errorParams}`, {
+    reason,
+    method,
+    type,
+    errorCode: code || tokenHash ? failureErrorCode : providerErrorCode,
+  })
 }
