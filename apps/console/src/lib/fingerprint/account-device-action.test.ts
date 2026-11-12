@@ -8,6 +8,10 @@ vi.mock("@/lib/supabase/server", () => ({
 }))
 const lookup = vi.hoisted(() => vi.fn())
 vi.mock("./observe", () => ({ verifiedAccountDevice: lookup }))
+const impersonatedTeam = vi.hoisted(() => ({ current: null as string | null }))
+vi.mock("@/lib/admin/impersonation", () => ({
+  getImpersonationTeamId: async () => impersonatedTeam.current,
+}))
 const record = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/api/promotion-device-evidence", () => ({
   recordExistingAccountDevice: record,
@@ -20,6 +24,14 @@ describe("recordAccountDevice", () => {
     user.current = null
     await expect(recordAccountDevice("event-1")).resolves.toBe(false)
     expect(lookup).not.toHaveBeenCalled()
+  })
+
+  it("records nothing during an authorized impersonation", async () => {
+    user.current = { id: "operator-1" }
+    impersonatedTeam.current = "team-1"
+    await expect(recordAccountDevice("event-1")).resolves.toBe(false)
+    expect(lookup).not.toHaveBeenCalled()
+    impersonatedTeam.current = null
   })
 
   it("records the session account's verified device", async () => {
