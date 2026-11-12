@@ -198,4 +198,77 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
     expect(mocks.getRecaptchaToken).not.toHaveBeenCalled()
     expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
   })
+
+  it("goes to Google within the deadline when the origin action never answers", async () => {
+    mocks.beginGoogleSignIn.mockReturnValue(new Promise(() => {}))
+    render(<SignInPage />)
+    const button = await clickGoogle()
+    await act(() =>
+      vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS - 1),
+    )
+    expect(mocks.signInWithOAuth).not.toHaveBeenCalled()
+    expect(button).toBeDisabled()
+
+    await act(() => vi.advanceTimersByTimeAsync(1))
+
+    expect(mocks.signInWithOAuth).toHaveBeenCalledTimes(1)
+    const callback = new URL(
+      mocks.signInWithOAuth.mock.calls[0][0].options.redirectTo,
+    )
+    expect(callback.searchParams.has("google_signin_intent")).toBe(false)
+    expect(callback.searchParams.get("signup_attempt_id")).toBe("attempt-1")
+  })
+
+  it("still reports an origin action that fails inside the deadline", async () => {
+    mocks.beginGoogleSignIn.mockRejectedValue(new Error("network"))
+    render(<SignInPage />)
+    await clickGoogle()
+    await act(() => vi.advanceTimersByTimeAsync(0))
+    expect(screen.getByText(/Error signing in/)).toBeInTheDocument()
+    expect(mocks.signInWithOAuth).not.toHaveBeenCalled()
+  })
+
+  it("does not queue a retry behind a stalled proof call (server actions run one at a time)", async () => {
+    // Next.js runs the client's server actions in order. A stalled proof call
+    // therefore holds back the origin action of the next try as well.
+    let queue: Promise<unknown> = Promise.resolve()
+    const inOrder = <T,>(run: () => Promise<T>): Promise<T> => {
+      const result = queue.then(run)
+      queue = result.catch(() => {})
+      return result
+    }
+    mocks.beginGoogleSignup
+      .mockReset()
+      .mockImplementationOnce(() => inOrder(() => new Promise(() => {})))
+      .mockImplementation(() =>
+        inOrder(async () => ({ success: true, signupAttemptId: "attempt-2" })),
+      )
+    mocks.beginGoogleSignIn
+      .mockReset()
+      .mockImplementation(() => inOrder(async () => "signin-origin"))
+    mocks.signInWithOAuth
+      .mockReset()
+      .mockResolvedValueOnce({ error: new Error("oauth down") })
+      .mockResolvedValue({ error: null })
+
+    render(<SignInPage />)
+    await clickGoogle()
+    await act(() =>
+      vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS),
+    )
+    expect(screen.getByText(/Error signing in/)).toBeInTheDocument()
+    expect(mocks.signInWithOAuth).toHaveBeenCalledTimes(1)
+
+    await clickGoogle()
+    await act(() =>
+      vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS),
+    )
+
+    expect(mocks.signInWithOAuth).toHaveBeenCalledTimes(2)
+    const retry = new URL(
+      mocks.signInWithOAuth.mock.calls[1][0].options.redirectTo,
+    )
+    expect(retry.searchParams.has("signup_attempt_id")).toBe(false)
+    expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
+  })
 })

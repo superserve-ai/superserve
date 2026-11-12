@@ -33,23 +33,50 @@ const TURNSTILE_BUDGET_MS = 2500
 
 // Only the newest call may act. See `googleSignupAttemptForSignIn`.
 let latestCheck = 0
+let latestAbort: AbortController | undefined
 
-function turnstileTokenWithinBudget(): Promise<string | undefined> {
+/**
+ * A token within the budget, or undefined. When the budget runs out, or the
+ * check is cancelled, the work stops: a late answer from the flag lookup
+ * starts no widget, and a widget already on the page is removed.
+ */
+function turnstileTokenWithinBudget(
+  cancelled: AbortSignal,
+): Promise<string | undefined> {
   if (!TURNSTILE_SITE_KEY) return Promise.resolve(undefined)
   return new Promise((resolve) => {
-    const timer = setTimeout(() => resolve(undefined), TURNSTILE_BUDGET_MS)
+    const own = new AbortController()
+    const stop = () => own.abort()
+    const timer = setTimeout(stop, TURNSTILE_BUDGET_MS)
+    cancelled.addEventListener("abort", stop, { once: true })
+    own.signal.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(timer)
+        resolve(undefined)
+      },
+      { once: true },
+    )
     isCloudflareSignupObservationEnabled()
-      .then((enabled) => (enabled ? getTurnstileToken() : undefined))
+      .then((enabled) =>
+        enabled && !own.signal.aborted
+          ? getTurnstileToken(own.signal)
+          : undefined,
+      )
       .catch(() => undefined)
       .then((token) => {
         clearTimeout(timer)
+        cancelled.removeEventListener("abort", stop)
         resolve(token)
       })
   })
 }
 
-async function runCheck(isCurrent: () => boolean): Promise<string | undefined> {
-  const turnstile = turnstileTokenWithinBudget()
+async function runCheck(
+  isCurrent: () => boolean,
+  cancelled: AbortSignal,
+): Promise<string | undefined> {
+  const turnstile = turnstileTokenWithinBudget(cancelled)
   const capture = await ensureFingerprintSignupCapture()
   if (!isCurrent()) return undefined
   const diagnostics = getFingerprintSignupDiagnostics()
@@ -85,8 +112,10 @@ async function runCheck(isCurrent: () => boolean): Promise<string | undefined> {
  * late step cannot write over the evidence of a later attempt. A server call
  * already sent when the deadline passes cannot be recalled; its proof cookie
  * is named for its own attempt ID and the callback URL does not carry that ID.
- * A fingerprint capture left running is the shared capture of the page, which
- * the next attempt, or the recovery page, reuses.
+ * Cancelling also removes the Turnstile widget the check added, and stops a
+ * late feature-flag answer from adding one. A fingerprint capture left running
+ * is the shared capture of the page, which the next attempt, or the recovery
+ * page, reuses.
  *
  * Returns the sign-up attempt ID for the callback URL, or undefined when the
  * check fails or runs out of time. Sign-in continues either way.
@@ -95,21 +124,26 @@ export function googleSignupAttemptForSignIn(
   deadlineMs: number = GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
 ): Promise<string | undefined> {
   const check = ++latestCheck
-  let expired = false
-  const isCurrent = () => !expired && check === latestCheck
+  latestAbort?.abort()
+  const abort = new AbortController()
+  latestAbort = abort
+  const isCurrent = () => !abort.signal.aborted && check === latestCheck
   return new Promise((resolve) => {
     const timer = setTimeout(() => {
-      expired = true
+      abort.abort()
       resolve(undefined)
     }, deadlineMs)
-    runCheck(isCurrent).then(
+    runCheck(isCurrent, abort.signal).then(
       (attemptId) => {
         clearTimeout(timer)
         // A result that arrives after the deadline is not used.
-        resolve(isCurrent() ? attemptId : undefined)
+        const result = isCurrent() ? attemptId : undefined
+        abort.abort()
+        resolve(result)
       },
       () => {
         clearTimeout(timer)
+        abort.abort()
         resolve(undefined)
       },
     )

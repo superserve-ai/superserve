@@ -30,10 +30,36 @@ import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
-import { googleSignupAttemptForSignIn } from "./google-signup-check"
+import {
+  GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
+  googleSignupAttemptForSignIn,
+} from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
 
 type RecoveryOption = "magic_link" | "google" | "forgot_password"
+
+/**
+ * The promise's value, or undefined once `ms` have passed. A rejection before
+ * then is kept; a result or rejection after it is dropped.
+ */
+function withinDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
 
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -226,9 +252,12 @@ function SignInContent() {
       // Run the sign-up check now, so a Google account that is new to
       // Superserve finishes sign-up in this one trip to Google. The check is
       // optional and stops by its own deadline, so it cannot hold back an
-      // existing account; a cancelled check starts no further step.
+      // existing account; a cancelled check starts no further step. The
+      // origin action is optional too (see below) and gets the same limit:
+      // Next.js runs server actions one at a time, so after a stalled check it
+      // would queue behind that check's request on a retry.
       const [intent, signupAttempt] = await Promise.allSettled([
-        beginGoogleSignIn(),
+        withinDeadline(beginGoogleSignIn(), GOOGLE_SIGNUP_CHECK_DEADLINE_MS),
         googleSignupAttemptForSignIn(),
       ])
       if (intent.status === "rejected") throw intent.reason

@@ -18,14 +18,22 @@ const TURNSTILE_TOKEN_TIMEOUT_MS = 3000
 /**
  * Returns a Turnstile token for the sign-up observation, or undefined when no
  * site key is set or the widget did not answer in time. The page must load
- * `TURNSTILE_SCRIPT_SRC`.
+ * `TURNSTILE_SCRIPT_SRC`. Aborting `signal` stops the wait, removes the widget
+ * and gives undefined, so a caller that has moved on leaves nothing behind.
  */
-export const getTurnstileToken = async (): Promise<string | undefined> => {
+export const getTurnstileToken = async (
+  signal?: AbortSignal,
+): Promise<string | undefined> => {
   if (!TURNSTILE_SITE_KEY) return undefined
   const start = Date.now()
-  while (!window.turnstile && Date.now() - start < TURNSTILE_LOAD_TIMEOUT_MS)
+  const aborted = () => signal?.aborted === true
+  while (
+    !window.turnstile &&
+    !aborted() &&
+    Date.now() - start < TURNSTILE_LOAD_TIMEOUT_MS
+  )
     await new Promise((resolve) => setTimeout(resolve, 100))
-  if (!window.turnstile) return undefined
+  if (!window.turnstile || aborted()) return undefined
   return new Promise((resolve) => {
     const container = document.createElement("div")
     container.style.position = "fixed"
@@ -42,6 +50,15 @@ export const getTurnstileToken = async (): Promise<string | undefined> => {
       cleanup()
       resolve(undefined)
     }, TURNSTILE_TOKEN_TIMEOUT_MS)
+    signal?.addEventListener(
+      "abort",
+      () => {
+        clearTimeout(deadline)
+        cleanup()
+        resolve(undefined)
+      },
+      { once: true },
+    )
     try {
       widgetId = window.turnstile!.render(container, {
         sitekey: TURNSTILE_SITE_KEY,

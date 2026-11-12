@@ -19,7 +19,7 @@ vi.mock("@/lib/cloudflare/turnstile-client", () => ({
   get TURNSTILE_SITE_KEY() {
     return mocks.turnstileSiteKey.value
   },
-  getTurnstileToken: () => mocks.turnstileToken(),
+  getTurnstileToken: (signal?: AbortSignal) => mocks.turnstileToken(signal),
 }))
 vi.mock("@/lib/fingerprint/client", () => ({
   ensureFingerprintSignupCapture: () => mocks.ensureCapture(),
@@ -153,6 +153,76 @@ describe("googleSignupAttemptForSignIn", () => {
       await vi.advanceTimersByTimeAsync(1)
       await expect(result).resolves.toBe("attempt-1")
       expect(mocks.beginGoogleSignup.mock.calls[0][1]).toBeUndefined()
+    })
+  })
+
+  describe("Turnstile cancellation", () => {
+    beforeEach(() => {
+      mocks.turnstileSiteKey.value = "turnstile-site-key"
+    })
+
+    it("starts no widget when the flag answer arrives after the check expired", async () => {
+      vi.useFakeTimers()
+      let answer: (enabled: boolean) => void = () => {}
+      mocks.cloudflareEnabled.mockReturnValue(
+        new Promise<boolean>((resolve) => {
+          answer = resolve
+        }),
+      )
+      mocks.ensureCapture.mockReturnValue(new Promise(() => {}))
+      const result = googleSignupAttemptForSignIn()
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS)
+      await expect(result).resolves.toBeUndefined()
+      answer(true)
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.turnstileToken).not.toHaveBeenCalled()
+    })
+
+    it("cancels the widget when the check expires", async () => {
+      vi.useFakeTimers()
+      let signal: AbortSignal | undefined
+      mocks.turnstileToken.mockImplementation((given?: AbortSignal) => {
+        signal = given
+        return new Promise(() => {})
+      })
+      mocks.ensureCapture.mockReturnValue(new Promise(() => {}))
+      // Shorter than the Turnstile budget, so the check is what cancels it.
+      const result = googleSignupAttemptForSignIn(1_000)
+      await vi.advanceTimersByTimeAsync(999)
+      expect(signal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(signal?.aborted).toBe(true)
+      await expect(result).resolves.toBeUndefined()
+    })
+
+    it("cancels the widget when its own budget runs out", async () => {
+      vi.useFakeTimers()
+      let signal: AbortSignal | undefined
+      mocks.turnstileToken.mockImplementation((given?: AbortSignal) => {
+        signal = given
+        return new Promise(() => {})
+      })
+      const result = googleSignupAttemptForSignIn()
+      await vi.advanceTimersByTimeAsync(2_499)
+      expect(signal?.aborted).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      expect(signal?.aborted).toBe(true)
+      await expect(result).resolves.toBe("attempt-1")
+    })
+
+    it("cancels the widget of an older check when a newer one starts", async () => {
+      let signal: AbortSignal | undefined
+      mocks.turnstileToken.mockImplementationOnce((given?: AbortSignal) => {
+        signal = given
+        return new Promise(() => {})
+      })
+      mocks.ensureCapture.mockReturnValueOnce(new Promise(() => {}))
+      void googleSignupAttemptForSignIn()
+      await Promise.resolve()
+      await Promise.resolve()
+      expect(signal?.aborted).toBe(false)
+      await googleSignupAttemptForSignIn()
+      expect(signal?.aborted).toBe(true)
     })
   })
 

@@ -122,6 +122,7 @@ vi.mock("./google-action", () => ({
 }))
 const mockGoogleSignupAttempt = vi.fn()
 vi.mock("./google-signup-check", () => ({
+  GOOGLE_SIGNUP_CHECK_DEADLINE_MS: 4000,
   googleSignupAttemptForSignIn: () => mockGoogleSignupAttempt(),
 }))
 const mockClearFingerprintCapture = vi.fn()
