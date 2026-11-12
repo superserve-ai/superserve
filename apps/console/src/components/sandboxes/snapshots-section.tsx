@@ -94,6 +94,7 @@ export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
                     <TemplateResources
                       vcpu={snapshot.resources.vcpu_count}
                       memoryMib={snapshot.resources.memory_mib}
+                      memoryMaxMib={snapshot.resources.memory_max_mib}
                       diskMib={snapshot.resources.disk_mib}
                     />
                   </TableCell>

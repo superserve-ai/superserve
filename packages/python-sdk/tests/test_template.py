@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+
 import httpx
 import pytest
 import respx
@@ -38,6 +40,7 @@ class TestCreate:
                 name="my-env",
                 vcpu=2,
                 memory_mib=2048,
+                memory_max_mib=8192,
                 disk_mib=4096,
                 from_="python:3.11",
                 start_cmd="python server.py",
@@ -48,6 +51,15 @@ class TestCreate:
             assert b"python:3.11" in body
             assert b"start_cmd" in body
             assert b"vcpu" in body
+            assert json.loads(body)["memory_max_mib"] == 8192
+
+    def test_omits_memory_max_when_unset(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/templates").mock(
+                return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
+            )
+            Template.create(name="x", memory_mib=2048, from_="python:3.11")
+            assert "memory_max_mib" not in json.loads(route.calls.last.request.content)
 
     def test_throws_on_missing_build_id(self) -> None:
         with respx.mock() as router:

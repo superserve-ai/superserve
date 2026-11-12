@@ -11,8 +11,8 @@ BASE = 'http://127.0.0.1:4173'
 VALUES = {
     'Full Name': 'Synthetic account',
     'Email': 'fixture@example.test',
-    'Password': 'synthetic-form-value',
-    'Confirm Password': 'synthetic-form-value',
+    'Password': 'Synthetic-form-value-1',
+    'Confirm Password': 'Synthetic-form-value-1',
 }
 
 

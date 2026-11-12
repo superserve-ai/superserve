@@ -4,7 +4,8 @@ import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import { Suspense, useEffect, useState } from "react"
+import posthog from "posthog-js"
+import { Suspense, useEffect, useRef, useState } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
@@ -19,6 +20,7 @@ import {
   signupCheckoutReturnPath,
   type TrialOutcome,
 } from "@/lib/billing/signup-checkout-paths"
+import { PLAN_PICKER_EVENTS } from "@/lib/posthog/events"
 
 const SUPPORT_EMAIL = "support@superserve.ai"
 
@@ -100,10 +102,6 @@ function ChoosePlanContent() {
     raw === "payment_confirming" && locator
       ? paymentSettlingPath(locator)
       : null
-  useEffect(() => {
-    if (settling) router.replace(settling)
-  }, [settling, router])
-  if (settling) return null
   const selected = searchParams.get("offer")
   const preselected =
     selected === "starter"
@@ -113,6 +111,32 @@ function ChoosePlanContent() {
         : null
 
   const picking = locator !== null && reason !== "checkout_elsewhere"
+  useEffect(() => {
+    if (settling) router.replace(settling)
+  }, [settling, router])
+  // New teams start on a trial, so this picker, not /onboarding/plan, is where
+  // most customers first see plans. $pageview alone does not say why.
+  // plan_options_requested says the page asked for plans; billing permissions
+  // or an empty catalog can still hide them. The ref keeps StrictMode's effect
+  // replay from recording the same picker state twice.
+  const recordedView = useRef<string | null>(null)
+  useEffect(() => {
+    if (settling) return
+    const view = {
+      reason,
+      requested_offer: preselected ?? "not_specified",
+      plan_options_requested: picking,
+    }
+    const key = JSON.stringify(view)
+    if (recordedView.current === key) return
+    recordedView.current = key
+    try {
+      posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
+    } catch {
+      /* Analytics never controls the picker. */
+    }
+  }, [settling, reason, preselected, picking])
+  if (settling) return null
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">

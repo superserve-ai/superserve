@@ -217,6 +217,10 @@ memory · 8192 MiB disk**.
 
 - Limits depend on the team's plan. For larger sandboxes, email support@superserve.ai.
 - `memoryMib` and `diskMib` take values in MiB (1 GiB = 1024 MiB).
+- Optional template `memoryMaxMib` / `memory_max_mib` lets sandboxes grow memory while
+  running up to that ceiling (`memoryMib` stays the boot size). It must exceed `memoryMib`,
+  be at most 4x it and within the plan limit, and differ from it by a multiple of 128.
+  Omit it for fixed memory; only templates built with it set can grow.
 - `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
   team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
