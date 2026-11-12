@@ -102,6 +102,8 @@ memoryMaxMib: 8192,
 
 Only sandboxes from a template built with `memoryMaxMib` set can grow; leave it out for a fixed memory size.
 
+For how sandboxes grow, shrink and are billed, see [Memory resizing](/sandbox/memory).
+
 ## Build error codes
 
 When a build lands on `failed`, `BuildError.code` carries one of these stable identifiers (the SDK parses it from the `"<code>: <detail>"` prefix on `errorMessage`):
