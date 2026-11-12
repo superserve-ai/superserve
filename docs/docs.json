@@ -268,7 +268,7 @@
         ]
       },
       {
-        "tab": "SDK & CLI",
+        "tab": "SDK",
         "icon": "code",
         "groups": [
           {
@@ -285,7 +285,7 @@
         ]
       },
       {
-        "tab": "API",
+        "tab": "REST API",
         "icon": "server",
         "groups": [
           {
