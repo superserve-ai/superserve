@@ -113,6 +113,12 @@ export async function createSignupFingerprintAttempt() {
   return createPromotionSignupAttempt()
 }
 
+// These actions take client input, and the label goes into analytics, so only
+// the two known pages pass.
+function knownEntryPoint(value: unknown): "signin" | "signup" | undefined {
+  return value === "signin" || value === "signup" ? value : undefined
+}
+
 export async function scheduleCloudflareObservation(
   signupAttemptId: string,
   signupMethod: "email" | "google",
@@ -124,12 +130,14 @@ export async function scheduleCloudflareObservation(
     ray?: string | null
   },
   turnstileToken?: string | null,
+  entryPoint?: "signin" | "signup",
 ) {
   try {
     after(() =>
       observeCloudflareSignup({
         signupAttemptId,
         signupMethod,
+        entryPoint: knownEntryPoint(entryPoint),
         userId,
         teamId,
         clientContext,
@@ -216,6 +224,7 @@ export async function scheduleFingerprintObservation(
   signupMethod: "email" | "google",
   userId?: string | null,
   signupAttemptId?: string,
+  entryPoint?: "signin" | "signup",
 ) {
   if (!eventId) return
   try {
@@ -223,6 +232,9 @@ export async function scheduleFingerprintObservation(
       observeFingerprintSignup({
         eventId,
         signupMethod,
+        ...(knownEntryPoint(entryPoint)
+          ? { entryPoint: knownEntryPoint(entryPoint) }
+          : {}),
         ...(userId !== undefined ? { userId } : {}),
         ...(signupAttemptId ? { signupAttemptId } : {}),
       }),
@@ -265,6 +277,7 @@ export const beginGoogleSignup = async (
     signupMethod: "google",
     captureAttemptId: capture?.attemptId,
     eventId: fingerprintEventId,
+    entryPoint: entry_point,
   })
   diagnostic.browser(browserDiagnostics)
   diagnostic.record({
@@ -283,6 +296,7 @@ export const beginGoogleSignup = async (
     undefined,
     clientContext,
     turnstileToken,
+    entry_point,
   )
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_google")
   const recaptchaBlock = strictRecaptchaBlock(recaptcha)
@@ -308,6 +322,7 @@ export const beginGoogleSignup = async (
       "google",
       null,
       signupAttemptId,
+      entry_point,
     )
     await trackEvent(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED,
@@ -331,6 +346,7 @@ export const beginGoogleSignup = async (
       ? await resolveFingerprintSignup({
           eventId: fingerprintEventId,
           signupMethod: "google",
+          entryPoint: entry_point,
           signupAttemptId,
           capture,
           onAttested: () => {

@@ -63,6 +63,24 @@ it("retains occurrence time, links untrusted reports without identifying users, 
   expect(JSON.stringify(events)).not.toContain("victim")
 })
 
+it("labels every diagnostic with the page that ran the check", async () => {
+  const diagnostic = fingerprintDiagnostics({
+    signupAttemptId: "server-attempt",
+    entryPoint: "signin",
+  })
+  diagnostic.browser({ schema_version: 1, events: [row] })
+  diagnostic.record({
+    stage: "submission",
+    outcome: "succeeded",
+    reason: "capture_present",
+  })
+  await mocks.after.mock.calls[0][0]()
+  const events = mocks.batch.mock.calls[0][0]
+  expect(events).toHaveLength(2)
+  for (const event of events)
+    expect(event.properties.entry_point).toBe("signin")
+})
+
 it("bounds reports, discards server stages from browser reports, and rejects arbitrary fields/codes", async () => {
   const diagnostic = fingerprintDiagnostics({})
   diagnostic.browser({

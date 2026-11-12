@@ -19,6 +19,10 @@ import {
   signInOfferDestination,
   isSelfServeSignupOffer,
 } from "@/lib/auth/signup-offer"
+import {
+  TURNSTILE_SCRIPT_SRC,
+  TURNSTILE_SITE_KEY,
+} from "@/lib/cloudflare/turnstile-client"
 import { clearFingerprintSignupCapture } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -220,8 +224,9 @@ function SignInContent() {
     try {
       const supabase = createBrowserClient()
       // Run the sign-up check now, so a Google account that is new to
-      // Superserve finishes sign-up in this one trip to Google. Wait for both
-      // to settle, so no part of the check runs after the buttons unlock.
+      // Superserve finishes sign-up in this one trip to Google. The check is
+      // optional and stops by its own deadline, so it cannot hold back an
+      // existing account; a cancelled check starts no further step.
       const [intent, signupAttempt] = await Promise.allSettled([
         beginGoogleSignIn(),
         googleSignupAttemptForSignIn(),
@@ -271,6 +276,10 @@ function SignInContent() {
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
           strategy="afterInteractive"
         />
+      )}
+      {/* Loaded up front too: the sign-up check sends its observation token. */}
+      {TURNSTILE_SITE_KEY && (
+        <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">

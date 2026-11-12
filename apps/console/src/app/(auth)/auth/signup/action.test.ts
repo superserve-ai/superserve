@@ -1642,6 +1642,82 @@ describe("beginGoogleSignup", () => {
     )
   })
 
+  it("labels the Cloudflare observation and keeps the Turnstile token for a sign-in check", async () => {
+    await beginGoogleSignup(
+      "google-token",
+      "turnstile-token",
+      undefined,
+      undefined,
+      "signin",
+    )
+
+    expect(mockObserveCloudflareSignup).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        signupMethod: "google",
+        turnstileToken: "turnstile-token",
+        entryPoint: "signin",
+      }),
+    )
+  })
+
+  it("labels the Cloudflare observation of the sign-up page as sign-up", async () => {
+    await beginGoogleSignup("google-token", "turnstile-token")
+
+    expect(mockObserveCloudflareSignup).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ entryPoint: "signup" }),
+    )
+  })
+
+  it.each([
+    ["signin", "signin"],
+    [undefined, "signup"],
+  ] as const)(
+    "labels the fingerprint diagnostics and lookup (%s)",
+    async (entryPoint, label) => {
+      fingerprintSignupEventId = encodeURIComponent("event-456")
+      diagnostics.contexts.mockClear()
+
+      await beginGoogleSignup(
+        "google-token",
+        undefined,
+        undefined,
+        undefined,
+        entryPoint,
+      )
+
+      expect(diagnostics.contexts).toHaveBeenCalledWith(
+        expect.objectContaining({ signupMethod: "google", entryPoint: label }),
+      )
+      expect(mockResolveFingerprintSignup).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: "event-456", entryPoint: label }),
+      )
+    },
+  )
+
+  it("labels the fingerprint observation of a sign-in check that reCAPTCHA blocks", async () => {
+    fingerprintSignupEventId = encodeURIComponent("event-456")
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      reason: "low_score",
+    })
+
+    await beginGoogleSignup(
+      "google-token",
+      undefined,
+      undefined,
+      undefined,
+      "signin",
+    )
+
+    expect(mockObserveFingerprintSignup).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        eventId: "event-456",
+        signupMethod: "google",
+        entryPoint: "signin",
+      }),
+    )
+  })
+
   it("starts a new evidence context for each Google signup attempt", async () => {
     const first = await beginGoogleSignup("google-token")
     const second = await beginGoogleSignup("google-token")
