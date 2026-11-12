@@ -1,6 +1,10 @@
+import { roleLabel } from "@/lib/team/roles"
+
 // Every string on the /invite/<token> page lives here so the wording can be
 // reviewed and edited in one place. Functions take the dynamic parts.
 export const INVITE_COPY = {
+  roleInvitation: (team: string, role: string) =>
+    `You're invited to join ${team} as ${roleLabel(role)}.`,
   ownerNotice:
     "Owners have full access to this team's sandboxes, billing, and members.",
 

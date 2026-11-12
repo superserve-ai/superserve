@@ -12,6 +12,7 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import {
@@ -58,12 +59,16 @@ function SignInContent() {
       ? rawNext
       : "/"
 
+  const invite = inviteReturnPath(nextUrl)
   const signUpParams = new URLSearchParams()
   if (requestedOffer) signUpParams.set("offer", requestedOffer)
   if (rawOffer && rawOffer !== requestedOffer)
     signUpParams.set(SIGNUP_OFFER_PARAM, rawOffer)
   if (nextUrl !== "/") signUpParams.set("next", nextUrl)
   const signUpHref = `/auth/signup${signUpParams.size ? `?${signUpParams}` : ""}`
+  const forgotPasswordHref = invite
+    ? `/auth/forgot-password?${new URLSearchParams({ next: invite })}`
+    : "/auth/forgot-password"
 
   useEffect(() => {
     const checkUser = async () => {
@@ -341,8 +346,11 @@ function SignInContent() {
           />
           <div className="flex justify-end">
             <Link
-              href="/auth/forgot-password"
-              className="text-xs text-muted/60 hover:text-muted"
+              href={forgotPasswordHref}
+              className={cn(
+                "text-xs text-muted/60 hover:text-muted",
+                inviteLinkReplayClass(forgotPasswordHref),
+              )}
             >
               Forgot password?
             </Link>
@@ -405,9 +413,12 @@ function SignInContent() {
             </Button>
             <div className="flex justify-center">
               <Link
-                href="/auth/forgot-password"
+                href={forgotPasswordHref}
                 onClick={() => trackRecoveryOption("forgot_password")}
-                className="text-xs text-muted hover:text-foreground"
+                className={cn(
+                  "text-xs text-muted hover:text-foreground",
+                  inviteLinkReplayClass(forgotPasswordHref),
+                )}
               >
                 Forgot password?
               </Link>

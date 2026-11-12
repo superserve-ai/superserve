@@ -1,8 +1,9 @@
 "use client"
 
-import { Button, Input } from "@superserve/ui"
+import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
+import { useSearchParams } from "next/navigation"
 import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useState } from "react"
@@ -10,7 +11,9 @@ import { Suspense, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
+import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { getRecaptchaToken, RECAPTCHA_SITE_KEY } from "@/lib/recaptcha/client"
 
@@ -22,6 +25,10 @@ function ForgotPasswordContent() {
   const [emailSent, setEmailSent] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
+  const invite = inviteReturnPath(useSearchParams().get("next"))
+  const signInHref = invite
+    ? `/auth/signin?${new URLSearchParams({ next: invite })}`
+    : "/auth/signin"
 
   const handleResetPassword = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -39,7 +46,11 @@ function ForgotPasswordContent() {
         })
         return
       }
-      const result = await sendPasswordResetEmail(email, recaptchaToken)
+      const result = await sendPasswordResetEmail(
+        email,
+        recaptchaToken,
+        invite ?? undefined,
+      )
       if (!result.success) {
         setErrors({ form: result.error })
         return
@@ -95,8 +106,11 @@ function ForgotPasswordContent() {
             </p>
             <p className="mt-5 text-center text-xs text-muted">
               <Link
-                href="/auth/signin"
-                className="font-medium text-foreground hover:underline"
+                href={signInHref}
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Back to sign in
               </Link>
@@ -128,8 +142,11 @@ function ForgotPasswordContent() {
 
             <p className="mt-5 text-center text-xs text-muted">
               <Link
-                href="/auth/signin"
-                className="font-medium text-foreground hover:underline"
+                href={signInHref}
+                className={cn(
+                  "font-medium text-foreground hover:underline",
+                  inviteLinkReplayClass(signInHref),
+                )}
               >
                 Back to sign in
               </Link>

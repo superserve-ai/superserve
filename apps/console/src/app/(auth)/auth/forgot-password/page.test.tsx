@@ -7,11 +7,13 @@ const recaptcha = vi.hoisted(() => ({
 }))
 const mockSendPasswordResetEmail = vi.fn()
 const mockCapture = vi.fn()
+const mockSearchParam = vi.fn()
 
 vi.mock("@superserve/ui", () => ({
   Button: (props: React.JSX.IntrinsicElements["button"]) => (
     <button {...props} />
   ),
+  cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
   Input: ({
     error,
     ...props
@@ -40,10 +42,19 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    className,
   }: {
     children: React.ReactNode
     href: string
-  }) => <a href={href}>{children}</a>,
+    className?: string
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
+}))
+vi.mock("next/navigation", () => ({
+  useSearchParams: () => ({ get: mockSearchParam }),
 }))
 vi.mock("next/script", () => ({ default: () => null }))
 vi.mock("posthog-js/react", () => ({
@@ -76,6 +87,7 @@ describe("ForgotPasswordPage", () => {
     recaptcha.getToken.mockReset().mockResolvedValue(undefined)
     mockSendPasswordResetEmail.mockReset().mockResolvedValue({ success: true })
     mockCapture.mockReset()
+    mockSearchParam.mockReset().mockReturnValue(null)
   })
 
   it("sends the reCAPTCHA token and shows the sent state", async () => {
@@ -89,6 +101,7 @@ describe("ForgotPasswordPage", () => {
     expect(mockSendPasswordResetEmail).toHaveBeenCalledWith(
       "user@example.com",
       "recaptcha-token",
+      undefined,
     )
     expect(mockCapture).toHaveBeenCalledOnce()
   })
@@ -150,6 +163,68 @@ describe("ForgotPasswordPage", () => {
       expect(
         screen.getByRole("button", { name: "Send reset link" }),
       ).toHaveProperty("disabled", false),
+    )
+  })
+})
+
+describe("forgot-password invite return path", () => {
+  beforeEach(() => {
+    recaptcha.siteKey = undefined
+    recaptcha.getToken.mockReset().mockResolvedValue(undefined)
+    mockSendPasswordResetEmail.mockReset().mockResolvedValue({ success: true })
+    mockCapture.mockReset()
+    mockSearchParam.mockReset()
+  })
+
+  it("passes a validated invite to the action, locks input and masks the echoed email", async () => {
+    const invite = `/invite/ssinv_use_${"T".repeat(43)}`
+    mockSearchParam.mockReturnValue(invite)
+    let resolve!: (value: { success: true }) => void
+    mockSendPasswordResetEmail.mockImplementation(
+      () =>
+        new Promise<{ success: true }>((done) => {
+          resolve = done
+        }),
+    )
+
+    submit("person@example.com")
+
+    await waitFor(() =>
+      expect(mockSendPasswordResetEmail).toHaveBeenCalledWith(
+        "person@example.com",
+        undefined,
+        invite,
+      ),
+    )
+    expect(screen.getByPlaceholderText("Email")).toHaveProperty(
+      "disabled",
+      true,
+    )
+    resolve({ success: true })
+    expect(await screen.findByText("person@example.com")).toHaveAttribute(
+      "data-mask",
+    )
+    const back = screen.getByRole("link", { name: "Back to sign in" })
+    expect(back).toHaveClass("ph-no-capture")
+    expect(
+      new URL(
+        back.getAttribute("href")!,
+        "https://console.example.com",
+      ).searchParams.get("next"),
+    ).toBe(invite)
+  })
+
+  it("drops non-invite paths", async () => {
+    mockSearchParam.mockReturnValue("/sandboxes")
+
+    submit("person@example.com")
+
+    await waitFor(() =>
+      expect(mockSendPasswordResetEmail).toHaveBeenCalledWith(
+        "person@example.com",
+        undefined,
+        undefined,
+      ),
     )
   })
 })
