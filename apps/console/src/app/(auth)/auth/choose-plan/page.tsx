@@ -121,14 +121,18 @@ interface PickerView {
   plan_options_requested: boolean
 }
 
+interface PickerVisit {
+  identity: string
+  view: PickerView
+}
+
 function recordPickerView(
   recorded: { current: string | null },
-  view: PickerView,
+  { identity, view }: PickerVisit,
   options?: CaptureOptions,
 ) {
-  const key = JSON.stringify(view)
-  if (recorded.current === key) return
-  recorded.current = key
+  if (recorded.current === identity) return
+  recorded.current = identity
   try {
     if (options) posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view, options)
     else posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
@@ -137,17 +141,18 @@ function recordPickerView(
   }
 }
 
-// Records plan_picker_viewed once per picker state. The ref keeps StrictMode's
-// effect replay from recording the same state twice. view is null while the
-// state is still loading; fallback is then recorded if the picker changes
-// (identity), closes or the page unloads first, so no view is lost.
+// Records plan_picker_viewed once per picker visit; identity names the visit.
+// The ref keeps StrictMode's effect replay, and a view that loads after its
+// fallback was sent, from recording the visit twice. view is null while the
+// visit is still loading; fallback is then recorded if the visit changes,
+// closes or the page unloads first, so no visit is lost.
 function usePlanPickerView(
   view: PickerView | null,
   fallback: PickerView | null,
   identity: string,
 ) {
   const recorded = useRef<string | null>(null)
-  const pending = useRef<{ identity: string; view: PickerView } | null>(null)
+  const pending = useRef<PickerVisit | null>(null)
   const mounted = useRef(false)
   const viewKey = view && JSON.stringify(view)
   const fallbackKey = fallback && JSON.stringify(fallback)
@@ -155,10 +160,14 @@ function usePlanPickerView(
     const waiting = pending.current
     pending.current = null
     if (waiting && waiting.identity !== identity) {
-      recordPickerView(recorded, waiting.view)
+      recordPickerView(recorded, waiting)
     }
-    if (viewKey) recordPickerView(recorded, JSON.parse(viewKey) as PickerView)
-    else if (fallbackKey) {
+    if (viewKey) {
+      recordPickerView(recorded, {
+        identity,
+        view: JSON.parse(viewKey) as PickerView,
+      })
+    } else if (fallbackKey) {
       pending.current = {
         identity,
         view: JSON.parse(fallbackKey) as PickerView,
@@ -170,7 +179,7 @@ function usePlanPickerView(
     const flush = (options?: CaptureOptions) => {
       const waiting = pending.current
       pending.current = null
-      if (waiting) recordPickerView(recorded, waiting.view, options)
+      if (waiting) recordPickerView(recorded, waiting, options)
     }
     // React cleanup does not run when the document unloads.
     const onPageHide = () => flush({ transport: "sendBeacon" })

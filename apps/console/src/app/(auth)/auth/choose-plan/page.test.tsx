@@ -38,15 +38,15 @@ const trial = vi.hoisted(() => ({
   outcome: null as TrialOutcome | null,
   perTeam: {} as Record<string, TrialOutcome | null>,
   never: false,
+  gate: null as Promise<void> | null,
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTeamCatalogAction: async () => null,
-  getTrialOutcomeAction: ({ team }: { team: string }) =>
-    trial.never
-      ? new Promise<never>(() => {})
-      : Promise.resolve(
-          team in trial.perTeam ? trial.perTeam[team] : trial.outcome,
-        ),
+  getTrialOutcomeAction: async ({ team }: { team: string }) => {
+    if (trial.never) return new Promise<never>(() => {})
+    await trial.gate
+    return team in trial.perTeam ? trial.perTeam[team] : trial.outcome
+  },
 }))
 const { capture } = vi.hoisted(() => ({ capture: vi.fn() }))
 vi.mock("posthog-js", () => ({ default: { capture } }))
@@ -63,6 +63,7 @@ describe("plan picker", () => {
     trial.outcome = null
     trial.perTeam = {}
     trial.never = false
+    trial.gate = null
   })
 
   it("offers both plans when the trial has ended", async () => {
@@ -320,6 +321,19 @@ describe("plan picker", () => {
     })
   })
 
+  it("records each team's waiting trial_ended view when the team changes", async () => {
+    trial.never = true
+    const at = (team: string) =>
+      new URLSearchParams({ reason: "trial_ended", account: "u1", team })
+    params = at("use:t1")
+    const { rerender, unmount } = render(<ChoosePlanPage />)
+    await screen.findByRole("button", { name: "Developer" })
+    params = at("use:t2")
+    rerender(<ChoosePlanPage />)
+    unmount()
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2))
+  })
+
   it("records a waiting trial_ended view when the picker changes first", async () => {
     trial.never = true
     const at = (offer: string) =>
@@ -348,7 +362,9 @@ describe("plan picker", () => {
   })
 
   it("sends a waiting trial_ended view by beacon when the page unloads", async () => {
-    trial.never = true
+    let release = () => {}
+    trial.gate = new Promise((done) => (release = done))
+    trial.outcome = "unavailable"
     params = new URLSearchParams({
       reason: "trial_ended",
       account: "u1",
@@ -357,6 +373,8 @@ describe("plan picker", () => {
     render(<ChoosePlanPage />)
     await screen.findByRole("button", { name: "Developer" })
     window.dispatchEvent(new Event("pagehide"))
+    release()
+    await screen.findByText(/isn't available/i)
     expect(capture).toHaveBeenCalledTimes(1)
     expect(capture).toHaveBeenCalledWith(
       "plan_picker_viewed",
