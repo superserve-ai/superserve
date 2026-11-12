@@ -1353,29 +1353,35 @@ describe("auth callback", () => {
       },
     )
 
-    it("records google_proof_failed with the proof failure as error_code", async () => {
-      googleMembershipState = { kind: "first_time" }
-      proofAvailable = false
+    it.each([
+      "started_from_signin",
+      "no_proof",
+      "expired",
+      "attempt_mismatch",
+      "invalid_proof",
+    ] as const)(
+      "records the Google proof failure %s as the reason in the URL",
+      async (proofFailure) => {
+        googleMembershipState = { kind: "first_time" }
+        proofAvailable = false
+        mockGoogleSignupProofFailure.mockResolvedValue(proofFailure)
 
-      const response = await GET(
-        new Request("https://console.superserve.ai/auth/callback?code=abc"),
-      )
+        const response = await GET(
+          new Request("https://console.superserve.ai/auth/callback?code=abc"),
+        )
 
-      expect(target(response)).toBe(
-        "/auth/signup?complete_google=1&reason=no_proof",
-      )
-      expect(failures()).toEqual([
-        [
-          "auth_callback_failed",
-          "u1",
-          {
-            ...googleProps,
-            error_code: "no_proof",
-            reason: "google_proof_failed",
-          },
-        ],
-      ])
-    })
+        expect(target(response)).toBe(
+          `/auth/signup?complete_google=1&reason=${proofFailure}`,
+        )
+        expect(failures()).toEqual([
+          [
+            "auth_callback_failed",
+            "u1",
+            { ...googleProps, reason: proofFailure },
+          ],
+        ])
+      },
+    )
 
     it("returns a post-sign-in failure redirect while PostHog never answers", async () => {
       currentUser!.app_metadata = { provider: "email" }

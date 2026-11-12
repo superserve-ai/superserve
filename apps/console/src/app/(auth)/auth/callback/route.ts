@@ -540,11 +540,7 @@ export async function GET(request: Request) {
                   origin,
                   `${recoveryUrl.pathname}${recoveryUrl.search}`,
                 ),
-                {
-                  ...signedIn,
-                  reason: "google_proof_failed",
-                  errorCode: proofFailure,
-                },
+                { ...signedIn, reason: proofFailure },
               )
             }
             console.info("Google OAuth signup proof validated at callback")

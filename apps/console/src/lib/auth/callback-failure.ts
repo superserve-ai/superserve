@@ -4,6 +4,7 @@ import crypto from "node:crypto"
 import { after } from "next/server"
 
 import type { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
+import type { GoogleSignupProofFailure } from "@/lib/auth/google-signup-proof"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
@@ -33,8 +34,8 @@ export const CALLBACK_FAILURE_REASONS = [
 
 /**
  * Why the callback could not finish account setup after the user signed in.
- * Except `google_proof_failed` (which returns to signup), each value is the
- * `reason` the error page shows its own copy or retry for.
+ * Each value is the `reason` in the redirect URL: the error page's own copy
+ * or retry, or signup's Google proof gate.
  */
 export const CALLBACK_SETUP_FAILURE_REASONS = [
   // Enterprise pricing could not be read for an Enterprise signup.
@@ -49,19 +50,27 @@ export const CALLBACK_SETUP_FAILURE_REASONS = [
   "impersonation",
   "team_changed",
   "team_conflict",
-  // A new Google account had no valid signup proof; it returns to signup.
-  "google_proof_failed",
+  // A new Google account had no valid signup proof; it returns to signup
+  // with one of these GoogleSignupProofFailure reasons.
+  "started_from_signin",
+  "no_proof",
+  "expired",
+  "attempt_mismatch",
+  "invalid_proof",
 ] as const
 
 export type CallbackFailureReason =
   | (typeof CALLBACK_FAILURE_REASONS)[number]
   | (typeof CALLBACK_SETUP_FAILURE_REASONS)[number]
 
-// Compile-time check: every SignupSetupBlockedError reason is a known reason.
-const setupBlockedReasonsAreKnown: SignupSetupBlockedError["reason"] extends CallbackFailureReason
+// Compile-time check: every reason these errors put in a redirect URL is a
+// known event reason.
+const redirectReasonsAreKnown:
+  | SignupSetupBlockedError["reason"]
+  | GoogleSignupProofFailure extends CallbackFailureReason
   ? true
   : never = true
-void setupBlockedReasonsAreKnown
+void redirectReasonsAreKnown
 
 const TOKEN_TYPES = new Set([
   "signup",
