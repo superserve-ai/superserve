@@ -270,6 +270,27 @@ describe("plan picker", () => {
     },
   )
 
+  it("reads the trial outcome again when the picker returns to trial_ended", async () => {
+    trial.outcome = "check_unavailable"
+    const at = (reason: string) =>
+      new URLSearchParams({ reason, account: "u1", team: "use:team-1" })
+    params = at("trial_ended")
+    const { rerender } = render(<ChoosePlanPage />)
+    expect(await screen.findByText(/couldn't confirm/)).toBeTruthy()
+    params = at("checkout_canceled")
+    rerender(<ChoosePlanPage />)
+    trial.outcome = "unavailable"
+    params = at("trial_ended")
+    rerender(<ChoosePlanPage />)
+    expect(screen.queryByText(/couldn't confirm/)).toBeNull()
+    expect(await screen.findByText(/isn't available/)).toBeTruthy()
+    expect(capture.mock.calls.map(([, view]) => view.reason)).toEqual([
+      "trial_check_unavailable",
+      "checkout_canceled",
+      "trial_unavailable",
+    ])
+  })
+
   it("records one picker view under StrictMode", async () => {
     params = new URLSearchParams({
       reason: "upgrade",

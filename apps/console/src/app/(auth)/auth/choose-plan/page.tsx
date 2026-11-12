@@ -94,6 +94,8 @@ function useTrialOutcome(
       })
     return () => {
       current = false
+      // A picker that leaves trial_ended and comes back waits for a fresh read.
+      setRead(null)
     }
   }, [account, team, key])
   if (key === null) return null
