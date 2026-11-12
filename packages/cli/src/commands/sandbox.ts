@@ -44,6 +44,7 @@ interface SandboxItem {
   status: string
   vcpu_count?: number
   memory_mib?: number
+  memory_max_mib?: number | null
   snapshot_id?: string
   source_snapshot_id?: string
   created_at?: string
@@ -139,9 +140,16 @@ function limitQuery(limit: string | undefined): string | undefined {
     : String(parseInteger(limit, "--limit", { min: 1, max: 200 }))
 }
 
-function shape(s: { vcpu_count?: number; memory_mib?: number }): string {
+function shape(s: {
+  vcpu_count?: number
+  memory_mib?: number
+  memory_max_mib?: number | null
+}): string {
   if (s.vcpu_count === undefined || s.memory_mib === undefined) return "-"
-  return `${s.vcpu_count} vCPU, ${formatBytes(s.memory_mib * 1024 * 1024)}`
+  const mem = formatBytes(s.memory_mib * 1024 * 1024)
+  return s.memory_max_mib == null
+    ? `${s.vcpu_count} vCPU, ${mem}`
+    : `${s.vcpu_count} vCPU, ${mem}-${formatBytes(s.memory_max_mib * 1024 * 1024)}`
 }
 
 function keyValues(m: Record<string, string> | undefined): string | undefined {
@@ -241,9 +249,10 @@ function eventDetails(e: NetworkEvent): string {
   return parts.join("  ")
 }
 
-// A brand-new account's trial credit is recorded by a background worker a few
-// seconds after signup, so the first create right after `superserve login` can
-// briefly see 402. A 402 creates nothing, so retrying it is safe.
+// A brand-new account's trial claim may still be in progress after signup, so
+// the first create right after `superserve login` can briefly see a 402 with
+// billing_ineligible or trial_check_unavailable. A 402 creates nothing, so
+// retrying these codes is safe.
 const NEW_ACCOUNT_SETUP_MS = 90_000
 
 async function createWaitingForNewAccount<T>(
@@ -263,7 +272,8 @@ async function createWaitingForNewAccount<T>(
         fresh &&
         err instanceof SandboxError &&
         err.statusCode === 402 &&
-        err.code === "billing_ineligible" &&
+        (err.code === "billing_ineligible" ||
+          err.code === "trial_check_unavailable") &&
         Date.now() < deadline
       if (!settingUp) throw err
       if (!told) info("Finishing account setup…")

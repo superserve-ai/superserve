@@ -19,6 +19,7 @@ import { useEffect, useMemo, useState } from "react"
 import { useTemplateEntitlement } from "@/hooks/use-template-entitlement"
 import { useCreateTemplate } from "@/hooks/use-templates"
 import { ApiError } from "@/lib/api/client"
+import { formatMemory as formatMib } from "@/lib/format"
 
 const CURATED_IMAGES = [
   "python:3.11-slim",
@@ -34,6 +35,8 @@ const CURATED_IMAGES = [
 const MEMORY_OPTIONS = [256, 512, 1024, 2048, 4096] as const
 const DISK_OPTIONS = [1024, 2048, 4096, 8192] as const
 const VCPU_OPTIONS = [1, 2] as const
+// Live-growth ceilings; the API allows up to 4x the boot memory.
+const MEMORY_MAX_OPTIONS = [512, 1024, 2048, 4096, 8192, 16384] as const
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 
@@ -94,6 +97,11 @@ export function CreateTemplateDialog({
   const [vcpu, setVcpu] = useState<number>(1)
   const [memory, setMemory] = useState<number>(1024)
   const [disk, setDisk] = useState<number>(4096)
+  const [memoryMax, setMemoryMax] = useState<number | null>(null)
+  const memoryMaxOptions = withinCap(
+    MEMORY_MAX_OPTIONS,
+    caps?.max_memory_mib,
+  ).filter((m) => m > memory && m <= 4 * memory)
   const [errors, setErrors] = useState<{
     name?: string
     image?: string
@@ -108,7 +116,18 @@ export function CreateTemplateDialog({
       setVcpu(vcpuOptions[vcpuOptions.length - 1] ?? VCPU_OPTIONS[0])
     if (!diskOptions.includes(disk))
       setDisk(diskOptions[diskOptions.length - 1] ?? DISK_OPTIONS[0])
-  }, [memoryOptions, vcpuOptions, diskOptions, memory, vcpu, disk])
+    if (memoryMax !== null && !memoryMaxOptions.includes(memoryMax))
+      setMemoryMax(null)
+  }, [
+    memoryOptions,
+    vcpuOptions,
+    diskOptions,
+    memoryMaxOptions,
+    memory,
+    vcpu,
+    disk,
+    memoryMax,
+  ])
 
   const reset = () => {
     setName("")
@@ -118,6 +137,7 @@ export function CreateTemplateDialog({
     setVcpu(1)
     setMemory(1024)
     setDisk(4096)
+    setMemoryMax(null)
     setErrors({})
   }
 
@@ -153,6 +173,7 @@ export function CreateTemplateDialog({
         name: name.trim(),
         vcpu,
         memory_mib: memory,
+        ...(memoryMax !== null && { memory_max_mib: memoryMax }),
         disk_mib: disk,
         build_spec: { from: image },
       })
@@ -202,7 +223,7 @@ export function CreateTemplateDialog({
         <p className="text-sm text-muted">
           Your plan does not include template creation.
         </p>
-        <Button render={<Link href="/plan-usage/upgrade" />}>
+        <Button render={<Link href="/billing-usage/upgrade" />}>
           Upgrade to create templates
         </Button>
       </div>
@@ -317,6 +338,36 @@ export function CreateTemplateDialog({
               ))}
             </div>
           </Field>
+
+          {memoryMaxOptions.length > 0 && (
+            <Field label="Max memory">
+              <div className="flex border border-dashed border-border">
+                {[null, ...memoryMaxOptions].map((m) => (
+                  <button
+                    key={m ?? "fixed"}
+                    type="button"
+                    onClick={() => setMemoryMax(m)}
+                    className={cn(
+                      "flex-1 cursor-pointer py-2 font-mono text-xs uppercase transition-colors",
+                      memoryMax === m
+                        ? "bg-foreground text-background"
+                        : "text-muted hover:text-foreground",
+                    )}
+                    aria-label={
+                      m === null ? "Fixed memory" : `Max ${formatMib(m)}`
+                    }
+                    title={
+                      m === null
+                        ? "Memory stays at the boot size"
+                        : `Sandboxes can grow memory to ${formatMib(m)} while running`
+                    }
+                  >
+                    {m === null ? "Fixed" : formatMib(m)}
+                  </button>
+                ))}
+              </div>
+            </Field>
+          )}
 
           <div className="space-y-1.5">
             <div className="grid grid-cols-2 gap-3">

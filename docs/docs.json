@@ -18,14 +18,13 @@
   "background": {
     "color": {
       "dark": "#141414"
-    },
-    "decoration": "gradient"
+    }
   },
   "styling": {
     "codeblocks": {
       "theme": {
         "light": "github-light",
-        "dark": "vitesse-dark"
+        "dark": "github-dark-default"
       }
     }
   },
@@ -53,9 +52,44 @@
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "redirects": [
+    { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
+    {
+      "source": "/integrations/managed-agents/claude-managed-agents",
+      "destination": "/integrations/agent-platforms/claude-managed-agents",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/managed-agents/cursor-cloud-agents",
+      "destination": "/integrations/agent-platforms/cursor-cloud-agents",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/managed-agents/omnara",
+      "destination": "/integrations/agent-platforms/omnara",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/personal-agents/qm",
+      "destination": "/integrations/agent-platforms/qm",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/managed-agents",
+      "destination": "/integrations/overview#agent-platforms",
+      "permanent": true
+    },
+    {
+      "source": "/integrations/managed-agents/:slug*",
+      "destination": "/integrations/agent-platforms/:slug*",
+      "permanent": true
+    },
     {
       "source": "/integrations/virtual-filesystems/mesa",
-      "destination": "/storage/mesa"
+      "destination": "/storage/archil"
+    },
+    {
+      "source": "/storage/mesa",
+      "destination": "/storage/archil"
     },
     {
       "source": "/integrations/virtual-filesystems/archil",
@@ -70,7 +104,13 @@
         "groups": [
           {
             "group": "Get Started",
-            "pages": ["introduction", "quickstart", "api-key", "cli"]
+            "pages": [
+              "introduction",
+              "quickstart",
+              "api-key",
+              "cli",
+              "integrations/mcp"
+            ]
           },
           {
             "group": "Sandbox",
@@ -78,13 +118,12 @@
               "sandbox/create",
               "sandbox/connect",
               "sandbox/lifecycle",
+              "sandbox/live-memory-resizing",
               "sandbox/snapshots",
               "sandbox/metadata",
               "sandbox/networking",
               "sandbox/preview-urls",
-              "sandbox/network-log",
-              "sandbox/desktop",
-              "sandbox/docker"
+              "sandbox/network-log"
             ]
           },
           {
@@ -120,7 +159,7 @@
           },
           {
             "group": "Storage",
-            "pages": ["storage/mesa", "storage/archil", "storage/cloud-buckets"]
+            "pages": ["storage/archil", "storage/cloud-buckets"]
           },
           {
             "group": "Errors",
@@ -222,12 +261,19 @@
           {
             "group": "Team Management",
             "pages": [
+              "PATCH /teams/{team_id}",
               "GET /teams/{team_id}/members",
               "POST /teams/{team_id}/members",
               "DELETE /teams/{team_id}/members/{user_id}",
               "GET /teams/{team_id}/roles",
               "POST /teams/{team_id}/roles",
-              "DELETE /teams/{team_id}/roles/{assignment_id}"
+              "DELETE /teams/{team_id}/roles/{assignment_id}",
+              "GET /teams/{team_id}/invitations",
+              "POST /teams/{team_id}/invitations",
+              "POST /teams/{team_id}/invitations/{invitation_id}/resend",
+              "POST /teams/{team_id}/invitations/{invitation_id}/revoke",
+              "POST /teams/{team_id}/invitations/{invitation_id}/delivery",
+              "POST /teams/{team_id}/leave"
             ]
           },
           {
@@ -238,55 +284,97 @@
         "openapi": "https://api.superserve.ai/openapi.yaml"
       },
       {
-        "anchor": "Integrations",
+        "anchor": "Guides",
         "icon": "puzzle-piece",
         "groups": [
           {
-            "group": "Overview",
-            "pages": ["integrations/overview"]
-          },
-          {
-            "group": "Coding Agents",
+            "group": "Use cases",
             "pages": [
-              "integrations/coding-agents/claude",
-              "integrations/coding-agents/codex",
-              "integrations/coding-agents/droid",
-              "integrations/coding-agents/kilocode",
-              "integrations/coding-agents/opencode",
-              "integrations/coding-agents/pi"
+              "guides/run-ci-jobs",
+              "guides/code-interpreter",
+              "guides/coding-agents",
+              "sandbox/desktop",
+              "sandbox/docker",
+              "guides/evals-and-rl",
+              "guides/headless-browser"
             ]
           },
           {
-            "group": "Agent Frameworks",
+            "group": "Integrations",
             "pages": [
-              "integrations/agent-harnesses/agno",
-              "integrations/agent-harnesses/claude-agent-sdk",
-              "integrations/agent-harnesses/langchain",
-              "integrations/agent-harnesses/openai-agents-sdk",
-              "integrations/agent-harnesses/vercel-ai-sdk"
+              "integrations/overview",
+              {
+                "group": "Coding agents",
+                "expanded": true,
+                "pages": [
+                  "integrations/coding-agents/claude",
+                  "integrations/coding-agents/codex",
+                  "integrations/coding-agents/droid",
+                  "integrations/coding-agents/kilocode",
+                  "integrations/coding-agents/opencode",
+                  "integrations/coding-agents/pi"
+                ]
+              },
+              {
+                "group": "Agent platforms",
+                "expanded": true,
+                "pages": [
+                  "integrations/agent-platforms/claude-managed-agents",
+                  "integrations/agent-platforms/cursor-cloud-agents",
+                  "integrations/agent-platforms/omnara",
+                  "integrations/agent-platforms/qm"
+                ]
+              },
+              {
+                "group": "Agent frameworks",
+                "expanded": true,
+                "pages": [
+                  "integrations/agent-harnesses/agno",
+                  "integrations/agent-harnesses/claude-agent-sdk",
+                  "integrations/agent-harnesses/crewai",
+                  "integrations/agent-harnesses/dspy",
+                  "integrations/agent-harnesses/flue",
+                  "integrations/agent-harnesses/google-adk",
+                  "integrations/agent-harnesses/langchain",
+                  "integrations/agent-harnesses/letta",
+                  "integrations/agent-harnesses/mastra",
+                  "integrations/agent-harnesses/openai-agents-sdk",
+                  "integrations/agent-harnesses/pydantic-ai",
+                  "integrations/agent-harnesses/vercel-ai-sdk"
+                ]
+              },
+              {
+                "group": "Personal agents",
+                "expanded": true,
+                "pages": [
+                  "integrations/personal-agents/hermes",
+                  "integrations/personal-agents/openclaw"
+                ]
+              },
+              {
+                "group": "Computer use models",
+                "expanded": true,
+                "pages": [
+                  "integrations/computer-use/claude",
+                  "integrations/computer-use/openai"
+                ]
+              },
+              {
+                "group": "Evaluation and RL frameworks",
+                "expanded": true,
+                "pages": [
+                  "integrations/evaluations/harbor",
+                  "integrations/reinforcement-learning/trl",
+                  "integrations/reinforcement-learning/nemo-gym",
+                  "integrations/evaluations/openenv"
+                ]
+              },
+              {
+                "group": "Developer tools",
+                "expanded": true,
+                "pages": ["integrations/dev-tools/crabbox"]
+              }
             ]
-          },
-          {
-            "group": "Personal Agents",
-            "pages": [
-              "integrations/personal-agents/hermes",
-              "integrations/personal-agents/openclaw"
-            ]
-          },
-          {
-            "group": "Managed Agents",
-            "pages": [
-              "integrations/managed-agents/claude-managed-agents",
-              "integrations/managed-agents/cursor-cloud-agents"
-            ]
-          },
-          {
-            "group": "Evaluations",
-            "pages": ["integrations/evaluations/harbor"]
-          },
-          {
-            "group": "MCP & Tools",
-            "pages": ["integrations/mcp"]
           }
         ]
       }
@@ -297,7 +385,18 @@
       "x": "https://x.com/superserve_ai",
       "github": "https://github.com/superserve-ai/",
       "linkedin": "https://www.linkedin.com/company/super-serve-ai/"
-    }
+    },
+    "links": [
+      {
+        "header": "Resources",
+        "items": [
+          {
+            "label": "Status",
+            "href": "https://status.superserve.ai"
+          }
+        ]
+      }
+    ]
   },
   "integrations": {
     "posthog": {

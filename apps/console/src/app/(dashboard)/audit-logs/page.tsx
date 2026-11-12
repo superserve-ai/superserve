@@ -41,6 +41,7 @@ const CATEGORY_TABS = [
   { label: "Template", value: "template" },
   { label: "Exec", value: "exec" },
   { label: "Secret", value: "secret" },
+  { label: "Team", value: "team" },
   { label: "Errors", value: "_errors" },
 ]
 

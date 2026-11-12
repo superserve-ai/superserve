@@ -67,7 +67,7 @@ function ReviewButtons({
         {!resend && (
           <select
             aria-label="Enterprise plan"
-            className="h-8 border border-dashed border-border bg-background px-2 text-xs"
+            className="h-8 border border-dashed border-control bg-background px-2 text-xs"
             value={versionId}
             disabled={pending || versions.length === 0}
             onChange={(event) => setVersionId(event.target.value)}

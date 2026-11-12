@@ -1,0 +1,277 @@
+---
+title: "Pydantic AI"
+sidebarTitle: Pydantic AI
+description: Use Superserve sandboxes as the execution runtime for agents built with Pydantic AI.
+icon: "/logos/integrations/pydantic-ai.svg"
+---
+
+[Pydantic AI](https://pydantic.dev/docs/ai/overview/) is a Python framework for building type-safe agents with tools. Pass a Superserve sandbox to each run as the agent's dependency, and back the agent's tools with `sandbox.commands.run` and `sandbox.files`. Every command the model runs, and every file it writes, then stays in an isolated VM instead of on your server. The model API key stays in your app; the sandbox never sees it.
+
+## Setup
+
+```bash
+pip install superserve "pydantic-ai-slim[anthropic]"
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Pydantic AI needs Python 3.11 or later. `pydantic-ai-slim[anthropic]` installs Pydantic AI with only the Anthropic provider, which reads the key from the environment. To use another provider, install its extra and change the model string. See [Models](https://pydantic.dev/docs/ai/models/overview/) in the Pydantic AI docs, and [API keys](/api-key) to create a Superserve API key.
+
+## Wire the sandbox into the agent
+
+The highlighted lines declare the sandbox as the agent's dependency and define a `bash` tool backed by it. Everything else is standard Pydantic AI usage.
+
+```python {6,11-14,22}
+from pydantic_ai import Agent, RunContext
+from superserve import CommandResult, Sandbox
+
+agent = Agent(
+    "anthropic:claude-sonnet-5-5",
+    deps_type=Sandbox,
+    instructions="Use the bash tool to inspect the sandbox before answering.",
+)
+
+
+@agent.tool
+def bash(ctx: RunContext[Sandbox], command: str) -> CommandResult:
+    """Run a shell command in the sandbox."""
+    return ctx.deps.commands.run(command, timeout_seconds=60)
+
+
+sandbox = Sandbox.create(name="agent-runtime")
+
+try:
+    result = agent.run_sync(
+        "List the files in /tmp and tell me how many there are.",
+        deps=sandbox,
+    )
+    print(result.output)
+finally:
+    sandbox.kill()
+```
+
+`deps_type=Sandbox` sets the dependency type, and `deps=sandbox` passes the sandbox to the run. Each tool gets it as `ctx.deps`, so one agent defined at module level can work with a different sandbox on every run. See [Dependencies](https://pydantic.dev/docs/ai/core-concepts/dependencies/) in the Pydantic AI docs.
+
+The tool returns the SDK's `CommandResult`. Pydantic AI sends it to the model as JSON with `stdout`, `stderr`, `exit_code`, and `truncated`, so the model sees failed commands as well as their output.
+
+## Run code with file tools
+
+Pydantic AI is async-first. With `AsyncSandbox` and `async` tools, sandbox calls do not block the event loop. Add file tools next to `bash` to let the model write a script, run it, and read the result.
+
+```python {22-35,45}
+import asyncio
+
+from pydantic_ai import Agent, ModelRetry, RunContext, UsageLimits
+from superserve import AsyncSandbox, CommandResult, NotFoundError
+
+agent = Agent(
+    "anthropic:claude-sonnet-5-5",
+    deps_type=AsyncSandbox,
+    instructions=(
+        "Save code under /home/user and run it with the bash tool. "
+        "Use python3, not python."
+    ),
+)
+
+
+@agent.tool
+async def bash(ctx: RunContext[AsyncSandbox], command: str) -> CommandResult:
+    """Run a shell command in the sandbox."""
+    return await ctx.deps.commands.run(command, timeout_seconds=60)
+
+
+@agent.tool
+async def write_file(ctx: RunContext[AsyncSandbox], path: str, content: str) -> str:
+    """Write a text file in the sandbox. Use an absolute path."""
+    await ctx.deps.files.write(path, content)
+    return f"Wrote {len(content)} characters to {path}"
+
+
+@agent.tool
+async def read_file(ctx: RunContext[AsyncSandbox], path: str) -> str:
+    """Read a text file from the sandbox. Use an absolute path."""
+    try:
+        return await ctx.deps.files.read_text(path)
+    except NotFoundError:
+        raise ModelRetry(f"{path} does not exist.") from None
+
+
+async def main() -> None:
+    sandbox = await AsyncSandbox.create(name="code-runner")
+    try:
+        result = await agent.run(
+            "Write a Python script that prints the first 10 prime numbers, "
+            "run it, and show me the output.",
+            deps=sandbox,
+            usage_limits=UsageLimits(request_limit=10),
+        )
+        print(result.output)
+    finally:
+        await sandbox.kill()
+
+
+asyncio.run(main())
+```
+
+- `ModelRetry` sends the message back to the model as the tool result, so the model can correct the path and try again. Unhandled ordinary exceptions from a tool stop the run.
+- `UsageLimits(request_limit=10)` caps the model requests in the run (the default is 50). Past the limit, the run raises `UsageLimitExceeded`.
+
+Output from a run (the model's wording varies):
+
+```text
+I saved the script as `/home/user/primes.py` and ran it. It printed:
+
+[2, 3, 5, 7, 11, 13, 17, 19, 23, 29]
+```
+
+`sandbox.files` paths must be absolute. See [Read & write files](/filesystem/read-write) for binary content and directory downloads.
+
+## Stream tool calls
+
+`run_stream_events()` yields the model's text as it arrives, and an event for each tool call and each tool result.
+
+```python {31-45}
+import asyncio
+
+from pydantic_ai import (
+    Agent,
+    FunctionToolCallEvent,
+    FunctionToolResultEvent,
+    PartDeltaEvent,
+    PartStartEvent,
+    RunContext,
+    TextPart,
+    TextPartDelta,
+)
+from superserve import AsyncSandbox, CommandResult
+
+agent = Agent(
+    "anthropic:claude-sonnet-5-5",
+    deps_type=AsyncSandbox,
+    instructions="Use the bash tool to inspect the sandbox before answering.",
+)
+
+
+@agent.tool
+async def bash(ctx: RunContext[AsyncSandbox], command: str) -> CommandResult:
+    """Run a shell command in the sandbox."""
+    return await ctx.deps.commands.run(command, timeout_seconds=60)
+
+
+async def main() -> None:
+    sandbox = await AsyncSandbox.create(name="agent-runtime")
+    try:
+        async with agent.run_stream_events(
+            "Which Linux distribution and Python version does this machine run?",
+            deps=sandbox,
+        ) as events:
+            async for event in events:
+                match event:
+                    case (
+                        PartStartEvent(part=TextPart(content=text))
+                        | PartDeltaEvent(delta=TextPartDelta(content_delta=text))
+                    ):
+                        print(text, end="", flush=True)
+                    case FunctionToolCallEvent(part=call):
+                        print(f"\n> {call.tool_name} {call.args}")
+                    case FunctionToolResultEvent(part=tool_return):
+                        print(tool_return.model_response_str())
+        print()
+    finally:
+        await sandbox.kill()
+
+
+asyncio.run(main())
+```
+
+`model_response_str()` returns the tool result as the model receives it. Output from a run (trimmed; the model's wording varies):
+
+```text
+> bash {"command": "cat /etc/os-release; uname -a"}
+
+> bash {"command": "python3 --version; python --version; which -a python python3"}
+{"stdout":"PRETTY_NAME=\"Ubuntu 24.04.5 LTS\"\nNAME=\"Ubuntu\"\n...","stderr":"","exit_code":0,"truncated":false}
+{"stdout":"Python 3.12.3\n/usr/bin/python3\n/bin/python3\n","stderr":"/bin/sh: 1: python: not found\n","exit_code":1,"truncated":false}
+This machine runs **Ubuntu 24.04.5 LTS (Noble Numbat)** and has **Python 3.12.3**.
+```
+
+See [Streaming all events](https://pydantic.dev/docs/ai/core-concepts/agent/#streaming-all-events) in the Pydantic AI docs, and [Streaming](/commands/streaming) to stream a single command's output.
+
+## One sandbox per conversation
+
+To serve many conversations, store each conversation's sandbox ID with its Pydantic AI `Conversation`. On each turn, reconnect to the sandbox, continue the conversation, and pause the sandbox afterwards. Files and installed packages stay available, and you do not pay for an idle VM between turns.
+
+```python {6-8,26-33}
+from pydantic import BaseModel
+from pydantic_ai import Agent, Conversation, RunContext
+from superserve import CommandResult, Sandbox
+
+
+class Chat(BaseModel):
+    sandbox_id: str
+    conversation: Conversation | None = None
+
+
+agent = Agent(
+    "anthropic:claude-sonnet-5-5",
+    deps_type=Sandbox,
+    instructions="Complete requests by running shell commands in the sandbox.",
+)
+
+
+@agent.tool
+def bash(ctx: RunContext[Sandbox], command: str) -> CommandResult:
+    """Run a shell command in the sandbox."""
+    return ctx.deps.commands.run(command, timeout_seconds=60)
+
+
+def send(chat: Chat, request: str) -> str:
+    # Resumes the sandbox if it is paused.
+    sandbox = Sandbox.connect(chat.sandbox_id)
+    try:
+        result = agent.run_sync(request, deps=sandbox, conversation=chat.conversation)
+        chat.conversation = result.conversation
+        return result.output
+    finally:
+        # Pause between turns. Files and memory are kept until the next connect.
+        sandbox.pause()
+
+
+chat = Chat(sandbox_id=Sandbox.create(name="chat-session").id)
+
+try:
+    send(chat, "Create /home/user/todo.txt with three short items.")
+    # Store the chat between turns, for example in your database.
+    stored = chat.model_dump_json()
+    chat = Chat.model_validate_json(stored)
+    print(send(chat, "Add a fourth item to that file, then print it."))
+finally:
+    Sandbox.kill_by_id(chat.sandbox_id)
+```
+
+`result.conversation` holds the messages, usage, and conversation ID that the next run needs. It is a Pydantic value, so `Chat` stores it next to the sandbox ID in one JSON document. The second turn understands "that file" because of the conversation, and finds the file because it lives in the sandbox. See [Carrying a conversation whole](https://pydantic.dev/docs/ai/core-concepts/message-history/#carrying-a-conversation-whole) in the Pydantic AI docs.
+
+`Sandbox.connect()` resumes a paused sandbox, or one that is still pausing, before it returns. See [Lifecycle](/sandbox/lifecycle) and [Connect](/sandbox/connect).
+
+<Note>
+  Usage limits count the usage that a conversation carries, not only the current run. A conversation stops with `UsageLimitExceeded` after 50 model requests in total unless you pass a higher `usage_limits` to each run. See [Usage limits](https://pydantic.dev/docs/ai/core-concepts/agent/#usage-limits).
+</Note>
+
+## Good to know
+
+- The model can call only the tools you define. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
+- To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
+- Pass `timeout_seconds` to `commands.run`. Without it, the SDK request times out after 30 seconds, so the tool call fails on longer commands such as package installs.
+- The default sandbox has `python3` but no `python`. Tell the agent in its `instructions`, or use a [template](/templates/overview) with the tools you need.
+- As a backstop for crashes, set `timeout_seconds` and `auto_delete_seconds` when you create the sandbox. See [Auto-delete](/sandbox/lifecycle#auto-delete).
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Pydantic AI docs" icon="book" href="https://pydantic.dev/docs/ai/overview/">
+    Agents, tools, dependencies, and message history in Pydantic AI.
+  </Card>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Options for `commands.run`, including environment variables and working directory.
+  </Card>
+</CardGroup>

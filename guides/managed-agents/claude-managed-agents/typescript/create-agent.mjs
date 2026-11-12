@@ -11,7 +11,7 @@ const client = new Anthropic()
 
 const TOOLS = ["bash", "read", "write", "edit", "glob", "grep", "web_fetch", "web_search"]
 
-for (const existing of await client.beta.agents.list()) {
+for await (const existing of client.beta.agents.list()) {
   if (existing.name === name && !existing.archived_at) {
     console.error(`agent named "${name}" already exists: ${existing.id}`)
     process.exit(1)

@@ -34,7 +34,7 @@ const FAILURES: Record<ActionFailure["kind"], string> = {
 }
 
 const selectClass =
-  "flex h-9 w-full border border-input bg-background px-3 text-sm text-foreground focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
+  "flex h-9 w-full border border-control bg-background px-3 text-sm text-foreground focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
 
 function Outcome({
   result,

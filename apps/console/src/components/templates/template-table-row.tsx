@@ -59,6 +59,7 @@ export function TemplateTableRow({ template }: { template: TemplateResponse }) {
         <TemplateResources
           vcpu={template.vcpu}
           memoryMib={template.memory_mib}
+          memoryMaxMib={template.memory_max_mib}
           diskMib={template.disk_mib}
         />
       </TableCell>

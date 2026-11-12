@@ -118,6 +118,16 @@ export async function apiClient<T>(
   )
 }
 
+export async function apiClientWithHeaders<T>(
+  path: string,
+  options: RequestInit = {},
+): Promise<{ data: T; headers: Headers }> {
+  return request(path, options, async (response) => ({
+    data: (response.status === 204 ? undefined : await response.json()) as T,
+    headers: response.headers,
+  }))
+}
+
 /**
  * Like `apiClient`, but for list endpoints: returns the parsed array plus the
  * total row count from the `X-Total-Count` header. Falls back to the page
