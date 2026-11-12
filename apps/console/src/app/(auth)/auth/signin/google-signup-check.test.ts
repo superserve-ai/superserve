@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   beginGoogleSignup: vi.fn(),
@@ -36,10 +36,6 @@ describe("googleSignupAttemptForSignIn", () => {
     mocks.beginGoogleSignup
       .mockReset()
       .mockResolvedValue({ success: true, signupAttemptId: "attempt-1" })
-  })
-
-  afterEach(() => {
-    vi.useRealTimers()
   })
 
   it("runs the signup_google check with the capture and labels it as sign-in", async () => {
@@ -92,18 +88,21 @@ describe("googleSignupAttemptForSignIn", () => {
     await expect(googleSignupAttemptForSignIn()).resolves.toBeUndefined()
   })
 
-  it("stops waiting after the time limit so sign-in is not held up", async () => {
-    vi.useFakeTimers()
-    mocks.beginGoogleSignup.mockReturnValue(new Promise(() => {}))
-    const result = googleSignupAttemptForSignIn(5000)
-    await vi.advanceTimersByTimeAsync(4999)
+  it("waits for a slow check to finish so no part of it runs after the page leaves", async () => {
+    let finish: (value: unknown) => void = () => {}
+    mocks.beginGoogleSignup.mockReturnValue(
+      new Promise((resolve) => {
+        finish = resolve
+      }),
+    )
     let settled = false
-    void result.then(() => {
+    const result = googleSignupAttemptForSignIn().then((id) => {
       settled = true
+      return id
     })
-    await Promise.resolve()
+    await new Promise((resolve) => setTimeout(resolve, 20))
     expect(settled).toBe(false)
-    await vi.advanceTimersByTimeAsync(1)
-    await expect(result).resolves.toBeUndefined()
+    finish({ success: true, signupAttemptId: "late-attempt" })
+    await expect(result).resolves.toBe("late-attempt")
   })
 })
