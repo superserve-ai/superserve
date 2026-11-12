@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   beginGoogleSignup: vi.fn(),
@@ -36,6 +36,10 @@ describe("googleSignupAttemptForSignIn", () => {
     mocks.beginGoogleSignup
       .mockReset()
       .mockResolvedValue({ success: true, signupAttemptId: "attempt-1" })
+  })
+
+  afterEach(() => {
+    vi.useRealTimers()
   })
 
   it("runs the signup_google check with the capture and labels it as sign-in", async () => {
@@ -88,21 +92,34 @@ describe("googleSignupAttemptForSignIn", () => {
     await expect(googleSignupAttemptForSignIn()).resolves.toBeUndefined()
   })
 
-  it("waits for a slow check to finish so no part of it runs after the page leaves", async () => {
-    let finish: (value: unknown) => void = () => {}
-    mocks.beginGoogleSignup.mockReturnValue(
-      new Promise((resolve) => {
+  it.each([
+    ["fingerprint capture", "capture"],
+    ["proof issuance", "proof"],
+  ])(
+    "waits past five seconds for slow %s instead of leaving it running",
+    async (_label, stage) => {
+      vi.useFakeTimers()
+      let finish: () => void = () => {}
+      const gate = new Promise<void>((resolve) => {
         finish = resolve
-      }),
-    )
-    let settled = false
-    const result = googleSignupAttemptForSignIn().then((id) => {
-      settled = true
-      return id
-    })
-    await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(settled).toBe(false)
-    finish({ success: true, signupAttemptId: "late-attempt" })
-    await expect(result).resolves.toBe("late-attempt")
-  })
+      })
+      if (stage === "capture")
+        mocks.ensureCapture.mockReturnValue(gate.then(() => capture))
+      else
+        mocks.beginGoogleSignup.mockReturnValue(
+          gate.then(() => ({ success: true, signupAttemptId: "late-attempt" })),
+        )
+      let settled = false
+      const result = googleSignupAttemptForSignIn().then((id) => {
+        settled = true
+        return id
+      })
+      await vi.advanceTimersByTimeAsync(30_000)
+      expect(settled).toBe(false)
+      finish()
+      await expect(result).resolves.toBe(
+        stage === "capture" ? "attempt-1" : "late-attempt",
+      )
+    },
+  )
 })

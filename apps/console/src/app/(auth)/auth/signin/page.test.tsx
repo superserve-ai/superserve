@@ -505,7 +505,8 @@ describe("SignInPage", () => {
       mockSignInWithOAuth.mock.calls[0][0].options.redirectTo,
     )
     expect(callback.searchParams.has("signup_attempt_id")).toBe(false)
-    expect(mockClearFingerprintCapture).not.toHaveBeenCalled()
+    // A failed check must not leave capture state for a later sign-up.
+    expect(mockClearFingerprintCapture).toHaveBeenCalledTimes(1)
     expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
   })
 
@@ -517,6 +518,28 @@ describe("SignInPage", () => {
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
     expect(await screen.findByText(/Error signing in/)).toBeInTheDocument()
+    expect(mockClearFingerprintCapture).not.toHaveBeenCalled()
+  })
+
+  it("waits for the sign-up check before it unlocks after an origin failure", async () => {
+    let finishCheck: (value: string | undefined) => void = () => {}
+    mockGoogleSignupAttempt.mockReturnValue(
+      new Promise((resolve) => {
+        finishCheck = resolve
+      }),
+    )
+    mockBeginGoogleSignIn.mockRejectedValue(new Error("network"))
+    render(<SignInPage />)
+    const button = await screen.findByRole("button", {
+      name: /Continue with Google/,
+    })
+    await user.click(button)
+    await new Promise((resolve) => setTimeout(resolve, 20))
+    expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
+    expect(button).toBeDisabled()
+    finishCheck("attempt-123")
+    expect(await screen.findByText(/Error signing in/)).toBeInTheDocument()
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
     expect(mockClearFingerprintCapture).not.toHaveBeenCalled()
   })
 

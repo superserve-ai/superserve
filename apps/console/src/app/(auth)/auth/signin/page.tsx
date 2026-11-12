@@ -220,11 +220,16 @@ function SignInContent() {
     try {
       const supabase = createBrowserClient()
       // Run the sign-up check now, so a Google account that is new to
-      // Superserve finishes sign-up in this one trip to Google.
-      const [intentId, signupAttemptId] = await Promise.all([
+      // Superserve finishes sign-up in this one trip to Google. Wait for both
+      // to settle, so no part of the check runs after the buttons unlock.
+      const [intent, signupAttempt] = await Promise.allSettled([
         beginGoogleSignIn(),
         googleSignupAttemptForSignIn(),
       ])
+      if (intent.status === "rejected") throw intent.reason
+      const intentId = intent.value
+      const signupAttemptId =
+        signupAttempt.status === "fulfilled" ? signupAttempt.value : undefined
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (signupAttemptId)
         callbackUrl.searchParams.set("signup_attempt_id", signupAttemptId)
@@ -245,9 +250,9 @@ function SignInContent() {
           queryParams: { prompt: "select_account" },
         },
       })
-      // The capture is spent once Google has the attempt; a failed start keeps
-      // it for the next try.
-      if (!error && signupAttemptId) clearFingerprintSignupCapture()
+      // The capture is spent once the page goes to Google, with or without a
+      // proof. A failed start keeps it for the next try.
+      if (!error) clearFingerprintSignupCapture()
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })
       }
