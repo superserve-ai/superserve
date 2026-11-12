@@ -17,6 +17,7 @@ import {
 import {
   publishAccountPromotion,
   publishEnterpriseAccountPromotion,
+  type TrialWithheldReason,
 } from "@/lib/api/promotion-publication"
 import {
   listTeamMembershipsForUserDetailed,
@@ -391,13 +392,14 @@ async function provisionTeamFor(
   if (!operationId && region !== DEFAULT_REGION)
     throw new Error("Team creation requires its original operation identifier")
   const locator = { userId, region, operationId: operationId ?? userId }
+  let trialWithheld: TrialWithheldReason | undefined
   let prepared = enterpriseAuthority
     ? await recoverPromotionTeamForEnterprise(locator, enterpriseAuthority)
     : await recoverPromotionTeam(locator)
   if (!prepared) {
     if (!operationId && !firstTeam)
       throw new Error("No initial team creation to recover")
-    const { authorityUnavailable, trialWithheld } = enterpriseAuthority
+    const publication = enterpriseAuthority
       ? await publishEnterpriseAccountPromotion(
           region,
           user,
@@ -405,10 +407,11 @@ async function provisionTeamFor(
           enterpriseAuthority,
         )
       : await publishAccountPromotion(region, user, observedAt)
+    trialWithheld = publication.trialWithheld
     const preparation = {
       ...locator,
       name,
-      authorityUnavailable,
+      authorityUnavailable: publication.authorityUnavailable,
       additionalTeam:
         !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
     }
@@ -418,16 +421,6 @@ async function provisionTeamFor(
           enterpriseAuthority,
         )
       : await preparePromotionTeam(preparation)
-    // An additional team never takes the trial, so only a team that could
-    // have had one counts as withheld. Recovery replays the stored decision
-    // and does not reach this branch, so a retry does not count it again.
-    if (trialWithheld && !preparation.additionalTeam)
-      recordTrialWithheld(userId, {
-        reason: trialWithheld,
-        region,
-        team_id: prepared.teamId,
-        signup_method: isGoogleUser(user) ? "google" : "email",
-      })
   }
   if (prepared.authorityUnavailable) {
     // Repair only the regional FK target. The persisted no-credit decision
@@ -445,6 +438,16 @@ async function provisionTeamFor(
     : await completePromotionTeam(prepared)
   if (completed.state === "deleted")
     throw new Error("This team creation has already been deleted")
+  // Count only a trial this request withheld and the backend then refused for
+  // that reason. A team that could not take the trial anyway (an additional
+  // team, or pricing without a trial) records another reason.
+  if (trialWithheld && completed.reason === "authority_unavailable")
+    recordTrialWithheld(userId, {
+      reason: trialWithheld,
+      region,
+      team_id: completed.teamId,
+      signup_method: isGoogleUser(user) ? "google" : "email",
+    })
   const team = { id: completed.teamId, name: completed.name }
 
   try {

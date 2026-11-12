@@ -52,6 +52,7 @@ const mockTrackEvent = vi.fn()
 let mockRegions = ["use"]
 let freeTeamElsewhere = false
 let mockTrialWithheld: string | undefined
+let mockCompletionReason: string | undefined
 const mockPrepareInputs: Array<Record<string, unknown>> = []
 const afterQueue: Array<() => Promise<void>> = []
 vi.mock("next/server", async (importOriginal) => ({
@@ -358,6 +359,7 @@ describe("provisionTeam", () => {
     mockRegions = ["use"]
     freeTeamElsewhere = false
     mockTrialWithheld = undefined
+    mockCompletionReason = undefined
     mockPrepareInputs.length = 0
     afterQueue.length = 0
     mockReadSignupEvidence.mockReset().mockResolvedValue(null)
@@ -927,6 +929,25 @@ describe("provisionTeam", () => {
     await provisionTeam("usw", "u1", "ignored@example.com", "west pilot")
     expect(mockPrepareInputs).toEqual([
       expect.objectContaining({ additionalTeam: true }),
+    ])
+    for (const task of afterQueue.splice(0)) await task()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  it("does not count a withheld trial when the backend refused it for another reason", async () => {
+    // A second team in the same region is only found to be additional by the backend.
+    mockTrialWithheld = "device_unverified"
+    mockCompletionReason = "additional_team"
+    await provisionTeam("usw", "u1", "ignored@example.com", "west pilot")
+    expect(mockPrepareInputs).toEqual([
+      expect.objectContaining({
+        authorityUnavailable: true,
+        additionalTeam: false,
+      }),
     ])
     for (const task of afterQueue.splice(0)) await task()
     expect(mockTrackEvent).not.toHaveBeenCalledWith(
@@ -1669,8 +1690,15 @@ vi.mock("@/lib/api/promotion-device-evidence", () => ({
     attemptId: "backend-attempt",
     state: "prepared",
   }),
-  completePromotionTeam: async (input: object) => ({
+  completePromotionTeam: async (input: Record<string, unknown>) => ({
     ...input,
     state: "completed",
+    // The backend checks for an additional team before the no-credit flag.
+    ...(input.additionalTeam
+      ? { outcome: "promotion_ineligible", reason: "additional_team" }
+      : input.authorityUnavailable
+        ? { outcome: "promotion_ineligible", reason: "authority_unavailable" }
+        : { outcome: "granted", reason: "first_identity_claim" }),
+    ...(mockCompletionReason ? { reason: mockCompletionReason } : {}),
   }),
 }))
