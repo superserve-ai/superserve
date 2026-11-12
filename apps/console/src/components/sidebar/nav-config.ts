@@ -24,8 +24,8 @@ export interface NavItem {
 }
 
 export const userManagementNavItem: NavItem = {
-  label: "User Management",
-  href: "/user-management",
+  label: "Team",
+  href: "/team",
   icon: UsersIcon,
 }
 

@@ -43,7 +43,7 @@ plane** (rotating access token) — you never build data-plane URLs or manage to
    - TypeScript: `npm install @superserve/sdk` (Node ≥ 18; bun/pnpm/yarn also work)
    - Python: `pip install superserve` (Python ≥ 3.9; uv/poetry also work)
 2. **Set `SUPERSERVE_API_KEY`** (key prefix `ss_live_`) in the environment — get it
-   from the Superserve console. With it set, `create()` needs no other config.
+   from the Superserve console. Sign-up is free, no card required. With it set, `create()` needs no other config.
 3. _(Optional)_ Override the API base with `SUPERSERVE_BASE_URL` (default `https://api.superserve.ai`).
 
 ## Quickstart
@@ -217,6 +217,10 @@ memory · 8192 MiB disk**.
 
 - Limits depend on the team's plan. For larger sandboxes, email support@superserve.ai.
 - `memoryMib` and `diskMib` take values in MiB (1 GiB = 1024 MiB).
+- Optional template `memoryMaxMib` / `memory_max_mib` lets sandboxes grow memory while
+  running up to that ceiling (`memoryMib` stays the boot size). It must exceed `memoryMib`,
+  be at most 4x it and within the plan limit, and differ from it by a multiple of 128.
+  Omit it for fixed memory; only templates built with it set can grow.
 - `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
   team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,

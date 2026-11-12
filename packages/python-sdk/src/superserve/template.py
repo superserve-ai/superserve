@@ -46,6 +46,7 @@ class Template:
         self.status: TemplateStatus = info.status
         self.vcpu: int = info.vcpu
         self.memory_mib: int = info.memory_mib
+        self.memory_max_mib: int | None = info.memory_max_mib
         self.disk_mib: int = info.disk_mib
         self.size_bytes = info.size_bytes
         self.error_message = info.error_message
@@ -66,6 +67,7 @@ class Template:
         from_: str,
         vcpu: int | None = None,
         memory_mib: int | None = None,
+        memory_max_mib: int | None = None,
         disk_mib: int | None = None,
         steps: list[BuildStep] | None = None,
         start_cmd: str | None = None,
@@ -89,6 +91,8 @@ class Template:
             body["vcpu"] = vcpu
         if memory_mib is not None:
             body["memory_mib"] = memory_mib
+        if memory_max_mib is not None:
+            body["memory_max_mib"] = memory_max_mib
         if disk_mib is not None:
             body["disk_mib"] = disk_mib
 

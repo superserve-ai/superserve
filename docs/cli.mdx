@@ -31,7 +31,7 @@ superserve login
 superserve whoami
 ```
 
-`login` opens the Superserve Console in your browser. Sign in or sign up (new accounts start on the Free plan), check that the code on the page matches your terminal, and approve. The CLI saves a new API key to `~/.superserve/credentials.json`; it shows up as `CLI · <hostname>` on the API keys page, where you can revoke it.
+`login` opens the Superserve Console in your browser. Sign in or sign up (new accounts start free with a limited trial, no card required), check that the code on the page matches your terminal, and approve. The CLI saves a new API key to `~/.superserve/credentials.json`; it shows up as `CLI · <hostname>` on the API keys page, where you can revoke it.
 
 Without a browser on the same machine (SSH, containers, agents), use `--no-browser` to just print the URL, or `--no-wait` to print it and exit. Run `superserve login` again after approving to pick up the key.
 
@@ -42,13 +42,14 @@ echo "$SUPERSERVE_API_KEY" | superserve login --with-key
 superserve login --with-key
 ```
 
-In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key.
+In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key. See [Run CI jobs in sandboxes](/guides/run-ci-jobs) for a GitHub Actions workflow.
 
 ## Quickstart
 
 ```bash
 superserve sandbox create --name demo --template superserve/python-3.11
 superserve exec demo -- python3 -c "print('hello')"
+mkdir -p app && echo "<h1>Hello from Superserve</h1>" > app/index.html
 superserve cp ./app demo:/home/user/app
 superserve exec demo "cd /home/user/app && nohup python3 -m http.server 3000 >/dev/null 2>&1 &"
 superserve preview publish demo 3000 --open

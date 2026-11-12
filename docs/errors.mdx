@@ -33,7 +33,7 @@ Catch the typed subclass you care about and fall back to `SandboxError` for ever
 import { NotFoundError, Sandbox, SandboxError } from "@superserve/sdk"
 
 try {
-  const sandbox = await Sandbox.connect("missing-id")
+  const sandbox = await Sandbox.connect("00000000-0000-0000-0000-000000000000")
 } catch (err) {
   if (err instanceof NotFoundError) {
     // Sandbox doesn't exist or was already deleted
@@ -47,7 +47,7 @@ try {
 from superserve import NotFoundError, Sandbox, SandboxError
 
 try:
-    sandbox = Sandbox.connect("missing-id")
+    sandbox = Sandbox.connect("00000000-0000-0000-0000-000000000000")
 except NotFoundError:
     # Sandbox doesn't exist or was already deleted
     pass
@@ -69,7 +69,7 @@ Every SDK error extends `SandboxError` and exposes:
 import { Sandbox, SandboxError } from "@superserve/sdk"
 
 try {
-  await Sandbox.connect("missing-id")
+  await Sandbox.connect("00000000-0000-0000-0000-000000000000")
 } catch (err) {
   if (err instanceof SandboxError) {
     console.error(err.statusCode, err.code, err.message)
@@ -81,7 +81,7 @@ try {
 from superserve import Sandbox, SandboxError
 
 try:
-    Sandbox.connect("missing-id")
+    Sandbox.connect("00000000-0000-0000-0000-000000000000")
 except SandboxError as err:
     print(err.status_code, err.code, err)
 ```
