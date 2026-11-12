@@ -223,6 +223,25 @@ describe("trusted Checkout publication contract", () => {
       expect(mocks.rpc).toHaveBeenCalledTimes(1)
     },
   )
+  it("keeps the standard decision when only the signup device is unverified", async () => {
+    // A failed signup device capture withholds the sign-up trial only.
+    const { PromotionEvidenceError } =
+      await import("@/lib/api/promotion-device-evidence")
+    mocks.evidence.mockRejectedValue(
+      new PromotionEvidenceError("evidence_missing"),
+    )
+    Object.assign(actor, {
+      app_metadata: { promotion_routine_absence: true },
+    })
+    try {
+      const { receipt: retained } = await (await checkout(prepareBody)).json()
+      expect(
+        readCheckoutIntent(retained, actor.id, "team-use", "use").decision,
+      ).toBe("standard")
+    } finally {
+      Reflect.deleteProperty(actor, "app_metadata")
+    }
+  })
   it("recovers without any receipt or publication", async () => {
     mocks.fetch.mockResolvedValueOnce(
       Response.json({ id: "original", url: "original-url" }),

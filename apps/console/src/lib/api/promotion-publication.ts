@@ -130,7 +130,8 @@ export type TrialWithheldReason = "device_unverified"
 
 export interface AccountPromotionPublication {
   authorityUnavailable: boolean
-  // Set only when this reason alone withholds the trial.
+  // Set only when this reason alone withholds the sign-up trial. It does not
+  // set authorityUnavailable, so Checkout keeps its publication decision.
   trialWithheld?: TrialWithheldReason
 }
 
@@ -197,13 +198,12 @@ async function publishAccountPromotionFor(
     return { authorityUnavailable }
   }
   if (deviceUnverified) {
-    // Fail closed for the trial only: the team is still created, and the
-    // backend records it as authority_unavailable, so the console shows the
-    // existing "trial check didn't complete" plan path.
-    console.warn("Signup device unverified; automatic credit withheld", {
+    // Fail closed for the sign-up trial only. Team preparation turns this into
+    // the no-credit decision; Checkout ignores it.
+    console.warn("Signup device unverified; sign-up trial withheld", {
       region,
     })
-    return { authorityUnavailable: true, trialWithheld: "device_unverified" }
+    return { authorityUnavailable: false, trialWithheld: "device_unverified" }
   }
   return { authorityUnavailable }
 }

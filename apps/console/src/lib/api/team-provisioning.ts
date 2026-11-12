@@ -411,7 +411,10 @@ async function provisionTeamFor(
     const preparation = {
       ...locator,
       name,
-      authorityUnavailable: publication.authorityUnavailable,
+      // An unverified sign-up device stores the same no-credit decision as a
+      // failed publication: the team is created, and the trial is withheld.
+      authorityUnavailable:
+        publication.authorityUnavailable || trialWithheld !== undefined,
       additionalTeam:
         !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
     }
@@ -438,10 +441,14 @@ async function provisionTeamFor(
     : await completePromotionTeam(prepared)
   if (completed.state === "deleted")
     throw new Error("This team creation has already been deleted")
-  // Count only a trial this request withheld and the backend then refused for
-  // that reason. A team that could not take the trial anyway (an additional
-  // team, or pricing without a trial) records another reason.
-  if (trialWithheld && completed.reason === "authority_unavailable")
+  // Count only a first team whose trial this request withheld and the backend
+  // then refused for that reason. A team that could not take the trial anyway
+  // (an additional team, or pricing without a trial) is not counted.
+  if (
+    trialWithheld &&
+    firstTeam &&
+    completed.reason === "authority_unavailable"
+  )
     recordTrialWithheld(userId, {
       reason: trialWithheld,
       region,

@@ -101,7 +101,7 @@ it("withholds the trial when a new signup's device capture failed", async () => 
       { ...user, app_metadata: { promotion_routine_absence: true } },
       "now",
     ),
-  ).toEqual({ authorityUnavailable: true, trialWithheld: "device_unverified" })
+  ).toEqual({ authorityUnavailable: false, trialWithheld: "device_unverified" })
   expect(mocks.bind).not.toHaveBeenCalled()
 })
 it("keeps the trial path for a signup whose device evidence exists", async () => {

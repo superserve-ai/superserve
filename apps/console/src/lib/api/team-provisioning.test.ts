@@ -938,6 +938,29 @@ describe("provisionTeam", () => {
     )
   })
 
+  it("does not count a withheld trial for a team that is not the account's first", async () => {
+    // The backend can store authority_unavailable for an additional team that
+    // has no Free-team record, so the console checks the first-team state too.
+    mockTrialWithheld = "device_unverified"
+    directoryState = {
+      memberships: [{ teamId: "old", region: "usw" }],
+      degradedRegions: [],
+    }
+    await provisionTeam("usw", "u1", "ignored@example.com", "west pilot")
+    expect(mockPrepareInputs).toEqual([
+      expect.objectContaining({
+        authorityUnavailable: true,
+        additionalTeam: false,
+      }),
+    ])
+    for (const task of afterQueue.splice(0)) await task()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
   it("does not count a withheld trial when the backend refused it for another reason", async () => {
     // A second team in the same region is only found to be additional by the backend.
     mockTrialWithheld = "device_unverified"
@@ -1663,7 +1686,7 @@ vi.mock("@/lib/api/promotion-publication", () => ({
     try {
       await mockPublishPromotionIdentity(region, user.id, user, observedAt)
       return mockTrialWithheld
-        ? { authorityUnavailable: true, trialWithheld: mockTrialWithheld }
+        ? { authorityUnavailable: false, trialWithheld: mockTrialWithheld }
         : { authorityUnavailable: false }
     } catch {
       return { authorityUnavailable: true }
