@@ -3,6 +3,11 @@
 export const AUTH_EVENTS = {
   SIGN_IN_COMPLETED: "auth_sign_in_completed",
   SIGN_IN_FAILED: "auth_sign_in_failed",
+  SIGN_IN_RECOVERY_SHOWN: "auth_sign_in_recovery_shown",
+  SIGN_IN_RECOVERY_OPTION_CLICKED: "auth_sign_in_recovery_option_clicked",
+  SIGN_IN_LINK_REQUESTED: "auth_sign_in_link_requested",
+  SIGN_IN_LINK_SENT: "auth_sign_in_link_sent",
+  SIGN_IN_LINK_FAILED: "auth_sign_in_link_failed",
   SIGN_UP_COMPLETED: "auth_sign_up_completed",
   SIGN_UP_FAILED: "auth_sign_up_failed",
   GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
@@ -54,6 +59,10 @@ export const API_KEY_EVENTS = {
   COPIED: "api_key_copied",
   REVOKED: "api_key_revoked",
   BULK_REVOKED: "api_key_bulk_revoked",
+} as const
+
+export const PLAN_PICKER_EVENTS = {
+  VIEWED: "plan_picker_viewed",
 } as const
 
 export const SNAPSHOT_EVENTS = {

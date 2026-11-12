@@ -140,7 +140,7 @@ def verify(browser, base, scenario, output):
 
         # The production link drops the fixture query; local session setup must persist.
         page.get_by_role("link", name="Billing & Usage", exact=True).click()
-        page.wait_for_url("**/plan-usage/")
+        page.wait_for_url("**/billing-usage/")
         card = page.locator("div.border-dashed.px-3.py-3").filter(has=page.get_by_text("Storage", exact=True))
         expect(card).to_have_count(1)
         charge = "$1.25" if scenario in ("paid", "credited") else "$0.00"
@@ -193,7 +193,7 @@ def verify(browser, base, scenario, output):
         assert context.request.post(base + "/api/stripe/checkout-session/").status == 405
         assert not errors, errors
         assert not page.locator("[data-nextjs-dialog], .vite-error-overlay").count()
-        print(f"PASS {scenario}: Settings → Plan & Usage, storage card, rate, chart and tooltip", flush=True)
+        print(f"PASS {scenario}: Settings → Billing & Usage, storage card, rate, chart and tooltip", flush=True)
     except Exception:
         print(f"FAIL {scenario}: url={page.url}; browser_errors={errors}", flush=True)
         page.screenshot(path=str(output / f"failure-{scenario}.png"), full_page=True)

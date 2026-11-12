@@ -44,10 +44,12 @@ interface SandboxItem {
   status: string
   vcpu_count?: number
   memory_mib?: number
+  memory_max_mib?: number | null
   snapshot_id?: string
   source_snapshot_id?: string
   created_at?: string
   timeout_seconds?: number
+  idle_timeout_seconds?: number
   auto_delete_seconds?: number
   auto_delete_at?: string
   network?: { allow_out?: string[]; deny_out?: string[] }
@@ -94,6 +96,7 @@ const STATUSES = [
   "deleted",
 ]
 const MAX_TIMEOUT = 7 * 86_400
+const MIN_IDLE_TIMEOUT = 60
 const MAX_AUTO_DELETE = 30 * 86_400
 const PAUSE_WAIT_MS = 5 * 60_000
 
@@ -137,9 +140,16 @@ function limitQuery(limit: string | undefined): string | undefined {
     : String(parseInteger(limit, "--limit", { min: 1, max: 200 }))
 }
 
-function shape(s: { vcpu_count?: number; memory_mib?: number }): string {
+function shape(s: {
+  vcpu_count?: number
+  memory_mib?: number
+  memory_max_mib?: number | null
+}): string {
   if (s.vcpu_count === undefined || s.memory_mib === undefined) return "-"
-  return `${s.vcpu_count} vCPU, ${formatBytes(s.memory_mib * 1024 * 1024)}`
+  const mem = formatBytes(s.memory_mib * 1024 * 1024)
+  return s.memory_max_mib == null
+    ? `${s.vcpu_count} vCPU, ${mem}`
+    : `${s.vcpu_count} vCPU, ${mem}-${formatBytes(s.memory_max_mib * 1024 * 1024)}`
 }
 
 function keyValues(m: Record<string, string> | undefined): string | undefined {
@@ -239,9 +249,10 @@ function eventDetails(e: NetworkEvent): string {
   return parts.join("  ")
 }
 
-// A brand-new account's trial credit is recorded by a background worker a few
-// seconds after signup, so the first create right after `superserve login` can
-// briefly see 402. A 402 creates nothing, so retrying it is safe.
+// A brand-new account's trial claim may still be in progress after signup, so
+// the first create right after `superserve login` can briefly see a 402 with
+// billing_ineligible or trial_check_unavailable. A 402 creates nothing, so
+// retrying these codes is safe.
 const NEW_ACCOUNT_SETUP_MS = 90_000
 
 async function createWaitingForNewAccount<T>(
@@ -261,7 +272,8 @@ async function createWaitingForNewAccount<T>(
         fresh &&
         err instanceof SandboxError &&
         err.statusCode === 402 &&
-        err.code === "billing_ineligible" &&
+        (err.code === "billing_ineligible" ||
+          err.code === "trial_check_unavailable") &&
         Date.now() < deadline
       if (!settingUp) throw err
       if (!told) info("Finishing account setup…")
@@ -290,6 +302,10 @@ export function register(program: Command): void {
     .option(
       "--timeout <duration>",
       "Auto-pause after this long active, e.g. 30m (max 7d)",
+    )
+    .option(
+      "--idle-timeout <duration>",
+      "Auto-pause after this long with no activity, e.g. 10m (1m to 7d)",
     )
     .option(
       "--auto-delete <duration>",
@@ -325,6 +341,7 @@ The sandbox's access token is never printed, --json included.
 Examples:
   superserve sandbox create --name dev -t superserve/python-3.11
   superserve sandbox create --timeout 30m --auto-delete 7d -m env=ci
+  superserve sandbox create --idle-timeout 10m           # pause after 10m with no activity
   superserve sandbox create -s OPENAI_API_KEY=openai-prod --allow-out api.openai.com --deny-out 0.0.0.0/0
   superserve sandbox create --snapshot <snapshot-id>      # fork a snapshot`,
     )
@@ -334,6 +351,7 @@ Examples:
         template?: string
         snapshot?: string
         timeout?: string
+        idleTimeout?: string
         autoDelete?: string
         metadata?: string[]
         env?: string[]
@@ -371,6 +389,13 @@ Examples:
               ? undefined
               : seconds(opts.timeout, "--timeout", {
                   min: 1,
+                  max: MAX_TIMEOUT,
+                }),
+          idle_timeout_seconds:
+            opts.idleTimeout === undefined
+              ? undefined
+              : seconds(opts.idleTimeout, "--idle-timeout", {
+                  min: MIN_IDLE_TIMEOUT,
                   max: MAX_TIMEOUT,
                 }),
           auto_delete_seconds:
@@ -570,6 +595,12 @@ Examples:
           s.timeout_seconds ? formatSeconds(s.timeout_seconds) : "none",
         ],
         [
+          "Idle timeout",
+          s.idle_timeout_seconds
+            ? formatSeconds(s.idle_timeout_seconds)
+            : "none",
+        ],
+        [
           "Auto-delete",
           s.auto_delete_seconds === undefined
             ? "none"
@@ -604,6 +635,10 @@ Examples:
       'Auto-pause after this long active (max 7d), or "none"',
     )
     .option(
+      "--idle-timeout <duration>",
+      'Auto-pause after this long with no activity (1m to 7d), or "none"',
+    )
+    .option(
       "--auto-delete <duration>",
       'Delete after this long paused (0 = on pause, max 30d), or "none"',
     )
@@ -628,6 +663,7 @@ are removed. Egress rules can only change while the sandbox is active.
 
 Examples:
   superserve sandbox update dev --timeout 1h --auto-delete none
+  superserve sandbox update dev --idle-timeout 15m
   superserve sandbox update dev -m env=prod -m owner=ci
   superserve sandbox update dev --allow-out api.openai.com --deny-out 0.0.0.0/0`,
     )
@@ -637,6 +673,7 @@ Examples:
         opts: {
           metadata?: string[]
           timeout?: string
+          idleTimeout?: string
           autoDelete?: string
           allowOut?: string[]
           denyOut?: string[]
@@ -666,6 +703,13 @@ Examples:
             max: MAX_TIMEOUT,
           })
         }
+        if (opts.idleTimeout !== undefined) {
+          body.idle_timeout_seconds = secondsOrNone(
+            opts.idleTimeout,
+            "--idle-timeout",
+            { min: MIN_IDLE_TIMEOUT, max: MAX_TIMEOUT },
+          )
+        }
         if (opts.autoDelete !== undefined) {
           body.auto_delete_seconds = secondsOrNone(
             opts.autoDelete,
@@ -683,7 +727,7 @@ Examples:
         if (Object.keys(body).length === 0) {
           throw usageError(
             "Nothing to update.",
-            "Pass at least one of --metadata, --clear-metadata, --timeout, --auto-delete, --allow-out, --deny-out, --clear-network, --preview-access.",
+            "Pass at least one of --metadata, --clear-metadata, --timeout, --idle-timeout, --auto-delete, --allow-out, --deny-out, --clear-network, --preview-access.",
           )
         }
         const id = await resolveSandboxId(ref)

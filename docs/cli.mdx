@@ -22,7 +22,7 @@ brew install superserve-ai/tap/superserve
 ```
 </CodeGroup>
 
-The npm package needs Node.js 22.4 or later. The install script downloads a standalone binary for macOS or Linux into `~/.superserve/bin`, adds that to your PATH in your shell profile, then, when run in a terminal, starts `superserve login` so you can sign in or sign up straight away. Set `SUPERSERVE_NO_MODIFY_PATH=1` to leave your profile alone, or `SUPERSERVE_NO_LOGIN=1` to skip the sign-in.
+The npm package needs Node.js 22.4 or later. The install script downloads the latest standalone binary for macOS or Linux into `~/.superserve/bin`, adds that to your PATH in your shell profile, then, when run in a terminal, starts `superserve login` so you can sign in or sign up straight away. Set `SUPERSERVE_NO_MODIFY_PATH=1` to leave your profile alone, or `SUPERSERVE_NO_LOGIN=1` to skip the sign-in. Set `SUPERSERVE_INSTALL_DIR` to install somewhere else, or `SUPERSERVE_VERSION` (for example `2.1.2`) to install a specific release.
 
 ## Authenticate
 
@@ -31,7 +31,7 @@ superserve login
 superserve whoami
 ```
 
-`login` opens the Superserve Console in your browser. Sign in or sign up (new accounts start on the Free plan), check that the code on the page matches your terminal, and approve. The CLI saves a new API key to `~/.superserve/credentials.json`; it shows up as `CLI · <hostname>` on the API keys page, where you can revoke it.
+`login` opens the Superserve Console in your browser. Sign in or sign up (new accounts start free with a limited trial, no card required), check that the code on the page matches your terminal, and approve. The CLI saves a new API key to `~/.superserve/credentials.json`; it shows up as `CLI · <hostname>` on the API keys page, where you can revoke it.
 
 Without a browser on the same machine (SSH, containers, agents), use `--no-browser` to just print the URL, or `--no-wait` to print it and exit. Run `superserve login` again after approving to pick up the key.
 
@@ -42,13 +42,14 @@ echo "$SUPERSERVE_API_KEY" | superserve login --with-key
 superserve login --with-key
 ```
 
-In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key.
+In CI, set `SUPERSERVE_API_KEY` instead; it takes precedence over the saved key. See [Run CI jobs in sandboxes](/guides/run-ci-jobs) for a GitHub Actions workflow.
 
 ## Quickstart
 
 ```bash
 superserve sandbox create --name demo --template superserve/python-3.11
 superserve exec demo -- python3 -c "print('hello')"
+mkdir -p app && echo "<h1>Hello from Superserve</h1>" > app/index.html
 superserve cp ./app demo:/home/user/app
 superserve exec demo "cd /home/user/app && nohup python3 -m http.server 3000 >/dev/null 2>&1 &"
 superserve preview publish demo 3000 --open
@@ -77,6 +78,47 @@ Commands that take a sandbox accept its ID or its exact name.
 | `completion` | Print a `bash`, `zsh`, `fish` or `powershell` completion script |
 
 Run `superserve <command> --help` for every option, with examples.
+
+## Build a template
+
+`superserve template create <name>` creates a [template](/templates/overview) and builds it, streaming the build log until it is ready.
+
+```bash
+superserve template create py-data --from python:3.11 \
+  --run "pip install numpy pandas" --env DEBUG=1 --workdir /app \
+  --vcpu 2 --memory 2G --memory-max 8G
+superserve sandbox create --name analysis --template py-data
+```
+
+| Flag | Description |
+| --- | --- |
+| `--from <image>` | Base OCI image, for example `python:3.11` (linux/amd64). Required, here or in `--file`. |
+| `--run <cmd>` | Build step: run a shell command. Repeatable. |
+| `--env <KEY=VALUE>` | Build step: set an environment variable for later steps and sandboxes. Repeatable. |
+| `--workdir <dir>` | Build step: working directory for later steps and sandboxes. |
+| `--user <name>` | Build step: run later steps and sandboxes as this user (created if missing). |
+| `--sudo` | Give the `--user` passwordless sudo. |
+| `--start-cmd <cmd>` | Process started after the build and captured running in the snapshot. |
+| `--ready-cmd <cmd>` | Readiness probe polled after `--start-cmd` until it exits 0. |
+| `--vcpu <n>` | vCPUs. Default `1`. |
+| `--memory <size>` | Memory a sandbox boots with. Default `1G`. |
+| `--memory-max <size>` | Let sandboxes grow memory while running, up to this size. See [Live memory resizing](/sandbox/live-memory-resizing). |
+| `--disk <size>` | Disk size. Default `4G`. |
+| `-f, --file <path>` | JSON build spec (`-` for stdin). |
+| `--no-wait` | Return once the build is queued. |
+
+Build steps (`--run`, `--env`, `--workdir`, `--user`) run in command-line order. Sizes take MiB (`2048`) or a unit (`512M`, `2G`, `8GiB`). The maximum vCPU, memory and disk depend on your team's plan; see [Resource limits](/templates/build-spec#resource-limits).
+
+`--memory-max` must be greater than `--memory`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128 MiB. If neither `--memory` nor the file's `memory_mib` is set, it is compared with the default of `1G`. Leave it out for a fixed memory size. See [Growing memory](/templates/build-spec#growing-memory).
+
+`--file` takes the [build spec](/templates/build-spec) fields in snake_case (`from`, `steps`, `start_cmd`, `ready_cmd`) plus `vcpu`, `memory_mib`, `memory_max_mib` and `disk_mib`. YAML is not supported. Flags override the file's fields, and flag build steps run after the file's steps.
+
+```bash
+echo '{"from": "python:3.11", "steps": [{"run": "pip install numpy"}], "memory_mib": 2048, "memory_max_mib": 8192}' > template.json
+superserve template create growable -f template.json
+```
+
+`superserve template get <name>` shows the memory range of a growable template, for example `Memory: 2G-8G`; `--json` returns `memory_mib` and `memory_max_mib`. `superserve sandbox get` shows the same range for a sandbox.
 
 ## Scripting
 

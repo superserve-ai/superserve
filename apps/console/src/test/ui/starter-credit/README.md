@@ -6,7 +6,7 @@ From `apps/console`, run:
 bunx next dev src/test/ui/starter-credit --webpack --hostname 127.0.0.1 --port 4177
 ```
 
-Open `http://127.0.0.1:4177/plan-usage/buy-credit/?scenario=first`. Scenarios:
+Open `http://127.0.0.1:4177/billing-usage/buy-credit/?scenario=first`. Scenarios:
 
 | Scenario   | State                                                                 |
 | ---------- | --------------------------------------------------------------------- |

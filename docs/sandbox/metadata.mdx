@@ -48,6 +48,43 @@ sandbox.update(metadata={"env": "staging", "owner": "agent-7"})
 ```
 </CodeGroup>
 
+## Limits
+
+The API checks metadata on `create()` and `update()`:
+
+| Rule | Limit |
+| --- | --- |
+| Keys per sandbox | 64 |
+| Key size | 1 to 256 bytes (UTF-8) |
+| Value size | 2,048 bytes (UTF-8) |
+| Total size (all keys plus all values) | 16,384 bytes (UTF-8) |
+| Reserved key prefixes | `superserve.` and `_superserve`, in any letter case |
+
+A map that breaks a rule fails with `ValidationError` (`400`), and the message names the rule. The sandbox keeps its previous metadata.
+
+<CodeGroup>
+```typescript TypeScript
+import { ValidationError } from "@superserve/sdk"
+
+try {
+  await sandbox.update({ metadata: { note: "x".repeat(4096) } })
+} catch (err) {
+  if (err instanceof ValidationError) {
+    console.log(err.message) // metadata value for key "note" is 4096 bytes, max is 2048
+  }
+}
+```
+
+```python Python
+from superserve import ValidationError
+
+try:
+    sandbox.update(metadata={"note": "x" * 4096})
+except ValidationError as err:
+    print(err)  # metadata value for key "note" is 4096 bytes, max is 2048
+```
+</CodeGroup>
+
 ## Filter sandboxes by metadata
 
 `Sandbox.list()` accepts a `metadata` filter that returns only sandboxes matching every key-value pair you pass.

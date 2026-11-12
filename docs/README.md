@@ -16,9 +16,15 @@ Preview at `http://localhost:3000`.
 docs/
 ├── docs.json              # Mintlify config and navigation
 ├── introduction.mdx       # Introduction
-├── logo/                  # Logos
+├── logos/                 # Logos
 └── favicon.svg            # Favicon
 ```
+
+## API reference
+
+The API reference pages load the OpenAPI spec from https://api.superserve.ai/openapi.yaml (`openapi` in `docs.json`). The sandbox repository serves it from `api/openapi.yaml`. The spec and these pages are public: they must not contain internal endpoints (`/internal/**`), secrets, tokens, internal hostnames or IPs, infrastructure details, or other sensitive data.
+
+`bun run docs:check-nav` (from the repo root) checks that the API reference navigation in `docs.json` matches the spec.
 
 ## Publishing
 

@@ -11,14 +11,13 @@ The network log answers a question you can't answer from inside an untrusted san
 const page = await sandbox.getNetworkLog({ limit: 50 })
 
 for (const e of page.events) {
-if (e.kind === "connection") {
-console.log(e.ts, e.host ?? e.dstIp, e.verdict)
-} else {
-console.log(e.ts, e.method, e.host + e.path, "→", e.status)
+  if (e.kind === "connection") {
+    console.log(e.ts, e.host ?? e.dstIp, e.verdict)
+  } else {
+    console.log(e.ts, e.method, `${e.host}${e.path}`, "→", e.status)
+  }
 }
-}
-
-````
+```
 
 ```python Python
 page = sandbox.get_network_log(limit=50)
@@ -28,7 +27,7 @@ for e in page.events:
         print(e.ts, e.host or e.dst_ip, e.verdict)
     else:
         print(e.ts, e.method, f"{e.host}{e.path}", "→", e.status)
-````
+```
 
 </CodeGroup>
 
@@ -37,9 +36,28 @@ for e in page.events:
 Each event has a `kind`:
 
 - **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. This is every HTTP or HTTPS connection the sandbox opened to a public address on ports 80 and 443, whether or not a secret was involved. Attempts at private, link-local, or loopback addresses are dropped before they reach the log.
-- **`request`** — a secret-bearing request (the sandbox used a [secret](/secrets/overview)). Carries `method`, `path`, `status`, and the `secretId` that was used.
+- **`request`** — an HTTPS request handled by the Superserve credential proxy. When a sandbox has [secrets](/secrets/overview) bound, the proxy handles its HTTPS requests, including requests that carry no secret. Carries `method`, `path`, and `status`. `secretId` is present only when the proxy attached a secret to the request. `errorCode` is present when the proxy refused or failed the request itself.
 
 Fields that don't apply to a row's kind are omitted.
+
+| Field                      | Kind         | Description                                                                                                                  |
+| -------------------------- | ------------ | ---------------------------------------------------------------------------------------------------------------------------- |
+| `kind`                     | both         | `"connection"` or `"request"`.                                                                                               |
+| `id`                       | both         | Row ID. Unique within its kind.                                                                                              |
+| `ts`                       | both         | When the event happened (`Date` in TypeScript, `datetime` in Python).                                                        |
+| `host`                     | both         | Destination hostname. Can be absent on a `connection` row when only the IP address is known.                                 |
+| `dstIp` / `dst_ip`         | `connection` | Destination IP address.                                                                                                      |
+| `dstPort` / `dst_port`     | `connection` | Destination port (`80` or `443`).                                                                                            |
+| `verdict`                  | `connection` | `allowed`, `blocked`, or `failed`. See [Verdicts](#verdicts).                                                                |
+| `matchRule` / `match_rule` | `connection` | The rule that decided the verdict.                                                                                           |
+| `bytesSent` / `bytes_sent` | `connection` | Bytes sent by the sandbox.                                                                                                   |
+| `bytesRecv` / `bytes_recv` | `connection` | Bytes received by the sandbox.                                                                                               |
+| `method` · `path`          | `request`    | The request line.                                                                                                            |
+| `status`                   | `request`    | HTTP status returned to the sandbox.                                                                                         |
+| `upstreamStatus` / `upstream_status` | `request` | HTTP status from the upstream service. Absent when the proxy answered the request itself.                         |
+| `latencyMs` / `latency_ms` | `request`    | Time the proxy spent on the request, in milliseconds.                                                                        |
+| `secretId` / `secret_id`   | `request`    | The secret the proxy attached. Absent when no secret was used.                                                               |
+| `errorCode` / `error_code` | `request`    | Why the proxy refused or failed the request, for example `host_not_allowed` or `credential_revoked`.                        |
 
 ### Verdicts
 
@@ -59,16 +77,15 @@ Narrow by verdict, or to a time window:
 
 <CodeGroup>
 ```typescript TypeScript
-// Everything that was blocked.
+// Connections your network rules blocked (connection rows only).
 const blocked = await sandbox.getNetworkLog({ verdict: "blocked" })
 
 // A specific window during an incident.
 const window = await sandbox.getNetworkLog({
-since: "2026-06-11T14:00:00Z",
-before: "2026-06-11T15:00:00Z",
+  since: "2026-06-11T14:00:00Z",
+  before: "2026-06-11T15:00:00Z",
 })
-
-````
+```
 
 ```python Python
 blocked = sandbox.get_network_log(verdict="blocked")
@@ -77,14 +94,60 @@ window = sandbox.get_network_log(
     since="2026-06-11T14:00:00Z",
     before="2026-06-11T15:00:00Z",
 )
-````
+```
 
 </CodeGroup>
 
 <Note>
   A `verdict` filter returns only `connection` rows — `request` rows have no
-  verdict.
+  verdict. When a sandbox has secrets bound, the proxy refuses an HTTPS request
+  to a host your network rules don't allow with a `request` row (status `403`,
+  `errorCode` `host_not_allowed`). `verdict: "blocked"` does not return that row.
 </Note>
+
+To see everything that was denied, page through the unfiltered log and keep both kinds:
+
+<CodeGroup>
+```typescript TypeScript
+import type { NetworkEvent } from "@superserve/sdk"
+
+const denied: NetworkEvent[] = []
+let cursor: string | undefined
+do {
+  const page = await sandbox.getNetworkLog({ before: cursor, limit: 1000 })
+  denied.push(
+    ...page.events.filter(
+      (e) => e.verdict === "blocked" || (e.kind === "request" && e.errorCode !== undefined),
+    ),
+  )
+  cursor = page.nextCursor
+} while (cursor)
+```
+
+```python Python
+denied = []
+cursor = None
+while True:
+    page = sandbox.get_network_log(before=cursor, limit=1000)
+    denied += [
+        e for e in page.events
+        if e.verdict == "blocked" or (e.kind == "request" and e.error_code)
+    ]
+    cursor = page.next_cursor
+    if not cursor:
+        break
+```
+
+</CodeGroup>
+
+### Query parameters
+
+| Option    | Description                                                                                                                                         |
+| --------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `limit`   | Events per page. Default `100`, maximum `1000`.                                                                                                     |
+| `before`  | The previous page's `nextCursor` / `next_cursor`. Also accepts an RFC 3339 timestamp: only rows strictly older than it are returned.                |
+| `since`   | RFC 3339 timestamp. Only rows at or newer than it are returned.                                                                                     |
+| `verdict` | `allowed`, `blocked`, or `failed`. Returns only `connection` rows with that verdict.                                                                |
 
 ## Pagination
 

@@ -9,7 +9,13 @@ const COOKIE_NAME = "__Host-superserve-google-signup"
 const PURPOSE = "signup_google"
 const LEGACY_VERSION = 1
 const VERSION = 2
-const TTL_SECONDS = 5 * 60
+// Long enough for Google consent and two-step verification after the CAPTCHA.
+const TTL_SECONDS = 15 * 60
+// The OAuth start record keeps its original window.
+const ORIGIN_TTL_SECONDS = 5 * 60
+// The browser keeps an expired proof this long so a failed callback can say it
+// expired rather than that it never arrived; validity still ends at exp.
+const EXPIRED_PROOF_RETENTION_SECONDS = 60 * 60
 const MAX_PROOF_COOKIES = 4
 const MAX_PROOF_COOKIE_BYTES = 3800
 const MAX_REQUEST_COOKIES = 128
@@ -225,7 +231,9 @@ function writeProof(
     secure: true,
     sameSite: "lax",
     path: "/",
-    maxAge: Math.max(0, payload.exp - Math.floor(Date.now() / 1000)),
+    maxAge:
+      Math.max(0, payload.exp - Math.floor(Date.now() / 1000)) +
+      EXPIRED_PROOF_RETENTION_SECONDS,
   })
 }
 
@@ -287,6 +295,120 @@ export async function hasValidGoogleSignupProof(
     )
   } catch (error) {
     console.error("Google signup proof validation failed", error)
+    return false
+  }
+}
+
+export type GoogleSignupProofFailure =
+  | "started_from_signin"
+  | "no_proof"
+  | "expired"
+  | "attempt_mismatch"
+  | "invalid_proof"
+
+/** A correctly signed proof's payload, whether or not it is still valid. */
+function signedPayload(value: string): Partial<ProofPayload> | undefined {
+  const [encoded, supplied, extra] = value.split(".")
+  if (!encoded || !supplied || extra) return undefined
+  const suppliedSignature = Buffer.from(supplied, "base64url")
+  const expected = signature(encoded)
+  if (
+    suppliedSignature.toString("base64url") !== supplied ||
+    suppliedSignature.length !== expected.length ||
+    !crypto.timingSafeEqual(suppliedSignature, expected)
+  )
+    return undefined
+  return JSON.parse(Buffer.from(encoded, "base64url").toString("utf8"))
+}
+
+/**
+ * Why a first-time Google callback has no usable signup proof, for the
+ * recovery page and the blocked event. It never authorizes anything.
+ */
+export async function googleSignupProofFailure(
+  signupAttemptId?: string,
+): Promise<GoogleSignupProofFailure> {
+  // Only the signup page's check starts an attempt, so a callback without one
+  // began on sign-in.
+  if (!signupAttemptId) return "started_from_signin"
+  try {
+    const store = await cookies()
+    const value = store.get(cookieName(signupAttemptId))?.value
+    if (!value)
+      return proofCookies(store).some(
+        ({ name, value }) => decodedProof(name, value) !== undefined,
+      )
+        ? "attempt_mismatch"
+        : "no_proof"
+    const payload = signedPayload(value)
+    if (!payload) return "invalid_proof"
+    if (
+      payload.signup_attempt_id !== undefined &&
+      payload.signup_attempt_id !== signupAttemptId
+    )
+      return "attempt_mismatch"
+    if (
+      typeof payload.exp === "number" &&
+      payload.exp < Math.floor(Date.now() / 1000)
+    )
+      return "expired"
+    return "invalid_proof"
+  } catch {
+    return "invalid_proof"
+  }
+}
+
+const RECOVERY_COOKIE = "__Host-superserve-google-recovery"
+const RECOVERY_PURPOSE = "google_signup_recovery"
+const RECOVERY_TTL_SECONDS = 10 * 60
+
+/**
+ * Marks that this browser's own Google callback just failed the signup check,
+ * so the recovery page may continue to Google without a click. A link alone
+ * carries no such mark.
+ */
+export async function markGoogleSignupRecovery(
+  reason: GoogleSignupProofFailure,
+): Promise<void> {
+  const encoded = Buffer.from(
+    JSON.stringify({
+      purpose: RECOVERY_PURPOSE,
+      reason,
+      exp: Math.floor(Date.now() / 1000) + RECOVERY_TTL_SECONDS,
+    }),
+  ).toString("base64url")
+  ;(await cookies()).set(
+    RECOVERY_COOKIE,
+    `${encoded}.${signature(encoded).toString("base64url")}`,
+    {
+      httpOnly: true,
+      secure: true,
+      sameSite: "lax",
+      path: "/",
+      maxAge: RECOVERY_TTL_SECONDS,
+    },
+  )
+}
+
+/** Consumes the recovery mark; true only for an unexpired mark for reason. */
+export async function claimGoogleSignupRecovery(
+  reason: string,
+): Promise<boolean> {
+  try {
+    const store = await cookies()
+    const value = store.get(RECOVERY_COOKIE)?.value
+    if (!value || value.length > 1024) return false
+    expireCookie(store, RECOVERY_COOKIE)
+    const payload = signedPayload(value) as
+      | { purpose?: string; reason?: string; exp?: number }
+      | undefined
+    return (
+      payload?.purpose === RECOVERY_PURPOSE &&
+      payload.reason === reason &&
+      typeof payload.exp === "number" &&
+      payload.exp >= Math.floor(Date.now() / 1000)
+    )
+  } catch {
     return false
   }
 }
@@ -379,6 +501,7 @@ export async function requireGoogleSignupProof(
   actor: string,
   expectedSignupAttemptId?: string,
 ): Promise<string | undefined> {
+  let setupError: unknown
   try {
     const store = await cookies()
     expectedSignupAttemptId ||= store.get(PENDING_ATTEMPT_COOKIE)?.value
@@ -419,10 +542,14 @@ export async function requireGoogleSignupProof(
     }
   } catch (error) {
     if (error instanceof GoogleSignupRecoveryRequiredError) throw error
-    // Treat cookie-store/configuration failures as a missing proof below.
+    // Cookie-store/configuration failures still block provisioning below.
+    setupError = error
   }
   await trackGoogleSignupBypass()
-  throw new Error("Google signup verification required")
+  // Another Google round trip cannot fix a setup failure, so surface it.
+  if (setupError) throw setupError
+  // Send the user back through the proof step instead of a setup error page.
+  throw new GoogleSignupRecoveryRequiredError()
 }
 
 async function trackGoogleSignupBypass(): Promise<void> {
@@ -550,7 +677,7 @@ async function readGoogleOrigin(
       !Number.isFinite(origin.expiresAt) ||
       origin.startedAt > Date.now() ||
       origin.expiresAt <= Date.now() ||
-      origin.expiresAt - origin.startedAt !== TTL_SECONDS * 1000
+      origin.expiresAt - origin.startedAt !== ORIGIN_TTL_SECONDS * 1000
     )
       return undefined
     return origin
@@ -595,7 +722,7 @@ export async function beginGoogleSigninOrigin(): Promise<string> {
     purpose: "google_oauth_origin",
     id,
     startedAt,
-    expiresAt: startedAt + TTL_SECONDS * 1000,
+    expiresAt: startedAt + ORIGIN_TTL_SECONDS * 1000,
   })
   return id
 }

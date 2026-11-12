@@ -33,8 +33,11 @@ def _valid_raw() -> dict:
         "status": "active",
         "vcpu_count": 2,
         "memory_mib": 1024,
+        "memory_max_mib": 4096,
+        "memory_current_mib": 2048,
         "created_at": "2026-01-01T12:00:00",
         "timeout_seconds": 600,
+        "idle_timeout_seconds": 300,
         "network": {"allow_out": ["1.2.3.4"], "deny_out": []},
         "metadata": {"key": "value"},
     }
@@ -49,7 +52,10 @@ class TestToSandboxInfo:
         assert info.status == SandboxStatus.ACTIVE
         assert info.vcpu_count == 2
         assert info.memory_mib == 1024
+        assert info.memory_max_mib == 4096
+        assert info.memory_current_mib == 2048
         assert info.timeout_seconds == 600
+        assert info.idle_timeout_seconds == 300
         assert info.metadata == {"key": "value"}
 
     def test_auto_delete_fields_parse(self) -> None:
@@ -86,7 +92,10 @@ class TestToSandboxInfo:
         assert info.name == ""
         assert info.vcpu_count == 0
         assert info.memory_mib == 0
+        assert info.memory_max_mib is None
+        assert info.memory_current_mib is None
         assert info.timeout_seconds is None
+        assert info.idle_timeout_seconds is None
         assert info.auto_delete_seconds is None
         assert info.auto_delete_at is None
         assert info.network is None
@@ -158,6 +167,7 @@ class TestToTemplateInfo:
                 "status": "ready",
                 "vcpu": 2,
                 "memory_mib": 2048,
+                "memory_max_mib": 8192,
                 "disk_mib": 4096,
                 "size_bytes": 12345,
                 "created_at": "2026-01-01T00:00:00Z",
@@ -169,6 +179,7 @@ class TestToTemplateInfo:
         assert info.status == TemplateStatus.READY
         assert info.vcpu == 2
         assert info.memory_mib == 2048
+        assert info.memory_max_mib == 8192
         assert info.disk_mib == 4096
         assert info.size_bytes == 12345
         assert isinstance(info.created_at, datetime)
@@ -187,6 +198,7 @@ class TestToTemplateInfo:
                 "created_at": "2026-01-01T00:00:00Z",
             }
         )
+        assert info.memory_max_mib is None
         assert info.size_bytes is None
         assert info.built_at is None
         assert info.error_message is None

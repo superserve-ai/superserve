@@ -103,7 +103,7 @@ export function Sidebar() {
           <button
             type="button"
             onClick={openCommandPalette}
-            className="group flex w-full cursor-pointer items-center gap-2.5 border border-border px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground"
+            className="group flex w-full cursor-pointer items-center gap-2.5 border border-control px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
           >
             <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
             <span className="flex-1 text-left text-sm leading-none tracking-tight text-foreground/70">

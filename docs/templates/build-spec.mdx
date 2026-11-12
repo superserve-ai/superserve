@@ -81,13 +81,28 @@ Polled every 2s after `startCmd` until it exits `0` or 10 minutes elapse. Use th
 
 Templates specify the VM shape; sandboxes inherit these and cannot override them per-sandbox.
 
-| Field       | Min  | Free max | Pro max | Default |
-| ----------- | ---- | -------- | ------- | ------- |
-| `vcpu`      | 1    | 2        | 16      | 1       |
-| `memoryMib` | 256  | 4096     | 65536   | 1024    |
-| `diskMib`   | 1024 | 8192     | 65536   | 4096    |
+| Limit         | `vcpu` (vCPUs) | `memoryMib` (MiB)  |
+| ------------- | -------------- | ------------------ |
+| Min           | 1 vCPU         | 256 MiB            |
+| Default       | 1 vCPU         | 1 GiB (1024 MiB)   |
+| Free max      | 2 vCPU         | 4 GiB (4096 MiB)   |
+| Developer max | 4 vCPU         | 16 GiB (16384 MiB) |
+| Pro max       | 16 vCPU        | 64 GiB (65536 MiB) |
 
-Your team's maximum depends on its plan. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
+`memoryMib` takes a value in MiB (1 GiB = 1024 MiB). Limits depend on your team's plan. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
+
+### Growing memory
+
+Set `memoryMaxMib` to let sandboxes grow their memory while running, up to that ceiling. `memoryMib` stays the size a sandbox boots with. `memoryMaxMib` must be greater than `memoryMib`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128 MiB.
+
+```typescript
+memoryMib: 2048,
+memoryMaxMib: 8192,
+```
+
+Only sandboxes from a template built with `memoryMaxMib` set can grow; leave it out for a fixed memory size. The [CLI](/cli#build-a-template) takes the same value as `--memory-max`, and the [MCP server](/integrations/mcp) as `memory_max_mib` on `sandbox_template_create`.
+
+For how sandboxes grow, shrink and are billed, see [Live memory resizing](/sandbox/live-memory-resizing).
 
 ## Build error codes
 

@@ -19,14 +19,17 @@ import {
   type GoogleMembershipState,
 } from "@/lib/auth/google-onboarding"
 import {
+  googleSignupProofFailure,
   hasValidGoogleSignupProof,
   hasValidLegacyGoogleSignupProof,
   isGoogleUser,
   markGoogleSignupAttempt,
+  markGoogleSignupRecovery,
   readGooglePromotionEvidence,
   retainOriginalGoogleSignup,
   revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
@@ -148,6 +151,12 @@ export async function GET(request: Request) {
     | "email"
     | null
   let next = sanitizeNext(searchParams.get("next"))
+  // Set by the sign-in recovery options after a failed password sign-in.
+  const rawSignInRecovery = searchParams.get("sign_in_recovery")
+  const signInRecovery =
+    rawSignInRecovery === "email_link" || rawSignInRecovery === "google"
+      ? rawSignInRecovery
+      : null
 
   if (code || tokenHash) {
     const supabase = await createServerClient()
@@ -193,12 +202,30 @@ export async function GET(request: Request) {
         tokenHash: !!tokenHash,
         type,
       })
+      // An expired or used confirmation link cannot be retried. Signing up
+      // again with the same email sends a new link while the account is
+      // unconfirmed, so return there with the signup's offer and destination.
+      if (!code && type === "signup") {
+        const signup = new URLSearchParams({ error: "link_expired" })
+        for (const param of ["offer", SIGNUP_OFFER_PARAM]) {
+          const value = searchParams.get(param)
+          if (value) signup.set(param, value)
+        }
+        if (next !== "/") signup.set("next", next)
+        return NextResponse.redirect(
+          buildRedirectUrl(origin, `/auth/signup?${signup}`),
+        )
+      }
     }
 
     if (!error) {
       if (next === "/auth/reset-password" || type === "recovery") {
+        const invite = inviteReturnPath(searchParams.get("invite"))
         return NextResponse.redirect(
-          buildRedirectUrl(origin, "/auth/reset-password"),
+          buildRedirectUrl(
+            origin,
+            `/auth/reset-password${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
+          ),
         )
       }
 
@@ -363,11 +390,24 @@ export async function GET(request: Request) {
               ),
             )
           }
+          // An invitee retries toward the invitation instead of first-team
+          // setup; an unproven Google invitee needs signup's proof gate first.
+          const invite = inviteReturnPath(next)
+          if (googleProofRecovery && invite && !paidSetupRecovery)
+            return NextResponse.redirect(
+              buildRedirectUrl(
+                origin,
+                `/auth/signup?${new URLSearchParams({ complete_google: "1", next: invite })}`,
+              ),
+            )
           return NextResponse.redirect(
             buildRedirectUrl(
               origin,
               paidSetupRecovery ??
-                "/auth/auth-code-error?reason=membership_lookup_degraded",
+                `/auth/auth-code-error?${new URLSearchParams({
+                  reason: "membership_lookup_degraded",
+                  ...(invite ? { next: invite } : {}),
+                })}`,
             ),
           )
         }
@@ -432,19 +472,25 @@ export async function GET(request: Request) {
               ? await hasValidGoogleSignupProof(signupAttemptId)
               : await hasValidLegacyGoogleSignupProof()
             if (!proofValid) {
+              const proofFailure =
+                await googleSignupProofFailure(signupAttemptId)
               await trackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
                 user.id,
                 {
                   reason: "missing_or_invalid_proof",
+                  proof_failure: proofFailure,
                   provider,
                 },
               )
               console.warn("Google OAuth onboarding blocked", {
                 reason: "missing_or_invalid_proof",
+                proofFailure,
               })
+              await markGoogleSignupRecovery(proofFailure)
               const recoveryUrl = new URL("/auth/signup", origin)
               recoveryUrl.searchParams.set("complete_google", "1")
+              recoveryUrl.searchParams.set("reason", proofFailure)
               if (requestedOffer)
                 recoveryUrl.searchParams.set("offer", requestedOffer)
               const signupOfferParam = offerIntent
@@ -703,11 +749,13 @@ export async function GET(request: Request) {
             ...(isNewUser && requestedOffer
               ? { requested_offer: requestedOffer }
               : {}),
+            ...(signInRecovery ? { sign_in_recovery: signInRecovery } : {}),
           },
         )
 
         const proNext = proAuthReturnPath(next) ?? starterAuthReturnPath(next)
         const preparationNext = signupPreparationReturnPath(next)
+        const inviteNext = inviteReturnPath(next)
         const ycNext =
           ycReturnPath(next) ??
           (process.env.YC_STAFF_UI_ENABLED === "true"
@@ -722,10 +770,12 @@ export async function GET(request: Request) {
           !isPlanPickerPath(next) &&
           !ycNext &&
           !proNext &&
-          !preparationNext
+          !preparationNext &&
+          !inviteNext
         ) {
           next = "/sandboxes"
         }
+        if (inviteNext) next = inviteNext
         if (ycNext) next = ycNext
         if (proNext) next = proNext
         if (preparationNext) next = preparationNext
@@ -808,5 +858,9 @@ export async function GET(request: Request) {
       return response
     }
   }
-  return NextResponse.redirect(`${origin}/auth/auth-code-error`)
+  // A failed exchange keeps the invitation, so its retry can still join it.
+  const invite = inviteReturnPath(next)
+  return NextResponse.redirect(
+    `${origin}/auth/auth-code-error${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
+  )
 }

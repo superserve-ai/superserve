@@ -32,22 +32,29 @@ from agno.agent import Agent
 from agno.models.openai import OpenAIResponses
 from agno.tools.superserve import SuperserveTools
 
+superserve = SuperserveTools(timeout=600)
+
 agent = Agent(
     name="Sandboxed Python Agent",
     model=OpenAIResponses(id="gpt-5.5"),
-    tools=[SuperserveTools(timeout=600)],
+    tools=[superserve],
     instructions=[
         "Execute requested code with run_python_code or run_command.",
         "Return the code and its actual execution output.",
     ],
 )
 
-agent.print_response(
-    "Generate the first 10 Fibonacci numbers, then calculate their sum and average."
-)
+try:
+    agent.print_response(
+        "Generate the first 10 Fibonacci numbers, then calculate their sum and average."
+    )
+finally:
+    superserve.shutdown_sandbox(agent)
 ```
 
 The toolkit creates a Python-ready sandbox on the first tool call. With `persistent=True`, the default, Agno stores its ID in session state and reuses the same sandbox across tool calls and runs in that session. Sync and async agents use the same sandbox automatically.
+
+`timeout` pauses the sandbox after that many seconds of active time, even if the agent is still running tools in it; it does not delete it. Call `shutdown_sandbox(agent)` when you are done, as in the example. As a backstop for runs that exit early, also set `auto_delete_seconds`: once `timeout` pauses the sandbox, it is deleted after it has stayed paused for that many seconds. The countdown runs only while the sandbox is paused, so a sandbox that never pauses is never auto-deleted. See [Auto-delete](/sandbox/lifecycle#auto-delete).
 
 ## Configure the sandbox
 
@@ -70,8 +77,8 @@ tools = [
 | --- | --- |
 | `template` | Select the sandbox runtime. The default is `superserve/code-interpreter`. |
 | `sandbox_id` | Connect the toolkit to an existing sandbox. |
-| `timeout` | Set the sandbox lifetime before it is automatically stopped. |
-| `auto_delete_seconds` | Set a hard time-to-live after which the sandbox is deleted. |
+| `timeout` | Auto-pause the sandbox after this many seconds of active time. Tool calls do not reset it. |
+| `auto_delete_seconds` | Delete the sandbox after it has stayed paused for this many seconds. Resuming it cancels the countdown. |
 | `secrets` | Bind [team secrets](/secrets/binding) without exposing their values in the sandbox. |
 | `enable_pause_sandbox` and `enable_resume_sandbox` | Let the agent pause and resume its current sandbox. |
 | `all` | Enable every toolkit function, including opt-in lifecycle and secret tools. |

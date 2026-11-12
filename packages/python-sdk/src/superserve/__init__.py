@@ -22,6 +22,7 @@ from .desktop import (
 )
 from .errors import (
     AuthenticationError,
+    BillingError,
     BuildError,
     ConflictError,
     NotFoundError,
@@ -74,7 +75,7 @@ from .types import (
     WorkdirStep,
 )
 
-__version__ = "0.11.5"
+__version__ = "0.12.0"
 
 __all__ = [
     "AsyncCommandSession",
@@ -91,6 +92,7 @@ __all__ = [
     "AsyncTemplate",
     "async_connection_pool",
     "AuthenticationError",
+    "BillingError",
     "BuildError",
     "BuildLogEvent",
     "BuildLogStream",

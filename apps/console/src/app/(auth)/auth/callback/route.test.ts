@@ -40,6 +40,8 @@ vi.mock("@/app/(auth)/auth/signin/google-action", () => ({
   beginGoogleSignIn: async () => "retry-origin",
 }))
 vi.mock("@superserve/ui", () => ({
+  cn: (...classes: Array<string | undefined | false>) =>
+    classes.filter(Boolean).join(" "),
   Button: ({
     render: element,
     children,
@@ -213,6 +215,8 @@ vi.mock("@/lib/cells", () => ({
 
 const mockHasValidGoogleSignupProof = vi.fn()
 const mockHasValidLegacyGoogleSignupProof = vi.fn()
+const mockGoogleSignupProofFailure = vi.fn()
+const mockMarkGoogleSignupRecovery = vi.fn()
 const mockConsumeGoogleSignupProof = vi.fn()
 const mockMarkGoogleSignupAttempt = vi.fn()
 const mockRevokeGoogleSignupAuthorization = vi.fn()
@@ -246,6 +250,10 @@ vi.mock("@/lib/auth/google-signup-proof", () => ({
     mockHasValidGoogleSignupProof(...args),
   hasValidLegacyGoogleSignupProof: (...args: unknown[]) =>
     mockHasValidLegacyGoogleSignupProof(...args),
+  googleSignupProofFailure: (...args: unknown[]) =>
+    mockGoogleSignupProofFailure(...args),
+  markGoogleSignupRecovery: (...args: unknown[]) =>
+    mockMarkGoogleSignupRecovery(...args),
   consumeGoogleSignupProof: (...args: unknown[]) =>
     mockConsumeGoogleSignupProof(...args),
   retainOriginalGoogleSignup: (...args: unknown[]) =>
@@ -340,6 +348,31 @@ import { STAFF_SESSION_COOKIE } from "@/lib/yc/staff-session"
 import { GET } from "./route"
 
 describe("auth callback", () => {
+  it.each([
+    `/invite/ssinv_use_${"T".repeat(43)}`,
+    "/sandboxes",
+    "https://example.com",
+    "/invite/invalid",
+  ])(
+    "keeps only a validated invite through password recovery (%s)",
+    async (invite) => {
+      const params = new URLSearchParams({
+        token_hash: "recovery-token",
+        type: "recovery",
+        next: "/auth/reset-password",
+        invite,
+      })
+      const response = await GET(
+        new Request(`https://console.example.com/auth/callback?${params}`),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).toBe("/auth/reset-password")
+      expect(location.searchParams.get("next")).toBe(
+        invite.startsWith("/invite/ssinv_") ? invite : null,
+      )
+    },
+  )
+
   beforeEach(() => {
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
     mockGetSignupPlanAction.mockReset().mockResolvedValue(undefined)
@@ -453,6 +486,8 @@ describe("auth callback", () => {
     mockHasValidLegacyGoogleSignupProof
       .mockReset()
       .mockImplementation(async () => proofAvailable)
+    mockGoogleSignupProofFailure.mockReset().mockResolvedValue("no_proof")
+    mockMarkGoogleSignupRecovery.mockReset().mockResolvedValue(undefined)
     mockConsumeGoogleSignupProof.mockReset()
     mockRevokeGoogleSignupAuthorization.mockReset().mockResolvedValue(undefined)
     mockMarkGoogleSignupAttempt.mockReset().mockResolvedValue(undefined)
@@ -567,6 +602,61 @@ describe("auth callback", () => {
       undefined,
     )
   })
+
+  it("returns an expired signup confirmation to signup with its offer and destination", async () => {
+    authVerifyOtpError = { message: "Email link is invalid or has expired" }
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=token&type=signup&signup_attempt_id=attempt-1&offer=pro_monthly&signup_offer=developer&next=%2Fyc%2Fclaim",
+      ),
+    )
+
+    const destination = new URL(response.headers.get("location")!)
+    expect(destination.pathname).toBe("/auth/signup")
+    expect(Object.fromEntries(destination.searchParams)).toEqual({
+      error: "link_expired",
+      offer: "pro_monthly",
+      signup_offer: "developer",
+      next: "/yc/claim",
+    })
+    expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+  })
+
+  it("preserves the invitation when an expired confirmation returns to signup", async () => {
+    authVerifyOtpError = { message: "Email link is invalid or has expired" }
+    const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+    const callback = new URL("https://console.superserve.ai/auth/callback")
+    callback.searchParams.set("token_hash", "expired-token")
+    callback.searchParams.set("type", "signup")
+    callback.searchParams.set("next", invite)
+
+    const response = await GET(new Request(callback))
+
+    const destination = new URL(response.headers.get("location")!)
+    expect(destination.pathname).toBe("/auth/signup")
+    expect(Object.fromEntries(destination.searchParams)).toEqual({
+      error: "link_expired",
+      next: invite,
+    })
+  })
+
+  it.each(["token_hash=token&type=magiclink", "code=abc&type=signup"])(
+    "keeps the generic error for a failed %s callback",
+    async (auth) => {
+      authVerifyOtpError = { message: "Email link is invalid or has expired" }
+      authExchangeError = { message: "invalid flow state" }
+
+      const response = await GET(
+        new Request(`https://console.superserve.ai/auth/callback?${auth}`),
+      )
+
+      const destination = new URL(response.headers.get("location")!)
+      expect(destination.pathname + destination.search).toBe(
+        "/auth/auth-code-error",
+      )
+    },
+  )
 
   it("uses unavailable for a pre-identity Google trigger rejection", async () => {
     authExchangeError = { message: "DATABASE ERROR SAVING NEW USER" }
@@ -1111,6 +1201,43 @@ describe("auth callback", () => {
       })
     })
 
+    describe("invite return path", () => {
+      const token = `ssinv_use_${"A".repeat(43)}`
+
+      it.each([`/invite/${token}`, `/invite/${token}/`])(
+        "returns to the invite page after sign-in: %s",
+        async (next) => {
+          const response = await GET(
+            new Request(
+              `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+            ),
+          )
+          expect(response.headers.get("location")).toBe(
+            `https://console.superserve.ai/invite/${token}`,
+          )
+        },
+      )
+
+      it.each([
+        `/invite/${token}/extra`,
+        `/invite/${token}?next=https://outside.test`,
+        `/invite/${token}#x`,
+        `/invite/ssinv_eu_${"A".repeat(43)}`,
+        `/invite/${"A".repeat(43)}`,
+        `//outside.test/invite/${token}`,
+        `/invite/..%2F..%2Fadmin`,
+      ])("drops %s", async (next) => {
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+          ),
+        )
+        expect(new URL(response.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
+        )
+      })
+    })
+
     it("keeps today's signup when the switch is off, whatever the offer", async () => {
       const response = await firstTimeGoogle("enterprise")
 
@@ -1127,6 +1254,39 @@ describe("auth callback", () => {
         { kind: "unavailable" },
         undefined,
       )
+    })
+
+    it("tells the recovery page and the blocked event why the signup check failed", async () => {
+      googleMembershipState = { kind: "first_time" }
+      proofAvailable = false
+      for (const [query, failure] of [
+        ["google_signin_intent=pre-auth-intent", "started_from_signin"],
+        ["signup_attempt_id=attempt-1", "expired"],
+      ] as const) {
+        mockTrackEvent.mockClear()
+        mockGoogleSignupProofFailure.mockResolvedValueOnce(failure)
+        const response = await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?code=abc&${query}`,
+          ),
+        )
+        const location = new URL(response.headers.get("location")!)
+        expect(location.pathname).toBe("/auth/signup")
+        expect(location.searchParams.get("complete_google")).toBe("1")
+        expect(location.searchParams.get("reason")).toBe(failure)
+        expect(mockMarkGoogleSignupRecovery).toHaveBeenLastCalledWith(failure)
+        expect(mockGoogleSignupProofFailure).toHaveBeenLastCalledWith(
+          query.startsWith("signup_attempt_id") ? "attempt-1" : undefined,
+        )
+        expect(mockTrackEvent).toHaveBeenCalledWith(
+          "auth_google_signup_bypass_blocked",
+          "u1",
+          expect.objectContaining({
+            reason: "missing_or_invalid_proof",
+            proof_failure: failure,
+          }),
+        )
+      }
     })
 
     it("keeps a v2 offer through the Google signup recovery page", async () => {
@@ -1522,7 +1682,7 @@ describe("auth callback", () => {
 
     it.each([
       "/billing/pro/?team=use%3Ateam&return=%2Fsandboxes",
-      "/plan-usage/buy-credit?amount=500",
+      "/billing-usage/buy-credit?amount=500",
     ])(
       "keeps direct no-offer email confirmation destination %s",
       async (next) => {
@@ -1538,7 +1698,7 @@ describe("auth callback", () => {
     )
 
     it.each([
-      ["starter", "/plan-usage/buy-credit/"],
+      ["starter", "/billing-usage/buy-credit/"],
       ["pro_monthly", "/billing/pro/"],
     ])(
       "finishes first-team preparation before the fresh %s confirmation destination",
@@ -1634,13 +1794,15 @@ describe("auth callback", () => {
       mockGetSignupPlanAction.mockRejectedValueOnce(new Error("Response lost"))
       const response = await GET(
         new Request(
-          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
         ),
       )
       const location = new URL(response.headers.get("location")!)
       expect(location.pathname).toBe("/auth/auth-code-error")
       expect(location.searchParams.get("reason")).toBe("account_setup")
-      expect(location.searchParams.get("next")).toBe("/plan-usage/buy-credit/")
+      expect(location.searchParams.get("next")).toBe(
+        "/billing-usage/buy-credit/",
+      )
       expect(location.searchParams.get("account")).toBe("u1")
     })
 
@@ -1658,7 +1820,7 @@ describe("auth callback", () => {
       )
       const response = await GET(
         new Request(
-          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+          "https://console.superserve.ai/auth/callback?token_hash=official&type=signup&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
         ),
       )
       const recovery = new URL(response.headers.get("location")!)
@@ -1674,7 +1836,7 @@ describe("auth callback", () => {
       expect(signin.pathname).toBe("/auth/signin")
       const authenticatedNext = signin.searchParams.get("next")!
       expect(new URL(authenticatedNext, signin).searchParams.get("next")).toBe(
-        "/plan-usage/buy-credit/",
+        "/billing-usage/buy-credit/",
       )
       currentUser = owner
       const callback = new URL(
@@ -1686,7 +1848,7 @@ describe("auth callback", () => {
         new Request(authenticated.headers.get("location")!),
       ).catch((error) => new URL(error.message, retry))
       if (!prepared) throw new Error("Expected paid destination")
-      expect(prepared.pathname).toBe("/plan-usage/buy-credit/")
+      expect(prepared.pathname).toBe("/billing-usage/buy-credit/")
       expect(directoryState.memberships).toEqual([
         { teamId: "created-team", region: "use" },
       ])
@@ -1698,7 +1860,7 @@ describe("auth callback", () => {
         currentUser!.app_metadata = { provider: "email" }
         directoryState = { memberships: [], degradedRegions: ["use"] }
         const next =
-          offer === "starter" ? "/plan-usage/buy-credit/" : "/billing/pro/"
+          offer === "starter" ? "/billing-usage/buy-credit/" : "/billing/pro/"
         const url = new URL(
           "https://console.superserve.ai/auth/callback?token_hash=official&type=signup",
         )
@@ -1744,6 +1906,24 @@ describe("auth callback", () => {
       },
     )
 
+    it("sends a Google invitee back through the signup proof gate on a degraded lookup", async () => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?code=abc",
+      )
+      url.searchParams.set("next", invite)
+      const response = await GET(new Request(url))
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.pathname).toBe("/auth/signup")
+      expect(failure.searchParams.get("complete_google")).toBe("1")
+      expect(failure.searchParams.get("next")).toBe(invite)
+      expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
+    })
+
     it("retains the existing preparation account and pinned team on a degraded Google lookup", async () => {
       googleMembershipState = {
         kind: "indeterminate",
@@ -1785,7 +1965,7 @@ describe("auth callback", () => {
       }
       const response = await GET(
         new Request(
-          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=early-unbound-attempt&signup_offer=starter&next=%2Fplan-usage%2Fbuy-credit%2F",
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=early-unbound-attempt&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
         ),
       )
       const recovery = new URL(response.headers.get("location")!)
@@ -1794,7 +1974,7 @@ describe("auth callback", () => {
       const preparation = new URL(recovery.searchParams.get("next")!, recovery)
       expect(preparation.searchParams.get("account")).toBe("u1")
       expect(preparation.searchParams.get("next")).toBe(
-        "/plan-usage/buy-credit/",
+        "/billing-usage/buy-credit/",
       )
       expect([...evidenceJar]).toEqual(before)
       expect(mockMarkGoogleSignupAttempt).not.toHaveBeenCalled()
@@ -1802,12 +1982,58 @@ describe("auth callback", () => {
       // This real guard cannot use an unbound scoped proof without completion.
       // After that gate binds the proof, the same actor's guard succeeds.
       await expect(proof.requireGoogleSignupProof("u1")).rejects.toThrow(
-        "Google signup verification required",
+        "Complete signup with Google to continue.",
       )
       await proof.markGoogleSignupAttempt("early-unbound-attempt", "u1")
       await expect(proof.requireGoogleSignupProof("u1")).resolves.toBe(
         "early-unbound-attempt",
       )
+    })
+
+    it("keeps an invitation destination through a degraded lookup and its retry", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      directoryState = { memberships: [], degradedRegions: ["use"] }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=official&type=signup",
+      )
+      url.searchParams.set("next", invite)
+      const response = await GET(new Request(url))
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.pathname).toBe("/auth/auth-code-error")
+      expect(failure.searchParams.get("reason")).toBe(
+        "membership_lookup_degraded",
+      )
+      expect(failure.searchParams.get("next")).toBe(invite)
+      retrySearch = failure.searchParams
+      const ErrorPage = (await import("../auth-code-error/page")).default
+      render(createElement(ErrorPage))
+      const retry = new URL(
+        screen.getByRole("link", { name: "Try Again" }).getAttribute("href")!,
+        url,
+      )
+      cleanup()
+      expect(retry.pathname).toBe("/auth/signin")
+      expect(retry.searchParams.get("next")).toBe(invite)
+    })
+
+    it("keeps an invitation destination when a magic-link exchange fails", async () => {
+      authVerifyOtpError = { message: "Email link is invalid or has expired" }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?token_hash=expired&type=magiclink",
+      )
+      url.searchParams.set("next", invite)
+      const failure = new URL(
+        (await GET(new Request(url))).headers.get("location")!,
+      )
+      expect(failure.pathname).toBe("/auth/auth-code-error")
+      expect(failure.searchParams.get("next")).toBe(invite)
+      url.searchParams.set("next", "/billing")
+      const plain = new URL(
+        (await GET(new Request(url))).headers.get("location")!,
+      )
+      expect(plain.search).toBe("")
     })
 
     it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(
@@ -1945,8 +2171,8 @@ describe("auth callback", () => {
         "/billing/pro",
       ],
       [
-        "signup_offer=pro_monthly&next=%2Fplan-usage%2Fbuy-credit%3Fpurchase%3Dsuccess%26team%3Duse%253Aoriginal",
-        "/plan-usage/buy-credit",
+        "signup_offer=pro_monthly&next=%2Fbilling-usage%2Fbuy-credit%3Fpurchase%3Dsuccess%26team%3Duse%253Aoriginal",
+        "/billing-usage/buy-credit",
       ],
     ])(
       "preserves existing account intent or explicit payment return: %s",
@@ -2789,5 +3015,56 @@ describe("auth callback", () => {
         delete process.env.GOOGLE_SIGNUP_PROOF_SECRET
       else process.env.GOOGLE_SIGNUP_PROOF_SECRET = previousSecret
     }
+  })
+
+  describe("sign-in recovery", () => {
+    it("signs in with an emailed sign-in link without the reset-password step", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=hashed&type=magiclink&sign_in_recovery=email_link&next=/sandboxes",
+        ),
+      )
+      const location = new URL(response.headers.get("location")!)
+      expect(location.pathname).not.toBe("/auth/reset-password")
+      expect(location.pathname).toBe("/sandboxes")
+      expect(mockTrackEvent).toHaveBeenCalledWith("sign_in_completed", "u1", {
+        provider: "email",
+        email: "user@example.com",
+        is_new_user: false,
+        sign_in_recovery: "email_link",
+      })
+    })
+
+    it("carries the Google recovery flag to the sign-in event", async () => {
+      currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&sign_in_recovery=google",
+        ),
+      )
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "sign_in_completed",
+        "u1",
+        expect.objectContaining({
+          provider: "google",
+          sign_in_recovery: "google",
+        }),
+      )
+    })
+
+    it("ignores an unknown recovery flag", async () => {
+      currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&sign_in_recovery=other",
+        ),
+      )
+      const completed = mockTrackEvent.mock.calls.find(
+        ([event]) => event === "sign_in_completed",
+      )
+      expect(completed?.[2]).not.toHaveProperty("sign_in_recovery")
+    })
   })
 })

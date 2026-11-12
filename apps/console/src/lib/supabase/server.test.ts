@@ -13,6 +13,8 @@ vi.mock("next/headers", () => ({
   cookies: vi.fn().mockResolvedValue(mockCookieStore),
 }))
 
+import { supabaseFetch } from "@/lib/supabase/fresh-fetch"
+
 import { createServerClient } from "./server"
 
 describe("createServerClient", () => {
@@ -42,7 +44,10 @@ describe("createServerClient", () => {
     expect(mockCreateServerClient).toHaveBeenCalledWith(
       "https://test.supabase.co",
       "test-key",
-      expect.objectContaining({ cookies: expect.any(Object) }),
+      expect.objectContaining({
+        cookies: expect.any(Object),
+        global: { fetch: supabaseFetch },
+      }),
     )
   })
 

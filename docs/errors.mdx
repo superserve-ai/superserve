@@ -15,8 +15,9 @@ Every error raised by the SDK extends a common base class - `SandboxError` in Ty
 | `ValidationError` | `ValidationError` | `400` | Request body or parameters rejected by the API. |
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
 | `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-paused sandbox, or patching `network` rules while paused). |
+| `SandboxError` | `SandboxError` | `402` | The team's billing or plan does not allow the sandbox to start. Branch on `code` (see [Billing errors](#billing-errors-402)). |
 | `RateLimitError` | `RateLimitError` | `429` | Rate limit or per-team quota reached. Branch on `code` (see below). |
-| `TimeoutError` | `SandboxTimeoutError` | - | Request or command timed out. |
+| `TimeoutError` | `SandboxTimeoutError` | - | The SDK stopped waiting for a response. A command that reaches its own timeout doesn't throw: it returns exit code `124`. |
 | `ServerError` | `ServerError` | `5xx` | Platform error - usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
 
 <Note>
@@ -32,7 +33,7 @@ Catch the typed subclass you care about and fall back to `SandboxError` for ever
 import { NotFoundError, Sandbox, SandboxError } from "@superserve/sdk"
 
 try {
-  const sandbox = await Sandbox.connect("missing-id")
+  const sandbox = await Sandbox.connect("00000000-0000-0000-0000-000000000000")
 } catch (err) {
   if (err instanceof NotFoundError) {
     // Sandbox doesn't exist or was already deleted
@@ -46,7 +47,7 @@ try {
 from superserve import NotFoundError, Sandbox, SandboxError
 
 try:
-    sandbox = Sandbox.connect("missing-id")
+    sandbox = Sandbox.connect("00000000-0000-0000-0000-000000000000")
 except NotFoundError:
     # Sandbox doesn't exist or was already deleted
     pass
@@ -68,7 +69,7 @@ Every SDK error extends `SandboxError` and exposes:
 import { Sandbox, SandboxError } from "@superserve/sdk"
 
 try {
-  await Sandbox.connect("missing-id")
+  await Sandbox.connect("00000000-0000-0000-0000-000000000000")
 } catch (err) {
   if (err instanceof SandboxError) {
     console.error(err.statusCode, err.code, err.message)
@@ -80,7 +81,7 @@ try {
 from superserve import Sandbox, SandboxError
 
 try:
-    Sandbox.connect("missing-id")
+    Sandbox.connect("00000000-0000-0000-0000-000000000000")
 except SandboxError as err:
     print(err.status_code, err.code, err)
 ```
@@ -112,6 +113,39 @@ Raised on `429` responses. Branch on `code` to distinguish the variant:
 | `too_many_sandboxes` | `POST /sandboxes` | Team has reached its active sandbox count limit. Pause/delete one or contact support. |
 
 The error `message` already includes the cap and a contact-support hint, so surfacing it directly to users is usually fine.
+
+## Billing errors (`402`)
+
+Creating or resuming a sandbox fails with `402 Payment Required` when the team's billing or plan does not allow it. This includes the automatic resume when you connect to a paused sandbox. In SDK 0.11.6 and earlier, there is no `402` subclass: the SDK raises the base `SandboxError` with `statusCode` / `status_code` set to `402`. Branch on `code`:
+
+| Code | Meaning | What to do |
+|---|---|---|
+| `trial_exhausted` | The team has no plan, and its free trial credit is used up or has expired. | Add a card and choose a plan at `action_url`, then retry. |
+| `trial_unavailable` | The team has no plan and did not get the free trial, for example because it is not the first team its creator made. | Add a card and choose a plan at `action_url`, then retry. |
+| `trial_check_unavailable` | The team has no plan, and the free trial could not be confirmed because a required check did not complete. This is not a decision that the team is ineligible. | Add a card and choose a plan at `action_url`, then retry. |
+| `billing_ineligible` | Sandbox usage is unavailable until billing is active, for a reason other than the trial codes above. An unpaid invoice is one example (see [Unpaid invoices](#unpaid-invoices)). The message is `Sandbox usage is unavailable until billing is active`. | Check the team's billing on the [Billing & Usage](https://console.superserve.ai/billing-usage) page: add a payment method, choose a plan, or pay the open invoice. Then retry. |
+| `free_allowance_exhausted` | The team is on a legacy Free plan and has used its daily compute allowance. Running sandboxes are paused too. New accounts start on the free trial instead. | Wait until the allowance resets, or upgrade on the [Billing & Usage](https://console.superserve.ai/billing-usage) page for unlimited runtime. |
+| `sandbox_exceeds_plan_limits` | The sandbox's vCPU, memory, or disk is larger than the team's plan allows. The message gives the sandbox size and the plan's limits. | Use a smaller template, or upgrade on the [Billing & Usage](https://console.superserve.ai/billing-usage) page. |
+
+A team whose free trial was refused by an abuse or account check, for example because the creator's email domain is restricted, gets `billing_ineligible`, not `trial_unavailable`.
+
+Some codes add a field to the `error` object of the API response. In SDK 0.11.6 and earlier, the SDK error does not carry these fields, so read them from the raw API response if you need them:
+
+- `action_url` (`trial_exhausted`, `trial_unavailable`, `trial_check_unavailable`): the console page where the team adds a card and chooses a plan. The `message` ends with the same URL, so a user who sees the message also gets the link.
+- `resets_at` (`free_allowance_exhausted`): the UTC time (RFC 3339) when sandboxes can start again.
+- `limits` (`sandbox_exceeds_plan_limits`): the plan's vCPU, memory, and disk maximums.
+
+### Unpaid invoices
+
+An unpaid invoice also returns `billing_ineligible`, on every plan. There is no separate code. When a card payment for an invoice is declined:
+
+1. Billing members get one email for that invoice. It has links to pay the invoice and to update the payment method. It shows when sandboxes will be paused, or that they are paused already.
+2. A temporary decline, such as insufficient funds, is retried once, 8 hours after the declined attempt. The email shows the retry time. A permanent decline, such as an expired, lost, or fraudulent card, is not retried. A payment that needs card authentication is not retried either.
+3. If the invoice is still unpaid 24 hours after the first payment attempt, running sandboxes are paused, and new creates and resumes fail with `billing_ineligible`.
+
+Superserve sometimes holds an invoice for review instead of charging it automatically. Superserve does not charge a held invoice, so a declined payment on it is not retried, and its email does not show a retry. If Superserve did not make the declined attempt itself, there is no 24-hour wait: sandboxes are paused as soon as Superserve records the decline, and the email says that they are paused.
+
+Pay the invoice from the link in the email. Sandboxes can start again once the invoice is paid.
 
 ## `BuildError`
 

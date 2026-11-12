@@ -22,6 +22,8 @@ export const AWAITING_PLAN_STATES = [
   "trial",
   "trial_ended",
   "payment_failed",
+  // A team after the account's first, which never gets Free or a trial.
+  "plan_required",
 ] as const
 
 export type AwaitingPlanState = (typeof AWAITING_PLAN_STATES)[number]
@@ -97,10 +99,45 @@ export type PlanPickerReason =
   | "checkout_elsewhere"
   | "trial_ended"
   | "payment_failed"
+  | "plan_required"
   | "plan_unavailable"
   | "checkout_canceled"
   | "checkout_unavailable"
+  | "checkout_refused"
   | "billing_admin_required"
+
+// Why a team that is awaiting its first plan has no trial. The states never
+// share a message:
+// - "ended": the trial grant was spent or expired.
+// - "unavailable": the server explicitly reported the trial as denied.
+// - "check_unavailable": the trial could not be confirmed because a required
+//   check did not complete. Not a denial and not proof of anything.
+// - "unknown": no reason is known. The server leaves trial_block null when it
+//   could not read the reason and for denials it keeps generic, so neither is
+//   a confirmed trial denial and the copy claims nothing about the trial.
+export type TrialOutcome =
+  | "ended"
+  | "unavailable"
+  | "check_unavailable"
+  | "unknown"
+
+export function trialOutcome(summary: unknown): TrialOutcome {
+  const {
+    trial,
+    trial_block: block,
+  }: {
+    trial?: { state?: unknown } | null
+    trial_block?: unknown
+  } = summary && typeof summary === "object" ? summary : {}
+  // The server's own reason wins over the balance, which can be stale or read
+  // separately: check_unavailable, then exhausted, then unavailable (denied).
+  if (block === "trial_check_unavailable") return "check_unavailable"
+  if (block === "trial_exhausted") return "ended"
+  if (block === "trial_unavailable") return "unavailable"
+  return trial?.state === "exhausted" || trial?.state === "expired"
+    ? "ended"
+    : "unknown"
+}
 
 export const PLAN_PICKER_ROUTE = "/auth/choose-plan/"
 
@@ -165,10 +202,17 @@ export function awaitingPlanRedirect(context: {
   const locator = { account: context.userId, team: context.teamKey }
   if (
     context.paymentSettling &&
-    (entry === "trial_ended" || entry === undefined)
+    (entry === "trial_ended" ||
+      entry === "plan_required" ||
+      entry === undefined)
   )
     return paymentSettlingPath(locator)
-  if (entry !== "trial_ended" && entry !== "payment_failed") return null
+  if (
+    entry !== "trial_ended" &&
+    entry !== "payment_failed" &&
+    entry !== "plan_required"
+  )
+    return null
   return planPickerPath(entry, trialPlanOffer(context.requestedOffer), locator)
 }
 

@@ -52,8 +52,14 @@ class SandboxInfo(BaseModel):
     status: SandboxStatus
     vcpu_count: int = 0
     memory_mib: int = 0
+    # Ceiling memory can grow to while running; None when memory is fixed.
+    memory_max_mib: Optional[int] = None
+    # Memory the sandbox last held; None when memory is fixed.
+    memory_current_mib: Optional[int] = None
     created_at: datetime
     timeout_seconds: Optional[int] = None
+    # Pause the sandbox after this many seconds with no activity.
+    idle_timeout_seconds: Optional[int] = None
     # Delete the sandbox after it has been continuously paused for this many seconds.
     auto_delete_seconds: Optional[int] = None
     # When the sandbox will be auto-deleted. Set only while paused with auto_delete_seconds configured.
@@ -113,9 +119,11 @@ def build_update_body(
     auto_delete_seconds: int | None,
     timeout_seconds: int | None,
     preview_access: PreviewAccessPolicy | None,
+    idle_timeout_seconds: int | None = UNSET,
 ) -> dict[str, Any]:
     """Serialize sandbox update args to the wire body. UNSET fields are omitted;
-    an explicit None for auto_delete_seconds / timeout_seconds clears them."""
+    an explicit None for auto_delete_seconds / timeout_seconds /
+    idle_timeout_seconds clears them."""
     body: dict[str, Any] = {}
     if metadata is not None:
         body["metadata"] = metadata
@@ -123,6 +131,8 @@ def build_update_body(
         body["auto_delete_seconds"] = auto_delete_seconds
     if timeout_seconds is not UNSET:
         body["timeout_seconds"] = timeout_seconds
+    if idle_timeout_seconds is not UNSET:
+        body["idle_timeout_seconds"] = idle_timeout_seconds
     if network is not None:
         body["network"] = {
             "allow_out": network.allow_out,
@@ -196,8 +206,11 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         status=SandboxStatus(raw["status"]),
         vcpu_count=raw.get("vcpu_count", 0),
         memory_mib=raw.get("memory_mib", 0),
+        memory_max_mib=raw.get("memory_max_mib"),
+        memory_current_mib=raw.get("memory_current_mib"),
         created_at=_parse_iso8601(raw["created_at"]),
         timeout_seconds=raw.get("timeout_seconds"),
+        idle_timeout_seconds=raw.get("idle_timeout_seconds"),
         auto_delete_seconds=raw.get("auto_delete_seconds"),
         auto_delete_at=(
             _parse_iso8601(raw["auto_delete_at"]) if raw.get("auto_delete_at") else None
@@ -231,6 +244,8 @@ class SnapshotResources(BaseModel):
     vcpu_count: int = 0
     memory_mib: int = 0
     disk_mib: int = 0
+    # Ceiling memory can grow to while running; None when memory is fixed.
+    memory_max_mib: Optional[int] = None
 
 
 class SnapshotInfo(BaseModel):
@@ -272,6 +287,7 @@ def to_snapshot_info(raw: dict[str, Any]) -> SnapshotInfo:
             vcpu_count=resources.get("vcpu_count") or 0,
             memory_mib=resources.get("memory_mib") or 0,
             disk_mib=resources.get("disk_mib") or 0,
+            memory_max_mib=resources.get("memory_max_mib"),
         ),
         created_at=_parse_iso8601(raw["created_at"]),
         ready_at=_parse_iso8601(raw["ready_at"]) if raw.get("ready_at") else None,
@@ -312,6 +328,8 @@ class TemplateInfo(BaseModel):
     status: TemplateStatus
     vcpu: int = 0
     memory_mib: int = 0
+    # Ceiling memory can grow to while running; None when memory is fixed.
+    memory_max_mib: Optional[int] = None
     disk_mib: int = 0
     size_bytes: Optional[int] = None
     error_message: Optional[str] = None
@@ -396,6 +414,7 @@ def to_template_info(
         status=TemplateStatus(raw["status"]),
         vcpu=raw.get("vcpu", 0),
         memory_mib=raw.get("memory_mib", 0),
+        memory_max_mib=raw.get("memory_max_mib"),
         disk_mib=raw.get("disk_mib", 0),
         size_bytes=raw.get("size_bytes"),
         error_message=raw.get("error_message"),

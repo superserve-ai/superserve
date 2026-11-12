@@ -62,6 +62,8 @@ export SUPERSERVE_API_KEY=ss_live_...
 dcode --sandbox superserve
 ```
 
+Deep Agents Code 0.2 and later requires Python 3.14. The installer sets up its own uv-managed Python 3.14 environment, so it works when your system Python is older. On an older Python, `pip install deepagents-code` installs an older 0.1.x release instead.
+
 The provider defaults to the `superserve/python-3.11` template; override it with the `SUPERSERVE_TEMPLATE` environment variable.
 
 ## Superserve extras

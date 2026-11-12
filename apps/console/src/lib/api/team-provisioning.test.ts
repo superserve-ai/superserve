@@ -252,6 +252,7 @@ vi.mock("@/lib/api/promotion-identity", () => ({
 }))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
+  configuredRegions: () => ["use"],
   cellFor: (region: string) => ({
     region,
     createAdminClient: () => clients[region],
@@ -303,7 +304,9 @@ vi.mock("@/lib/auth/google-onboarding", () => ({
 import { createServerClient } from "@/lib/supabase/server"
 
 import {
+  clearFirstSignup,
   completedMemberships,
+  completeFirstSignup,
   provisionHeldApplicantTeam,
   provisionTeam as provisionActualTeam,
 } from "./team-provisioning"
@@ -1337,6 +1340,118 @@ describe("provisionTeam", () => {
 
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
     expect(clients.use.writes).toEqual({})
+  })
+
+  describe("clearFirstSignup", () => {
+    const googleAccount = {
+      id: "u1",
+      email: "user@example.com",
+      app_metadata: { provider: "google", providers: ["google"] },
+    }
+
+    it("blocks a first-time Google account without proof and creates nothing", async () => {
+      googleUser = true
+      mockRequireGoogleSignupProof.mockRejectedValue(
+        new Error("Google signup verification required"),
+      )
+
+      await expect(
+        clearFirstSignup("use", googleAccount as never, { googleProof: true }),
+      ).rejects.toThrow("Google signup verification required")
+
+      expect(clients.use.writes).toEqual({})
+      expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
+    })
+
+    it("applies the device restriction to a first signup in the given region", async () => {
+      googleUser = true
+      mockRequireGoogleSignupProof.mockResolvedValue("attempt-1")
+      mockReadSignupEvidence.mockResolvedValue("visitor-1")
+      mockEvaluateSignupRestriction.mockRejectedValue(new Error("restricted"))
+
+      await expect(
+        clearFirstSignup("usw", googleAccount as never, { googleProof: true }),
+      ).rejects.toThrow("restricted")
+      expect(mockEvaluateSignupRestriction).toHaveBeenCalledWith(
+        "usw",
+        "u1",
+        "visitor-1",
+      )
+    })
+
+    it("restricts a first non-Google signup the same way", async () => {
+      mockReadSignupEvidence.mockResolvedValue("visitor-1")
+      mockEvaluateSignupRestriction.mockRejectedValue(new Error("restricted"))
+
+      await expect(
+        clearFirstSignup("use", currentUser as never, { googleProof: false }),
+      ).rejects.toThrow("restricted")
+    })
+
+    it("does not treat an account with a completed team as a first signup", async () => {
+      googleUser = true
+      directoryState = {
+        memberships: [{ teamId: "old", region: "use" }],
+        degradedRegions: [],
+      }
+
+      const clearance = await clearFirstSignup("use", googleAccount as never, {
+        googleProof: true,
+      })
+
+      expect(clearance.firstTeam).toBe(false)
+      expect(mockRequireGoogleSignupProof).not.toHaveBeenCalled()
+      expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
+    })
+
+    it("does not infer a first signup from a degraded directory", async () => {
+      directoryState = { memberships: [], degradedRegions: ["usw"] }
+
+      await expect(
+        clearFirstSignup("use", currentUser as never, { googleProof: false }),
+      ).rejects.toThrow("Membership lookup degraded")
+      expect(mockEvaluateSignupRestriction).not.toHaveBeenCalled()
+    })
+
+    it("spends the proof and evidence only when completed", async () => {
+      googleUser = true
+      mockRequireGoogleSignupProof.mockResolvedValue("attempt-1")
+      mockReadSignupEvidence.mockResolvedValue("visitor-1")
+
+      const clearance = await clearFirstSignup("use", googleAccount as never, {
+        googleProof: true,
+      })
+      expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
+      expect(mockClearSignupEvidence).not.toHaveBeenCalled()
+
+      await completeFirstSignup("u1", clearance)
+
+      expect(mockConsumeGoogleSignupProof).toHaveBeenCalledWith(
+        "u1",
+        "attempt-1",
+      )
+      expect(mockClearSignupEvidence).toHaveBeenCalledWith(
+        "u1",
+        clearance.evidence,
+      )
+    })
+
+    it("has nothing to spend for an established account", async () => {
+      directoryState = {
+        memberships: [{ teamId: "old", region: "use" }],
+        degradedRegions: [],
+      }
+
+      await completeFirstSignup(
+        "u1",
+        await clearFirstSignup("use", currentUser as never, {
+          googleProof: false,
+        }),
+      )
+
+      expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
+      expect(mockClearSignupEvidence).not.toHaveBeenCalled()
+    })
   })
 
   it("does not block an established Google user when the deeper lookup was degraded", async () => {

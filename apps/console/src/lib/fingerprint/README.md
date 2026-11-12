@@ -32,7 +32,7 @@ original association. Google carries verified evidence in the signed pre-auth
 proof and binds only an account created after that proof. Older-account Google
 recovery still retains restriction evidence but cannot replace promotion provenance.
 Each region registers the original account evidence independently. See the Console
-README for rollout configuration, fail-closed credit behavior, and durable retries.
+README for fail-closed credit behavior and durable retries.
 
 ## Diagnostic events
 

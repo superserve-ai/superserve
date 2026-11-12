@@ -2,6 +2,7 @@
 
 import Link from "next/link"
 
+import { useSandboxMemory } from "@/hooks/use-sandboxes"
 import type { SandboxResponse } from "@/lib/api/types"
 import { formatTime, formatTimeout } from "@/lib/format"
 
@@ -10,10 +11,12 @@ interface SandboxResourceBarProps {
 }
 
 function formatMemory(mib: number): string {
-  return mib >= 1024 ? `${(mib / 1024).toFixed(0)} GB` : `${mib} MB`
+  return mib >= 1024 ? `${+(mib / 1024).toFixed(2)} GB` : `${mib} MB`
 }
 
 export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
+  const { data: polledMemory } = useSandboxMemory(sandbox)
+  const currentMemory = polledMemory ?? sandbox.memory_current_mib
   const created = formatTime(new Date(sandbox.created_at))
 
   const items: {
@@ -28,12 +31,23 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
     },
     {
       label: "Memory",
-      value: formatMemory(sandbox.memory_mib),
+      value:
+        sandbox.memory_max_mib == null
+          ? formatMemory(sandbox.memory_mib)
+          : currentMemory != null
+            ? `${formatMemory(currentMemory)} of ${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`
+            : `${formatMemory(sandbox.memory_mib)}–${formatMemory(sandbox.memory_max_mib)}`,
     },
     {
       label: "Timeout",
       value: sandbox.timeout_seconds
         ? formatTimeout(sandbox.timeout_seconds)
+        : "None",
+    },
+    {
+      label: "Idle timeout",
+      value: sandbox.idle_timeout_seconds
+        ? formatTimeout(sandbox.idle_timeout_seconds)
         : "None",
     },
     ...(sandbox.source_snapshot_id

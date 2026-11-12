@@ -57,7 +57,13 @@ export interface BillingPlan {
   key: string
   name: string
   // A team on its trial reports the "trial" plan with its entry state.
-  status: "active" | "pending" | "trial" | "trial_ended" | "payment_failed"
+  status:
+    | "active"
+    | "pending"
+    | "trial"
+    | "trial_ended"
+    | "payment_failed"
+    | "plan_required"
   price_usd: number | null
   billing_interval_months: number | null
   starts_at: string | null
@@ -65,8 +71,17 @@ export interface BillingPlan {
   included_usage: BillingIncludedUsage | null
 }
 
+// Why the trial is what blocks the team, when the server knows. null or absent
+// means the trial is not the cause, the block is generic (abuse denials stay
+// generic on purpose), or the server could not read the reason.
+export type BillingTrialBlock =
+  | "trial_exhausted"
+  | "trial_unavailable"
+  | "trial_check_unavailable"
+
 export interface BillingSummaryResponse {
   trial?: BillingTrialBalance | null
+  trial_block?: BillingTrialBlock | null
   billing_mode: "shadow" | "live"
   checkout_available: boolean
   portal_available: boolean

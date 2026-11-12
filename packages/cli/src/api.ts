@@ -1,5 +1,6 @@
 import {
   AuthenticationError,
+  BillingError,
   ConflictError,
   NotFoundError,
   RateLimitError,
@@ -151,13 +152,23 @@ export async function apiRequest<T>(
 }
 
 async function toApiError(res: Response): Promise<SandboxError> {
-  let body: { error?: { code?: string; message?: string } } = {}
+  let body: {
+    error?: { code?: string; message?: string; action_url?: string }
+  } = {}
   try {
     body = await res.json()
   } catch {}
   const message = body.error?.message ?? `API error (${res.status})`
   const code = body.error?.code
   switch (res.status) {
+    case 402:
+      return new BillingError(
+        message,
+        code,
+        typeof body.error?.action_url === "string" && body.error.action_url
+          ? body.error.action_url
+          : undefined,
+      )
     case 400:
       return new ValidationError(message, code)
     case 401:

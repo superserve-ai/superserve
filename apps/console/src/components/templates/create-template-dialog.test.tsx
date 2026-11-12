@@ -60,7 +60,7 @@ describe("template creation entitlement", () => {
     render(<CreateTemplateDialog />)
     expect(
       screen.getByRole("link", { name: "Upgrade to create templates" }),
-    ).toHaveAttribute("href", "/plan-usage/upgrade")
+    ).toHaveAttribute("href", "/billing-usage/upgrade")
     expect(screen.queryByRole("button", { name: "New template" })).toBeNull()
     expect(mocks.create).not.toHaveBeenCalled()
   })
@@ -216,6 +216,45 @@ describe("shape options follow the team's plan caps", () => {
     await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce())
     expect(mocks.create).toHaveBeenCalledWith(
       expect.objectContaining({ memory_mib: 2048 }),
+    )
+  })
+
+  it("bounds max memory by 4x the boot size and the team's memory cap", async () => {
+    mocks.cap = 10
+    mocks.create.mockResolvedValue({ id: "created-template" })
+    const view = render(<CreateTemplateDialog open hideTrigger />)
+    // 1 GB boot: 2 and 4 GB fit under 4x; 8 GB does not.
+    expect(screen.getByRole("button", { name: "Max 2 GB" })).toBeInTheDocument()
+    expect(screen.queryByRole("button", { name: "Max 8 GB" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Max 4 GB" }))
+    // A cap shrinking below the pick drops it back to fixed memory.
+    mocks.memoryCap = 2048
+    view.rerender(<CreateTemplateDialog open hideTrigger />)
+    expect(screen.queryByRole("button", { name: "Max 4 GB" })).toBeNull()
+    fireEvent.change(screen.getByPlaceholderText("e.g. python-ml"), {
+      target: { value: "fixed" },
+    })
+    fireEvent.keyDown(screen.getByPlaceholderText("e.g. python-ml"), {
+      key: "Enter",
+    })
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce())
+    expect(mocks.create.mock.calls[0][0]).not.toHaveProperty("memory_max_mib")
+  })
+
+  it("sends the picked max memory", async () => {
+    mocks.cap = 10
+    mocks.create.mockResolvedValue({ id: "created-template" })
+    render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.click(screen.getByRole("button", { name: "Max 2 GB" }))
+    fireEvent.change(screen.getByPlaceholderText("e.g. python-ml"), {
+      target: { value: "growable" },
+    })
+    fireEvent.keyDown(screen.getByPlaceholderText("e.g. python-ml"), {
+      key: "Enter",
+    })
+    await waitFor(() => expect(mocks.create).toHaveBeenCalledOnce())
+    expect(mocks.create).toHaveBeenCalledWith(
+      expect.objectContaining({ memory_mib: 1024, memory_max_mib: 2048 }),
     )
   })
 })

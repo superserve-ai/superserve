@@ -3,6 +3,7 @@ import { describe, expect, it } from "vitest"
 import {
   awaitingPlanRedirect,
   isPaymentActivating,
+  trialOutcome,
 } from "./signup-checkout-paths"
 
 const team = {
@@ -12,7 +13,7 @@ const team = {
 }
 
 describe("awaitingPlanRedirect", () => {
-  it.each(["trial_ended", undefined] as const)(
+  it.each(["trial_ended", "plan_required", undefined] as const)(
     "never sends a team whose paid checkout settles (entry %s) to the picker",
     (entryState) => {
       expect(
@@ -60,5 +61,50 @@ describe("isPaymentActivating", () => {
     [null, false],
   ])("reads %j as %s", (plan, activating) => {
     expect(isPaymentActivating(plan)).toBe(activating)
+  })
+})
+
+it("sends a team that needs a plan to the picker with its own reason", () => {
+  const path = awaitingPlanRedirect({
+    userId: "owner",
+    teamKey: "usw:team",
+    entryState: "plan_required",
+  })
+  expect(path).not.toBeNull()
+  const url = new URL(path!, "https://console.test")
+  expect(url.pathname).toBe("/auth/choose-plan/")
+  expect(Object.fromEntries(url.searchParams)).toEqual({
+    reason: "plan_required",
+    account: "owner",
+    team: "usw:team",
+  })
+})
+
+describe("trialOutcome", () => {
+  it.each([
+    [{ trial: { state: "exhausted" } }, "ended"],
+    [{ trial: { state: "expired" } }, "ended"],
+    [{ trial: { state: "no_grant" } }, "unknown"],
+    [{ trial: { state: "active" } }, "unknown"],
+    [{ trial: { state: "unknown" } }, "unknown"],
+    [{ trial: null }, "unknown"],
+    [{}, "unknown"],
+    [null, "unknown"],
+    ["exhausted", "unknown"],
+    [{ trial_block: "trial_exhausted" }, "ended"],
+    [{ trial_block: "trial_unavailable" }, "unavailable"],
+    [{ trial_block: "trial_check_unavailable" }, "check_unavailable"],
+    [{ trial_block: null, trial: { state: "no_grant" } }, "unknown"],
+    [{ trial_block: null, trial: { state: "exhausted" } }, "ended"],
+    [
+      { trial_block: "trial_unavailable", trial: { state: "exhausted" } },
+      "unavailable",
+    ],
+    [
+      { trial_block: "trial_check_unavailable", trial: { state: "exhausted" } },
+      "check_unavailable",
+    ],
+  ])("%j is %s", (summary, outcome) => {
+    expect(trialOutcome(summary)).toBe(outcome)
   })
 })

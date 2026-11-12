@@ -67,6 +67,26 @@ describe("network rules + sandbox_update (in-memory, fake client)", () => {
     info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
     expect(info.structured.auto_delete_seconds).toBeUndefined()
   })
+
+  it("sandbox_update sets and clears the idle timeout", async () => {
+    const created = await callTool(conn.client, "sandbox_create", {
+      name: "idle",
+      idle_timeout_seconds: 600,
+    })
+    const id = created.structured.id as string
+
+    let info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.idle_timeout_seconds).toBe(600)
+
+    const upd = await callTool(conn.client, "sandbox_update", {
+      sandbox_id: id,
+      idle_timeout_seconds: null,
+    })
+    expect(upd.isError).toBe(false)
+
+    info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.idle_timeout_seconds).toBeUndefined()
+  })
 })
 
 describe("secrets (in-memory, fake client)", () => {
@@ -135,12 +155,15 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
       from: "python:3.11",
       vcpu: 4,
       memory_mib: 8192,
+      memory_max_mib: 16384,
       run_steps: ["pip install numpy"],
     })
     expect(r.isError).toBe(false)
     const t = r.structured.template as Record<string, unknown>
     expect(t.name).toBe("my-4cpu")
     expect(t.vcpu).toBe(4)
+    expect(t.memoryMaxMib).toBe(16384)
+    expect(r.text).toContain("8192-16384 MiB")
     expect(t.status).toBe("building")
     // The agent is told to poll until ready before using it.
     expect(r.text).toMatch(/ready/)

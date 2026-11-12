@@ -12,7 +12,7 @@ vi.mock("@/hooks/use-billing-capabilities", () => ({
     },
   }),
 }))
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type {
@@ -45,16 +45,22 @@ vi.mock("@/hooks/use-billing-v2", () => ({
   usePrepaidBalance: () => ({ data: undefined }),
 }))
 
+vi.mock("@/components/settings/team-details-section", () => ({
+  TeamDetailsSection: () => null,
+}))
 vi.mock("@/components/settings/teams-section", () => ({
   TeamsSection: () => null,
 }))
 
+const { addToast, signInWithPassword, updateUser } = vi.hoisted(() => ({
+  addToast: vi.fn(),
+  signInWithPassword: vi.fn(),
+  updateUser: vi.fn(),
+}))
+
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
-    auth: {
-      updateUser: vi.fn(),
-      signInWithPassword: vi.fn(),
-    },
+    auth: { updateUser, signInWithPassword },
   }),
 }))
 
@@ -67,7 +73,7 @@ vi.mock("@superserve/ui", async () => {
     await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")
   return {
     ...actual,
-    useToast: () => ({ addToast: vi.fn() }),
+    useToast: () => ({ addToast }),
   }
 })
 
@@ -343,5 +349,175 @@ describe("Settings billing", () => {
 
     expect(screen.getByText("Billed")).toBeInTheDocument()
     expect(screen.getAllByText("Unavailable")).toHaveLength(3)
+  })
+})
+
+describe("Settings change password", () => {
+  const hint =
+    "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number."
+
+  beforeEach(() => {
+    addToast.mockReset()
+    signInWithPassword.mockReset().mockResolvedValue({ error: null })
+    updateUser.mockReset().mockResolvedValue({ error: null })
+    useUser.mockReturnValue({
+      user: {
+        id: "user-1",
+        email: "user@example.com",
+        user_metadata: {},
+        app_metadata: {},
+      },
+      loading: false,
+    })
+    useBillingSettings.mockReturnValue({
+      data: pricing,
+      isPending: false,
+      error: null,
+    })
+    useBillingSummary.mockReturnValue({
+      data: summary(false),
+      isPending: false,
+      error: null,
+    })
+  })
+
+  function submitPasswords(next: string) {
+    fireEvent.change(screen.getByLabelText("Current Password"), {
+      target: { value: "Current-value-1" },
+    })
+    fireEvent.change(screen.getByLabelText("New Password"), {
+      target: { value: next },
+    })
+    fireEvent.change(screen.getByLabelText("Confirm New Password"), {
+      target: { value: next },
+    })
+    fireEvent.click(screen.getByRole("button", { name: "Update Password" }))
+  }
+
+  it("shows the password rule under the new password", () => {
+    renderPage()
+
+    expect(screen.getByText(hint).id).toBe("settings-password-rule")
+    expect(
+      screen.getByLabelText("New Password").getAttribute("aria-describedby"),
+    ).toBe("settings-password-rule")
+  })
+
+  it("names the missing part of a weak password without calling the server", () => {
+    renderPage()
+
+    submitPasswords("sandbox12345")
+
+    const error = screen.getByText("Add an uppercase letter.")
+    const input = screen.getByLabelText("New Password")
+    expect(input.getAttribute("aria-invalid")).toBe("true")
+    expect(input.getAttribute("aria-describedby")).toBe(error.id)
+    expect(screen.queryByText(hint)).toBeNull()
+    expect(signInWithPassword).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("rejects a password over 72 bytes without calling the server", () => {
+    renderPage()
+
+    submitPasswords("Sandbox42".padEnd(73, "x"))
+
+    expect(screen.getByText("Use 72 characters or fewer.")).toBeTruthy()
+    expect(signInWithPassword).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("clears the rule error once a corrected password is submitted", async () => {
+    renderPage()
+
+    submitPasswords("sandbox12345")
+    expect(screen.getByText("Add an uppercase letter.")).toBeTruthy()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith({
+        password: "Sandbox12345",
+        current_password: "Current-value-1",
+      }),
+    )
+    expect(screen.queryByText("Add an uppercase letter.")).toBeNull()
+    expect(screen.getByText(hint)).toBeTruthy()
+  })
+
+  it("sends the current password so Auth can check it on the server", async () => {
+    renderPage()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith("Password updated", "success"),
+    )
+    expect(signInWithPassword).toHaveBeenCalledWith({
+      email: "user@example.com",
+      password: "Current-value-1",
+    })
+    expect(updateUser).toHaveBeenCalledWith({
+      password: "Sandbox12345",
+      current_password: "Current-value-1",
+    })
+    expect(
+      (screen.getByLabelText("Current Password") as HTMLInputElement).value,
+    ).toBe("")
+  })
+
+  it("does not update the password when the browser check fails", async () => {
+    signInWithPassword.mockResolvedValue({
+      error: { code: "invalid_credentials" },
+    })
+    renderPage()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        "Current password is incorrect",
+        "error",
+      ),
+    )
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it.each(["current_password_invalid", "current_password_required"])(
+    "shows the current password error when Auth returns %s",
+    async (code) => {
+      updateUser.mockResolvedValue({ error: { code } })
+      renderPage()
+
+      submitPasswords("Sandbox12345")
+
+      await waitFor(() =>
+        expect(addToast).toHaveBeenCalledWith(
+          "Current password is incorrect",
+          "error",
+        ),
+      )
+      expect(addToast).not.toHaveBeenCalledWith(
+        "Failed to update password",
+        "error",
+      )
+      expect(
+        (screen.getByLabelText("Current Password") as HTMLInputElement).value,
+      ).toBe("Current-value-1")
+    },
+  )
+
+  it("keeps the generic error for other Auth failures", async () => {
+    updateUser.mockResolvedValue({ error: { code: "same_password" } })
+    renderPage()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(addToast).toHaveBeenCalledWith(
+        "Failed to update password",
+        "error",
+      ),
+    )
   })
 })

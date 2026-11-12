@@ -8,7 +8,11 @@ description: Send input to a running command, signal it, and stream its output b
 
 <CodeGroup>
 ```typescript TypeScript
-const session = await sandbox.commands.spawn("python -i", {
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({ name: "repl" })
+
+const session = await sandbox.commands.spawn("python3 -i", {
   onStdout: (data) => process.stdout.write(data),
 })
 
@@ -17,18 +21,31 @@ session.stdin.close() // EOF, so the REPL exits
 
 const result = await session.wait()
 console.log(`exited ${result.exitCode}`)
+
+await sandbox.kill()
 ```
 
 ```python Python
-# spawn is async only, so use AsyncSandbox.
-async with await sandbox.commands.spawn(
-    "python -i",
-    on_stdout=lambda data: print(data, end=""),
-) as session:
-    await session.stdin.write("print(2 + 2)\n")
-    await session.stdin.close()  # EOF, so the REPL exits
-    result = await session.wait()
-    print(f"exited {result.exit_code}")
+import asyncio
+
+from superserve import AsyncSandbox
+
+
+async def main() -> None:
+    # spawn is async only, so use AsyncSandbox.
+    sandbox = await AsyncSandbox.create(name="repl")
+    async with await sandbox.commands.spawn(
+        "python3 -i",
+        on_stdout=lambda data: print(data, end=""),
+    ) as session:
+        await session.stdin.write("print(2 + 2)\n")
+        await session.stdin.close()  # EOF, so the REPL exits
+        result = await session.wait()
+        print(f"exited {result.exit_code}")
+    await sandbox.kill()
+
+
+asyncio.run(main())
 ```
 </CodeGroup>
 
@@ -57,6 +74,12 @@ Most of the time you want `run()`: scripts, builds, anything that takes its inpu
 
 The [SDK reference](/sdk-reference/commands#commandsession) lists the full surface.
 
+## Timeouts
+
+`spawn()` has no timeout unless you set one, so the process runs until it exits or you kill it. Pass `timeoutMs` / `timeout_seconds` to stop it at a hard limit. Output doesn't extend the limit, and when it's reached, `wait()` resolves with exit code `124`. See [Timeouts](/commands/overview#timeouts) for how this compares to `run()`.
+
 ## If the connection drops
 
-`wait()` fails if the socket closes before the command finishes. The process keeps running inside the sandbox, so save the ID and pick it back up with `Sandbox.connect(id)`. A paused sandbox wakes on its own before the session opens.
+`wait()` throws `SandboxError` if the socket closes before the process exits. The sandbox then stops the process, and there's no way to reattach to a session. `Sandbox.connect(id)` gets you the sandbox back, so you can start a new session. For a job that has to outlive the connection, start it in the background with `nohup` and its output in a file. See [If the connection drops](/commands/streaming#if-the-connection-drops).
+
+A paused sandbox wakes on its own before the session opens.

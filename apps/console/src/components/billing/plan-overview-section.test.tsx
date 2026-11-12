@@ -188,7 +188,7 @@ describe("PlanOverviewSection with pricing v2 off", () => {
     expect(screen.queryByRole("link", { name: "Change plan" })).toBeNull()
     expect(
       screen.getByRole("link", { name: "Manage scheduled change" }),
-    ).toHaveAttribute("href", "/plan-usage/upgrade")
+    ).toHaveAttribute("href", "/billing-usage/upgrade")
   })
 
   it("renders today's plan card when there is no assigned plan", () => {
@@ -452,7 +452,7 @@ describe("PlanOverviewSection with pricing v2 on", () => {
     expect(screen.getByText("$42.50")).toBeTruthy()
     expect(
       screen.getByRole("link", { name: "Add more" }).getAttribute("href"),
-    ).toBe("/plan-usage/buy-credit")
+    ).toBe("/billing-usage/buy-credit")
     expect(screen.queryByText("Current plan")).toBeNull()
     expect(
       screen.getByText(/adds \$20 when the balance drops below \$5/),
@@ -703,9 +703,18 @@ describe("a summary that disagrees with the plan", () => {
       data: plan({ effective_from }),
       isError: false,
     })
-    render(<PlanOverviewSection summary={changed as BillingSummaryResponse} />)
+    render(
+      <PlanOverviewSection
+        summary={changed as BillingSummaryResponse}
+        billingControls={<button type="button">Open Customer Portal</button>}
+      />,
+    )
     expect(screen.getByText("Loading your plan…")).toBeTruthy()
     expect(screen.queryByText(/of \$250 used|couldn't be loaded/)).toBeNull()
+    // The payment action stays available while the contract settles.
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeTruthy()
   })
 
   it("stops waiting on a pending contract once the plan has settled", () => {
@@ -861,7 +870,7 @@ describe("Settings plan details", () => {
       expect(screen.queryByText(/disk/)).toBeNull()
       expect(
         screen.getByRole("link", { name: "Change plan" }).getAttribute("href"),
-      ).toBe("/plan-usage/upgrade")
+      ).toBe("/billing-usage/upgrade")
       expect(screen.queryByText("Usage limits")).toBeNull()
       expect(mocks.allowance).toHaveBeenCalledWith(false)
       expect(mocks.pricing).toHaveBeenCalledWith(false)
@@ -885,7 +894,7 @@ describe("Settings plan details", () => {
       screen
         .getByRole("link", { name: "Manage auto-recharge" })
         .getAttribute("href"),
-    ).toBe("/plan-usage/buy-credit")
+    ).toBe("/billing-usage/buy-credit")
     expect(screen.queryByRole("link", { name: "Add more" })).toBeNull()
     unmount()
     render(
@@ -913,11 +922,11 @@ it("keeps Settings recovery and recharge-disable navigation when capabilities ar
   render(<PlanOverviewSection summary={summary} details />)
   expect(screen.getByRole("link", { name: "Change plan" })).toHaveAttribute(
     "href",
-    "/plan-usage/upgrade",
+    "/billing-usage/upgrade",
   )
   expect(
     screen.getByRole("link", { name: "Manage auto-recharge" }),
-  ).toHaveAttribute("href", "/plan-usage/buy-credit")
+  ).toHaveAttribute("href", "/billing-usage/buy-credit")
 })
 
 it("doesn't promise postpaid overages for a credit-funded plan", () => {

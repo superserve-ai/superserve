@@ -39,6 +39,7 @@ interface FakeSandbox {
   secrets: SandboxSecretBinding[]
   autoDeleteSeconds?: number
   timeoutSeconds?: number
+  idleTimeoutSeconds?: number
   previewAccess: PreviewAccess
   publishedPorts: Map<number, PreviewAccessPolicy>
 }
@@ -130,6 +131,7 @@ export function createFakeClient(): FakeClient {
         network: input.network,
         autoDeleteSeconds: input.autoDeleteSeconds,
         timeoutSeconds: input.timeoutSeconds ?? 3600,
+        idleTimeoutSeconds: input.idleTimeoutSeconds,
         previewAccess: input.previewAccess ?? "public",
         publishedPorts: new Map(),
         secrets: Object.entries(input.secrets ?? {}).map(
@@ -148,6 +150,8 @@ export function createFakeClient(): FakeClient {
         sb.autoDeleteSeconds = input.autoDeleteSeconds ?? undefined
       if (input.timeoutSeconds !== undefined)
         sb.timeoutSeconds = input.timeoutSeconds ?? undefined
+      if (input.idleTimeoutSeconds !== undefined)
+        sb.idleTimeoutSeconds = input.idleTimeoutSeconds ?? undefined
       if (input.previewAccess !== undefined)
         sb.previewAccess = input.previewAccess
     },
@@ -174,6 +178,7 @@ export function createFakeClient(): FakeClient {
         status: "building",
         vcpu: input.vcpu ?? 2,
         memoryMib: input.memoryMib ?? 2048,
+        memoryMaxMib: input.memoryMaxMib,
         diskMib: input.diskMib ?? 8192,
       }
       templates.push(summary)
@@ -190,6 +195,7 @@ export function createFakeClient(): FakeClient {
         memoryMib: 2048,
         createdAt: new Date(0),
         timeoutSeconds: sb.timeoutSeconds,
+        idleTimeoutSeconds: sb.idleTimeoutSeconds,
         autoDeleteSeconds: sb.autoDeleteSeconds,
         network: sb.network,
         metadata: sb.metadata,

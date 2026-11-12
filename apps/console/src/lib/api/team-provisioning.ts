@@ -38,7 +38,7 @@ import {
   assertSignupReviewCleared,
   signupReviewStatus,
 } from "@/lib/auth/signup-review"
-import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TEAM_OWNER_ROLE = "team_owner"
@@ -160,6 +160,41 @@ export interface ProvisionedTeam {
   region: string
 }
 
+// Each cell claims a user's one Free team itself; a claim held in another cell
+// makes this team additional. Unreadable cells fail the creation for a retry.
+async function holdsFreeTeamElsewhere(
+  userId: string,
+  region: string,
+): Promise<boolean> {
+  const claims = await Promise.all(
+    configuredRegions()
+      .filter((other) => other !== region)
+      .map(async (other) => {
+        const admin = cellFor(other).createAdminClient()
+        const { data, error } = await admin
+          .from("billing_account_free_team")
+          .select("team_id")
+          .eq("user_id", userId)
+          .limit(1)
+        if (!error) return (data?.length ?? 0) > 0
+        if (error.code !== "42P01" && error.code !== "PGRST205")
+          throw new Error("Unable to check your plan. Please retry.")
+        // A cell from before Free claims records none, but a team the user
+        // owns there may be their Free one, so a new team is additional.
+        const owned = await admin
+          .from("team_member")
+          .select("team_id")
+          .eq("profile_id", userId)
+          .eq("role", "owner")
+          .limit(1)
+        if (owned.error)
+          throw new Error("Unable to check your plan. Please retry.")
+        return (owned.data?.length ?? 0) > 0
+      }),
+  )
+  return claims.some(Boolean)
+}
+
 async function guardFirstGoogleTeam(
   userId: string,
   user: {
@@ -186,6 +221,67 @@ async function guardFirstGoogleTeam(
   return {
     signupAttemptId: await requireGoogleSignupProof(userId),
   }
+}
+
+export interface FirstSignupClearance {
+  firstTeam: boolean
+  googleProvisioning: { signupAttemptId?: string } | null
+  evidence: SignupEvidenceEntry[]
+}
+
+/**
+ * The first-signup gates, without creating anything: Google first-team proof,
+ * the device restriction and a degraded membership lookup. Accounts that
+ * already hold a completed team are not a first signup and pass untouched.
+ * Pair a successful outcome with completeFirstSignup.
+ */
+export async function clearFirstSignup(
+  region: string,
+  user: User,
+  { googleProof }: { googleProof: boolean },
+): Promise<FirstSignupClearance> {
+  const userId = user.id
+  const googleProvisioning = googleProof
+    ? await guardFirstGoogleTeam(userId, user)
+    : null
+  let firstTeam = googleProvisioning !== null
+  if (!googleProof) {
+    const directory = await completedMemberships(
+      userId,
+      await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+    )
+    if (
+      directory.memberships.length === 0 &&
+      directory.degradedRegions.length > 0
+    )
+      throw new Error("Membership lookup degraded; please try again")
+    firstTeam = directory.memberships.length === 0
+  }
+  let evidence: SignupEvidenceEntry[] = []
+  if (firstTeam) {
+    // The actor-bound signed context is the authority for active evidence.
+    // Google proof validation and consumption remain independent.
+    evidence = await readSignupEvidenceEntries(userId)
+    await evaluateSignupRestriction(
+      region,
+      userId,
+      evidence[0]?.visitor ?? null,
+    )
+  }
+  return { firstTeam, googleProvisioning, evidence }
+}
+
+/** Spends the first-signup proof and evidence once the account has its team. */
+export async function completeFirstSignup(
+  userId: string,
+  { firstTeam, googleProvisioning, evidence }: FirstSignupClearance,
+): Promise<void> {
+  if (googleProvisioning) {
+    if (googleProvisioning.signupAttemptId)
+      await consumeGoogleSignupProof(userId, googleProvisioning.signupAttemptId)
+    else await consumeGoogleSignupProof(userId)
+  }
+  if (firstTeam) await clearEvaluatedSignupEvidence(userId, evidence)
 }
 
 export async function provisionTeam(
@@ -265,33 +361,8 @@ async function provisionTeamFor(
   },
 ): Promise<ProvisionedTeam> {
   const userId = user.id
-  const googleProvisioning = googleProof
-    ? await guardFirstGoogleTeam(userId, user)
-    : null
-  let firstTeam = googleProvisioning !== null
-  if (!googleProof) {
-    const directory = await completedMemberships(
-      userId,
-      await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
-    )
-    if (
-      directory.memberships.length === 0 &&
-      directory.degradedRegions.length > 0
-    )
-      throw new Error("Membership lookup degraded; please try again")
-    firstTeam = directory.memberships.length === 0
-  }
-  let evaluatedEvidence: SignupEvidenceEntry[] = []
-  if (firstTeam) {
-    // The actor-bound signed context is the authority for active evidence.
-    // Google proof validation and consumption remain independent.
-    evaluatedEvidence = await readSignupEvidenceEntries(userId)
-    await evaluateSignupRestriction(
-      region,
-      userId,
-      evaluatedEvidence[0]?.visitor ?? null,
-    )
-  }
+  const clearance = await clearFirstSignup(region, user, { googleProof })
+  const { firstTeam } = clearance
   const admin = cellFor(region).createAdminClient()
 
   // The Auth UUID is reserved for the single automatic initial East intent.
@@ -313,7 +384,13 @@ async function provisionTeamFor(
           enterpriseAuthority,
         )
       : await publishAccountPromotion(region, user, observedAt)
-    const preparation = { ...locator, name, ...publication }
+    const preparation = {
+      ...locator,
+      name,
+      ...publication,
+      additionalTeam:
+        !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
+    }
     prepared = enterpriseAuthority
       ? await preparePromotionTeamForEnterprise(
           preparation,
@@ -429,11 +506,6 @@ async function provisionTeamFor(
     )
   }
 
-  if (googleProvisioning) {
-    if (googleProvisioning.signupAttemptId)
-      await consumeGoogleSignupProof(userId, googleProvisioning.signupAttemptId)
-    else await consumeGoogleSignupProof(userId)
-  }
-  if (firstTeam) await clearEvaluatedSignupEvidence(userId, evaluatedEvidence)
+  await completeFirstSignup(userId, clearance)
   return { id: team.id as string, name: team.name as string, region }
 }

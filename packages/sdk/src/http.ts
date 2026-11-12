@@ -20,7 +20,7 @@ import type { ApiExecStreamEvent } from "./types.js"
 
 export const DEFAULT_TIMEOUT_MS = 30_000
 
-const SDK_VERSION = "0.11.5"
+const SDK_VERSION = "0.12.0"
 const USER_AGENT = `@superserve/sdk/${SDK_VERSION} (node/${
   typeof process !== "undefined" && process.versions?.node
     ? `v${process.versions.node}`
@@ -307,7 +307,7 @@ async function retryableFetch(
 }
 
 async function readErrorBody(res: Response): Promise<{
-  error?: { code?: string; message?: string }
+  error?: { code?: string; message?: string; action_url?: string }
   code?: string
   message?: string
 }> {
@@ -319,7 +319,7 @@ async function readErrorBody(res: Response): Promise<{
   }
   try {
     return JSON.parse(text) as {
-      error?: { code?: string; message?: string }
+      error?: { code?: string; message?: string; action_url?: string }
       code?: string
       message?: string
     }

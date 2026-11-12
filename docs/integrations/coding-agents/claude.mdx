@@ -1,6 +1,6 @@
 ---
 title: "Claude Code"
-sidebarTitle: Claude
+sidebarTitle: Claude Code
 description: Run Claude Code in a Superserve sandbox.
 icon: "/logos/integrations/claude.svg"
 ---
@@ -17,10 +17,17 @@ Claude Code is Anthropic's terminal coding agent. Run it in a Superserve sandbox
 
 ## Via the SDK
 
-```bash
+<CodeGroup>
+```bash TypeScript
 npm install @superserve/sdk
 export SUPERSERVE_API_KEY=ss_live_...
 ```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
 
 <CodeGroup>
 ```typescript TypeScript
@@ -64,3 +71,19 @@ Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&
 await sandbox.pause()    // checkpoint state to disk
 await sandbox.resume()   // restore exactly where you left off
 ```
+
+## Delete when finished
+
+A paused sandbox is kept until you delete it. When you no longer need the sandbox, delete it. This also deletes its files and saved state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).

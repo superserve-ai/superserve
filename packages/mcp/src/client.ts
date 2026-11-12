@@ -125,6 +125,8 @@ export interface TemplateSummary {
   status: string
   vcpu: number
   memoryMib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memoryMaxMib?: number
   diskMib: number
 }
 
@@ -133,6 +135,8 @@ export interface CreateInput {
   fromTemplate?: string
   fromSnapshot?: string
   timeoutSeconds?: number
+  /** Pause the sandbox after this many seconds with no activity. */
+  idleTimeoutSeconds?: number
   /** Delete the sandbox once continuously paused for this many seconds. */
   autoDeleteSeconds?: number
   metadata?: Record<string, string>
@@ -152,6 +156,8 @@ export interface UpdateInput {
   autoDeleteSeconds?: number | null
   /** A number sets the auto-pause timeout; null disables it. */
   timeoutSeconds?: number | null
+  /** A number sets the idle timeout; null turns idle pausing off. */
+  idleTimeoutSeconds?: number | null
   previewAccess?: PreviewAccessPolicy
 }
 
@@ -166,6 +172,7 @@ export interface TemplateCreateInput {
   from: string
   vcpu?: number
   memoryMib?: number
+  memoryMaxMib?: number
   diskMib?: number
   steps?: BuildStep[]
   startCmd?: string
@@ -282,6 +289,7 @@ function toTemplateSummary(t: TemplateInfo): TemplateSummary {
     status: t.status,
     vcpu: t.vcpu,
     memoryMib: t.memoryMib,
+    memoryMaxMib: t.memoryMaxMib,
     diskMib: t.diskMib,
   }
 }
@@ -317,6 +325,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         fromTemplate: input.fromTemplate,
         fromSnapshot: input.fromSnapshot,
         timeoutSeconds: input.timeoutSeconds,
+        idleTimeoutSeconds: input.idleTimeoutSeconds,
         autoDeleteSeconds: input.autoDeleteSeconds,
         metadata: input.metadata,
         envVars: input.envVars,
@@ -345,6 +354,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
           network: input.network,
           autoDeleteSeconds: input.autoDeleteSeconds,
           timeoutSeconds: input.timeoutSeconds,
+          idleTimeoutSeconds: input.idleTimeoutSeconds,
           previewAccess: input.previewAccess,
         },
         conn,
@@ -371,6 +381,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         from: input.from,
         vcpu: input.vcpu,
         memoryMib: input.memoryMib,
+        memoryMaxMib: input.memoryMaxMib,
         diskMib: input.diskMib,
         steps: input.steps,
         startCmd: input.startCmd,
@@ -384,6 +395,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         status: t.status,
         vcpu: t.vcpu,
         memoryMib: t.memoryMib,
+        memoryMaxMib: t.memoryMaxMib,
         diskMib: t.diskMib,
         createdAt: t.createdAt,
       })

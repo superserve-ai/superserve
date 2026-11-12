@@ -9,6 +9,7 @@ const m = vi.hoisted(() => ({
   teams: vi.fn(),
   read: vi.fn(),
   prepare: vi.fn(),
+  fresh: false,
 }))
 vi.mock("next/navigation", () => ({
   redirect: (url: string) => {
@@ -36,12 +37,23 @@ vi.mock("@/lib/api/active-team", () => ({
 }))
 vi.mock("@/lib/api/teams-actions", () => ({ listTeamsAction: m.teams }))
 vi.mock("@/lib/api/signup-plan-read", () => ({ readSignupPlan: m.read }))
+vi.mock("@/lib/supabase/fresh-fetch", () => ({
+  readFresh: async <T>(read: () => Promise<T>) => {
+    m.fresh = true
+    try {
+      return await read()
+    } finally {
+      m.fresh = false
+    }
+  },
+}))
 vi.mock("@/lib/api/signup-plan-actions", () => ({
   getSignupPlanAction: m.prepare,
 }))
 import { GET as prepareAccount } from "@/app/api/onboarding/prepare/route"
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 
-import { getSignupPlanPage } from "./signup-plan-page"
+import { getSignupPlanPage, getSignupPlanPageState } from "./signup-plan-page"
 
 beforeEach(() => {
   vi.clearAllMocks()
@@ -142,17 +154,61 @@ it("rejects changed accounts and impersonated sessions before reading plans", as
   expect(await getSignupPlanPage()).toBeNull()
   expect(m.memberships).not.toHaveBeenCalled()
   expect(m.read).not.toHaveBeenCalled()
+  // A retry can't change either answer, so neither is read twice.
+  expect(m.user).toHaveBeenCalledTimes(2)
 })
 it("fails closed on degraded membership, directory races, and plan read failures", async () => {
-  m.memberships.mockResolvedValueOnce({
+  m.memberships.mockResolvedValue({
     memberships: [],
     degradedRegions: ["use"],
   })
   expect(await getSignupPlanPage()).toBeNull()
-  m.teams.mockResolvedValueOnce({ teams: [], regions: ["use"] })
+  m.memberships.mockResolvedValue({
+    memberships: [{ teamId: "team", region: "use" }],
+    degradedRegions: [],
+  })
+  m.teams.mockResolvedValue({ teams: [], regions: ["use"] })
   expect(await getSignupPlanPage()).toBeNull()
+  m.teams.mockResolvedValue({
+    teams: [{ id: "team", region: "use", name: "Team" }],
+    regions: ["use"],
+  })
   m.read.mockRejectedValue(new Error("Unavailable"))
   expect(await getSignupPlanPage()).toBeNull()
+})
+it("retries a failed plan read once and renders when the retry succeeds", async () => {
+  const fresh: boolean[] = []
+  m.read.mockImplementation(async () => {
+    fresh.push(m.fresh)
+    if (fresh.length === 1) throw new Error("Unavailable")
+    return { userId: "owner", teamKey: "use:team", state: "selecting" }
+  })
+  expect((await getSignupPlanPage())?.context.teamKey).toBe("use:team")
+  // Only the retry skips the render's request memoization.
+  expect(fresh).toEqual([false, true])
+})
+it("retries a degraded membership lookup once before rendering", async () => {
+  m.memberships.mockResolvedValueOnce({
+    memberships: [],
+    degradedRegions: ["use"],
+  })
+  expect((await getSignupPlanPage())?.context.teamKey).toBe("use:team")
+  expect(m.memberships).toHaveBeenCalledTimes(2)
+})
+it("still blocks after one retry when the plan read keeps failing", async () => {
+  m.read.mockRejectedValue(
+    new Error("Unable to check your plan. Please retry."),
+  )
+  expect(await getSignupPlanPage()).toBeNull()
+  expect(m.read).toHaveBeenCalledTimes(2)
+})
+it("doesn't retry a team change or a redirect", async () => {
+  m.read.mockRejectedValue(new SignupSetupBlockedError("team_changed"))
+  expect(await getSignupPlanPage({ team: "use:other" })).toBeNull()
+  expect(m.read).toHaveBeenCalledTimes(1)
+  m.user.mockResolvedValueOnce({ data: { user: null } })
+  await expect(getSignupPlanPage()).rejects.toThrow("/auth/signin?next=")
+  expect(m.user).toHaveBeenCalledTimes(2)
 })
 
 it("keeps an established team available when an unrelated region is degraded", async () => {
@@ -171,4 +227,40 @@ it("sends an expired session to sign-in instead of the setup error", async () =>
   await expect(getSignupPlanPage()).rejects.toThrow(
     "/auth/signin?next=%2Fonboarding%2Fplan%2F%3F",
   )
+})
+
+it("tells a plan that stayed unreadable apart from a blocked answer", async () => {
+  m.read.mockRejectedValue(new Error("Unable to check your plan."))
+  const state = await getSignupPlanPageState()
+  expect(state.status).toBe("unavailable")
+  // The team is confirmed even though its plan isn't.
+  expect(state.status === "unavailable" && state.directory.activeTeamId).toBe(
+    "team",
+  )
+  expect(m.read).toHaveBeenCalledTimes(2)
+  m.read.mockRejectedValue(new SignupSetupBlockedError("team_changed"))
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
+  expect(await getSignupPlanPageState({ account: "other" })).toEqual({
+    status: "blocked",
+  })
+  m.memberships.mockResolvedValue({ memberships: [], degradedRegions: [] })
+  expect(await getSignupPlanPageState({ setup_error: "1" })).toEqual({
+    status: "blocked",
+  })
+})
+it("reports a plan read that a retry recovered as ready", async () => {
+  m.read.mockRejectedValueOnce(new Error("Unavailable"))
+  const state = await getSignupPlanPageState()
+  expect(state.status === "ready" && state.page.context.teamKey).toBe(
+    "use:team",
+  )
+})
+it("keeps the console closed when the team can't be confirmed", async () => {
+  m.read.mockRejectedValue(new Error("Unable to check your plan."))
+  m.teams.mockResolvedValue({ teams: [], regions: ["use"] })
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
+  m.teams.mockRejectedValue(new Error("Directory unavailable"))
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
+  m.memberships.mockResolvedValue({ memberships: [], degradedRegions: ["use"] })
+  expect(await getSignupPlanPageState()).toEqual({ status: "blocked" })
 })
