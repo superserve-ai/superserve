@@ -351,6 +351,7 @@ vi.mock("@/lib/supabase/server", () => ({
   }),
 }))
 
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { STAFF_SESSION_COOKIE } from "@/lib/yc/staff-session"
@@ -1176,6 +1177,219 @@ describe("auth callback", () => {
           { provider: "google", email: "user@example.com", is_new_user: false },
         ],
       ])
+    })
+  })
+
+  describe("auth_callback_failed after sign-in", () => {
+    const failures = () =>
+      mockTrackEvent.mock.calls.filter(
+        ([event]) => event === "auth_callback_failed",
+      )
+    const target = (response: Response) => {
+      const location = new URL(response.headers.get("location")!)
+      return location.pathname + location.search
+    }
+    const emailSignup = (query = "") =>
+      GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?token_hash=official&type=signup${query}`,
+        ),
+      )
+    const emailProps = {
+      method: "token_hash",
+      type: "signup",
+      error_code: null,
+    }
+    const googleProps = { method: "code", type: null, error_code: null }
+
+    it("records signup_blocked when the restriction check rejects the account", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      mockEvaluateSignupRestriction.mockRejectedValue(
+        new SignupRestrictedError(),
+      )
+
+      const response = await emailSignup()
+
+      expect(target(response)).toBe(
+        "/auth/auth-code-error?reason=signup_blocked",
+      )
+      expect(failures()).toEqual([
+        [
+          "auth_callback_failed",
+          "u1",
+          { ...emailProps, reason: "signup_blocked" },
+        ],
+      ])
+    })
+
+    it("records pricing_unavailable when Enterprise pricing cannot be read", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      mockStrictPlans.mockRejectedValue(new Error("catalog down"))
+
+      const response = await emailSignup("&signup_offer=enterprise")
+
+      expect(target(response)).toBe(
+        "/auth/auth-code-error?reason=pricing_unavailable&signup_offer=enterprise",
+      )
+      expect(failures()).toEqual([
+        [
+          "auth_callback_failed",
+          "u1",
+          { ...emailProps, reason: "pricing_unavailable" },
+        ],
+      ])
+    })
+
+    it("records membership_lookup_degraded when the Google directory read is degraded", async () => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["usw"],
+      }
+
+      const response = await GET(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+
+      expect(target(response)).toBe(
+        "/auth/auth-code-error?reason=membership_lookup_degraded",
+      )
+      expect(failures()).toEqual([
+        [
+          "auth_callback_failed",
+          "u1",
+          { ...googleProps, reason: "membership_lookup_degraded" },
+        ],
+      ])
+    })
+
+    it("records membership_lookup_degraded when a Google invitee returns to signup", async () => {
+      googleMembershipState = {
+        kind: "indeterminate",
+        degradedRegions: ["use"],
+      }
+      const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+      const url = new URL(
+        "https://console.superserve.ai/auth/callback?code=abc",
+      )
+      url.searchParams.set("next", invite)
+
+      const response = await GET(new Request(url))
+
+      expect(target(response)).toBe(
+        `/auth/signup?${new URLSearchParams({ complete_google: "1", next: invite })}`,
+      )
+      expect(failures()).toEqual([
+        [
+          "auth_callback_failed",
+          "u1",
+          { ...googleProps, reason: "membership_lookup_degraded" },
+        ],
+      ])
+    })
+
+    it("records account_setup when a paid email signup cannot read its directory", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      mockListTeamMembershipsForUserDetailed.mockRejectedValueOnce(
+        new Error("Directory unavailable"),
+      )
+
+      const response = await emailSignup("&signup_offer=pro_monthly")
+
+      expect(target(response)).toBe(
+        `/auth/auth-code-error?${new URLSearchParams({ reason: "account_setup", account: "u1", next: "/billing/pro/" })}`,
+      )
+      expect(failures()).toEqual([
+        [
+          "auth_callback_failed",
+          "u1",
+          { ...emailProps, reason: "account_setup" },
+        ],
+      ])
+    })
+
+    it("records account_setup when first-team preparation fails", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      mockGetSignupPlanAction.mockRejectedValueOnce(new Error("Response lost"))
+
+      const response = await emailSignup(
+        "&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
+      )
+
+      expect(target(response)).toBe(
+        `/auth/auth-code-error?${new URLSearchParams({ reason: "account_setup", account: "u1", next: "/billing-usage/buy-credit/" })}`,
+      )
+      expect(failures()).toEqual([
+        [
+          "auth_callback_failed",
+          "u1",
+          { ...emailProps, reason: "account_setup" },
+        ],
+      ])
+    })
+
+    it.each([
+      "account_changed",
+      "impersonation",
+      "team_changed",
+      "team_conflict",
+    ] as const)(
+      "records %s when first-team setup is refused",
+      async (reason) => {
+        currentUser!.app_metadata = { provider: "email" }
+        mockGetSignupPlanAction.mockRejectedValueOnce(
+          new SignupSetupBlockedError(reason),
+        )
+
+        const response = await emailSignup(
+          "&signup_offer=starter&next=%2Fbilling-usage%2Fbuy-credit%2F",
+        )
+
+        expect(target(response)).toBe(
+          `/auth/auth-code-error?${new URLSearchParams({ reason, account: "u1", next: "/billing-usage/buy-credit/" })}`,
+        )
+        expect(failures()).toEqual([
+          ["auth_callback_failed", "u1", { ...emailProps, reason }],
+        ])
+      },
+    )
+
+    it("records google_proof_failed with the proof failure as error_code", async () => {
+      googleMembershipState = { kind: "first_time" }
+      proofAvailable = false
+
+      const response = await GET(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+
+      expect(target(response)).toBe(
+        "/auth/signup?complete_google=1&reason=no_proof",
+      )
+      expect(failures()).toEqual([
+        [
+          "auth_callback_failed",
+          "u1",
+          {
+            ...googleProps,
+            error_code: "no_proof",
+            reason: "google_proof_failed",
+          },
+        ],
+      ])
+    })
+
+    it("returns a post-sign-in failure redirect while PostHog never answers", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+      mockEvaluateSignupRestriction.mockRejectedValue(
+        new SignupRestrictedError(),
+      )
+      mockTrackEvent.mockImplementation(() => new Promise(() => {}))
+
+      const outcome = await Promise.race([
+        emailSignup().then((response) => target(response)),
+        new Promise((resolve) => setTimeout(() => resolve("pending"), 200)),
+      ])
+
+      expect(outcome).toBe("/auth/auth-code-error?reason=signup_blocked")
     })
   })
 
