@@ -68,7 +68,7 @@ await sandbox.commands.run("bash /var/lib/cursor-worker/launch.sh", {
 
 `CURSOR_API_KEY` is passed to the worker process. The agent's commands run as the same user as the worker, so treat the pool as one trust boundary and scope the service account to it. `SUPERSERVE_API_KEY` never enters the sandbox.
 
-See the [full guide](https://docs.superserve.ai/integrations/managed-agents/cursor-cloud-agents) for the Cursor admin setup, egress rules, and hibernation.
+See the [full guide](https://docs.superserve.ai/integrations/agent-platforms/cursor-cloud-agents) for the Cursor admin setup, egress rules, and hibernation.
 
 ## Prerequisites
 
@@ -156,7 +156,7 @@ The controller sets `CURSOR_AGENT_WORKER_ID`, `CURSOR_REQUEST_ID`, and `CURSOR_W
 
 ## See also
 
-- [Full integration guide](https://docs.superserve.ai/integrations/managed-agents/cursor-cloud-agents)
+- [Full integration guide](https://docs.superserve.ai/integrations/agent-platforms/cursor-cloud-agents)
 - [Cursor Team Pools](https://cursor.com/docs/cloud-agent/self-hosted/pool)
 - [Cursor Workers and Pools API](https://cursor.com/docs/cloud-agent/api/endpoints#workers-and-pools)
 - [Superserve SDK reference](https://docs.superserve.ai/sdk-reference/sandbox)
