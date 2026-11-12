@@ -316,6 +316,22 @@ describe("return from Stripe's Back link", () => {
       ).toBeEnabled(),
     )
     expect(assign).not.toHaveBeenCalled()
+    fireEvent(window, new Event("focus"))
+    await waitFor(() => expect(recoverProPayment).toHaveBeenCalledTimes(2))
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Check payment status" }),
+      ).toBeEnabled(),
+    )
+    expect(assign).not.toHaveBeenCalled()
+    fireEvent.click(
+      screen.getByRole("button", { name: "Check payment status" }),
+    )
+    await waitFor(() =>
+      expect(assign).toHaveBeenCalledWith(
+        "https://checkout.stripe.com/c/pay/again",
+      ),
+    )
   })
 
   it("closes the checkout only once", async () => {
@@ -329,6 +345,24 @@ describe("return from Stripe's Back link", () => {
     expect(
       vi.mocked(recoverProPayment).mock.calls.filter(([, restart]) => restart),
     ).toHaveLength(1)
+  })
+
+  it("does not close a checkout started after the return", async () => {
+    vi.mocked(getSignupPlanAction).mockResolvedValue(selecting)
+    vi.mocked(startProCheckout).mockImplementation(async () => {
+      vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
+      return null
+    })
+    render(<PlanSelection initial={selecting} billingReturn="cancel" />)
+    expect(window.location.search).toBe("?team=use%3Ateam&account=user")
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    expect(
+      await screen.findByRole("heading", {
+        name: "We’re checking your payment",
+      }),
+    ).toBeVisible()
+    await waitFor(() => expect(recoverProPayment).toHaveBeenCalled())
+    expect(recoverProPayment).not.toHaveBeenCalledWith("use:team", true)
   })
 
   it("leaves a team without a pending payment on the plans", async () => {

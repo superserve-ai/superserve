@@ -41,6 +41,9 @@ export function PlanSelection({
   const inFlight = useRef(false)
   // Stripe's Back link returns here with billing=cancel. Act on it once.
   const leftCheckout = useRef(billingReturn === "cancel")
+  // Set once the customer leaves checkout: only a click on this page may
+  // open checkout again, never a background check.
+  const stayOffCheckout = useRef(false)
   const mounted = useRef(true)
   const completionSent = useRef(false)
   const navigating = useRef(false)
@@ -135,14 +138,13 @@ export function PlanSelection({
   )
 
   const checkPayment = useCallback(
-    (restart = false, stayOffCheckout = false) =>
+    (restart = false) =>
       run(async () => {
         const latest = await refresh()
         if (latest.state === "pending") {
           const outcome = await recoverProPayment(initial.teamKey, restart)
           if (isStripeCheckoutUrl(outcome)) {
-            // The customer just left this checkout; don't send them back.
-            if (!stayOffCheckout) navigate(outcome)
+            if (!stayOffCheckout.current) navigate(outcome)
             return
           }
           const recovered = await refresh()
@@ -182,18 +184,25 @@ export function PlanSelection({
   }, [billingReturn, track])
 
   useEffect(() => {
+    // Read the Back-link marker on the first state only, so it can never
+    // close a checkout the customer starts later from this page.
+    const leaving = leftCheckout.current
+    if (leaving) {
+      leftCheckout.current = false
+      const url = new URL(window.location.href)
+      url.searchParams.delete("billing")
+      // A null state lets the Next.js router take the new URL as its own.
+      window.history.replaceState(null, "", url)
+    }
     if (context.state !== "pending") return
-    if (leftCheckout.current) {
+    if (leaving) {
       // The customer left checkout without paying. Close that attempt now, as
       // "Cancel checkout and change plan" does, so they get the plans back
       // instead of waiting on a payment they did not make. A payment that did
       // complete still comes back as pending or committed from the backend.
-      leftCheckout.current = false
-      const url = new URL(window.location.href)
-      url.searchParams.delete("billing")
-      window.history.replaceState(window.history.state, "", url)
+      stayOffCheckout.current = true
       setClosingCheckout(true)
-      void checkPayment(true, true).finally(() => {
+      void checkPayment(true).finally(() => {
         if (mounted.current) setClosingCheckout(false)
       })
     } else void checkPayment()
@@ -305,6 +314,7 @@ export function PlanSelection({
       }
       onPro={() =>
         void run(async () => {
+          stayOffCheckout.current = false
           if (!(await confirmSelecting())) return
           const offer = `pro_${cadence}` as const
           setSelection("pro")
@@ -385,8 +395,14 @@ export function PlanSelection({
             )
         })
       }
-      onCheckPayment={() => void checkPayment()}
-      onCancelPayment={() => void checkPayment(true)}
+      onCheckPayment={() => {
+        stayOffCheckout.current = false
+        void checkPayment()
+      }}
+      onCancelPayment={() => {
+        stayOffCheckout.current = false
+        void checkPayment(true)
+      }}
     />
   )
 }
