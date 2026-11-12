@@ -377,9 +377,9 @@ describe("SignInPage", () => {
     await user.type(screen.getByPlaceholderText("Password"), "wrongpassword")
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
-    expect(
-      await screen.findByText("Invalid email or password."),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Invalid email or password.",
+    )
     expect(mockReplace).not.toHaveBeenCalled()
   })
 
@@ -396,9 +396,9 @@ describe("SignInPage", () => {
     await user.type(screen.getByPlaceholderText("Password"), "password123")
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
-    expect(
-      await screen.findByText("Please verify your email before signing in."),
-    ).toBeInTheDocument()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Verify your email first. Open the link we sent to your inbox.",
+    )
   })
 
   it("shows generic error on unexpected failure", async () => {
@@ -419,6 +419,39 @@ describe("SignInPage", () => {
         "We couldn't sign you in. Try again, or continue with Google.",
       ),
     ).toBeInTheDocument()
+  })
+
+  it("clears the generic error alert while retrying and restores it on the same failure", async () => {
+    const failure = { error: { message: "Unexpected auth error" } }
+    const errorText =
+      "We couldn't sign you in. Try again, or continue with Google."
+    let resolveRetry!: (value: typeof failure) => void
+    mockSignInWithPassword.mockResolvedValueOnce(failure).mockReturnValueOnce(
+      new Promise<typeof failure>((resolve) => {
+        resolveRetry = resolve
+      }),
+    )
+    render(<SignInPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(errorText)
+    expect(screen.getAllByRole("alert")).toHaveLength(1)
+
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    await waitFor(() => expect(mockSignInWithPassword).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+    resolveRetry(failure)
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(errorText)
+    expect(screen.getAllByRole("alert")).toHaveLength(1)
   })
 
   it("offers Google after a generic error without showing recovery on a fresh page", async () => {
@@ -797,7 +830,9 @@ describe("SignInPage", () => {
       )
       await user.type(screen.getByPlaceholderText("Password"), "password123")
       await user.click(screen.getByRole("button", { name: "Sign In" }))
-      await screen.findByText("Please verify your email before signing in.")
+      await screen.findByText(
+        "Verify your email first. Open the link we sent to your inbox.",
+      )
       expect(
         screen.queryByRole("region", { name: "Other ways to sign in" }),
       ).not.toBeInTheDocument()
@@ -868,11 +903,9 @@ describe("SignInPage", () => {
         within(region).getByRole("button", { name: "Email me a sign-in link" }),
       )
 
-      expect(
-        await within(region).findByText(
-          "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
-        ),
-      ).toBeInTheDocument()
+      expect(await within(region).findByRole("alert")).toHaveTextContent(
+        "Our bot check couldn't finish. Turn off ad blockers for this site, then refresh the page.",
+      )
       expect(recaptcha.getToken).toHaveBeenCalledWith("signin_link")
       expect(mockSendSignInLink).not.toHaveBeenCalled()
       expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
@@ -894,7 +927,7 @@ describe("SignInPage", () => {
 
       expect(
         await within(region).findByText(
-          "We couldn't verify you're human. Refresh the page and try again.",
+          "Our bot check didn't pass this request. Refresh the page and try again.",
         ),
       ).toBeInTheDocument()
       expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
@@ -926,6 +959,28 @@ describe("SignInPage", () => {
         method: "email_link",
         reason: "captcha_unavailable",
       })
+    })
+
+    it("preserves the form alert when a failed sign-in link adds a recovery alert", async () => {
+      mockSendSignInLink.mockResolvedValue({
+        success: false,
+        errorCode: "captcha_unavailable",
+      })
+      const region = await failPasswordSignIn()
+      const formAlert = screen.getByRole("alert")
+      expect(formAlert).toHaveTextContent("Invalid email or password.")
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      const linkAlert = await within(region).findByRole("alert")
+      expect(linkAlert).toHaveTextContent(
+        "We couldn't send the sign-in link. Try again in a minute, or continue with Google.",
+      )
+      expect(screen.getAllByRole("alert")).toHaveLength(2)
+      expect(screen.getByText("Invalid email or password.")).toBe(formAlert)
+      expect(formAlert).toHaveTextContent("Invalid email or password.")
     })
 
     it("locks the email field while a link request is pending", async () => {
