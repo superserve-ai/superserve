@@ -13,13 +13,10 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { confirmedSignupDestination } from "@/lib/auth/confirmed-signup-destination"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
-import {
-  SIGNUP_OFFER_PARAM,
-  isSelfServeSignupOffer,
-  signInOfferDestination,
-} from "@/lib/auth/signup-offer"
+import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
@@ -409,19 +406,7 @@ export default function SignUpContent() {
     setResendNotice(null)
   }
 
-  // The sign-in page sends a signed-in visitor to the same place, and it
-  // follows only a plain local path. A browser reads "/\\host" as another
-  // site, so a backslash or control character falls back to "/".
-  const localNext =
-    nextUrl.startsWith("/") &&
-    !nextUrl.startsWith("//") &&
-    !/[\\\u0000-\u0020\u007f]/.test(nextUrl)
-      ? nextUrl
-      : "/"
-  const confirmedDestination =
-    localNext === "/" && isSelfServeSignupOffer(rawOffer)
-      ? signInOfferDestination(rawOffer)
-      : localNext
+  const confirmedDestination = confirmedSignupDestination(nextUrl, rawOffer)
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
