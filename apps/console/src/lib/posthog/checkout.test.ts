@@ -330,6 +330,28 @@ describe("checkout_completed", () => {
     })
   })
 
+  it("is sent without a list price when no backend key is given", async () => {
+    m.rows.billing_signup_choice = {
+      data: {
+        offer_key: "pro_monthly",
+        session_id: "cs_live_signup",
+        generation: "2026-11-10T00:00:00Z",
+      },
+      error: null,
+    }
+    recordCheckoutCompleted({ userId: "u1", surface: "onboarding_plan", team })
+    await flush()
+    expect(m.trackEvent).toHaveBeenCalledWith(
+      "checkout_completed",
+      "u1",
+      expect.objectContaining({
+        surface: "onboarding_plan",
+        price_cents: null,
+        checkout_session_id: "cs_live_signup",
+      }),
+    )
+  })
+
   it("is not sent for a team with no paid checkout on record", async () => {
     m.rows.billing_signup_choice = {
       data: null,

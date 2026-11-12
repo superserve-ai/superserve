@@ -8,7 +8,11 @@ import {
   type SignupPlanPageParams,
 } from "@/lib/api/signup-plan-page"
 import { trackEvent } from "@/lib/posthog/actions"
-import { recordCheckoutReturned } from "@/lib/posthog/checkout"
+import {
+  parseTeamKey,
+  recordCheckoutCompleted,
+  recordCheckoutReturned,
+} from "@/lib/posthog/checkout"
 import { ycOnboardingDestination } from "@/lib/yc/onboarding"
 
 export const metadata: Metadata = {
@@ -77,6 +81,21 @@ export default async function PlanSelectionPage({
         action: "completed",
       })
     })
+    // The payment committed before this return rendered, so no recovery runs
+    // to complete the checkout.
+    const team = parseTeamKey(context.teamKey)
+    if (
+      params.billing === "success" &&
+      context.state === "committed" &&
+      context.offer &&
+      context.offer !== "free" &&
+      team
+    )
+      recordCheckoutCompleted({
+        userId: context.userId,
+        surface: "onboarding_plan",
+        team,
+      })
     redirect("/sandboxes")
   }
   return (

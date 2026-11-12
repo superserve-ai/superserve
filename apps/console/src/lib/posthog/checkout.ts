@@ -121,7 +121,10 @@ interface CheckoutRecord {
 
 // The team's latest paid Checkout, from the backend's purchase tables: a plan
 // upgrade (it has the quoted charge) or the signup plan choice, whichever
-// started last.
+// started last. The backend keeps one open purchase per team and resumes its
+// Checkout session, so this is the session the customer returns from. The one
+// gap: a cancel from the tab of an expired session that a new one replaced is
+// attributed to the new session.
 export async function readCheckoutRecord(
   team: CheckoutTeam,
 ): Promise<CheckoutRecord | null> {
@@ -214,8 +217,9 @@ async function openedProperties(input: OpenedInput): Promise<Properties> {
 interface CompletedInput {
   surface: CheckoutSurface
   team: CheckoutTeam
-  base: string
-  apiKey: string
+  // Without a backend key the catalog isn't read and price_cents is null.
+  base?: string
+  apiKey?: string
 }
 
 // Only a team with a paid Checkout on record counts, so a team that already
@@ -228,11 +232,10 @@ async function completedProperties(
   return {
     surface: input.surface,
     ...offerProperties(checkout.offer),
-    price_cents: await offerPriceCents(
-      input.base,
-      input.apiKey,
-      checkout.offer,
-    ),
+    price_cents:
+      input.base && input.apiKey
+        ? await offerPriceCents(input.base, input.apiKey, checkout.offer)
+        : null,
     amount_cents: checkout.amountCents,
     checkout_session_id: checkout.sessionId,
     ...teamProperties(input.team),
