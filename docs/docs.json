@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "luma",
+  "theme": "sequoia",
   "name": "Superserve",
   "colors": {
     "primary": "#B2FAB4",
