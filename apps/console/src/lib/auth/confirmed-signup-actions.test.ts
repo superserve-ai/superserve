@@ -4,6 +4,13 @@ const getUser = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ auth: { getUser } }),
 }))
+const cookieJar = vi.hoisted(() => new Map<string, string>())
+vi.mock("next/headers", () => ({
+  cookies: async () => ({
+    get: (name: string) =>
+      cookieJar.has(name) ? { name, value: cookieJar.get(name) } : undefined,
+  }),
+}))
 const pricing = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/billing/plans-actions", () => ({
   getPricingVersionAction: () => pricing(),
@@ -32,6 +39,7 @@ const fetchMock = vi.fn(async () => ({
 
 beforeEach(() => {
   getUser.mockResolvedValue({ data: { user: { id: "u1" } } })
+  cookieJar.clear()
   pricing.mockReset()
   pricing.mockResolvedValue("v2")
   plan = { ok: true, body: { entry_state: "trial" } }
@@ -52,6 +60,17 @@ describe("confirmedSignupDestinationAction", () => {
       "https://api.example.test/billing/plan",
       expect.anything(),
     )
+  })
+
+  it("sends an unfinished YC claim to its claim page first", async () => {
+    cookieJar.set("yc_claim_confirmation", "pending")
+    await expect(confirmedSignupDestinationAction("pro_monthly")).resolves.toBe(
+      "/yc/claim",
+    )
+    await expect(confirmedSignupDestinationAction(undefined)).resolves.toBe(
+      "/yc/claim",
+    )
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("sends a team whose trial is used up to its plan picker", async () => {
