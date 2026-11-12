@@ -4,7 +4,7 @@ import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import posthog, { type CaptureOptions } from "posthog-js"
+import posthog from "posthog-js"
 import { Suspense, useEffect, useRef, useState } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
@@ -129,13 +129,11 @@ interface PickerVisit {
 function recordPickerView(
   recorded: { current: string | null },
   { identity, view }: PickerVisit,
-  options?: CaptureOptions,
 ) {
   if (recorded.current === identity) return
   recorded.current = identity
   try {
-    if (options) posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view, options)
-    else posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
+    posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
   } catch {
     /* Analytics never controls the picker. */
   }
@@ -176,16 +174,17 @@ function usePlanPickerView(
   }, [identity, viewKey, fallbackKey])
   useEffect(() => {
     mounted.current = true
-    const flush = (options?: CaptureOptions) => {
+    const flush = () => {
       const waiting = pending.current
       pending.current = null
-      if (waiting) recordPickerView(recorded, waiting, options)
+      if (waiting) recordPickerView(recorded, waiting)
     }
-    // React cleanup does not run when the document unloads.
-    const onPageHide = () => flush({ transport: "sendBeacon" })
-    window.addEventListener("pagehide", onPageHide)
+    // React cleanup does not run when the document unloads. PostHog sends its
+    // queued events by beacon from its own pagehide listener; a capture
+    // listener on window runs before it, so this view joins that queue.
+    window.addEventListener("pagehide", flush, { capture: true })
     return () => {
-      window.removeEventListener("pagehide", onPageHide)
+      window.removeEventListener("pagehide", flush, { capture: true })
       mounted.current = false
       // StrictMode runs this cleanup and mounts again at once, so only a
       // picker that is still unmounted after the timeout has really closed.

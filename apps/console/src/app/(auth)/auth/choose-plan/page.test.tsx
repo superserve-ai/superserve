@@ -361,7 +361,7 @@ describe("plan picker", () => {
     ])
   })
 
-  it("sends a waiting trial_ended view by beacon when the page unloads", async () => {
+  it("records a waiting trial_ended view when the page unloads", async () => {
     let release = () => {}
     trial.gate = new Promise((done) => (release = done))
     trial.outcome = "unavailable"
@@ -376,15 +376,11 @@ describe("plan picker", () => {
     release()
     await screen.findByText(/isn't available/i)
     expect(capture).toHaveBeenCalledTimes(1)
-    expect(capture).toHaveBeenCalledWith(
-      "plan_picker_viewed",
-      {
-        reason: "trial_reason_unknown",
-        requested_offer: "not_specified",
-        plan_options_requested: true,
-      },
-      { transport: "sendBeacon" },
-    )
+    expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
+      reason: "trial_reason_unknown",
+      requested_offer: "not_specified",
+      plan_options_requested: true,
+    })
   })
 
   it("records one picker view under StrictMode", async () => {
