@@ -90,11 +90,14 @@ export function PlanSelection({
     [track, navigate],
   )
 
+  // This page acts on billing=cancel once, on arrival. Keep it out of later
+  // reads, so a sign-in return URL built from one can't close a newer checkout.
+  const billingRead = billingReturn === "cancel" ? undefined : billingReturn
   const refresh = useCallback(async () => {
     const next = await getSignupPlanAction(
       initial.teamKey,
       initial.userId,
-      billingReturn,
+      billingRead,
     )
     if (next.userId !== initial.userId || next.teamKey !== initial.teamKey)
       throw new Error("Your account changed. Reload to continue.")
@@ -103,7 +106,7 @@ export function PlanSelection({
       setUncertain(false)
     }
     return next
-  }, [initial.teamKey, initial.userId, billingReturn])
+  }, [initial.teamKey, initial.userId, billingRead])
 
   const run = useCallback(
     async (operation: () => Promise<void>) => {
@@ -187,13 +190,7 @@ export function PlanSelection({
     // Read the Back-link marker on the first state only, so it can never
     // close a checkout the customer starts later from this page.
     const leaving = leftCheckout.current
-    if (leaving) {
-      leftCheckout.current = false
-      const url = new URL(window.location.href)
-      url.searchParams.delete("billing")
-      // A null state lets the Next.js router take the new URL as its own.
-      window.history.replaceState(null, "", url)
-    }
+    leftCheckout.current = false
     if (context.state !== "pending") return
     if (leaving) {
       // The customer left checkout without paying. Close that attempt now, as
@@ -211,6 +208,21 @@ export function PlanSelection({
     }, 5000)
     return () => window.clearInterval(timer)
   }, [context.state, checkPayment])
+
+  useEffect(() => {
+    if (billingReturn !== "cancel") return
+    // Drop billing=cancel from the address so a reload can't act on it again.
+    // Wait one task: on hydration this effect runs before the Next.js router
+    // wraps history.replaceState, and only the wrapped call updates the URL
+    // the router keeps. A null state lets the router keep its own entries.
+    const timer = window.setTimeout(() => {
+      const url = new URL(window.location.href)
+      if (url.searchParams.get("billing") !== "cancel") return
+      url.searchParams.delete("billing")
+      window.history.replaceState(null, "", url)
+    }, 0)
+    return () => window.clearTimeout(timer)
+  }, [billingReturn])
 
   useEffect(() => {
     const onFocus = () => {

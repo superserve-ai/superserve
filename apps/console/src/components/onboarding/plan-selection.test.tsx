@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import { useEffect, type ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
@@ -334,6 +335,44 @@ describe("return from Stripe's Back link", () => {
     )
   })
 
+  it("clears the marker through the router's history wrapper", async () => {
+    closesOnRestart()
+    const native = window.history.replaceState.bind(window.history)
+    const routed: string[] = []
+    // Next.js wraps replaceState in an effect of its root, which runs after
+    // the effects of the page inside it.
+    const Router = ({ children }: { children: ReactNode }) => {
+      useEffect(() => {
+        window.history.replaceState = (data, unused, url) => {
+          routed.push(String(url))
+          native(data, unused, url)
+        }
+        return () => {
+          window.history.replaceState = native
+        }
+      }, [])
+      return children
+    }
+    render(
+      <Router>
+        <PlanSelection initial={pending} billingReturn="cancel" />
+      </Router>,
+    )
+    await waitFor(() => expect(routed).toHaveLength(1))
+    expect(new URL(routed[0]!).search).toBe("?team=use%3Ateam&account=user")
+  })
+
+  it("leaves billing=cancel out of later plan reads", async () => {
+    closesOnRestart()
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    expect(
+      await screen.findByRole("button", { name: "Continue with Free" }),
+    ).toBeVisible()
+    expect(getSignupPlanAction).toHaveBeenCalled()
+    for (const call of vi.mocked(getSignupPlanAction).mock.calls)
+      expect(call[2]).toBeUndefined()
+  })
+
   it("closes the checkout only once", async () => {
     closesOnRestart()
     render(<PlanSelection initial={pending} billingReturn="cancel" />)
@@ -354,7 +393,9 @@ describe("return from Stripe's Back link", () => {
       return null
     })
     render(<PlanSelection initial={selecting} billingReturn="cancel" />)
-    expect(window.location.search).toBe("?team=use%3Ateam&account=user")
+    await waitFor(() =>
+      expect(window.location.search).toBe("?team=use%3Ateam&account=user"),
+    )
     fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
     expect(
       await screen.findByRole("heading", {
