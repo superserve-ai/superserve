@@ -70,6 +70,9 @@ function Banner() {
       <Link href="/dialogs/" className="hover:text-foreground">
         dialogs
       </Link>
+      <Link href="/popups/" className="hover:text-foreground">
+        popups
+      </Link>
     </aside>
   )
 }

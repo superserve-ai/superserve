@@ -5,6 +5,7 @@ import type { NextConfig } from "next"
 const sourceRoot = resolve(__dirname, "../../..")
 const stubs = resolve(__dirname, "stubs.ts")
 const activityStub = resolve(__dirname, "activity-stub.ts")
+const apiKeysStub = resolve(__dirname, "api-keys-stub.ts")
 const planActionsStub = resolve(__dirname, "plan-actions-stub.ts")
 const navigationStub = resolve(__dirname, "navigation-stub.ts")
 
@@ -20,6 +21,10 @@ const config: NextConfig = {
       new webpack.NormalModuleReplacementPlugin(
         /^@\/lib\/api\/activity-actions$/,
         activityStub,
+      ),
+      new webpack.NormalModuleReplacementPlugin(
+        /^(?:@\/lib\/api\/|\.\/)api-keys-actions$/,
+        apiKeysStub,
       ),
       new webpack.NormalModuleReplacementPlugin(
         /^@\/lib\/billing\/plan-offers-actions$/,

@@ -7,7 +7,7 @@ bunx next dev src/test/ui/reduced-motion --webpack --hostname 127.0.0.1 --port 4
 ```
 
 Routes: `/sandboxes/` (list), `/sandboxes/sbx-7f3a91c2/` (detail), `/spinners/`,
-`/terminal/`, `/plans/`, `/plans/fallback/` and `/dialogs/` (see below).
+`/terminal/`, `/plans/`, `/plans/fallback/`, `/dialogs/` and `/popups/` (see below).
 
 The fixture renders the production sandbox list and detail pages inside the
 production `MotionProvider` and Console `globals.css`. A route handler at
@@ -45,3 +45,16 @@ springing. With reduce **off**, all of these animate as before.
   presses the confirm button. The request behind it never answers (the API route
   hangs `DELETE`, the other two take a never-resolving `onConfirm`), so the
   button spinner stays up. Reload after switching the query string.
+- `/popups/` mounts the real shared `Dialog` (including its backdrop) and
+  `Popover`, plus the production `ConnectSandboxDialog` for `sbx-7f3a91c2`.
+  Open Connect and click **Create API Key** to display
+  `ss_live_fixture_xxxxxxxx`; `api-keys-stub.ts` replaces the API-key server
+  actions, so listing and creating keys need no network or Supabase. With
+  reduce **on**, dialog and popover open/close should fade without scaling,
+  the dialog should stay centered, and switching/hovering the Connect language
+  tabs should make the active/hover highlights jump instead of springing.
+  With reduce **off**, the popups scale and the highlights spring as before.
+  The backdrop keeps its opacity fade in both modes. Use `open-dialog`,
+  `dialog-popup`, `close-dialog`, `open-connect-dialog`, `open-popover`,
+  `popover-popup` and `close-popover` test IDs; locate Connect by its
+  **Connect to Sandbox** dialog title and **TypeScript** / **Python** buttons.
