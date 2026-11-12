@@ -4,7 +4,7 @@ import { isSelfServeSignupOffer, signInOfferDestination } from "./signup-offer"
 // matches where the sign-in page sends a signed-in visitor, and it follows
 // only a plain local path: a browser reads "/\host" as another site, so a
 // backslash or control character falls back to "/".
-export function confirmedSignupDestination(
+export function confirmedSignupReturnPath(
   nextUrl: string,
   rawOffer: string | undefined,
 ): string {

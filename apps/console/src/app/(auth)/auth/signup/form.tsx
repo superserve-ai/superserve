@@ -13,10 +13,10 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { confirmedSignupDestination } from "@/lib/auth/confirmed-signup-destination"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import { confirmedSignupReturnPath } from "@/lib/auth/signup-return-path"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
@@ -406,7 +406,7 @@ export default function SignUpContent() {
     setResendNotice(null)
   }
 
-  const confirmedDestination = confirmedSignupDestination(nextUrl, rawOffer)
+  const confirmedDestination = confirmedSignupReturnPath(nextUrl, rawOffer)
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
