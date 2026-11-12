@@ -15,6 +15,9 @@ export type PlanStep = "plans" | "free-billing" | "payment-pending"
 
 export interface PlanSelectionViewProps {
   step: PlanStep
+  // The customer came back from checkout without paying and that checkout is
+  // being closed.
+  leavingCheckout?: boolean
   selection: "free" | "pro"
   cadence: PlanCadence
   busy: boolean
@@ -119,16 +122,20 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
           {choosing
             ? "Choose your plan."
-            : pending
-              ? "We’re checking your payment"
-              : "You’re almost ready."}
+            : props.leavingCheckout
+              ? "Returning to plans"
+              : pending
+                ? "We’re checking your payment"
+                : "You’re almost ready."}
         </h1>
         <p className="text-muted-foreground mt-4 max-w-2xl">
           {choosing
             ? "Start small or build at scale. Choose the plan that fits your team."
-            : pending
-              ? "Your account is ready. We’re confirming your Pro payment before finishing setup."
-              : "Add a payment method for pay-as-you-go usage, or start with your trial credit. No subscription fee."}
+            : props.leavingCheckout
+              ? "You left checkout. We’re closing it so you can choose a plan."
+              : pending
+                ? "Your account is ready. We’re confirming your Pro payment before finishing setup."
+                : "Add a payment method for pay-as-you-go usage, or start with your trial credit. No subscription fee."}
         </p>
 
         {error ? (

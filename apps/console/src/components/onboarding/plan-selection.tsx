@@ -37,7 +37,10 @@ export function PlanSelection({
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [closingCheckout, setClosingCheckout] = useState(false)
   const inFlight = useRef(false)
+  // Stripe's Back link returns here with billing=cancel. Act on it once.
+  const leftCheckout = useRef(billingReturn === "cancel")
   const mounted = useRef(true)
   const completionSent = useRef(false)
   const navigating = useRef(false)
@@ -132,13 +135,14 @@ export function PlanSelection({
   )
 
   const checkPayment = useCallback(
-    (restart = false) =>
+    (restart = false, stayOffCheckout = false) =>
       run(async () => {
         const latest = await refresh()
         if (latest.state === "pending") {
           const outcome = await recoverProPayment(initial.teamKey, restart)
           if (isStripeCheckoutUrl(outcome)) {
-            navigate(outcome)
+            // The customer just left this checkout; don't send them back.
+            if (!stayOffCheckout) navigate(outcome)
             return
           }
           const recovered = await refresh()
@@ -179,7 +183,20 @@ export function PlanSelection({
 
   useEffect(() => {
     if (context.state !== "pending") return
-    void checkPayment()
+    if (leftCheckout.current) {
+      // The customer left checkout without paying. Close that attempt now, as
+      // "Cancel checkout and change plan" does, so they get the plans back
+      // instead of waiting on a payment they did not make. A payment that did
+      // complete still comes back as pending or committed from the backend.
+      leftCheckout.current = false
+      const url = new URL(window.location.href)
+      url.searchParams.delete("billing")
+      window.history.replaceState(window.history.state, "", url)
+      setClosingCheckout(true)
+      void checkPayment(true, true).finally(() => {
+        if (mounted.current) setClosingCheckout(false)
+      })
+    } else void checkPayment()
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void checkPayment()
     }, 5000)
@@ -266,6 +283,7 @@ export function PlanSelection({
   return (
     <PlanSelectionView
       step={step}
+      leavingCheckout={closingCheckout && step === "payment-pending"}
       offers={offers}
       selection={selection}
       cadence={cadence}
