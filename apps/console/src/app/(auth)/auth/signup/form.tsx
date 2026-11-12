@@ -1,6 +1,7 @@
 "use client"
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
+import type { Session } from "@supabase/supabase-js"
 import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
@@ -14,7 +15,11 @@ import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
-import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import {
+  SIGNUP_OFFER_PARAM,
+  isSelfServeSignupOffer,
+  signInOfferDestination,
+} from "@/lib/auth/signup-offer"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
@@ -147,6 +152,9 @@ const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
 
 // Matches the server-side cooldown between confirmation emails.
 const RESEND_COOLDOWN_SECONDS = 60
+// How often a waiting "Check your email" view looks for the session that a
+// confirmation in another tab of this browser leaves behind.
+const CONFIRMATION_CHECK_INTERVAL_MS = 3000
 const BOT_CHECK_UNAVAILABLE =
   "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
 
@@ -215,6 +223,7 @@ export default function SignUpContent() {
     text: string
     error: boolean
   } | null>(null)
+  const [confirmedElsewhere, setConfirmedElsewhere] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
   const router = useRouter()
@@ -400,6 +409,53 @@ export default function SignUpContent() {
     setResendNotice(null)
   }
 
+  // The sign-in page sends a signed-in visitor to the same place.
+  const confirmedDestination =
+    nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
+      ? signInOfferDestination(rawOffer)
+      : nextUrl
+
+  // A confirmation link opened in another tab of this browser signs that tab
+  // in and leaves the session cookies here too. Follow them on to the next
+  // step instead of waiting on "Check your email" for a click on "Sign in".
+  useEffect(() => {
+    if (!emailStatus || !submittedEmail) return
+    const expected = submittedEmail.trim().toLowerCase()
+    let supabase: ReturnType<typeof createBrowserClient>
+    try {
+      supabase = createBrowserClient()
+    } catch {
+      return
+    }
+    let following = false
+    const follow = (session: Session | null) => {
+      // Only the account this tab created counts, not one already signed in.
+      if (following || session?.user.email?.toLowerCase() !== expected) return
+      following = true
+      setConfirmedElsewhere(true)
+      window.location.replace(confirmedDestination)
+    }
+    const check = () => {
+      if (following || document.visibilityState !== "visible") return
+      void supabase.auth
+        .getSession()
+        .then(({ data }) => follow(data.session))
+        .catch(() => undefined)
+    }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => follow(session))
+    const timer = setInterval(check, CONFIRMATION_CHECK_INTERVAL_MS)
+    document.addEventListener("visibilitychange", check)
+    window.addEventListener("focus", check)
+    return () => {
+      subscription.unsubscribe()
+      clearInterval(timer)
+      document.removeEventListener("visibilitychange", check)
+      window.removeEventListener("focus", check)
+    }
+  }, [emailStatus, submittedEmail, confirmedDestination])
+
   const resendControls = (
     <>
       <Button
@@ -571,7 +627,17 @@ export default function SignUpContent() {
             />
           </Link>
         </div>
-        {emailStatus === "sent" ? (
+        {confirmedElsewhere ? (
+          <>
+            <h1 className="text-center text-sm font-medium text-foreground">
+              Email verified
+            </h1>
+            <output className="mt-2 flex items-center justify-center gap-2 text-center text-xs leading-relaxed text-muted">
+              <Spinner />
+              Taking you to Superserve...
+            </output>
+          </>
+        ) : emailStatus === "sent" ? (
           <>
             <h1 className="text-center text-sm font-medium text-foreground">
               Check Your Email

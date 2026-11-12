@@ -60,10 +60,24 @@ vi.mock("next/script", () => ({
 }))
 
 const mockSignInWithOAuth = vi.fn()
+type MockSession = { user: { email?: string } } | null
+const mockGetSession = vi.fn<() => Promise<{ data: { session: MockSession } }>>(
+  () => Promise.resolve({ data: { session: null } }),
+)
+const mockUnsubscribe = vi.fn()
+let authStateListener: ((event: string, session: MockSession) => void) | null =
+  null
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
     auth: {
       signInWithOAuth: mockSignInWithOAuth,
+      getSession: () => mockGetSession(),
+      onAuthStateChange: (
+        listener: (event: string, session: MockSession) => void,
+      ) => {
+        authStateListener = listener
+        return { data: { subscription: { unsubscribe: mockUnsubscribe } } }
+      },
     },
   }),
 }))
@@ -171,6 +185,10 @@ describe("SignUpPage", () => {
       signupAttemptId: "attempt-default",
     })
     mockSignInWithOAuth.mockReset()
+    mockGetSession.mockReset()
+    mockGetSession.mockResolvedValue({ data: { session: null } })
+    mockUnsubscribe.mockReset()
+    authStateListener = null
     mockEnsureFingerprintSignupEventId.mockReset()
     mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
     mockCapture.mockReset()
@@ -1106,6 +1124,135 @@ describe("SignUpPage", () => {
 
       expect(screen.getByPlaceholderText("Email")).toHaveValue("test@test.com")
       expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled()
+    })
+  })
+
+  describe("confirmation in another tab", () => {
+    let mockReplace: ReturnType<typeof vi.spyOn>
+
+    const signUp = async (email = "New.User@Example.com") => {
+      await user.type(
+        await screen.findByPlaceholderText("Full Name"),
+        "Test User",
+      )
+      await user.type(screen.getByPlaceholderText("Email"), email)
+      await user.type(screen.getByPlaceholderText("Password"), "Password123")
+      await user.type(
+        screen.getByPlaceholderText("Confirm Password"),
+        "Password123",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign Up" }))
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+    }
+
+    beforeEach(() => {
+      mockReplace = vi
+        .spyOn(window.location, "replace")
+        .mockImplementation(() => {})
+      mockSignUpWithEmail.mockResolvedValue({ success: true })
+    })
+
+    afterEach(() => {
+      mockReplace.mockRestore()
+      vi.useRealTimers()
+    })
+
+    it("moves on once the new account signs in from another tab", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      render(<SignUpPage />)
+      await signUp()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000)
+      })
+      expect(mockReplace).not.toHaveBeenCalled()
+
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: { email: "new.user@example.com" } } },
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000)
+      })
+
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+      expect(mockReplace).toHaveBeenCalledWith("/")
+      expect(screen.getByText("Email verified")).toBeInTheDocument()
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Taking you to Superserve...",
+      )
+      expect(screen.queryByText("Check Your Email")).not.toBeInTheDocument()
+    })
+
+    it("moves on when the other tab reports the sign-in", async () => {
+      mockSearchParams = new URLSearchParams({ next: "/yc/claim" })
+      render(<SignUpPage />)
+      await signUp()
+
+      act(() => {
+        authStateListener?.("SIGNED_IN", {
+          user: { email: "new.user@example.com" },
+        })
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/yc/claim")
+    })
+
+    it("checks again when the user comes back to this tab", async () => {
+      render(<SignUpPage />)
+      await signUp()
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: { email: "new.user@example.com" } } },
+      })
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"))
+      })
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+    })
+
+    it("sends a plan offer to the page that sign-in uses", async () => {
+      mockSearchParams = new URLSearchParams({ offer: "pro_monthly" })
+      render(<SignUpPage />)
+      await signUp()
+
+      act(() => {
+        authStateListener?.("SIGNED_IN", {
+          user: { email: "new.user@example.com" },
+        })
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/billing/pro/")
+    })
+
+    it("ignores a session for another account", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: { email: "someone.else@example.com" } } },
+      })
+      render(<SignUpPage />)
+      await signUp()
+
+      act(() => {
+        authStateListener?.("INITIAL_SESSION", {
+          user: { email: "someone.else@example.com" },
+        })
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9_000)
+      })
+
+      expect(mockReplace).not.toHaveBeenCalled()
+      expect(screen.getByText("Check Your Email")).toBeInTheDocument()
+    })
+
+    it("stops watching when the user starts over", async () => {
+      render(<SignUpPage />)
+      await signUp()
+      expect(authStateListener).not.toBeNull()
+
+      await user.click(screen.getByRole("button", { name: "Start over" }))
+
+      expect(mockUnsubscribe).toHaveBeenCalled()
     })
   })
 
