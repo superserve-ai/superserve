@@ -1,0 +1,213 @@
+---
+title: "Hugging Face TRL"
+sidebarTitle: "Hugging Face TRL"
+description: Score model-generated code in Superserve sandboxes as the reward function for TRL GRPO training.
+icon: "/logos/integrations/huggingface.svg"
+---
+
+[TRL](https://huggingface.co/docs/trl) is Hugging Face's library for post-training language models. Its `GRPOTrainer` trains a model with Group Relative Policy Optimization: for each prompt it samples a group of completions, scores each one with your reward functions, and moves the model toward the completions that scored above the group average.
+
+For code tasks, a good reward is "does the code pass the tests?". That means running code the model just wrote, often thousands of times per training run. This page builds a reward function that runs each completion in its own Superserve sandbox, so untrusted code never runs on your training machine.
+
+## Setup
+
+```bash
+pip install trl superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+TRL needs Python 3.11 or later and installs PyTorch and Transformers. See [API keys](/api-key) to create a Superserve API key.
+
+## How it works
+
+TRL calls a reward function once per batch with the completions and every extra column of the dataset as keyword arguments. The reward function on this page:
+
+1. Extracts the code from the first fenced Python code block in each completion.
+2. Appends a line that prints the result of the problem's test expression as JSON.
+3. Runs the program in a new sandbox with no internet access, then kills the sandbox. A thread pool scores several completions at the same time.
+4. Returns `1.0` if the program exits with status 0 and its last line of output matches the expected result, and `0.0` otherwise.
+
+## Add the reward function
+
+Save this file as `code_reward.py`. The highlighted lines are the Superserve calls: create a sandbox, write the program, run it, and kill the sandbox.
+
+```python code_reward.py {28-40}
+import json
+import re
+from concurrent.futures import ThreadPoolExecutor
+from typing import Any
+
+import httpx
+from superserve import (
+    CommandResult,
+    NetworkConfig,
+    RateLimitError,
+    Sandbox,
+    SandboxError,
+    SandboxTimeoutError,
+    ServerError,
+)
+
+MAX_SANDBOXES = 8  # completions scored at the same time
+CODE_BLOCK = re.compile(r"```(?:python)?\n(.*?)```", re.DOTALL)
+TRANSIENT_ERRORS = (RateLimitError, ServerError, SandboxTimeoutError)
+
+
+def extract_code(text: str) -> str:
+    match = CODE_BLOCK.search(text)
+    return match.group(1) if match else text
+
+
+def run_in_sandbox(program: str) -> CommandResult:
+    sandbox = Sandbox.create(
+        name="grpo-reward",
+        network=NetworkConfig(deny_out=["0.0.0.0/0"]),
+        timeout_seconds=300,
+        auto_delete_seconds=0,
+    )
+    try:
+        sandbox.files.write("/tmp/solution.py", program)
+        return sandbox.commands.run(
+            "timeout -s KILL 10 python3 /tmp/solution.py", timeout_seconds=30
+        )
+    finally:
+        sandbox.kill()
+
+
+def is_transient(error: SandboxError) -> bool:
+    # Network failures arrive as a SandboxError caused by an httpx error.
+    return isinstance(error, TRANSIENT_ERRORS) or isinstance(
+        error.__cause__, httpx.HTTPError
+    )
+
+
+def score(code: str, test: str, expected: str) -> float | None:
+    try:
+        result = run_in_sandbox(f"{code}\n\nimport json\nprint(json.dumps({test}))\n")
+    except SandboxError as error:
+        if is_transient(error):
+            return None  # TRL leaves completions with no score out of the update
+        raise
+
+    # The expected value never enters the sandbox, so the code cannot print it
+    # without computing it.
+    last_line = result.stdout.rstrip().rpartition("\n")[2]
+    try:
+        passed = result.exit_code == 0 and json.loads(last_line) == json.loads(expected)
+    except (ValueError, RecursionError):  # output that is not valid JSON
+        passed = False
+    return 1.0 if passed else 0.0
+
+
+def code_reward(
+    completions: list[list[dict[str, str]]],
+    test: list[str],
+    expected: list[str],
+    **kwargs: Any,
+) -> list[float | None]:
+    codes = [extract_code(completion[0]["content"]) for completion in completions]
+    with ThreadPoolExecutor(max_workers=MAX_SANDBOXES) as pool:
+        return list(pool.map(score, codes, test, expected))
+```
+
+Each sandbox blocks all outbound traffic with `deny_out=["0.0.0.0/0"]`, so generated code cannot download packages or send data out. `timeout -s KILL 10` stops code that never ends, such as an infinite loop, after 10 seconds. If your training process crashes before `kill()` runs, the sandbox auto-pauses after `timeout_seconds`, and `auto_delete_seconds=0` deletes it at once. See [Networking](/sandbox/networking) and [Lifecycle](/sandbox/lifecycle).
+
+The expected result stays on your training machine and never goes into the sandbox. Code that exits early, or reads its own file, cannot print a passing result without computing it.
+
+If a sandbox call fails with a rate-limit, server, timeout, or network error, `score` returns `None` instead of `0.0`. Other errors, such as an invalid API key, still raise and stop training. TRL 1.6 and later leave a completion with no score out of the policy update, so a temporary outage does not teach the model that correct code is wrong.
+
+## Train with GRPO
+
+Save this file as `train.py`, next to `code_reward.py`. TRL passes the `test` and `expected` columns of the dataset to `code_reward` as arguments with the same names, one entry for each completion.
+
+```python train.py
+from datasets import Dataset
+from trl import GRPOConfig, GRPOTrainer
+
+from code_reward import code_reward
+
+# Each problem: task, test expression, expected result of the test as JSON.
+problems = [
+    (
+        "is_prime(n) that returns True if n is a prime number.",
+        "[is_prime(97), is_prime(1), is_prime(91)]",
+        "[true, false, false]",
+    ),
+    (
+        "roman(n) that converts an integer to a Roman numeral.",
+        "[roman(4), roman(1994)]",
+        '["IV", "MCMXCIV"]',
+    ),
+    (
+        "flatten(xs) that flattens arbitrarily nested lists.",
+        "flatten([1, [2, [3, [4]]], []])",
+        "[1, 2, 3, 4]",
+    ),
+    (
+        "median(xs) that returns the median of a list of numbers.",
+        "[median([3, 1, 2]), median([4, 1, 3, 2])]",
+        "[2, 2.5]",
+    ),
+]
+dataset = Dataset.from_list(
+    [
+        {
+            "prompt": [
+                {
+                    "role": "user",
+                    "content": f"Write a Python function {task} "
+                    "Reply with only the code in one ```python block.",
+                }
+            ],
+            "test": test,
+            "expected": expected,
+        }
+        for task, test, expected in problems
+    ]
+)
+
+trainer = GRPOTrainer(
+    model="Qwen/Qwen2.5-0.5B-Instruct",
+    reward_funcs=code_reward,
+    args=GRPOConfig(
+        output_dir="grpo-code",
+        num_generations=4,
+        per_device_train_batch_size=4,
+        max_completion_length=256,
+        max_steps=50,
+        logging_steps=1,
+    ),
+    train_dataset=dataset,
+)
+trainer.train()
+```
+
+Run it:
+
+```bash
+python train.py
+```
+
+TRL logs the reward for each step as `rewards/code_reward/mean`. The model learns only from groups where some completions pass and others fail. When every completion in a group gets the same reward, `reward_std` is `0` and that group contributes no gradient. Add harder problems, or more `num_generations`, if most steps show this.
+
+<Note>
+  On a machine without a GPU, add `use_cpu=True` to `GRPOConfig`. A 0.5B model trains on CPU, but slowly.
+</Note>
+
+## Good to know
+
+- **Concurrency:** each completion uses one sandbox for a few seconds. `MAX_SANDBOXES` caps how many run at the same time. Keep it within your team's concurrent sandbox limit; limits depend on your team's plan.
+- **Dependencies:** the default sandbox has Python 3 and the standard library. If your tests import packages such as `numpy`, build a [template](/templates/overview) with them and pass `from_template=` to `Sandbox.create`.
+- **Partial credit:** when the test expression is a list, as in the `is_prime` problem, return the fraction of items that match the expected list instead of `1.0` or `0.0`.
+- **Other languages:** change the run command, for example to `node /tmp/solution.js`, and use a template that has the runtime.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="GRPO Trainer" icon="book" href="https://huggingface.co/docs/trl/grpo_trainer">
+    Read how GRPOTrainer samples completions and uses rewards.
+  </Card>
+  <Card title="Custom reward functions" icon="code" href="https://huggingface.co/docs/trl/grpo_trainer#using-a-custom-reward-function">
+    Review the arguments TRL passes to a reward function.
+  </Card>
+</CardGroup>

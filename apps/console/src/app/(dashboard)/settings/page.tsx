@@ -17,6 +17,7 @@ import type {
   BillingPricingRate,
   BillingSummaryResource,
 } from "@/lib/api/billing"
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { SETTINGS_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -51,6 +52,7 @@ export default function SettingsPage() {
   const [currentPassword, setCurrentPassword] = useState("")
   const [newPassword, setNewPassword] = useState("")
   const [confirmPassword, setConfirmPassword] = useState("")
+  const [newPasswordError, setNewPasswordError] = useState<string>()
   const [savingPassword, setSavingPassword] = useState(false)
 
   useEffect(() => {
@@ -102,12 +104,11 @@ export default function SettingsPage() {
       addToast("Current password is required", "error")
       return
     }
+    const passwordError = passwordRuleError(newPassword)
+    setNewPasswordError(passwordError ?? undefined)
+    if (passwordError) return
     if (newPassword !== confirmPassword) {
       addToast("Passwords do not match", "error")
-      return
-    }
-    if (newPassword.length < 8) {
-      addToast("Password must be at least 8 characters", "error")
       return
     }
     setSavingPassword(true)
@@ -122,9 +123,21 @@ export default function SettingsPage() {
         addToast("Current password is incorrect", "error")
         return
       }
+      // Auth checks current_password itself once "Require current password"
+      // is on, so a password-session access token alone cannot change the
+      // password. Auth skips the check for OTP, magic-link and recovery
+      // sessions.
       const { error } = await supabase.auth.updateUser({
         password: newPassword,
+        current_password: currentPassword,
       })
+      if (
+        error?.code === "current_password_invalid" ||
+        error?.code === "current_password_required"
+      ) {
+        addToast("Current password is incorrect", "error")
+        return
+      }
       if (error) throw error
       setCurrentPassword("")
       setNewPassword("")
@@ -223,7 +236,19 @@ export default function SettingsPage() {
                     value={newPassword}
                     onChange={(e) => setNewPassword(e.target.value)}
                     placeholder="••••••••"
+                    error={newPasswordError}
+                    aria-describedby={
+                      newPasswordError ? undefined : "settings-password-rule"
+                    }
                   />
+                  {!newPasswordError && (
+                    <p
+                      id="settings-password-rule"
+                      className="text-xs text-muted"
+                    >
+                      {PASSWORD_RULE_HINT}
+                    </p>
+                  )}
                 </Field>
                 <Field label="Confirm New Password">
                   <Input
@@ -270,11 +295,7 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="max-w-xl">
-            <Button
-              size="sm"
-              variant="outline"
-              render={<Link href="/user-management" />}
-            >
+            <Button size="sm" variant="outline" render={<Link href="/team" />}>
               Manage members
             </Button>
           </div>

@@ -22,6 +22,7 @@ import {
   TableCell,
 } from "@superserve/ui"
 import type { HTMLMotionProps } from "motion/react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
 
 import { AnimatedTableRow } from "@/components/animated-table-row"
@@ -70,7 +71,14 @@ export function SandboxTableRow({
         />
       </TableCell>
       <TableCell className="font-mono text-foreground/80">
-        {sandbox.name}
+        <Link
+          href={`/sandboxes/${sandbox.id}/`}
+          onClick={(e) => e.stopPropagation()}
+          onAuxClick={(e) => e.stopPropagation()}
+          className="hover:text-foreground hover:underline focus-visible:text-foreground focus-visible:underline focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+        >
+          {sandbox.name}
+        </Link>
       </TableCell>
       <TableCell>
         <Badge variant={STATUS_BADGE_VARIANT[sandbox.status]} dot>
@@ -81,7 +89,8 @@ export function SandboxTableRow({
         {sandbox.snapshot_id ? `${sandbox.snapshot_id.slice(0, 8)}...` : "-"}
       </TableCell> */}
       <TableCell className="font-mono text-xs text-muted tabular-nums">
-        {sandbox.vcpu_count}CPU | {sandbox.memory_mib}MB
+        {sandbox.vcpu_count}CPU | {sandbox.memory_mib}
+        {sandbox.memory_max_mib != null && `–${sandbox.memory_max_mib}`}MB
       </TableCell>
       <TableCell onClick={(e) => e.stopPropagation()}>
         <div className="flex items-center justify-end gap-1">

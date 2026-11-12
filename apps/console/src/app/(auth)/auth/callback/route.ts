@@ -151,6 +151,12 @@ export async function GET(request: Request) {
     | "email"
     | null
   let next = sanitizeNext(searchParams.get("next"))
+  // Set by the sign-in recovery options after a failed password sign-in.
+  const rawSignInRecovery = searchParams.get("sign_in_recovery")
+  const signInRecovery =
+    rawSignInRecovery === "email_link" || rawSignInRecovery === "google"
+      ? rawSignInRecovery
+      : null
 
   if (code || tokenHash) {
     const supabase = await createServerClient()
@@ -214,8 +220,12 @@ export async function GET(request: Request) {
 
     if (!error) {
       if (next === "/auth/reset-password" || type === "recovery") {
+        const invite = inviteReturnPath(searchParams.get("invite"))
         return NextResponse.redirect(
-          buildRedirectUrl(origin, "/auth/reset-password"),
+          buildRedirectUrl(
+            origin,
+            `/auth/reset-password${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
+          ),
         )
       }
 
@@ -739,6 +749,7 @@ export async function GET(request: Request) {
             ...(isNewUser && requestedOffer
               ? { requested_offer: requestedOffer }
               : {}),
+            ...(signInRecovery ? { sign_in_recovery: signInRecovery } : {}),
           },
         )
 

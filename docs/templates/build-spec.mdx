@@ -91,6 +91,17 @@ Templates specify the VM shape; sandboxes inherit these and cannot override them
 
 `memoryMib` takes a value in MiB (1 GiB = 1024 MiB). Limits depend on your team's plan. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
 
+### Growing memory
+
+Set `memoryMaxMib` to let sandboxes grow their memory while running, up to that ceiling. `memoryMib` stays the size a sandbox boots with. `memoryMaxMib` must be greater than `memoryMib`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128 MiB.
+
+```typescript
+memoryMib: 2048,
+memoryMaxMib: 8192,
+```
+
+Only sandboxes from a template built with `memoryMaxMib` set can grow; leave it out for a fixed memory size.
+
 ## Build error codes
 
 When a build lands on `failed`, `BuildError.code` carries one of these stable identifiers (the SDK parses it from the `"<code>: <detail>"` prefix on `errorMessage`):
