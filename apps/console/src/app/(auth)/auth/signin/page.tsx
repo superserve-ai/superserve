@@ -19,12 +19,14 @@ import {
   signInOfferDestination,
   isSelfServeSignupOffer,
 } from "@/lib/auth/signup-offer"
+import { clearFingerprintSignupCapture } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
+import { googleSignupAttemptForSignIn } from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
 
 type RecoveryOption = "magic_link" | "google" | "forgot_password"
@@ -217,8 +219,15 @@ function SignInContent() {
     setErrors({})
     try {
       const supabase = createBrowserClient()
-      const intentId = await beginGoogleSignIn()
+      // Run the sign-up check now, so a Google account that is new to
+      // Superserve finishes sign-up in this one trip to Google.
+      const [intentId, signupAttemptId] = await Promise.all([
+        beginGoogleSignIn(),
+        googleSignupAttemptForSignIn(),
+      ])
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      if (signupAttemptId)
+        callbackUrl.searchParams.set("signup_attempt_id", signupAttemptId)
       if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
       if (rawOffer && rawOffer !== requestedOffer)
         callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, rawOffer)
@@ -238,6 +247,8 @@ function SignInContent() {
       })
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })
+      } else if (signupAttemptId) {
+        clearFingerprintSignupCapture()
       }
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
@@ -248,7 +259,8 @@ function SignInContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      {showRecovery && RECAPTCHA_SITE_KEY && (
+      {/* Loaded up front: Continue with Google runs the sign-up check. */}
+      {RECAPTCHA_SITE_KEY && (
         <Script
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
           strategy="afterInteractive"

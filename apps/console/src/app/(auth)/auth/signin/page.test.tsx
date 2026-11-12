@@ -120,6 +120,14 @@ const mockBeginGoogleSignIn = vi.fn()
 vi.mock("./google-action", () => ({
   beginGoogleSignIn: () => mockBeginGoogleSignIn(),
 }))
+const mockGoogleSignupAttempt = vi.fn()
+vi.mock("./google-signup-check", () => ({
+  googleSignupAttemptForSignIn: () => mockGoogleSignupAttempt(),
+}))
+const mockClearFingerprintCapture = vi.fn()
+vi.mock("@/lib/fingerprint/client", () => ({
+  clearFingerprintSignupCapture: () => mockClearFingerprintCapture(),
+}))
 const mockSendSignInLink = vi.fn()
 vi.mock("./link-action", () => ({
   sendSignInLink: (...args: unknown[]) => mockSendSignInLink(...args),
@@ -170,6 +178,8 @@ describe("SignInPage", () => {
     mockSignInWithOAuth.mockReset()
     mockSignOut.mockReset()
     mockBeginGoogleSignIn.mockReset().mockResolvedValue("signin-origin")
+    mockGoogleSignupAttempt.mockReset().mockResolvedValue(undefined)
+    mockClearFingerprintCapture.mockReset()
     mockCapture.mockReset()
     mockSendSignInLink.mockReset().mockResolvedValue({ success: true })
     searchParamsMap = {}
@@ -461,6 +471,53 @@ describe("SignInPage", () => {
     )
     expect(callback.pathname).toBe("/auth/callback")
     expect(callback.searchParams.get("next")).toBe(next)
+  })
+
+  it("runs the sign-up check first so a new Google account needs one trip", async () => {
+    mockGoogleSignupAttempt.mockResolvedValue("attempt-123")
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    expect(mockGoogleSignupAttempt).toHaveBeenCalledTimes(1)
+    const { options } = mockSignInWithOAuth.mock.calls[0][0]
+    const callback = new URL(options.redirectTo)
+    expect(callback.searchParams.get("signup_attempt_id")).toBe("attempt-123")
+    expect(callback.searchParams.get("google_signin_intent")).toBe(
+      "signin-origin",
+    )
+    // Sign-in still lets the user pick an account on the first trip.
+    expect(options.queryParams).toEqual({ prompt: "select_account" })
+    expect(mockClearFingerprintCapture).toHaveBeenCalledTimes(1)
+  })
+
+  it("continues Google sign-in without a sign-up attempt when the check fails", async () => {
+    mockGoogleSignupAttempt.mockResolvedValue(undefined)
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    render(<SignInPage />)
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+    const callback = new URL(
+      mockSignInWithOAuth.mock.calls[0][0].options.redirectTo,
+    )
+    expect(callback.searchParams.has("signup_attempt_id")).toBe(false)
+    expect(mockClearFingerprintCapture).not.toHaveBeenCalled()
+    expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
+  })
+
+  it("keeps the fingerprint capture when Google OAuth does not start", async () => {
+    mockGoogleSignupAttempt.mockResolvedValue("attempt-123")
+    mockSignInWithOAuth.mockResolvedValue({ error: new Error("oauth down") })
+    render(<SignInPage />)
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+    expect(await screen.findByText(/Error signing in/)).toBeInTheDocument()
+    expect(mockClearFingerprintCapture).not.toHaveBeenCalled()
   })
 
   it("continues Google sign-in when optional origin retention is unavailable", async () => {

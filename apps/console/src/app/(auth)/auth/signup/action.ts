@@ -242,6 +242,8 @@ export const beginGoogleSignup = async (
   turnstileToken?: string,
   captureResult?: SignupFingerprintResult,
   browserDiagnostics?: BrowserFingerprintDiagnostics,
+  // Which page ran the check. Only labels events; it grants nothing.
+  entryPoint?: "signin" | "signup",
 ): Promise<
   | { success: true; signupAttemptId: string }
   | {
@@ -253,6 +255,7 @@ export const beginGoogleSignup = async (
   const capture =
     captureResult && "attemptId" in captureResult ? captureResult : undefined
   const signupAttemptId = crypto.randomUUID()
+  const entry_point = entryPoint === "signin" ? "signin" : "signup"
   await beginSignupEvidenceAttempt(signupAttemptId)
   const clientContext = await readCloudflareClientContext()
   const fingerprintEventId =
@@ -287,6 +290,7 @@ export const beginGoogleSignup = async (
     provider: "recaptcha",
     signup_attempt_id: signupAttemptId,
     signup_method: "google",
+    entry_point,
     verified: recaptcha.verified,
     provider_outcome: recaptcha.providerOutcome,
     reason: "reason" in recaptcha ? recaptcha.reason : null,
@@ -311,6 +315,7 @@ export const beginGoogleSignup = async (
       {
         reason: recaptchaBlock.reason,
         stage: "captcha_verification",
+        entry_point,
       },
     )
     console.warn("Google signup blocked by reCAPTCHA", {
@@ -351,6 +356,7 @@ export const beginGoogleSignup = async (
       signupAttemptId,
       {
         stage: "captcha_verification",
+        entry_point,
       },
     )
     console.info("Google signup CAPTCHA verified; pre-auth proof issued")
@@ -365,6 +371,7 @@ export const beginGoogleSignup = async (
         reason:
           error instanceof Error ? error.message : "proof_issuance_failed",
         stage: "proof_issuance",
+        entry_point,
       },
     )
     console.error("Google signup proof issuance failed", error)
