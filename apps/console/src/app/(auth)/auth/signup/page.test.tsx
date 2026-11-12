@@ -1245,6 +1245,48 @@ describe("SignUpPage", () => {
       expect(screen.getByText("Check Your Email")).toBeInTheDocument()
     })
 
+    it("does not follow a next path that leaves the site", async () => {
+      mockSearchParams = new URLSearchParams({ next: "/\\attacker.example" })
+      render(<SignUpPage />)
+      await signUp()
+
+      act(() => {
+        authStateListener?.("SIGNED_IN", {
+          user: { email: "new.user@example.com" },
+        })
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/")
+    })
+
+    it("ignores a session check that ends after the user starts over", async () => {
+      let resolveSession: (value: {
+        data: { session: MockSession }
+      }) => void = () => {}
+      mockGetSession.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveSession = resolve
+          }),
+      )
+      render(<SignUpPage />)
+      await signUp()
+      act(() => {
+        window.dispatchEvent(new Event("focus"))
+      })
+      await waitFor(() => expect(mockGetSession).toHaveBeenCalled())
+
+      await user.click(screen.getByRole("button", { name: "Start over" }))
+      await act(async () => {
+        resolveSession({
+          data: { session: { user: { email: "new.user@example.com" } } },
+        })
+      })
+
+      expect(mockReplace).not.toHaveBeenCalled()
+      expect(screen.queryByText("Email verified")).not.toBeInTheDocument()
+    })
+
     it("stops watching when the user starts over", async () => {
       render(<SignUpPage />)
       await signUp()

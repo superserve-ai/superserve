@@ -409,11 +409,19 @@ export default function SignUpContent() {
     setResendNotice(null)
   }
 
-  // The sign-in page sends a signed-in visitor to the same place.
+  // The sign-in page sends a signed-in visitor to the same place, and it
+  // follows only a plain local path. A browser reads "/\\host" as another
+  // site, so a backslash or control character falls back to "/".
+  const localNext =
+    nextUrl.startsWith("/") &&
+    !nextUrl.startsWith("//") &&
+    !/[\\\u0000-\u0020\u007f]/.test(nextUrl)
+      ? nextUrl
+      : "/"
   const confirmedDestination =
-    nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
+    localNext === "/" && isSelfServeSignupOffer(rawOffer)
       ? signInOfferDestination(rawOffer)
-      : nextUrl
+      : localNext
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
@@ -428,9 +436,15 @@ export default function SignUpContent() {
       return
     }
     let following = false
+    let disposed = false
     const follow = (session: Session | null) => {
       // Only the account this tab created counts, not one already signed in.
-      if (following || session?.user.email?.toLowerCase() !== expected) return
+      if (
+        disposed ||
+        following ||
+        session?.user.email?.toLowerCase() !== expected
+      )
+        return
       following = true
       setConfirmedElsewhere(true)
       window.location.replace(confirmedDestination)
@@ -449,6 +463,7 @@ export default function SignUpContent() {
     document.addEventListener("visibilitychange", check)
     window.addEventListener("focus", check)
     return () => {
+      disposed = true
       subscription.unsubscribe()
       clearInterval(timer)
       document.removeEventListener("visibilitychange", check)
