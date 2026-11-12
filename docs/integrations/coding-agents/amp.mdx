@@ -63,7 +63,7 @@ sandbox.commands.run("curl -fsSL https://ampcode.com/install.sh | bash")
 Amp reads `AMP_API_KEY` from the environment. [Environment variables](/sandbox/environment-variables) are plain text, so any process in the sandbox, including the agent, can read the token. Revoke it on the [access token](https://ampcode.com/settings/security#access-token) page if it leaks.
 
 <Warning>
-Don't bind the token as a [secret](/secrets/overview). Amp runs each agent turn over a WebSocket connection to `ampcode.com`, and secrets don't support WebSocket connections, so Amp exits with `WebSocket connection failed`.
+Don't bind the token as a [secret](/secrets/overview). Amp runs each agent turn over a WebSocket connection to `ampcode.com`. When a secret is bound, the sandbox sends outbound HTTPS traffic through the secrets proxy, and Amp's WebSocket client can't connect through it. Amp then exits with `WebSocket connection failed`.
 </Warning>
 
 Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `amp`.
