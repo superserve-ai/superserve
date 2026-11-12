@@ -240,6 +240,15 @@ describe("resource ranges follow the team's plan caps", () => {
     ).toBeInTheDocument()
   })
 
+  it("keeps a selection that a raised cap still allows", async () => {
+    mocks.diskCap = 51200
+    const view = render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.keyDown(spin("Disk"), { key: "End" })
+    mocks.diskCap = 102400
+    view.rerender(<CreateTemplateDialog open hideTrigger />)
+    expect(await submit()).toMatchObject({ disk_mib: 51200 })
+  })
+
   it("clamps a selection the shrinking cap no longer allows", async () => {
     const view = render(<CreateTemplateDialog open hideTrigger />)
     press("Increase Memory", 2)

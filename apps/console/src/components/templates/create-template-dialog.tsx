@@ -47,15 +47,21 @@ function limitOf(cap: number | null | undefined, apiMax: number): number {
 }
 
 // Doubling steps from the API minimum that end exactly at the limit, so a
-// team's cap is always selectable even when it isn't a power of two.
-function doublingSteps(min: number, limit: number): number[] {
+// team's cap is always selectable even when it isn't a power of two. A
+// current pick still inside the range is kept, so a raised cap doesn't move it.
+function doublingSteps(min: number, limit: number, keep?: number): number[] {
   const steps: number[] = []
   for (let v = min; v < limit; v *= 2) steps.push(v)
   steps.push(Math.max(min, limit))
-  return steps
+  if (keep !== undefined && keep > min && keep < limit) steps.push(keep)
+  return [...new Set(steps)].toSorted((a, b) => a - b)
 }
 
-function maxMemorySteps(memory: number, memoryLimit: number): number[] {
+function maxMemorySteps(
+  memory: number,
+  memoryLimit: number,
+  keep: number,
+): number[] {
   const top = Math.min(4 * memory, memoryLimit)
   const highest =
     memory +
@@ -63,7 +69,14 @@ function maxMemorySteps(memory: number, memoryLimit: number): number[] {
   const candidates = doublingSteps(API_MIN_MEMORY_MIB, top).filter(
     (s) => s < highest && (s - memory) % MEMORY_GROWTH_STEP_MIB === 0,
   )
-  return [...new Set([...candidates, highest])].filter((s) => s > memory)
+  return [...new Set([...candidates, keep, highest])]
+    .filter(
+      (s) =>
+        s > memory &&
+        s <= highest &&
+        (s - memory) % MEMORY_GROWTH_STEP_MIB === 0,
+    )
+    .toSorted((a, b) => a - b)
 }
 
 // The offered step closest to a pick from below, so a cap that shrinks under
@@ -235,8 +248,6 @@ export function CreateTemplateDialog({
     { length: Math.max(1, vcpuLimit) },
     (_, i) => i + 1,
   )
-  const memorySteps = doublingSteps(API_MIN_MEMORY_MIB, memoryLimit)
-  const diskSteps = doublingSteps(API_MIN_DISK_MIB, diskLimit)
 
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
@@ -253,10 +264,12 @@ export function CreateTemplateDialog({
   const [memoryMaxPick, setMemoryMax] = useState(2048)
   // Picks are clamped at render rather than rewritten, so a cap or boot size
   // change always shows, and submits, a shape the API accepts.
+  const memorySteps = doublingSteps(API_MIN_MEMORY_MIB, memoryLimit, memoryPick)
+  const diskSteps = doublingSteps(API_MIN_DISK_MIB, diskLimit, diskPick)
   const vcpu = clampTo(vcpuPick, vcpuSteps)
   const memory = clampTo(memoryPick, memorySteps)
   const disk = clampTo(diskPick, diskSteps)
-  const memoryMaxSteps = maxMemorySteps(memory, memoryLimit)
+  const memoryMaxSteps = maxMemorySteps(memory, memoryLimit, memoryMaxPick)
   const canGrow = memoryMaxSteps.length > 0
   // Drop the opt-in once there is no room to grow, so a later lower boot size
   // doesn't re-enable it unasked.
