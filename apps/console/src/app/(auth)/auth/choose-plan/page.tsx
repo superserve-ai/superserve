@@ -4,7 +4,7 @@ import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useRouter, useSearchParams } from "next/navigation"
-import posthog from "posthog-js"
+import posthog, { type CaptureOptions } from "posthog-js"
 import { Suspense, useEffect, useRef, useState } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
@@ -124,15 +124,67 @@ interface PickerView {
 function recordPickerView(
   recorded: { current: string | null },
   view: PickerView,
+  options?: CaptureOptions,
 ) {
   const key = JSON.stringify(view)
   if (recorded.current === key) return
   recorded.current = key
   try {
-    posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
+    if (options) posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view, options)
+    else posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
   } catch {
     /* Analytics never controls the picker. */
   }
+}
+
+// Records plan_picker_viewed once per picker state. The ref keeps StrictMode's
+// effect replay from recording the same state twice. view is null while the
+// state is still loading; fallback is then recorded if the picker changes
+// (identity), closes or the page unloads first, so no view is lost.
+function usePlanPickerView(
+  view: PickerView | null,
+  fallback: PickerView | null,
+  identity: string,
+) {
+  const recorded = useRef<string | null>(null)
+  const pending = useRef<{ identity: string; view: PickerView } | null>(null)
+  const mounted = useRef(false)
+  const viewKey = view && JSON.stringify(view)
+  const fallbackKey = fallback && JSON.stringify(fallback)
+  useEffect(() => {
+    const waiting = pending.current
+    pending.current = null
+    if (waiting && waiting.identity !== identity) {
+      recordPickerView(recorded, waiting.view)
+    }
+    if (viewKey) recordPickerView(recorded, JSON.parse(viewKey) as PickerView)
+    else if (fallbackKey) {
+      pending.current = {
+        identity,
+        view: JSON.parse(fallbackKey) as PickerView,
+      }
+    }
+  }, [identity, viewKey, fallbackKey])
+  useEffect(() => {
+    mounted.current = true
+    const flush = (options?: CaptureOptions) => {
+      const waiting = pending.current
+      pending.current = null
+      if (waiting) recordPickerView(recorded, waiting.view, options)
+    }
+    // React cleanup does not run when the document unloads.
+    const onPageHide = () => flush({ transport: "sendBeacon" })
+    window.addEventListener("pagehide", onPageHide)
+    return () => {
+      window.removeEventListener("pagehide", onPageHide)
+      mounted.current = false
+      // StrictMode runs this cleanup and mounts again at once, so only a
+      // picker that is still unmounted after the timeout has really closed.
+      setTimeout(() => {
+        if (!mounted.current) flush()
+      }, 0)
+    }
+  }, [])
 }
 
 function ChoosePlanContent() {
@@ -163,46 +215,25 @@ function ChoosePlanContent() {
   // New teams start on a trial, so this picker, not /onboarding/plan, is where
   // most customers first see plans. $pageview alone does not say why.
   // plan_options_requested says the page asked for plans; billing permissions
-  // or an empty catalog can still hide them. The ref keeps StrictMode's effect
-  // replay from recording the same picker state twice. A trial_ended picker
-  // waits for the team's trial outcome so its reason says which one it is.
-  // If the picker changes or closes first, the view is still recorded, with
-  // an unknown trial reason.
-  const recordedView = useRef<string | null>(null)
-  const pendingView = useRef<PickerView | null>(null)
-  useEffect(() => {
-    if (settling) return
-    const view: PickerView = {
-      reason: trialEnded
-        ? TRIAL_VIEW_REASON[trialOutcome ?? "unknown"]
-        : reason,
-      requested_offer: preselected ?? "not_specified",
-      plan_options_requested: picking,
-    }
-    const pending = pendingView.current
-    pendingView.current = null
-    if (trialEnded && trialOutcome === undefined) {
-      pendingView.current = view
-      return
-    }
-    if (pending && !trialEnded) recordPickerView(recordedView, pending)
-    recordPickerView(recordedView, view)
-  }, [settling, reason, preselected, picking, trialEnded, trialOutcome])
-  const mounted = useRef(false)
-  useEffect(() => {
-    mounted.current = true
-    return () => {
-      mounted.current = false
-      // StrictMode runs this cleanup and mounts again at once, so only a
-      // picker that is still unmounted after the timeout has really closed.
-      setTimeout(() => {
-        const pending = pendingView.current
-        if (mounted.current || !pending) return
-        pendingView.current = null
-        recordPickerView(recordedView, pending)
-      }, 0)
-    }
-  }, [])
+  // or an empty catalog can still hide them. A trial_ended picker waits for
+  // the team's trial outcome so its reason says which one it is, and records
+  // an unknown trial reason if it changes or closes first.
+  const shown = {
+    requested_offer: preselected ?? "not_specified",
+    plan_options_requested: picking,
+  }
+  usePlanPickerView(
+    settling || (trialEnded && trialOutcome === undefined)
+      ? null
+      : {
+          ...shown,
+          reason: trialEnded
+            ? TRIAL_VIEW_REASON[trialOutcome ?? "unknown"]
+            : reason,
+        },
+    settling ? null : { ...shown, reason: TRIAL_VIEW_REASON.unknown },
+    JSON.stringify({ ...shown, reason, team: locator?.team ?? null }),
+  )
   if (settling) return null
 
   return (

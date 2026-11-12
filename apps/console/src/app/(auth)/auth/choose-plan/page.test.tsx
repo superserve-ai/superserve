@@ -320,6 +320,55 @@ describe("plan picker", () => {
     })
   })
 
+  it("records a waiting trial_ended view when the picker changes first", async () => {
+    trial.never = true
+    const at = (offer: string) =>
+      new URLSearchParams({
+        reason: "trial_ended",
+        offer,
+        account: "u1",
+        team: "use:team-1",
+      })
+    params = at("developer")
+    const { rerender, unmount } = render(<ChoosePlanPage />)
+    await screen.findByRole("button", { name: "Developer" })
+    params = at("pro_monthly")
+    rerender(<ChoosePlanPage />)
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1))
+    unmount()
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2))
+    expect(capture.mock.calls.map(([, view]) => view.requested_offer)).toEqual([
+      "developer",
+      "pro_monthly",
+    ])
+    expect(capture.mock.calls.map(([, view]) => view.reason)).toEqual([
+      "trial_reason_unknown",
+      "trial_reason_unknown",
+    ])
+  })
+
+  it("sends a waiting trial_ended view by beacon when the page unloads", async () => {
+    trial.never = true
+    params = new URLSearchParams({
+      reason: "trial_ended",
+      account: "u1",
+      team: "use:team-1",
+    })
+    render(<ChoosePlanPage />)
+    await screen.findByRole("button", { name: "Developer" })
+    window.dispatchEvent(new Event("pagehide"))
+    expect(capture).toHaveBeenCalledTimes(1)
+    expect(capture).toHaveBeenCalledWith(
+      "plan_picker_viewed",
+      {
+        reason: "trial_reason_unknown",
+        requested_offer: "not_specified",
+        plan_options_requested: true,
+      },
+      { transport: "sendBeacon" },
+    )
+  })
+
   it("records one picker view under StrictMode", async () => {
     params = new URLSearchParams({
       reason: "upgrade",
