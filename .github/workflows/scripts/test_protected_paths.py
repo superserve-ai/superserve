@@ -59,13 +59,31 @@ class EvaluateTest(unittest.TestCase):
 
 
 class RepositoryCodeownersTest(unittest.TestCase):
+    # Sensitive files that reviews found unowned. Dropping or narrowing the entry
+    # that covers one of them fails here instead of silently removing the gate.
+    MUST_BE_PROTECTED = [
+        "apps/console/src/app/(dashboard)/admin/billing/teams/[team_id]/actions.ts",
+        "apps/console/src/app/(public)/device/actions.ts",
+        "apps/console/src/lib/cells.ts",
+        "apps/console/src/lib/fingerprint/account-device-action.ts",
+        "apps/console/src/lib/recaptcha/verify.ts",
+    ]
+
+    @classmethod
+    def setUpClass(cls):
+        cls.rules = pp.parse_codeowners((ROOT / pp.CODEOWNERS).read_text())
+        cls.files = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, capture_output=True,
+                                   text=True).stdout.splitlines()
+
     def test_every_protected_pattern_matches_a_tracked_file(self):
         # A mistyped or stale pattern protects nothing and fails silently otherwise.
-        rules = pp.parse_codeowners((ROOT / pp.CODEOWNERS).read_text())
-        files = subprocess.run(["git", "ls-files"], cwd=ROOT, check=True, capture_output=True,
-                               text=True).stdout.splitlines()
-        stale = [pattern for regex, pattern, _ in rules if not any(regex.match(f) for f in files)]
+        stale = [pattern for regex, pattern, _ in self.rules if not any(regex.match(f) for f in self.files)]
         self.assertEqual(stale, [])
+
+    def test_known_sensitive_files_stay_protected(self):
+        for path in self.MUST_BE_PROTECTED:
+            self.assertIn(path, self.files, f"{path} moved: update this list and CODEOWNERS")
+            self.assertTrue(pp.owners_for(self.rules, path), f"{path} has no code owner")
 
 
 if __name__ == "__main__":
