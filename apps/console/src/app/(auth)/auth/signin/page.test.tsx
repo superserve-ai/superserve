@@ -421,6 +421,39 @@ describe("SignInPage", () => {
     ).toBeInTheDocument()
   })
 
+  it("clears the generic error alert while retrying and restores it on the same failure", async () => {
+    const failure = { error: { message: "Unexpected auth error" } }
+    const errorText =
+      "We couldn't sign you in. Try again, or continue with Google."
+    let resolveRetry!: (value: typeof failure) => void
+    mockSignInWithPassword.mockResolvedValueOnce(failure).mockReturnValueOnce(
+      new Promise<typeof failure>((resolve) => {
+        resolveRetry = resolve
+      }),
+    )
+    render(<SignInPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(errorText)
+    expect(screen.getAllByRole("alert")).toHaveLength(1)
+
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    await waitFor(() => expect(mockSignInWithPassword).toHaveBeenCalledTimes(2))
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+    resolveRetry(failure)
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(errorText)
+    expect(screen.getAllByRole("alert")).toHaveLength(1)
+  })
+
   it("offers Google after a generic error without showing recovery on a fresh page", async () => {
     mockSignInWithPassword.mockResolvedValue({
       error: {
@@ -926,6 +959,28 @@ describe("SignInPage", () => {
         method: "email_link",
         reason: "captcha_unavailable",
       })
+    })
+
+    it("preserves the form alert when a failed sign-in link adds a recovery alert", async () => {
+      mockSendSignInLink.mockResolvedValue({
+        success: false,
+        errorCode: "captcha_unavailable",
+      })
+      const region = await failPasswordSignIn()
+      const formAlert = screen.getByRole("alert")
+      expect(formAlert).toHaveTextContent("Invalid email or password.")
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      const linkAlert = await within(region).findByRole("alert")
+      expect(linkAlert).toHaveTextContent(
+        "We couldn't send the sign-in link. Try again in a minute, or continue with Google.",
+      )
+      expect(screen.getAllByRole("alert")).toHaveLength(2)
+      expect(screen.getByText("Invalid email or password.")).toBe(formAlert)
+      expect(formAlert).toHaveTextContent("Invalid email or password.")
     })
 
     it("locks the email field while a link request is pending", async () => {
