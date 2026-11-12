@@ -71,6 +71,7 @@ function missingPopupOverrides(source: string, popups: [string, string][]) {
       for (const selector of rule.selectors) {
         const values = overrides.get(selector) ?? new Map<string, string>()
         rule.walkDecls((decl) => {
+          if (decl.parent !== rule) return
           values.set(decl.prop, decl.value)
         })
         overrides.set(selector, values)
@@ -123,6 +124,18 @@ describe("reduced motion guards", () => {
         `.ss-popover-popup { transition: opacity 150ms ease-out; }
          .ss-popover-popup[data-starting-style],
          .ss-popover-popup[data-ending-style] { transform: none; }`,
+        [[".ss-popover-popup", "scale(1)"]],
+      ),
+    ).toEqual([".ss-popover-popup"])
+    expect(
+      missingPopupOverrides(
+        `@media (prefers-reduced-motion: reduce) {
+           .ss-popover-popup { transition: opacity 150ms ease-out; }
+           .ss-popover-popup[data-starting-style],
+           .ss-popover-popup[data-ending-style] {
+             &:hover { transform: none; }
+           }
+         }`,
         [[".ss-popover-popup", "scale(1)"]],
       ),
     ).toEqual([".ss-popover-popup"])
