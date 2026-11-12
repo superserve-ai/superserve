@@ -277,7 +277,7 @@ Keep the GitHub side safe too. Don't run untrusted pull requests with `pull_requ
 
 ## Limits and tips
 
-- **Timeouts in the SDK:** without a timeout, `commands.run()` gives up after 30 seconds and throws `TimeoutError` (`SandboxTimeoutError` in Python). Set `timeoutMs` (TypeScript) or `timeout_seconds` (Python) for builds and tests; a command that runs past it returns exit code `124` instead. See [Timeouts](/commands/overview#timeouts).
+- **Timeouts in the SDK:** without a timeout, `commands.run()` stops the command after 30 seconds. Without output callbacks, the SDK also stops waiting at 30 seconds and throws `TimeoutError` (`SandboxTimeoutError` in Python). With callbacks, the result has exit code `124`. Set `timeoutMs` (TypeScript) or `timeout_seconds` (Python) for builds and tests; a command that runs past it returns exit code `124`. See [Timeouts](/commands/overview#timeouts).
 - **Sandbox size:** a sandbox gets the vCPU and memory of its template, up to your plan's limit. See [resource limits](/templates/build-spec#resource-limits).
 - **Billing errors:** when the team's plan or trial doesn't allow a sandbox, `create` fails with a [`402` billing error](/errors#billing-errors-402) (`BillingError` in the SDKs). Its `code` says why, for example `trial_exhausted` or `sandbox_exceeds_plan_limits`.
 - **Exit codes:** the CLI's own errors use [exit codes](/cli#exit-codes) such as `4` for not found and `6` for rate limited. `exec` returns the command's exit code.
