@@ -101,7 +101,7 @@ export function useSandboxMemory(
     queryKey: [...sandboxKeys.detail(sandbox.id), "memory", queryScope],
     queryFn: () => getSandbox(sandbox.id),
     select: (s) => s.memory_current_mib ?? null,
-    enabled: growable && sandbox.status === "active",
+    enabled: growable,
     // The page's copy goes stale once the sandbox is paused or resumed
     // elsewhere, so each poll decides from its own latest response: often
     // while active, slowly while not, so a resume is picked up. Only a

@@ -433,22 +433,41 @@ describe("growable sandbox memory refresh", () => {
     expect(mockGet).toHaveBeenCalledTimes(calls)
   })
 
-  it("does not poll fixed-size or paused sandboxes", async () => {
+  it("never polls a fixed-size sandbox", async () => {
     const { wrapper } = createQueryWrapper()
     const { result } = renderHook(
-      () => ({
-        fixed: useSandboxMemory({ id: "sbx-2", status: "active" }),
-        paused: useSandboxMemory({
-          id: "sbx-3",
-          status: "paused",
-          memory_max_mib: 4096,
-        }),
-      }),
+      () => useSandboxMemory({ id: "sbx-2", status: "active" }),
       { wrapper },
     )
-    expect(result.current.fixed.fetchStatus).toBe("idle")
-    expect(result.current.paused.fetchStatus).toBe("idle")
-    expect(mockGet).not.toHaveBeenCalledWith("sbx-2")
-    expect(mockGet).not.toHaveBeenCalledWith("sbx-3")
+    expect(result.current.fetchStatus).toBe("idle")
+    expect(mockGet).not.toHaveBeenCalled()
+  })
+
+  it("checks a growable sandbox opened while paused, slowly", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const paused = {
+      id: "sbx-3",
+      name: "growable",
+      status: "paused",
+      vcpu_count: 2,
+      memory_mib: 1024,
+      memory_max_mib: 4096,
+      memory_current_mib: 2048,
+      metadata: {},
+      created_at: "2026-01-01T00:00:00Z",
+      access_token: "token-a",
+    } as SandboxResponse
+    mockGet.mockResolvedValue(paused)
+    const { wrapper } = createQueryWrapper()
+    renderHook(() => useSandboxMemory(paused), { wrapper })
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(30_000)
+    })
+    expect(mockGet).toHaveBeenCalledTimes(1)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(35_000)
+    })
+    expect(mockGet).toHaveBeenCalledTimes(2)
   })
 })
