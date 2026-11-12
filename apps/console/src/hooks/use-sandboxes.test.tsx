@@ -381,6 +381,46 @@ describe("growable sandbox memory refresh", () => {
     expect(mockGet).toHaveBeenCalledTimes(2)
   })
 
+  it("keeps polling through a transient error and stops once the sandbox is deleted", async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true })
+    const active = {
+      id: "sbx-5",
+      name: "growable",
+      status: "active",
+      vcpu_count: 2,
+      memory_mib: 1024,
+      memory_max_mib: 4096,
+      memory_current_mib: 2048,
+      metadata: {},
+      created_at: "2026-01-01T00:00:00Z",
+      access_token: "token-a",
+    } as SandboxResponse
+    mockGet.mockResolvedValue(active)
+    const { wrapper } = createQueryWrapper()
+    renderHook(() => useSandboxMemory(active), { wrapper })
+    await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1))
+
+    mockGet.mockRejectedValue(new ApiError(503, "unavailable", "Unavailable"))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000)
+    })
+    mockGet.mockResolvedValue(active)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000)
+    })
+    expect(mockGet).toHaveBeenCalledTimes(3)
+
+    mockGet.mockRejectedValue(new ApiError(404, "not_found", "Not found"))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000)
+    })
+    const calls = mockGet.mock.calls.length
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    expect(mockGet).toHaveBeenCalledTimes(calls)
+  })
+
   it("does not poll fixed-size or paused sandboxes", async () => {
     const { wrapper } = createQueryWrapper()
     const { result } = renderHook(
