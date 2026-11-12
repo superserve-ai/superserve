@@ -245,10 +245,11 @@ function SignInContent() {
           queryParams: { prompt: "select_account" },
         },
       })
+      // The capture is spent once Google has the attempt; a failed start keeps
+      // it for the next try.
+      if (!error && signupAttemptId) clearFingerprintSignupCapture()
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })
-      } else if (signupAttemptId) {
-        clearFingerprintSignupCapture()
       }
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
