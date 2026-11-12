@@ -34,7 +34,14 @@ template = Template.create(
 )
 ```
 
+```bash CLI
+superserve template create my-growable-env --from python:3.11 \
+  --memory 2G --memory-max 8G
+```
+
 </CodeGroup>
+
+With the [MCP server](/integrations/mcp), pass `memory_max_mib` to `sandbox_template_create`.
 
 See [Growing memory](/templates/build-spec#growing-memory) for the values `memoryMaxMib` accepts. Templates without it keep a fixed size.
 
