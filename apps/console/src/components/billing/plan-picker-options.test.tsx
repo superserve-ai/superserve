@@ -232,6 +232,64 @@ describe("PlanPickerOptions", () => {
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
   })
 
+  it("lets a billing administrator with plans open another of their teams", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.cards = [card("developer")]
+    mocks.canManage = true
+    mocks.teams = [
+      { id: "team-1", name: "Team B", region: "use" },
+      { id: "team-2", name: "Team A", region: "use" },
+    ]
+    const user = userEvent.setup()
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("form", { name: "Builder plan" }),
+    ).toBeTruthy()
+    expect(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    ).toHaveTextContent("Team A")
+    await user.click(screen.getByRole("button", { name: "Open team" }))
+    expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
+    expect(mocks.switchTeam).toHaveBeenCalledWith("team-2", "use")
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+    expect(mocks.switchTeam.mock.invocationCallOrder[0]).toBeLessThan(
+      assign.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it("shows other teams to a billing administrator when offers can't be read", async () => {
+    mocks.offers = null
+    mocks.canManage = true
+    mocks.teams = [
+      { id: "team-1", name: "Team B", region: "use" },
+      { id: "team-2", name: "Team A", region: "use" },
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("button", { name: "Developer" }),
+    ).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
+    expect(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    ).toHaveTextContent("Team A")
+    expect(screen.getByRole("button", { name: "Open team" })).toBeTruthy()
+  })
+
+  it("offers no other team to a billing administrator with plans and no other team", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.cards = [card("developer")]
+    mocks.canManage = true
+    mocks.teams = [{ id: "team-1", name: "Team B", region: "use" }]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("form", { name: "Builder plan" }),
+    ).toBeTruthy()
+    await act(async () => {})
+    expect(screen.queryByRole("combobox", { name: "Team to open" })).toBeNull()
+  })
+
   it("sends only the first plan choice while Checkout opens", async () => {
     mocks.offers = [
       offer("developer_monthly", "Builder"),

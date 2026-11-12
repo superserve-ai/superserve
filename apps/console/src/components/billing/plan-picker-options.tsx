@@ -179,10 +179,17 @@ function teamKey(team: { id: string; region: string }) {
   return `${team.region}:${team.id}`
 }
 
-// The user's other teams, so someone who can't buy a plan for this team can
-// carry on in one of theirs. One dropdown keeps the page short however many
-// teams there are. Nothing shows while they load or can't be read.
-function OtherTeams({ locator }: { locator: CheckoutLocator }) {
+// The user's other teams, so anyone on this gate can carry on in one of
+// theirs instead of buying a plan here. One dropdown keeps the page short
+// however many teams there are. Nothing shows while they load or can't be
+// read, or when the user has no other team.
+function OtherTeams({
+  locator,
+  className,
+}: {
+  locator: CheckoutLocator
+  className?: string
+}) {
   const [teams, setTeams] = useState<TeamSummary[]>()
   const [picked, setPicked] = useState<string>()
   const [switching, setSwitching] = useState(false)
@@ -226,7 +233,12 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
     }
   }
   return (
-    <div className="flex w-80 max-w-full flex-col items-center gap-2">
+    <div
+      className={cn(
+        "flex w-80 max-w-full flex-col items-center gap-2",
+        className,
+      )}
+    >
       <p className="text-center text-sm text-muted">Or open another team:</p>
       <div className="flex w-full gap-2">
         <Select
@@ -367,55 +379,63 @@ export function PlanPickerOptions({
   )
   if (listed.length === 0)
     return (
-      <div className="mt-5 flex gap-2">
-        {plans.map(({ offer, label }) => (
-          <form
-            key={offer}
-            method="post"
-            action={signupCheckoutPath(offer, locator)}
-            onSubmit={onSubmit(offer)}
-          >
-            <Button
-              type="submit"
-              size="sm"
-              variant={highlighted(offer) ? "default" : "outline"}
-              disabled={submitting !== null}
+      <div className="flex flex-col items-center">
+        <div className="mt-5 flex gap-2">
+          {plans.map(({ offer, label }) => (
+            <form
+              key={offer}
+              method="post"
+              action={signupCheckoutPath(offer, locator)}
+              onSubmit={onSubmit(offer)}
             >
-              {submitting === offer ? <Spinner size="sm" /> : null}
-              {label}
-            </Button>
-          </form>
-        ))}
+              <Button
+                type="submit"
+                size="sm"
+                variant={highlighted(offer) ? "default" : "outline"}
+                disabled={submitting !== null}
+              >
+                {submitting === offer ? <Spinner size="sm" /> : null}
+                {label}
+              </Button>
+            </form>
+          ))}
+        </div>
+        <OtherTeams locator={locator} className="mt-5" />
       </div>
     )
   return (
-    <div
-      className={cn(
-        "mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2",
-        listed.length + (enterprise ? 1 : 0) > 2
-          ? "lg:grid-cols-3"
-          : "max-w-3xl",
-      )}
-    >
-      {listed.map((plan) => (
-        <PlanOption
-          key={plan.offer}
-          plan={plan}
-          card={pickerCard(plan.catalog, catalog?.cards ?? [])}
-          locator={locator}
-          highlighted={highlighted(plan.offer)}
-          submitting={submitting}
-          onSubmit={onSubmit}
-        />
-      ))}
-      {enterprise ? (
-        <EnterpriseOption
-          card={enterprise}
-          className={
-            listed.length % 2 === 0 ? "md:col-span-2 lg:col-span-1" : undefined
-          }
-        />
-      ) : null}
+    <div className="flex w-full flex-col items-center">
+      <div
+        className={cn(
+          "mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2",
+          listed.length + (enterprise ? 1 : 0) > 2
+            ? "lg:grid-cols-3"
+            : "max-w-3xl",
+        )}
+      >
+        {listed.map((plan) => (
+          <PlanOption
+            key={plan.offer}
+            plan={plan}
+            card={pickerCard(plan.catalog, catalog?.cards ?? [])}
+            locator={locator}
+            highlighted={highlighted(plan.offer)}
+            submitting={submitting}
+            onSubmit={onSubmit}
+          />
+        ))}
+        {enterprise ? (
+          <EnterpriseOption
+            card={enterprise}
+            className={
+              listed.length % 2 === 0
+                ? "md:col-span-2 lg:col-span-1"
+                : undefined
+            }
+          />
+        ) : null}
+      </div>
+      <OtherTeams locator={locator} className="mt-8" />
     </div>
   )
 }
