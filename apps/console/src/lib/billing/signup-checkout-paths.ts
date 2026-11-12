@@ -109,12 +109,13 @@ export type PlanPickerReason =
 // Why a team that is awaiting its first plan has no trial. The states never
 // share a message:
 // - "ended": the trial grant was spent or expired.
-// - "unavailable": the server explicitly reported the trial as denied.
+// - "unavailable": the team never got a trial. Either the server reported the
+//   trial as denied, or the team is held at trial_ended with no trial grant
+//   and no reason, which is how the server reports a denial it keeps generic.
+//   Why a team was denied is never shown.
 // - "check_unavailable": the trial could not be confirmed because a required
 //   check did not complete. Not a denial and not proof of anything.
-// - "unknown": no reason is known. The server leaves trial_block null when it
-//   could not read the reason and for denials it keeps generic, so neither is
-//   a confirmed trial denial and the copy claims nothing about the trial.
+// - "unknown": no reason is known, so the copy claims nothing about the trial.
 export type TrialOutcome =
   | "ended"
   | "unavailable"
@@ -125,18 +126,29 @@ export function trialOutcome(summary: unknown): TrialOutcome {
   const {
     trial,
     trial_block: block,
+    plan,
   }: {
     trial?: { state?: unknown } | null
     trial_block?: unknown
+    plan?: { key?: unknown; status?: unknown } | null
   } = summary && typeof summary === "object" ? summary : {}
   // The server's own reason wins over the balance, which can be stale or read
   // separately: check_unavailable, then exhausted, then unavailable (denied).
   if (block === "trial_check_unavailable") return "check_unavailable"
   if (block === "trial_exhausted") return "ended"
   if (block === "trial_unavailable") return "unavailable"
-  return trial?.state === "exhausted" || trial?.state === "expired"
-    ? "ended"
-    : "unknown"
+  if (trial?.state === "exhausted" || trial?.state === "expired") return "ended"
+  // The server reports a check that did not complete or a claim still in
+  // progress as trial_check_unavailable above, so a team it holds at
+  // trial_ended with no grant and no reason never had a trial.
+  if (
+    trial?.state === "no_grant" &&
+    plan?.key === "trial" &&
+    plan.status === "trial_ended"
+  ) {
+    return "unavailable"
+  }
+  return "unknown"
 }
 
 export const PLAN_PICKER_ROUTE = "/auth/choose-plan/"

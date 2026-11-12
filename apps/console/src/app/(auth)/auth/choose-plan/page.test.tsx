@@ -243,22 +243,32 @@ describe("plan picker", () => {
     ).toBe("/sandboxes")
   })
 
-  it("records why the picker opened and which plan was asked for", async () => {
-    params = new URLSearchParams({
-      reason: "trial_ended",
-      offer: "starter",
-      account: "u1",
-      team: "use:team-1",
-    })
-    render(<ChoosePlanPage />)
-    await screen.findByRole("button", { name: "Developer" })
-    expect(capture).toHaveBeenCalledTimes(1)
-    expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
-      reason: "trial_ended",
-      requested_offer: "developer",
-      plan_options_requested: true,
-    })
-  })
+  it.each([
+    ["ended", "trial_ended"],
+    ["unavailable", "trial_unavailable"],
+    ["check_unavailable", "trial_check_unavailable"],
+    ["unknown", "trial_reason_unknown"],
+    [null, "trial_reason_unknown"],
+  ] as const)(
+    "records a trial_ended picker whose trial outcome is %s as %s",
+    async (outcome, reason) => {
+      trial.outcome = outcome
+      params = new URLSearchParams({
+        reason: "trial_ended",
+        offer: "starter",
+        account: "u1",
+        team: "use:team-1",
+      })
+      render(<ChoosePlanPage />)
+      await screen.findByRole("button", { name: "Developer" })
+      await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1))
+      expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
+        reason,
+        requested_offer: "developer",
+        plan_options_requested: true,
+      })
+    },
+  )
 
   it("records one picker view under StrictMode", async () => {
     params = new URLSearchParams({

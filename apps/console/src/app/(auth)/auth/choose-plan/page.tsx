@@ -59,16 +59,27 @@ const TRIAL_COPY: Record<TrialOutcome, string> = {
   unknown: MESSAGES.trial_ended,
 }
 
-// Says which trial state the team is in only once its summary confirms it.
-// Until that is known nothing is shown, so the copy never flips. A summary the
-// console cannot read, or one with no trial reason, keeps the neutral message,
-// so neither a load failure nor an unexplained block is shown as a denial.
-function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
-  const account = locator?.account
-  const team = locator?.team
+// What plan_picker_viewed reports as its reason for a trial_ended picker, so
+// a trial that was used up, one the account never got, and one a required
+// check could not confirm stay apart in analytics as they do in the copy.
+const TRIAL_VIEW_REASON: Record<TrialOutcome, string> = {
+  ended: "trial_ended",
+  unavailable: "trial_unavailable",
+  check_unavailable: "trial_check_unavailable",
+  unknown: "trial_reason_unknown",
+}
+
+// The team's trial outcome once its summary is read: undefined while it
+// loads, null when there is no team to read or the console can't read it.
+function useTrialOutcome(
+  locator: CheckoutLocator | null,
+  enabled: boolean,
+): TrialOutcome | null | undefined {
+  const account = enabled ? locator?.account : undefined
+  const team = enabled ? locator?.team : undefined
   const key = account && team ? `${account}/${team}` : null
   // Tagged with the team it was read for, so a previous team's result is never
-  // shown while another team's balance loads.
+  // used while another team's balance loads.
   const [read, setRead] = useState<{
     key: string
     outcome: TrialOutcome | null
@@ -85,9 +96,21 @@ function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
       current = false
     }
   }, [account, team, key])
-  if (key === null) return MESSAGES.trial_ended
-  if (read?.key !== key) return null
-  return read.outcome ? TRIAL_COPY[read.outcome] : MESSAGES.trial_ended
+  if (key === null) return null
+  return read?.key === key ? read.outcome : undefined
+}
+
+// Says which trial state the team is in only once its summary confirms it.
+// Until that is known nothing is shown, so the copy never flips. A summary the
+// console cannot read, or one with no trial reason, keeps the neutral message,
+// so a load failure is never shown as a denial.
+function TrialEndedMessage({
+  outcome,
+}: {
+  outcome: TrialOutcome | null | undefined
+}) {
+  if (outcome === undefined) return null
+  return outcome ? TRIAL_COPY[outcome] : MESSAGES.trial_ended
 }
 
 function ChoosePlanContent() {
@@ -110,6 +133,8 @@ function ChoosePlanContent() {
         : null
 
   const picking = locator !== null && reason !== "checkout_elsewhere"
+  const trialEnded = reason === "trial_ended" && !settling
+  const trialOutcome = useTrialOutcome(locator, trialEnded)
   useEffect(() => {
     if (settling) router.replace(settling)
   }, [settling, router])
@@ -117,12 +142,16 @@ function ChoosePlanContent() {
   // most customers first see plans. $pageview alone does not say why.
   // plan_options_requested says the page asked for plans; billing permissions
   // or an empty catalog can still hide them. The ref keeps StrictMode's effect
-  // replay from recording the same picker state twice.
+  // replay from recording the same picker state twice. A trial_ended picker
+  // waits for the team's trial outcome so its reason says which one it is.
   const recordedView = useRef<string | null>(null)
   useEffect(() => {
     if (settling) return
+    if (trialEnded && trialOutcome === undefined) return
     const view = {
-      reason,
+      reason: trialEnded
+        ? TRIAL_VIEW_REASON[trialOutcome ?? "unknown"]
+        : reason,
       requested_offer: preselected ?? "not_specified",
       plan_options_requested: picking,
     }
@@ -134,7 +163,7 @@ function ChoosePlanContent() {
     } catch {
       /* Analytics never controls the picker. */
     }
-  }, [settling, reason, preselected, picking])
+  }, [settling, reason, preselected, picking, trialEnded, trialOutcome])
   if (settling) return null
 
   return (
@@ -163,7 +192,7 @@ function ChoosePlanContent() {
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
             {reason === "trial_ended" ? (
-              <TrialEndedMessage locator={locator} />
+              <TrialEndedMessage outcome={trialOutcome} />
             ) : (
               MESSAGES[reason]
             )}

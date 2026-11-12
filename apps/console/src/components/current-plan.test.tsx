@@ -46,3 +46,15 @@ it("tells a team that needs a plan it never had a trial", () => {
   ).toBeTruthy()
   expect(screen.queryByText(/Trial/)).toBeNull()
 })
+
+it("shows a live trial's balance when the general credit fields read $0", () => {
+  const plan = summary("trial")
+  Object.assign(plan, {
+    credit_source: "stripe",
+    stripe_remaining_credit_usd: 0,
+    trial: { state: "active", remaining_usd: 0.05 },
+  })
+  render(<CurrentPlan summary={plan} />)
+  expect(screen.getByText("$0.05")).toBeTruthy()
+  expect(screen.getByText("Applied automatically to your usage.")).toBeTruthy()
+})

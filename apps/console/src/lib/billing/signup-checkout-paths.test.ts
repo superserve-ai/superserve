@@ -95,6 +95,29 @@ describe("trialOutcome", () => {
     [{ trial_block: "trial_unavailable" }, "unavailable"],
     [{ trial_block: "trial_check_unavailable" }, "check_unavailable"],
     [{ trial_block: null, trial: { state: "no_grant" } }, "unknown"],
+    [
+      {
+        trial_block: null,
+        trial: { state: "no_grant" },
+        plan: { key: "trial", status: "trial_ended" },
+      },
+      "unavailable",
+    ],
+    [
+      {
+        trial: { state: "no_grant" },
+        plan: { key: "free", status: "active" },
+      },
+      "unknown",
+    ],
+    [
+      {
+        trial_block: "trial_check_unavailable",
+        trial: { state: "no_grant" },
+        plan: { key: "trial", status: "trial_ended" },
+      },
+      "check_unavailable",
+    ],
     [{ trial_block: null, trial: { state: "exhausted" } }, "ended"],
     [
       { trial_block: "trial_unavailable", trial: { state: "exhausted" } },

@@ -26,18 +26,30 @@ export interface BillingCredits {
 export function billingCredits(
   summary: BillingSummaryResponse,
 ): BillingCredits {
-  if (summary.credit_source === "stripe") {
-    return {
-      applied: summary.stripe_credits_applied_usd ?? null,
-      remaining: summary.stripe_remaining_credit_usd ?? null,
-      payable: summary.expected_invoice_amount_usd,
-    }
+  const credits: BillingCredits =
+    summary.credit_source === "stripe"
+      ? {
+          applied: summary.stripe_credits_applied_usd ?? null,
+          remaining: summary.stripe_remaining_credit_usd ?? null,
+          payable: summary.expected_invoice_amount_usd,
+        }
+      : {
+          applied: summary.credits_applied_usd,
+          remaining: summary.credits_remaining_usd,
+          payable: summary.expected_invoice_amount_usd,
+        }
+  // A team still on its free trial spends the trial balance, the figure the
+  // trial banner and sandbox access use. The general credit fields can read
+  // $0 for such a team while its trial still has credit.
+  const trial = summary.trial
+  if (
+    summary.plan?.key === "trial" &&
+    trial?.state === "active" &&
+    typeof trial.remaining_usd === "number"
+  ) {
+    return { ...credits, remaining: trial.remaining_usd }
   }
-  return {
-    applied: summary.credits_applied_usd,
-    remaining: summary.credits_remaining_usd,
-    payable: summary.expected_invoice_amount_usd,
-  }
+  return credits
 }
 
 export function formatCurrency(value: number, currency = "USD"): string {
