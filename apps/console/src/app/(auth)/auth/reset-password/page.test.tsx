@@ -109,6 +109,60 @@ describe("ResetPasswordPage", () => {
     fireEvent.click(button)
   }
 
+  describe("accessibility", () => {
+    it.each([
+      ["New password", "New Password", "reset-password-new"],
+      [
+        "Confirm new password",
+        "Confirm New Password",
+        "reset-password-confirm",
+      ],
+    ])(
+      "labels %s and identifies its autocomplete purpose",
+      (label, placeholder, id) => {
+        render(<ResetPasswordPage />)
+
+        const input = screen.getByLabelText(label)
+        expect(input).toBe(screen.getByPlaceholderText(placeholder))
+        expect(input).toHaveAttribute("id", id)
+        expect(input).toHaveAttribute("autocomplete", "new-password")
+      },
+    )
+
+    it.each([
+      ["password", "New password", "Confirm new password"],
+      ["password confirmation", "Confirm new password", "New password"],
+    ])(
+      "names the %s toggle and exposes its pressed state",
+      (name, label, otherLabel) => {
+        render(<ResetPasswordPage />)
+
+        const input = screen.getByLabelText(label)
+        const toggle = screen.getByRole("button", { name: `Show ${name}` })
+        expect(toggle).toHaveAttribute("aria-pressed", "false")
+        expect(input).toHaveAttribute("type", "password")
+        expect(toggle).toHaveClass("-m-1", "p-1")
+
+        fireEvent.click(toggle)
+
+        const hideToggle = screen.getByRole("button", { name: `Hide ${name}` })
+        expect(hideToggle).toHaveAttribute("aria-pressed", "true")
+        expect(input).toHaveAttribute("type", "text")
+        expect(screen.getByLabelText(otherLabel)).toHaveAttribute(
+          "type",
+          "password",
+        )
+
+        fireEvent.click(hideToggle)
+
+        expect(
+          screen.getByRole("button", { name: `Show ${name}` }),
+        ).toHaveAttribute("aria-pressed", "false")
+        expect(input).toHaveAttribute("type", "password")
+      },
+    )
+  })
+
   it("captures success event and schedules redirect on successful update", async () => {
     mockUpdateUser.mockResolvedValue({ error: null })
     render(<ResetPasswordPage />)

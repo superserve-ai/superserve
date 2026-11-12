@@ -189,6 +189,73 @@ describe("SignUpPage", () => {
     restoreRecaptchaSiteKey()
   })
 
+  describe("accessibility", () => {
+    it.each([
+      ["Full name", "Full Name", "signup-full-name", "name"],
+      ["Email", "Email", "signup-email", "email"],
+      ["Password", "Password", "signup-password", "new-password"],
+      [
+        "Confirm password",
+        "Confirm Password",
+        "signup-confirm-password",
+        "new-password",
+      ],
+    ])(
+      "labels %s and identifies its autocomplete purpose",
+      async (label, placeholder, id, autocomplete) => {
+        render(<SignUpPage />)
+        await screen.findByText("Create your Superserve account")
+
+        const input = screen.getByLabelText(label)
+        expect(input).toBe(screen.getByPlaceholderText(placeholder))
+        expect(input).toHaveAttribute("id", id)
+        expect(input).toHaveAttribute("autocomplete", autocomplete)
+      },
+    )
+
+    it.each([
+      ["password", "Password", "Confirm password"],
+      ["password confirmation", "Confirm password", "Password"],
+    ])(
+      "names the %s toggle and exposes its pressed state",
+      async (name, label, otherLabel) => {
+        render(<SignUpPage />)
+        await screen.findByText("Create your Superserve account")
+
+        const input = screen.getByLabelText(label)
+        const toggle = screen.getByRole("button", { name: `Show ${name}` })
+        expect(toggle).toHaveAttribute("aria-pressed", "false")
+        expect(input).toHaveAttribute("type", "password")
+        expect(toggle).toHaveClass("-m-1", "p-1")
+
+        await user.click(toggle)
+
+        const hideToggle = screen.getByRole("button", { name: `Hide ${name}` })
+        expect(hideToggle).toHaveAttribute("aria-pressed", "true")
+        expect(input).toHaveAttribute("type", "text")
+        expect(screen.getByLabelText(otherLabel)).toHaveAttribute(
+          "type",
+          "password",
+        )
+
+        await user.click(hideToggle)
+
+        expect(
+          screen.getByRole("button", { name: `Show ${name}` }),
+        ).toHaveAttribute("aria-pressed", "false")
+        expect(input).toHaveAttribute("type", "password")
+      },
+    )
+
+    it("keeps privacy text readable", async () => {
+      render(<SignUpPage />)
+
+      const privacy = await screen.findByText(/By continuing, you agree to our/)
+      expect(privacy).toHaveClass("text-muted")
+      expect(privacy.className).not.toMatch(/text-muted\/\d/)
+    })
+  })
+
   it("renders the signup form", async () => {
     render(<SignUpPage />)
 

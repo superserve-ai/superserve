@@ -108,8 +108,13 @@ function ResetPasswordContent() {
             </h1>
 
             <form onSubmit={handleResetPassword} className="space-y-3">
+              <label htmlFor="reset-password-new" className="sr-only">
+                New password
+              </label>
               <Input
                 type={showPassword ? "text" : "password"}
+                id="reset-password-new"
+                autoComplete="new-password"
                 placeholder="New Password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
@@ -121,7 +126,11 @@ function ResetPasswordContent() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-muted"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    className="-m-1 p-1 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   >
                     {showPassword ? (
                       <EyeSlashIcon className="size-4" weight="light" />
@@ -139,8 +148,13 @@ function ResetPasswordContent() {
                   {PASSWORD_RULE_HINT}
                 </p>
               )}
+              <label htmlFor="reset-password-confirm" className="sr-only">
+                Confirm new password
+              </label>
               <Input
                 type={showConfirmPassword ? "text" : "password"}
+                id="reset-password-confirm"
+                autoComplete="new-password"
                 placeholder="Confirm New Password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
@@ -149,7 +163,13 @@ function ResetPasswordContent() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="text-muted"
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide password confirmation"
+                        : "Show password confirmation"
+                    }
+                    aria-pressed={showConfirmPassword}
+                    className="-m-1 p-1 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   >
                     {showConfirmPassword ? (
                       <EyeSlashIcon className="size-4" weight="light" />

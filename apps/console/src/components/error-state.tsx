@@ -30,7 +30,7 @@ export function ErrorState({
         <p className="mt-4 text-sm font-medium text-foreground">{title}</p>
         <p className="mt-2 text-xs leading-relaxed text-muted">{message}</p>
         {suggestion && (
-          <p className="mt-1.5 text-xs leading-relaxed text-muted/70">
+          <p className="mt-1.5 text-xs leading-relaxed text-muted">
             {suggestion}
           </p>
         )}

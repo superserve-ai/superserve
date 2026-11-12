@@ -90,6 +90,17 @@ describe("ForgotPasswordPage", () => {
     mockSearchParam.mockReset().mockReturnValue(null)
   })
 
+  describe("accessibility", () => {
+    it("labels the email input and identifies its autocomplete purpose", () => {
+      render(<ForgotPasswordPage />)
+
+      const email = screen.getByLabelText("Email")
+      expect(email).toBe(screen.getByPlaceholderText("Email"))
+      expect(email).toHaveAttribute("id", "forgot-password-email")
+      expect(email).toHaveAttribute("autocomplete", "email")
+    })
+  })
+
   it("sends the reCAPTCHA token and shows the sent state", async () => {
     recaptcha.siteKey = "site-key"
     recaptcha.getToken.mockResolvedValue("recaptcha-token")

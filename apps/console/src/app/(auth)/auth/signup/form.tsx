@@ -669,22 +669,37 @@ export default function SignUpContent() {
               </div>
             </div>
             <form onSubmit={handleSignUp} className="space-y-3">
+              <label htmlFor="signup-full-name" className="sr-only">
+                Full name
+              </label>
               <Input
                 type="text"
+                id="signup-full-name"
+                autoComplete="name"
                 placeholder="Full Name"
                 value={fullName}
                 onChange={(e) => setFormValue("fullName", e.target.value)}
                 error={errors.fullName}
               />
+              <label htmlFor="signup-email" className="sr-only">
+                Email
+              </label>
               <Input
                 type="email"
+                id="signup-email"
+                autoComplete="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setFormValue("email", e.target.value)}
                 error={errors.email}
               />
+              <label htmlFor="signup-password" className="sr-only">
+                Password
+              </label>
               <Input
                 type={showPassword ? "text" : "password"}
+                id="signup-password"
+                autoComplete="new-password"
                 placeholder="Password"
                 value={password}
                 onChange={(e) => setFormValue("password", e.target.value)}
@@ -696,7 +711,11 @@ export default function SignUpContent() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-muted"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    className="-m-1 p-1 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   >
                     {showPassword ? (
                       <EyeSlashIcon className="size-4" weight="light" />
@@ -714,8 +733,13 @@ export default function SignUpContent() {
                   {PASSWORD_RULE_HINT}
                 </p>
               )}
+              <label htmlFor="signup-confirm-password" className="sr-only">
+                Confirm password
+              </label>
               <Input
                 type={showConfirmPassword ? "text" : "password"}
+                id="signup-confirm-password"
+                autoComplete="new-password"
                 placeholder="Confirm Password"
                 value={confirmPassword}
                 onChange={(e) =>
@@ -726,7 +750,13 @@ export default function SignUpContent() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="text-muted"
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide password confirmation"
+                        : "Show password confirmation"
+                    }
+                    aria-pressed={showConfirmPassword}
+                    className="-m-1 p-1 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   >
                     {showConfirmPassword ? (
                       <EyeSlashIcon className="size-4" weight="light" />
@@ -760,7 +790,7 @@ export default function SignUpContent() {
                 Sign in
               </Link>
             </p>
-            <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
+            <p className="mt-6 text-center text-xs leading-relaxed text-muted">
               By continuing, you agree to our{" "}
               <a
                 href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}

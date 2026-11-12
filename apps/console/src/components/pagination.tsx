@@ -116,8 +116,8 @@ export function Pagination({
     >
       <p className="font-mono text-xs text-muted tabular-nums">
         {start}
-        <span className="text-muted/60">–</span>
-        {end} <span className="text-muted/60">of</span> {total}
+        <span className="text-muted">–</span>
+        {end} <span className="text-muted">of</span> {total}
       </p>
 
       <div className="flex items-center gap-1">

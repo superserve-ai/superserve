@@ -155,3 +155,22 @@ describe("Pagination", () => {
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled()
   })
 })
+
+describe("Pagination accessibility", () => {
+  it("keeps range separators readable", () => {
+    render(
+      <Pagination
+        page={1}
+        pageSize={50}
+        total={120}
+        onPageChange={noop}
+        onPageSizeChange={noop}
+      />,
+    )
+
+    for (const separator of [screen.getByText("–"), screen.getByText("of")]) {
+      expect(separator).toHaveClass("text-muted")
+      expect(separator.className).not.toMatch(/text-muted\//)
+    }
+  })
+})
