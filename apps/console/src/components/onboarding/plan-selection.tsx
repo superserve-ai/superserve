@@ -37,14 +37,15 @@ export function PlanSelection({
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [closingCheckout, setClosingCheckout] = useState(false)
+  // Stripe's Back link returns here with billing=cancel. The page says so and
+  // waits for the customer to choose. It never closes the checkout by itself:
+  // the cancel URL doesn't say which checkout it came from, so a closure could
+  // hit a newer checkout open in another tab.
+  const [leftCheckout, setLeftCheckout] = useState(billingReturn === "cancel")
+  // After that return, only a check a click starts may open checkout again,
+  // never a timer or focus check. Starting a new Pro checkout clears it.
+  const stayOffCheckout = useRef(billingReturn === "cancel")
   const inFlight = useRef(false)
-  // Stripe's Back link returns here with billing=cancel. Act on it once.
-  const leftCheckout = useRef(billingReturn === "cancel")
-  // Set once the customer leaves checkout: from then on only the check a click
-  // starts may open checkout again, never a timer or focus check. Starting a
-  // new Pro checkout clears it.
-  const stayOffCheckout = useRef(false)
   const mounted = useRef(true)
   const completionSent = useRef(false)
   const navigating = useRef(false)
@@ -91,14 +92,11 @@ export function PlanSelection({
     [track, navigate],
   )
 
-  // This page acts on billing=cancel once, on arrival. Keep it out of later
-  // reads, so a sign-in return URL built from one can't close a newer checkout.
-  const billingRead = billingReturn === "cancel" ? undefined : billingReturn
   const refresh = useCallback(async () => {
     const next = await getSignupPlanAction(
       initial.teamKey,
       initial.userId,
-      billingRead,
+      billingReturn,
     )
     if (next.userId !== initial.userId || next.teamKey !== initial.teamKey)
       throw new Error("Your account changed. Reload to continue.")
@@ -107,7 +105,7 @@ export function PlanSelection({
       setUncertain(false)
     }
     return next
-  }, [initial.teamKey, initial.userId, billingRead])
+  }, [initial.teamKey, initial.userId, billingReturn])
 
   const run = useCallback(
     async (operation: () => Promise<void>) => {
@@ -188,42 +186,13 @@ export function PlanSelection({
   }, [billingReturn, track])
 
   useEffect(() => {
-    // Read the Back-link marker on the first state only, so it can never
-    // close a checkout the customer starts later from this page.
-    const leaving = leftCheckout.current
-    leftCheckout.current = false
     if (context.state !== "pending") return
-    if (leaving) {
-      // The customer left checkout without paying. Close that attempt now, as
-      // "Cancel checkout and change plan" does, so they get the plans back
-      // instead of waiting on a payment they did not make. A payment that did
-      // complete still comes back as pending or committed from the backend.
-      stayOffCheckout.current = true
-      setClosingCheckout(true)
-      void checkPayment(true).finally(() => {
-        if (mounted.current) setClosingCheckout(false)
-      })
-    } else void checkPayment()
+    void checkPayment()
     const timer = window.setInterval(() => {
       if (document.visibilityState === "visible") void checkPayment()
     }, 5000)
     return () => window.clearInterval(timer)
   }, [context.state, checkPayment])
-
-  useEffect(() => {
-    if (billingReturn !== "cancel") return
-    // Drop billing=cancel from the address so a reload can't act on it again.
-    // Wait one task: on hydration this effect runs before the Next.js router
-    // wraps history.replaceState, and only the wrapped call updates the URL
-    // the router keeps. A null state lets the router keep its own entries.
-    const timer = window.setTimeout(() => {
-      const url = new URL(window.location.href)
-      if (url.searchParams.get("billing") !== "cancel") return
-      url.searchParams.delete("billing")
-      window.history.replaceState(null, "", url)
-    }, 0)
-    return () => window.clearTimeout(timer)
-  }, [billingReturn])
 
   useEffect(() => {
     const onFocus = () => {
@@ -305,7 +274,7 @@ export function PlanSelection({
   return (
     <PlanSelectionView
       step={step}
-      leavingCheckout={closingCheckout && step === "payment-pending"}
+      leftCheckout={leftCheckout}
       offers={offers}
       selection={selection}
       cadence={cadence}
@@ -328,6 +297,7 @@ export function PlanSelection({
       onPro={() =>
         void run(async () => {
           stayOffCheckout.current = false
+          setLeftCheckout(false)
           if (!(await confirmSelecting())) return
           const offer = `pro_${cadence}` as const
           setSelection("pro")
@@ -408,8 +378,14 @@ export function PlanSelection({
             )
         })
       }
-      onCheckPayment={() => void checkPayment(false, true)}
-      onCancelPayment={() => void checkPayment(true, true)}
+      onCheckPayment={() => {
+        setLeftCheckout(false)
+        void checkPayment(false, true)
+      }}
+      onCancelPayment={() => {
+        setLeftCheckout(false)
+        void checkPayment(true, true)
+      }}
     />
   )
 }

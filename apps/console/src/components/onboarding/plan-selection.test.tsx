@@ -1,5 +1,4 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
-import { useEffect, type ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
@@ -124,7 +123,7 @@ describe("onboarding plan flow", () => {
 
   it("asks the backend to close the old attempt before unlocking plans", async () => {
     vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
-    render(<PlanSelection initial={pending} />)
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
     const cancel = screen.getByRole("button", {
       name: "Cancel checkout and change plan",
     })
@@ -242,81 +241,66 @@ describe("onboarding plan flow", () => {
 })
 
 describe("return from Stripe's Back link", () => {
-  const closesOnRestart = () =>
+  const again = "https://checkout.stripe.com/c/pay/again"
+  const checkButton = () =>
+    screen.getByRole("button", { name: "Check payment status" })
+  const settled = async (calls: number) => {
+    await waitFor(() => expect(recoverProPayment).toHaveBeenCalledTimes(calls))
+    await waitFor(() => expect(checkButton()).toBeEnabled())
+  }
+
+  beforeEach(() => {
+    vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
+  })
+
+  it("says the customer left checkout and waits for a choice", async () => {
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    expect(
+      screen.getByRole("heading", { name: "You left checkout" }),
+    ).toBeVisible()
+    expect(
+      screen.getByText(/To choose another plan, cancel checkout/),
+    ).toBeVisible()
+    await settled(1)
+    expect(
+      screen.getByRole("button", { name: "Cancel checkout and change plan" }),
+    ).toBeEnabled()
+  })
+
+  it("never closes a checkout without a click", async () => {
+    // Checkout A came back after checkout B started in another tab. The
+    // return can't say which checkout it was, so B must stay open.
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    await settled(1)
+    fireEvent(window, new Event("focus"))
+    await settled(2)
+    fireEvent(window, Object.assign(new Event("pageshow"), { persisted: true }))
+    await settled(3)
+    for (const [, restart] of vi.mocked(recoverProPayment).mock.calls)
+      expect(restart).toBe(false)
+  })
+
+  it("closes the checkout when the customer asks", async () => {
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    await settled(1)
     vi.mocked(recoverProPayment).mockImplementation(async (_team, restart) => {
       if (!restart) return "payment_confirmation_pending"
       vi.mocked(getSignupPlanAction).mockResolvedValue(selecting)
       return "retryable"
     })
-
-  beforeEach(() => {
-    window.history.replaceState(
-      null,
-      "",
-      "/onboarding/plan/?team=use%3Ateam&account=user&billing=cancel",
+    fireEvent.click(
+      screen.getByRole("button", { name: "Cancel checkout and change plan" }),
     )
-    vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
-  })
-
-  it("closes the unpaid checkout and shows the plans", async () => {
-    let finishRecovery!: () => void
-    vi.mocked(recoverProPayment).mockImplementation(
-      (_team, restart) =>
-        new Promise((resolve) => {
-          finishRecovery = () => {
-            vi.mocked(getSignupPlanAction).mockResolvedValue(selecting)
-            resolve(restart ? "retryable" : "payment_confirmation_pending")
-          }
-        }),
-    )
-    render(<PlanSelection initial={pending} billingReturn="cancel" />)
-    expect(
-      await screen.findByRole("heading", { name: "Returning to plans" }),
-    ).toBeVisible()
-    await waitFor(() => expect(recoverProPayment).toHaveBeenCalledTimes(1))
-    expect(recoverProPayment).toHaveBeenCalledWith("use:team", true)
-    expect(
-      screen.queryByRole("button", { name: "Continue with Free" }),
-    ).not.toBeInTheDocument()
-    await act(async () => finishRecovery())
     expect(
       await screen.findByRole("button", { name: "Continue with Free" }),
     ).toBeVisible()
-    expect(window.location.search).toBe("?team=use%3Ateam&account=user")
-    expect(assign).not.toHaveBeenCalled()
+    expect(recoverProPayment).toHaveBeenLastCalledWith("use:team", true)
   })
 
-  it("keeps waiting when the backend still sees the payment", async () => {
-    render(<PlanSelection initial={pending} billingReturn="cancel" />)
-    await waitFor(() =>
-      expect(recoverProPayment).toHaveBeenCalledWith("use:team", true),
-    )
-    expect(
-      await screen.findByRole("heading", {
-        name: "We’re checking your payment",
-      }),
-    ).toBeVisible()
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Cancel checkout and change plan" }),
-      ).toBeEnabled(),
-    )
-  })
-
-  it("does not send the customer back to checkout", async () => {
-    const again = "https://checkout.stripe.com/c/pay/again"
+  it("does not send the customer back to checkout on its own", async () => {
     vi.mocked(recoverProPayment).mockResolvedValue(again)
     render(<PlanSelection initial={pending} billingReturn="cancel" />)
-    const checkButton = () =>
-      screen.getByRole("button", { name: "Check payment status" })
-    const settled = async (calls: number) => {
-      await waitFor(() =>
-        expect(recoverProPayment).toHaveBeenCalledTimes(calls),
-      )
-      await waitFor(() => expect(checkButton()).toBeEnabled())
-    }
     await settled(1)
-    expect(recoverProPayment).toHaveBeenCalledWith("use:team", true)
     fireEvent(window, new Event("focus"))
     await settled(2)
     expect(assign).not.toHaveBeenCalled()
@@ -336,86 +320,22 @@ describe("return from Stripe's Back link", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(again))
   })
 
-  it("clears the marker through the router's history wrapper", async () => {
-    closesOnRestart()
-    const native = window.history.replaceState.bind(window.history)
-    const routed: string[] = []
-    // Next.js wraps replaceState in an effect of its root, which runs after
-    // the effects of the page inside it.
-    const Router = ({ children }: { children: ReactNode }) => {
-      useEffect(() => {
-        window.history.replaceState = (data, unused, url) => {
-          routed.push(String(url))
-          native(data, unused, url)
-        }
-        return () => {
-          window.history.replaceState = native
-        }
-      }, [])
-      return children
-    }
-    render(
-      <Router>
-        <PlanSelection initial={pending} billingReturn="cancel" />
-      </Router>,
-    )
-    await waitFor(() => expect(routed).toHaveLength(1))
-    expect(new URL(routed[0]!).search).toBe("?team=use%3Ateam&account=user")
-  })
-
-  it("leaves billing=cancel out of later plan reads", async () => {
-    closesOnRestart()
+  it("keeps the payment wait text once the customer checks", async () => {
     render(<PlanSelection initial={pending} billingReturn="cancel" />)
-    expect(
-      await screen.findByRole("button", { name: "Continue with Free" }),
-    ).toBeVisible()
-    expect(getSignupPlanAction).toHaveBeenCalled()
-    for (const call of vi.mocked(getSignupPlanAction).mock.calls)
-      expect(call[2]).toBeUndefined()
-  })
-
-  it("closes the checkout only once", async () => {
-    closesOnRestart()
-    render(<PlanSelection initial={pending} billingReturn="cancel" />)
-    expect(
-      await screen.findByRole("button", { name: "Continue with Free" }),
-    ).toBeVisible()
-    fireEvent(window, new Event("focus"))
-    await waitFor(() => expect(getSignupPlanAction).toHaveBeenCalledTimes(3))
-    expect(
-      vi.mocked(recoverProPayment).mock.calls.filter(([, restart]) => restart),
-    ).toHaveLength(1)
-  })
-
-  it("does not close a checkout started after the return", async () => {
-    vi.mocked(getSignupPlanAction).mockResolvedValue(selecting)
-    vi.mocked(startProCheckout).mockImplementation(async () => {
-      vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
-      return null
-    })
-    render(<PlanSelection initial={selecting} billingReturn="cancel" />)
-    await waitFor(() =>
-      expect(window.location.search).toBe("?team=use%3Ateam&account=user"),
-    )
-    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    await settled(1)
+    fireEvent.click(checkButton())
     expect(
       await screen.findByRole("heading", {
         name: "We’re checking your payment",
       }),
     ).toBeVisible()
-    await waitFor(() => expect(recoverProPayment).toHaveBeenCalled())
-    expect(recoverProPayment).not.toHaveBeenCalledWith("use:team", true)
   })
 
-  it("leaves a team without a pending payment on the plans", async () => {
-    vi.mocked(getSignupPlanAction).mockResolvedValue(selecting)
-    render(<PlanSelection initial={selecting} billingReturn="cancel" />)
+  it("keeps today's wait for a return that is not a cancel", () => {
+    render(<PlanSelection initial={pending} />)
     expect(
-      screen.getByRole("button", { name: "Continue with Free" }),
+      screen.getByRole("heading", { name: "We’re checking your payment" }),
     ).toBeVisible()
-    fireEvent(window, new Event("focus"))
-    await waitFor(() => expect(getSignupPlanAction).toHaveBeenCalled())
-    expect(recoverProPayment).not.toHaveBeenCalled()
   })
 })
 

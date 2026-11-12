@@ -15,9 +15,8 @@ export type PlanStep = "plans" | "free-billing" | "payment-pending"
 
 export interface PlanSelectionViewProps {
   step: PlanStep
-  // The customer came back from checkout without paying and that checkout is
-  // being closed.
-  leavingCheckout?: boolean
+  // The customer came back with Stripe's Back link and did not pay there.
+  leftCheckout?: boolean
   selection: "free" | "pro"
   cadence: PlanCadence
   busy: boolean
@@ -72,6 +71,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
   const proIncluded = proOffer?.included_credit_cents
   const choosing = step === "plans"
   const pending = step === "payment-pending"
+  const leftCheckout = pending && !!props.leftCheckout
   return (
     <main className="min-h-dvh bg-background px-5 py-10 text-foreground sm:px-10 sm:py-14">
       <div className="mx-auto max-w-6xl">
@@ -122,8 +122,8 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
         <h1 className="text-3xl font-medium tracking-tight sm:text-4xl">
           {choosing
             ? "Choose your plan."
-            : props.leavingCheckout
-              ? "Returning to plans"
+            : leftCheckout
+              ? "You left checkout"
               : pending
                 ? "We’re checking your payment"
                 : "You’re almost ready."}
@@ -131,8 +131,8 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
         <p className="text-muted-foreground mt-4 max-w-2xl">
           {choosing
             ? "Start small or build at scale. Choose the plan that fits your team."
-            : props.leavingCheckout
-              ? "You left checkout. We’re closing it so you can choose a plan."
+            : leftCheckout
+              ? "Your account is ready. Your Pro payment isn’t complete yet."
               : pending
                 ? "Your account is ready. We’re confirming your Pro payment before finishing setup."
                 : "Add a payment method for pay-as-you-go usage, or start with your trial credit. No subscription fee."}
@@ -296,9 +296,9 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
             className="bg-card mt-10 max-w-2xl border border-dashed border-border p-6 sm:p-8"
           >
             <output className="text-muted-foreground text-sm leading-relaxed">
-              You won’t be asked to pay again while this payment is being
-              checked. To change plans, we first need to confirm that your
-              previous payment cannot complete.
+              {leftCheckout
+                ? "To choose another plan, cancel checkout. To pay for Pro, check your payment status to go back to checkout."
+                : "You won’t be asked to pay again while this payment is being checked. To change plans, we first need to confirm that your previous payment cannot complete."}
             </output>
             <div className="mt-6 flex flex-wrap gap-3">
               <Button
