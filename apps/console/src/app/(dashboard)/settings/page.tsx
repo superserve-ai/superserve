@@ -295,11 +295,7 @@ export default function SettingsPage() {
             </p>
           </div>
           <div className="max-w-xl">
-            <Button
-              size="sm"
-              variant="outline"
-              render={<Link href="/user-management" />}
-            >
+            <Button size="sm" variant="outline" render={<Link href="/team" />}>
               Manage members
             </Button>
           </div>

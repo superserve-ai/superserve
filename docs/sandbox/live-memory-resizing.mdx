@@ -1,0 +1,70 @@
+---
+title: "Live memory resizing"
+sidebarTitle: Memory resizing
+description: "Sandboxes that grow for bursty workloads and shrink back when they're done."
+---
+
+Most agent workloads aren't steady. A sandbox might idle at a few hundred MB, then need several GB for a build, a test suite, loading a dataset or starting a model, then drop back down. Live memory resizing lets a sandbox grow for those bursts and shrink afterwards. You don't have to size every sandbox for its peak, and you don't pay for the peak while it's idle.
+
+## Turn it on
+
+Set `memoryMaxMib` on a template alongside `memoryMib`. Sandboxes from that template start at `memoryMib` and can grow up to `memoryMaxMib`.
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "my-growable-env",
+  memoryMib: 2048,
+  memoryMaxMib: 8192,
+  from: "python:3.11",
+})
+```
+
+```python Python
+from superserve import Template
+
+template = Template.create(
+    name="my-growable-env",
+    memory_mib=2048,
+    memory_max_mib=8192,
+    from_="python:3.11",
+)
+```
+
+</CodeGroup>
+
+See [Growing memory](/templates/build-spec#growing-memory) for the values `memoryMaxMib` accepts. Templates without it keep a fixed size.
+
+## How it works
+
+It's automatic: no API calls, no restarts, and no changes to your code.
+
+- **Growing:** when a sandbox runs low on memory, it grows automatically, up to its limit. A program can even ask for a large block of memory at once, more than the sandbox started with, and the sandbox grows as the program uses it.
+- **Shrinking:** once the burst is over and memory use has stayed low for a few minutes, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`.
+- **Pause, resume and snapshots:** a sandbox resumes at the size it was paused at, and a sandbox created from a snapshot starts at its source's size.
+- **Above the limit:** if a program needs more than `memoryMaxMib`, Linux stops that program, as on any machine that runs out of memory. The sandbox keeps running.
+
+## Billing
+
+You pay for the memory a sandbox holds. During a burst it's billed at its grown size, and once it shrinks it's billed at the smaller size again.
+
+## Check the current size
+
+<CodeGroup>
+
+```typescript TypeScript
+const info = await sandbox.getInfo()
+console.log(info.memoryMib, info.memoryMaxMib, info.memoryCurrentMib)
+```
+
+```python Python
+info = sandbox.get_info()
+print(info.memory_mib, info.memory_max_mib, info.memory_current_mib)
+```
+
+</CodeGroup>
+
+`memoryCurrentMib` / `memory_current_mib` is the memory an active sandbox holds. For a paused sandbox, it's the size the sandbox will resume at; paused sandboxes aren't billed for it. It isn't set for fixed-size sandboxes. The console shows it next to the range, for example **3 GB of 2–8 GB**.
