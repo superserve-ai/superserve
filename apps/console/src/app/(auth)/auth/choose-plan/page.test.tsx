@@ -293,6 +293,37 @@ describe("plan picker", () => {
     expect(screen.getByRole("button", { name: "Open team" })).toBeTruthy()
   })
 
+  it("lists every team for another account's checkout when no team is open", async () => {
+    teams.directory = {
+      activeTeamId: null,
+      activeRegion: null,
+      teams: [
+        { id: "team-a", name: "Team A", region: "use" },
+        { id: "team-b", name: "Team B", region: "use" },
+      ],
+    }
+    params = new URLSearchParams({
+      reason: "checkout_elsewhere",
+      account: "u2",
+      team: "use:team-a",
+    })
+    const user = userEvent.setup()
+    render(<ChoosePlanPage />)
+    expect(screen.getByRole("link", { name: "Check again" })).toHaveAttribute(
+      "href",
+      "/api/onboarding/checkout/return/?account=u2&team=use%3Ateam-a",
+    )
+    await user.click(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    )
+    expect(
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Team A", "Team B"])
+    expect(screen.queryByRole("button", { name: /^Choose / })).toBeNull()
+  })
+
   it("records why the picker opened and which plan was asked for", async () => {
     params = new URLSearchParams({
       reason: "trial_ended",
