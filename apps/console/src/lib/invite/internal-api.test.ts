@@ -73,6 +73,19 @@ describe("invitation credential", () => {
 })
 
 describe("previewInvitation", () => {
+  it.each(["viewer", "future_role", null, 42, undefined])(
+    "safely parses optional role %j",
+    async (role) => {
+      fetchSpy.mockResolvedValue(json({ ...previewBody, role }))
+      const result = await previewInvitation(token)
+      expect(result.ok).toBe(true)
+      if (result.ok)
+        expect(result.preview.role).toBe(
+          typeof role === "string" ? role : undefined,
+        )
+    },
+  )
+
   it("posts the token to the region's internal route", async () => {
     fetchSpy.mockResolvedValue(json(previewBody))
 

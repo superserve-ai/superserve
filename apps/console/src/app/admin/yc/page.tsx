@@ -43,7 +43,7 @@ export default async function StaffYCPage({
         {session?.kind === "nonstaff" && (
           <form action={staffSignOut.bind(null, params.claim)}>
             <p>This account cannot access staff review.</p>
-            <button className="border border-dashed border-border px-4 py-2">
+            <button className="border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none">
               Sign out and use your staff account
             </button>
           </form>
@@ -53,7 +53,7 @@ export default async function StaffYCPage({
         )}
         {session?.kind === "eligible" && (
           <form action={staffGoogleLogin.bind(null, params.claim)}>
-            <button className="border border-dashed border-border px-4 py-2">
+            <button className="border border-dashed border-control px-4 py-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none">
               Verify staff Google sign-in
             </button>
           </form>

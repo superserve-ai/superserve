@@ -5,12 +5,14 @@ import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
+import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
-import { Suspense, useEffect, useState } from "react"
+import { Suspense, useEffect, useRef, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   SIGNUP_OFFER_PARAM,
@@ -19,9 +21,13 @@ import {
 } from "@/lib/auth/signup-offer"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
+import { sendSignInLink } from "./link-action"
+
+type RecoveryOption = "magic_link" | "google" | "forgot_password"
 
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -30,6 +36,12 @@ function SignInContent() {
   const [password, setPassword] = useState("")
   const [showPassword, setShowPassword] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
+  // Shown after a wrong email or password, to offer other ways in.
+  const [showRecovery, setShowRecovery] = useState(false)
+  const recoveryTracked = useRef(false)
+  const [isLinkSending, setIsLinkSending] = useState(false)
+  const [linkSentTo, setLinkSentTo] = useState<string | null>(null)
+  const [linkError, setLinkError] = useState<string | null>(null)
   const searchParams = useSearchParams()
   const rawOffer =
     searchParams.get(SIGNUP_OFFER_PARAM) ||
@@ -46,12 +58,16 @@ function SignInContent() {
       ? rawNext
       : "/"
 
+  const invite = inviteReturnPath(nextUrl)
   const signUpParams = new URLSearchParams()
   if (requestedOffer) signUpParams.set("offer", requestedOffer)
   if (rawOffer && rawOffer !== requestedOffer)
     signUpParams.set(SIGNUP_OFFER_PARAM, rawOffer)
   if (nextUrl !== "/") signUpParams.set("next", nextUrl)
   const signUpHref = `/auth/signup${signUpParams.size ? `?${signUpParams}` : ""}`
+  const forgotPasswordHref = invite
+    ? `/auth/forgot-password?${new URLSearchParams({ next: invite })}`
+    : "/auth/forgot-password"
 
   useEffect(() => {
     const checkUser = async () => {
@@ -110,6 +126,13 @@ function SignInContent() {
         })
         if (error.message.includes("Invalid login credentials")) {
           setErrors({ form: "Invalid email or password." })
+          setShowRecovery(true)
+          if (!recoveryTracked.current) {
+            recoveryTracked.current = true
+            posthog.capture(AUTH_EVENTS.SIGN_IN_RECOVERY_SHOWN, {
+              method: "email",
+            })
+          }
         } else if (error.message.includes("Email not confirmed")) {
           setErrors({ form: "Please verify your email before signing in." })
         } else {
@@ -132,7 +155,64 @@ function SignInContent() {
     }
   }
 
-  const handleGoogleSignIn = async () => {
+  const trackRecoveryOption = (option: RecoveryOption) => {
+    posthog.capture(AUTH_EVENTS.SIGN_IN_RECOVERY_OPTION_CLICKED, { option })
+  }
+
+  const handleSendSignInLink = async () => {
+    trackRecoveryOption("magic_link")
+    setLinkError(null)
+    if (!email) {
+      setErrors({ email: "Email is required." })
+      return
+    }
+    setIsLinkSending(true)
+    try {
+      const recaptchaToken = await getRecaptchaToken("signin_link")
+      if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        posthog.capture(AUTH_EVENTS.SIGN_IN_LINK_FAILED, {
+          method: "email_link",
+          reason: "captcha_unavailable",
+        })
+        setLinkError("We couldn't verify you're human. Please try again.")
+        return
+      }
+      const result = await sendSignInLink(
+        email,
+        recaptchaToken,
+        nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
+          ? signInOfferDestination(rawOffer)
+          : nextUrl,
+      )
+      if (!result.success) {
+        posthog.capture(AUTH_EVENTS.SIGN_IN_LINK_FAILED, {
+          method: "email_link",
+          reason: result.errorCode,
+        })
+        setLinkError(
+          result.errorCode === "captcha_failed"
+            ? "We couldn't verify you're human. Please try again."
+            : "Could not send the link. Please try again.",
+        )
+        return
+      }
+      posthog.capture(AUTH_EVENTS.SIGN_IN_LINK_REQUESTED, {
+        method: "email_link",
+      })
+      setLinkSentTo(email)
+    } catch {
+      posthog.capture(AUTH_EVENTS.SIGN_IN_LINK_FAILED, {
+        method: "email_link",
+        reason: "request_error",
+      })
+      setLinkError("Could not send the link. Please try again.")
+    } finally {
+      setIsLinkSending(false)
+    }
+  }
+
+  const handleGoogleSignIn = async (fromRecovery = false) => {
+    if (fromRecovery) trackRecoveryOption("google")
     setIsLoading(true)
     setErrors({})
     try {
@@ -147,6 +227,8 @@ function SignInContent() {
       if (nextUrl && nextUrl !== "/") {
         callbackUrl.searchParams.set("next", nextUrl)
       }
+      if (fromRecovery)
+        callbackUrl.searchParams.set("sign_in_recovery", "google")
       const { error } = await supabase.auth.signInWithOAuth({
         provider: "google",
         options: {
@@ -166,6 +248,12 @@ function SignInContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
+      {showRecovery && RECAPTCHA_SITE_KEY && (
+        <Script
+          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
+          strategy="afterInteractive"
+        />
+      )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
@@ -190,8 +278,8 @@ function SignInContent() {
         <Button
           type="button"
           variant="outline"
-          onClick={handleGoogleSignIn}
-          disabled={isLoading || isEmailLoading}
+          onClick={() => handleGoogleSignIn()}
+          disabled={isLoading || isEmailLoading || isLinkSending}
           className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
         >
           {isLoading ? <Spinner /> : <GoogleIcon />}
@@ -214,7 +302,11 @@ function SignInContent() {
             type="email"
             placeholder="Email"
             value={email}
-            onChange={(e) => setEmail(e.target.value)}
+            onChange={(e) => {
+              setEmail(e.target.value)
+              setLinkSentTo(null)
+            }}
+            disabled={isLinkSending}
             error={errors.email}
           />
           <Input
@@ -241,8 +333,11 @@ function SignInContent() {
           />
           <div className="flex justify-end">
             <Link
-              href="/auth/forgot-password"
-              className="text-xs text-muted/60 hover:text-muted"
+              href={forgotPasswordHref}
+              className={cn(
+                "text-xs text-muted/60 hover:text-muted",
+                inviteLinkReplayClass(forgotPasswordHref),
+              )}
             >
               Forgot password?
             </Link>
@@ -252,7 +347,7 @@ function SignInContent() {
           )}
           <Button
             type="submit"
-            disabled={isEmailLoading || isLoading}
+            disabled={isEmailLoading || isLoading || isLinkSending}
             className="w-full"
           >
             {isEmailLoading ? <Spinner /> : null}
@@ -260,19 +355,82 @@ function SignInContent() {
           </Button>
         </form>
 
-        {/* Sign up link */}
-        <p className="mt-5 text-center text-xs text-muted">
-          Don&apos;t have an account?{" "}
-          <Link
-            href={signUpHref}
-            className={cn(
-              "font-medium text-foreground hover:underline",
-              inviteLinkReplayClass(signUpHref),
-            )}
+        {showRecovery && (
+          <section
+            aria-label="Other ways to sign in"
+            className="mt-4 space-y-2 border border-dashed border-border p-3"
           >
-            Sign up
-          </Link>
-        </p>
+            {linkSentTo ? (
+              <p aria-live="polite" className="text-xs text-foreground">
+                If an account exists, we sent a link to{" "}
+                <span data-mask className="font-medium">
+                  {linkSentTo}
+                </span>
+                .
+              </p>
+            ) : (
+              <>
+                <p className="text-xs text-muted">
+                  Having trouble? Try another way to sign in.
+                </p>
+                <Button
+                  type="button"
+                  variant="outline"
+                  onClick={handleSendSignInLink}
+                  disabled={isLinkSending || isLoading || isEmailLoading}
+                  className="w-full gap-2"
+                >
+                  {isLinkSending ? <Spinner /> : null}
+                  {isLinkSending ? "Sending..." : "Email me a sign-in link"}
+                </Button>
+                {linkError && (
+                  <p className="text-xs text-destructive">{linkError}</p>
+                )}
+              </>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => handleGoogleSignIn(true)}
+              disabled={isLoading || isEmailLoading || isLinkSending}
+              className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
+            >
+              <GoogleIcon />
+              Continue with Google
+            </Button>
+            <div className="flex justify-center">
+              <Link
+                href={forgotPasswordHref}
+                onClick={() => trackRecoveryOption("forgot_password")}
+                className={cn(
+                  "text-xs text-muted hover:text-foreground",
+                  inviteLinkReplayClass(forgotPasswordHref),
+                )}
+              >
+                Forgot password?
+              </Link>
+            </div>
+          </section>
+        )}
+
+        {/* Sign up */}
+        <div className="relative mt-6 mb-4">
+          <div className="absolute inset-0 flex items-center">
+            <div className="w-full border-t border-dashed border-border" />
+          </div>
+          <div className="relative flex justify-center text-xs">
+            <span className="bg-surface px-3 text-muted">
+              New to Superserve?
+            </span>
+          </div>
+        </div>
+        <Button
+          variant="outline"
+          className={cn("w-full", inviteLinkReplayClass(signUpHref))}
+          render={<Link href={signUpHref} />}
+        >
+          Create an account
+        </Button>
 
         {/* Privacy */}
         <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">

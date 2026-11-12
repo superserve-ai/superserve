@@ -38,9 +38,15 @@ let recovered: { status: number; body: unknown } = {
   status: 200,
   body: { outcome: "retryable" },
 }
+let summary: { status: number; body: unknown } = {
+  status: 200,
+  body: { permissions: { can_view: true, can_manage: false } },
+}
 const fetchMock = vi.fn(async (url: string) => {
   if (url.endsWith("/billing/plan"))
     return Response.json({ entry_state: entryState })
+  if (url.endsWith("/billing/summary"))
+    return Response.json(summary.body, { status: summary.status })
   if (url.endsWith("/stripe/pro-checkout/recover"))
     return Response.json(recovered.body, { status: recovered.status })
   const next = checkouts.shift() ?? checkout
@@ -56,6 +62,10 @@ describe("startSignupCheckout", () => {
     }
     checkouts = []
     recovered = { status: 200, body: { outcome: "retryable" } }
+    summary = {
+      status: 200,
+      body: { permissions: { can_view: true, can_manage: false } },
+    }
     fetchMock.mockClear()
     provision.mockClear()
     vi.stubGlobal("fetch", fetchMock)
@@ -125,6 +135,37 @@ describe("startSignupCheckout", () => {
       `/auth/choose-plan/?reason=billing_admin_required&${pinned}`,
     )
   })
+
+  it("doesn't send a billing administrator to ask an administrator", async () => {
+    const error = vi.spyOn(console, "error").mockImplementation(() => {})
+    checkout = { status: 403, body: { error: { code: "forbidden" } } }
+    summary = {
+      status: 200,
+      body: { permissions: { can_view: true, can_manage: true } },
+    }
+    expect(await startSignupCheckout(user, "developer", origin, mine)).toBe(
+      `/auth/choose-plan/?reason=checkout_refused&${pinned}`,
+    )
+    expect(error).toHaveBeenCalledWith("Signup checkout refused", {
+      status: 403,
+      code: "forbidden",
+    })
+    error.mockRestore()
+  })
+
+  it.each([
+    [500, {}],
+    [200, { permissions: {} }],
+  ])(
+    "keeps asking for an administrator when billing access can't be read (%s %j)",
+    async (status, body) => {
+      checkout = { status: 403, body: { error: { code: "forbidden" } } }
+      summary = { status, body }
+      expect(await startSignupCheckout(user, "developer", origin, mine)).toBe(
+        `/auth/choose-plan/?reason=billing_admin_required&${pinned}`,
+      )
+    },
+  )
 
   it("returns to the paid page while a paid checkout settles", async () => {
     checkout = {

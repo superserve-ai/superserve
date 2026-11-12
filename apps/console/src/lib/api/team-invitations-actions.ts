@@ -42,6 +42,7 @@ export type InvitationErrorCode =
   | "invitation_pending"
   | "pending_limit"
   | "rate_limited"
+  | "invalid_role"
   | "bad_request"
   | "invitation_closed"
   | "last_owner"
@@ -84,13 +85,14 @@ export type SendInvitationResult =
 export type LeaveTeamResult = { ok: true; active: TeamMembership | null }
 
 const MESSAGES: Record<InvitationErrorCode, string> = {
-  free_plan: "Upgrade to invite owners",
+  free_plan: "Upgrade to invite members",
   already_member: "That person is already a member of this team.",
   invitation_pending:
     "That email already has an invitation that hasn't been accepted, including expired ones. Resend or revoke it in the list below.",
   pending_limit:
     "This team has the maximum number of pending invitations. Revoke one to send another.",
   rate_limited: "Too many invitations were sent recently. Try again later.",
+  invalid_role: "Role not allowed",
   bad_request: "Enter a valid email address.",
   invitation_closed: "That invitation is no longer pending.",
   last_owner:
@@ -119,6 +121,7 @@ const BACKEND_CODES: readonly InvitationErrorCode[] = [
   "pending_limit",
   "rate_limited",
   "bad_request",
+  "invalid_role",
   "invitation_closed",
   "last_owner",
   "conflict",
@@ -245,6 +248,7 @@ function toInvitation(raw: unknown): TeamInvitation | null {
   return {
     id: r.id,
     email: r.email,
+    ...(typeof r.role === "string" ? { role: r.role } : {}),
     status: r.status as TeamInvitation["status"],
     invited_by: typeof r.invited_by === "string" ? r.invited_by : null,
     created_at: r.created_at,
@@ -340,6 +344,7 @@ async function createOrResend(
       subject: teamInvitationSubject(name),
       react: TeamInvitationEmail({
         teamName: name,
+        role: invitation.role,
         regionLabel: regionLabel(context.team.region),
         inviterName: context.userLabel,
         expiresOn: formatExpiry(invitation.expires_at),
@@ -360,12 +365,16 @@ async function createOrResend(
 export async function createInvitationAction(
   expected: TeamScope,
   email: string,
+  role?: string,
 ): Promise<SendInvitationResult> {
   const normalized = typeof email === "string" ? email.trim() : ""
   if (!normalized || normalized.length > 320 || !normalized.includes("@")) {
     return failure("bad_request")
   }
-  return createOrResend(expected, "/invitations", { email: normalized })
+  return createOrResend(expected, "/invitations", {
+    email: normalized,
+    ...(role === undefined ? {} : { role }),
+  })
 }
 
 export async function resendInvitationAction(
