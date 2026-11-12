@@ -350,7 +350,7 @@ describe("growable sandbox memory refresh", () => {
     expect(result.current.detail.data?.access_token).toBe("token-a")
   })
 
-  it("stops polling once a poll finds the sandbox paused or gone", async () => {
+  it("slows down while paused elsewhere and picks up an external resume", async () => {
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const active = {
       id: "sbx-4",
@@ -366,8 +366,8 @@ describe("growable sandbox memory refresh", () => {
     } as SandboxResponse
     mockGet.mockResolvedValue(active)
     const { wrapper } = createQueryWrapper()
-    // The page's copy still says active; the API now says paused.
-    renderHook(() => useSandboxMemory(active), { wrapper })
+    // The page's copy stays active throughout; only the API changes.
+    const { result } = renderHook(() => useSandboxMemory(active), { wrapper })
     await waitFor(() => expect(mockGet).toHaveBeenCalledTimes(1))
 
     mockGet.mockResolvedValue({ ...active, status: "paused" })
@@ -375,10 +375,22 @@ describe("growable sandbox memory refresh", () => {
       await vi.advanceTimersByTimeAsync(12_000)
     })
     expect(mockGet).toHaveBeenCalledTimes(2)
+    // Paused: no 10 s polls, but a slow check still runs.
     await act(async () => {
-      await vi.advanceTimersByTimeAsync(60_000)
+      await vi.advanceTimersByTimeAsync(30_000)
     })
     expect(mockGet).toHaveBeenCalledTimes(2)
+
+    mockGet.mockResolvedValue({ ...active, memory_current_mib: 3072 })
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(35_000)
+    })
+    expect(mockGet).toHaveBeenCalledTimes(3)
+    await waitFor(() => expect(result.current.data).toBe(3072))
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(12_000)
+    })
+    expect(mockGet).toHaveBeenCalledTimes(4)
   })
 
   it("keeps polling through a transient error and stops once the sandbox is deleted", async () => {

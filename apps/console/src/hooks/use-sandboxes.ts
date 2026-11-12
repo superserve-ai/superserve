@@ -96,20 +96,21 @@ export function useSandboxMemory(
   sandbox: Pick<SandboxResponse, "id" | "status" | "memory_max_mib">,
 ) {
   const queryScope = useQueryScope()
-  const growing = (s: Pick<SandboxResponse, "status" | "memory_max_mib">) =>
-    s.status === "active" && s.memory_max_mib != null
+  const growable = sandbox.memory_max_mib != null
   return useQuery({
     queryKey: [...sandboxKeys.detail(sandbox.id), "memory", queryScope],
     queryFn: () => getSandbox(sandbox.id),
     select: (s) => s.memory_current_mib ?? null,
-    enabled: growing(sandbox),
-    // The page's copy goes stale once the sandbox is paused or deleted
-    // elsewhere, so each poll decides from its own latest response. Only a
+    enabled: growable && sandbox.status === "active",
+    // The page's copy goes stale once the sandbox is paused or resumed
+    // elsewhere, so each poll decides from its own latest response: often
+    // while active, slowly while not, so a resume is picked up. Only a
     // deleted sandbox stops it; a transient failure is retried next interval.
     refetchInterval: (query) => {
       const err = query.state.error
       if (err instanceof ApiError && err.status === 404) return false
-      return growing(query.state.data ?? sandbox) ? 10_000 : false
+      const status = (query.state.data ?? sandbox).status
+      return status === "active" ? 10_000 : 60_000
     },
     refetchIntervalInBackground: false,
   })
