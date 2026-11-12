@@ -258,12 +258,10 @@ export function useChangeTeamRole() {
     onSuccess: () => addToast("Role changed", "success"),
     onError: (error) => {
       addToast(
-        error instanceof PartialRoleChangeFailure
+        error instanceof PartialRoleChangeFailure ||
+          error.message === TEAM_CHANGED_MESSAGE
           ? error.message
-          : friendlyRbacMessage(
-              error,
-              error.message || "Failed to change role.",
-            ),
+          : friendlyRbacMessage(error, "Failed to change role."),
         "error",
       )
     },
