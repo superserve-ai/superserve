@@ -309,7 +309,8 @@ export type ProxyCheckoutRequest =
 
 // A recovery reports "active" for any team on a paid plan, so it completes a
 // checkout only when the page asking is the one Checkout returned to after a
-// payment (?billing=success).
+// payment (?billing=success). /onboarding/plan completes through its plan
+// refresh instead (getSignupPlanAction), so it is not counted twice.
 export function recordProxyCheckout(input: {
   request: ProxyCheckoutRequest
   response: Response
@@ -324,7 +325,11 @@ export function recordProxyCheckout(input: {
     request.kind === "opened"
       ? checkoutSurfaceFromUrl(request.successUrl)
       : checkoutSurfaceFromUrl(request.referer)
-  if (request.kind === "recovered" && page?.outcome !== "success") return
+  if (
+    request.kind === "recovered" &&
+    (page?.outcome !== "success" || page.surface !== "billing_pro")
+  )
+    return
   let copy: Response
   try {
     copy = response.clone()

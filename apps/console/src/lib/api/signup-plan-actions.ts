@@ -13,6 +13,8 @@ import {
   starterAuthReturnPath,
   signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
+import { cellFor } from "@/lib/cells"
+import { recordCheckoutCompleted } from "@/lib/posthog/checkout"
 import { createServerClient } from "@/lib/supabase/server"
 
 export async function getSignupPlanAction(
@@ -53,7 +55,7 @@ export async function getSignupPlanAction(
   if (await getImpersonationContext(user))
     throw new SignupSetupBlockedError("impersonation")
   // Resolve/provision through the existing signup path, before reading billing state.
-  const { team } = await getAuthApiKeyAndTeamForUser(
+  const { apiKey, team } = await getAuthApiKeyAndTeamForUser(
     user,
     new Date().toISOString(),
   ).catch((error: unknown) => {
@@ -63,5 +65,22 @@ export async function getSignupPlanAction(
       )
     throw error
   })
-  return readSignupPlan(user.id, team, expectedTeam)
+  const context = await readSignupPlan(user.id, team, expectedTeam)
+  // The onboarding page's refresh is where a successful Checkout return first
+  // sees the paid plan committed; it is the one completion for that page.
+  if (
+    billingReturn === "success" &&
+    context.state === "committed" &&
+    context.offer &&
+    context.offer !== "free" &&
+    context.teamKey === `${team.region}:${team.teamId}`
+  )
+    recordCheckoutCompleted({
+      userId: user.id,
+      surface: "onboarding_plan",
+      team,
+      base: cellFor(team.region).apiBaseUrl,
+      apiKey,
+    })
+  return context
 }

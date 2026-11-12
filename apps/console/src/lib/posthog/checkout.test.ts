@@ -433,6 +433,10 @@ describe("recordProxyCheckout", () => {
     recover({ outcome: "active" }, "https://c.test/billing/pro?team=x")
     recover({ outcome: "active" }, null)
     recover(
+      { outcome: "active" },
+      "https://c.test/onboarding/plan?billing=success",
+    )
+    recover(
       { outcome: "payment_confirmation_pending" },
       "https://c.test/billing/pro?billing=success",
     )
