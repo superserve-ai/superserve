@@ -399,6 +399,21 @@ describe("recordProxyCheckout", () => {
     )
   })
 
+  it("does not count a setup-only Checkout for a card as opened", async () => {
+    m.rows.billing_pro_upgrade_setup = { data: { id: "setup" }, error: null }
+    recordProxyCheckout({
+      ...base,
+      response: Response.json({ url: CHECKOUT_URL }),
+      request: {
+        kind: "opened",
+        offer: "pro_monthly",
+        successUrl: "https://c.test/billing/pro?billing=success",
+      },
+    })
+    await flush()
+    expect(m.trackEvent).not.toHaveBeenCalled()
+  })
+
   it("ignores a refused or non-Checkout response", async () => {
     recordProxyCheckout({
       ...base,

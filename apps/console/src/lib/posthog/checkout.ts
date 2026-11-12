@@ -199,17 +199,33 @@ interface OpenedInput {
   planSwitch?: boolean
 }
 
-async function openedProperties(input: OpenedInput): Promise<Properties> {
+// A paid purchase that needs a new card resumes with a setup-only Checkout
+// (billing_pro_upgrade_setup). It is not a new paid Checkout, so it is not
+// counted as opened. A failed lookup counts the Checkout.
+async function isCardSetupSession(team: CheckoutTeam, sessionId: string) {
+  const { data, error } = await cellFor(team.region)
+    .createAdminClient()
+    .from("billing_pro_upgrade_setup")
+    .select("id")
+    .eq("session_id", sessionId)
+    .limit(1)
+    .maybeSingle()
+  return !error && data !== null
+}
+
+async function openedProperties(
+  input: OpenedInput,
+): Promise<Properties | null> {
+  const sessionId = checkoutSessionId(input.response.id, input.response.url)
+  if (sessionId && (await isCardSetupSession(input.team, sessionId)))
+    return null
   return {
     surface: input.surface,
     ...offerProperties(input.offer),
     price_cents: await offerPriceCents(input.base, input.apiKey, input.offer),
     reason: input.reason ?? null,
     plan_switch: input.planSwitch ?? false,
-    checkout_session_id: checkoutSessionId(
-      input.response.id,
-      input.response.url,
-    ),
+    checkout_session_id: sessionId,
     ...teamProperties(input.team),
   }
 }
