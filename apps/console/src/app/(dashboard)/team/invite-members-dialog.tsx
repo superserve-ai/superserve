@@ -15,7 +15,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@superserve/ui"
-import { useEffect, useRef, useState } from "react"
+import { useEffect, useId, useRef, useState } from "react"
 
 import {
   sameTeam,
@@ -85,6 +85,7 @@ export function InviteMembersDialog({
   const [sending, setSending] = useState(false)
   const [attempted, setAttempted] = useState(false)
   const nextId = useRef(0)
+  const idPrefix = useId()
   const rowsRef = useRef<HTMLUListElement>(null)
   const displayedTeam = useDisplayedTeam()
   const currentTeam = useRef(displayedTeam)
@@ -92,6 +93,12 @@ export function InviteMembersDialog({
   const create = useCreateInvitation()
   const sent = rows.filter((row) => row.status === "sent").length
   const needsAttention = rows.length - sent
+  const summary =
+    attempted && !sending && rows.length > 0
+      ? needsAttention > 0
+        ? `${sent > 0 ? `${sent} sent. ` : ""}${needsAttention} ${needsAttention === 1 ? "needs" : "need"} attention.`
+        : `${sent} sent.`
+      : ""
 
   useEffect(() => {
     if (attempted && !sending) {
@@ -289,19 +296,23 @@ export function InviteMembersDialog({
               const complete = isComplete(row)
               const duplicate = isDuplicate(row)
               const role = knownTeamRole(row.role)
+              const messageId = `${idPrefix}-row-${row.id}-message`
+              const message = invalid
+                ? "Invalid email"
+                : duplicate
+                  ? "Address already added"
+                  : row.message
               return (
                 <li key={row.id} data-status={row.status} className="px-3 py-3">
                   <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
-                    <span
-                      data-mask
-                      className="min-w-0 flex-1 text-sm break-all"
-                    >
+                    <div data-mask className="min-w-0 flex-1 text-sm break-all">
                       {invalid || row.status === "error" || row.editing ? (
-                        <input
+                        <Input
                           aria-label={`Email for ${row.email}`}
+                          aria-describedby={message ? messageId : undefined}
                           value={row.email}
                           disabled={sending}
-                          className="h-9 w-full border border-dashed border-border bg-background px-2 text-sm outline-none focus:border-brand"
+                          className="border-dashed"
                           onChange={(event) =>
                             update(row.id, {
                               email: event.target.value.trim(),
@@ -320,7 +331,7 @@ export function InviteMembersDialog({
                       ) : (
                         row.email
                       )}
-                    </span>
+                    </div>
                     <div className="flex min-w-0 items-center gap-3 sm:shrink-0">
                       {rolesSupported && (
                         <Select
@@ -337,7 +348,7 @@ export function InviteMembersDialog({
                         >
                           <SelectTrigger
                             aria-label={`Role for ${row.email}`}
-                            className="h-9 min-w-0 gap-3 border-dashed border-border px-3 sm:w-40"
+                            className="h-9 min-w-0 gap-3 border-dashed px-3 sm:w-40"
                           >
                             <SelectValue className="truncate">
                               {() =>
@@ -382,30 +393,25 @@ export function InviteMembersDialog({
                       {TEAM_ROLES[role].description}
                     </p>
                   )}
-                  {(invalid || duplicate || row.message) && (
-                    <output
-                      className={`mt-1 block text-xs ${invalid || duplicate || row.status === "error" || row.status === "delivery_failed" ? "text-destructive" : "text-brand"}`}
+                  {message && (
+                    <p
+                      id={messageId}
+                      className={`mt-1 text-xs ${invalid || duplicate || row.status === "error" || row.status === "delivery_failed" ? "text-destructive" : "text-brand"}`}
                     >
-                      {invalid
-                        ? "Invalid email"
-                        : duplicate
-                          ? "Address already added"
-                          : row.message}
-                    </output>
+                      {message}
+                    </p>
                   )}
                 </li>
               )
             })}
           </ul>
-          {attempted && !sending && rows.length > 0 && (
-            <output
-              className={`mt-2 block text-xs ${needsAttention > 0 ? "text-destructive" : "text-brand"}`}
-            >
-              {needsAttention > 0
-                ? `${sent > 0 ? `${sent} sent. ` : ""}${needsAttention} ${needsAttention === 1 ? "needs" : "need"} attention.`
-                : `${sent} sent.`}
-            </output>
-          )}
+          {/* Mounted with the dialog so screen readers announce each new summary. */}
+          <output
+            aria-live="polite"
+            className={`block text-xs ${summary ? "mt-2" : ""} ${needsAttention > 0 ? "text-destructive" : "text-brand"}`}
+          >
+            {summary}
+          </output>
           <DialogFooter className="mt-6 p-0">
             <Button
               variant="outline"

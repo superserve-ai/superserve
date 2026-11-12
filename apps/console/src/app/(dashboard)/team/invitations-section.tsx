@@ -98,7 +98,6 @@ export function InviteMemberCard({
           type="button"
           size="sm"
           disabled={blocked}
-          title={blocked ? UPGRADE_REASON : undefined}
           onClick={() => {
             if (team) setInviting(team)
           }}

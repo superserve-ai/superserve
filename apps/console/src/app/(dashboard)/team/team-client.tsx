@@ -171,7 +171,7 @@ function ChangeRoleForm({
               value={selectedUserId}
               onValueChange={(value) => onSelectedUserIdChange(value ?? "")}
             >
-              <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
+              <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed px-3">
                 <SelectValue className="min-w-0 truncate">
                   {() =>
                     activeMembers.find(
@@ -203,7 +203,7 @@ function ChangeRoleForm({
               value={selectedRoleName}
               onValueChange={(value) => setRoleName(value ?? "")}
             >
-              <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed border-border px-3">
+              <SelectTrigger className="h-9 min-w-0 gap-3 border-dashed px-3">
                 <SelectValue className="truncate">
                   {() => roleLabel(selectedRoleName)}
                 </SelectValue>
@@ -423,7 +423,6 @@ function ActiveAssignmentRows({
                         variant="outline"
                         className="shrink-0"
                         disabled={revokeRole.isPending || ownerBlocked}
-                        title={ownerBlocked ? LAST_OWNER_REASON : undefined}
                         aria-describedby={
                           ownerBlocked
                             ? `owner-reason-${assignment.assignment_id}`

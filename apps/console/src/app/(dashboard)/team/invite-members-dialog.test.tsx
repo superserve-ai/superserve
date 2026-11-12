@@ -158,6 +158,9 @@ describe("InviteMembersDialog", () => {
     expect(screen.getByText("Duplicate addresses ignored.")).toBeInTheDocument()
     expect(screen.getByText("Invalid email")).toBeInTheDocument()
     expect(screen.getByLabelText("Email for invalid")).toHaveValue("invalid")
+    expect(
+      screen.getByLabelText("Email for invalid"),
+    ).toHaveAccessibleDescription("Invalid email")
     expect(screen.getByText("one@example.com")).toHaveAttribute("data-mask")
     fireEvent.click(screen.getByRole("button", { name: "Remove invalid" }))
     expect(screen.queryByText("Invalid email")).not.toBeInTheDocument()
@@ -250,6 +253,24 @@ describe("InviteMembersDialog", () => {
       screen.queryByRole("button", { name: /Send invites|Retry failed/ }),
     ).not.toBeInTheDocument()
     expect(screen.getByText("Close", { selector: "button" })).toBeEnabled()
+  })
+  it("announces each send summary in one live region mounted with the dialog", async () => {
+    mocks.create
+      .mockResolvedValueOnce({ delivery: "sent" })
+      .mockRejectedValueOnce({ status: 500 })
+    setup()
+    const status = screen.getByRole("status")
+    expect(status).toHaveAttribute("aria-live", "polite")
+    expect(status).toBeEmptyDOMElement()
+    paste("one@example.com two@example.com")
+    send()
+    await waitFor(() =>
+      expect(status).toHaveTextContent("1 sent. 1 needs attention."),
+    )
+    expect(screen.getAllByRole("status")).toEqual([status])
+    fireEvent.click(screen.getByRole("button", { name: "Retry failed" }))
+    await waitFor(() => expect(status).toHaveTextContent(/^2 sent\.$/))
+    expect(screen.getAllByRole("status")).toEqual([status])
   })
   it("retries only the retryable row when permanent and generic errors are mixed", async () => {
     mocks.create
