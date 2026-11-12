@@ -8,7 +8,10 @@ import posthog from "posthog-js"
 import { Suspense, useEffect, useRef, useState } from "react"
 
 import { CheckoutElsewhere } from "@/components/billing/checkout-elsewhere"
-import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
+import {
+  OtherTeams,
+  PlanPickerOptions,
+} from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { getTrialOutcomeAction } from "@/lib/billing/plan-offers-actions"
 import {
@@ -184,13 +187,16 @@ function ChoosePlanContent() {
             locator ? (
               <CheckoutElsewhere locator={locator} />
             ) : (
-              <Button
-                render={<Link href="/sandboxes" />}
-                size="sm"
-                className="mt-5"
-              >
-                Back to console
-              </Button>
+              <>
+                <Button
+                  render={<Link href="/sandboxes" />}
+                  size="sm"
+                  className="mt-5"
+                >
+                  Back to console
+                </Button>
+                <OtherTeams className="mt-5" />
+              </>
             )
           ) : !locator ? (
             <Button

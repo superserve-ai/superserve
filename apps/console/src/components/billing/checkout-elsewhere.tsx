@@ -4,6 +4,7 @@ import { Button, Spinner } from "@superserve/ui"
 import Link from "next/link"
 import { useEffect, useRef, useState } from "react"
 
+import { OtherTeams } from "@/components/billing/plan-picker-options"
 import { useSignOut } from "@/hooks/use-sign-out"
 import { setActiveTeamAction } from "@/lib/api/teams-actions"
 import {
@@ -146,6 +147,11 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
           Back to console
         </Button>
       </div>
+      {result.kind === "switch" ? (
+        <OtherTeams besides={locator.team} hideOpen className="mt-5" />
+      ) : result.kind !== "signed_out" ? (
+        <OtherTeams className="mt-5" />
+      ) : null}
       {failed && (
         <p role="alert" className="mt-3 text-center text-xs text-destructive">
           {failed}

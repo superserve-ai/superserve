@@ -179,10 +179,18 @@ function teamKey(team: { id: string; region: string }) {
   return `${team.region}:${team.id}`
 }
 
-// The user's other teams, so someone who can't buy a plan for this team can
-// carry on in one of theirs. One dropdown keeps the page short however many
-// teams there are. Nothing shows while they load or can't be read.
-function OtherTeams({ locator }: { locator: CheckoutLocator }) {
+// Open another team. `besides` leaves out a region:id team key.
+// `hideOpen` also leaves out the open team; it defaults to true without `besides`.
+// `className` controls placement. Nothing shows if no teams can be offered.
+export function OtherTeams({
+  besides,
+  hideOpen = besides === undefined,
+  className,
+}: {
+  besides?: string
+  hideOpen?: boolean
+  className?: string
+}) {
   const [teams, setTeams] = useState<TeamSummary[]>()
   const [picked, setPicked] = useState<string>()
   const [switching, setSwitching] = useState(false)
@@ -190,24 +198,32 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
   useEffect(() => {
     let live = true
     listTeamsAction()
-      .then(
-        (directory) =>
-          live &&
+      .then((directory) => {
+        const open =
+          hideOpen && directory.activeTeamId && directory.activeRegion
+            ? teamKey({
+                id: directory.activeTeamId,
+                region: directory.activeRegion,
+              })
+            : null
+        if (live)
           setTeams(
             directory.teams
-              .filter((team) => teamKey(team) !== locator.team)
+              .filter(
+                (team) => teamKey(team) !== besides && teamKey(team) !== open,
+              )
               .toSorted(
                 (a, b) =>
                   a.name.localeCompare(b.name) ||
                   a.region.localeCompare(b.region),
               ),
-          ),
-      )
+          )
+      })
       .catch(() => undefined)
     return () => {
       live = false
     }
-  }, [locator.team])
+  }, [besides, hideOpen])
   if (!teams?.length) return null
   // Region badges only add signal when the teams span regions.
   const multiRegion = new Set(teams.map((team) => team.region)).size > 1
@@ -226,7 +242,12 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
     }
   }
   return (
-    <div className="flex w-80 max-w-full flex-col items-center gap-2">
+    <div
+      className={cn(
+        "flex w-80 max-w-full flex-col items-center gap-2",
+        className,
+      )}
+    >
       <p className="text-center text-sm text-muted">Or open another team:</p>
       <div className="flex w-full gap-2">
         <Select
@@ -323,7 +344,7 @@ export function PlanPickerOptions({
             one of them to upgrade this team.
           </p>
         )}
-        <OtherTeams locator={locator} />
+        <OtherTeams besides={locator.team} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
@@ -355,7 +376,7 @@ export function PlanPickerOptions({
         {enterprise ? (
           <EnterpriseOption card={enterprise} className="w-full max-w-sm" />
         ) : null}
-        <OtherTeams locator={locator} />
+        <OtherTeams besides={locator.team} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>

@@ -1,4 +1,5 @@
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { CheckoutTeam } from "@/lib/billing/checkout-team-actions"
@@ -8,6 +9,7 @@ import { CheckoutElsewhere } from "./checkout-elsewhere"
 
 const mocks = vi.hoisted(() => ({
   lookup: vi.fn(),
+  listTeams: vi.fn(),
   setActiveTeam: vi.fn(),
   signOut: vi.fn(),
   assign: vi.fn(),
@@ -16,7 +18,12 @@ vi.mock("@/lib/billing/checkout-team-actions", () => ({
   getCheckoutTeamAction: mocks.lookup,
 }))
 vi.mock("@/lib/api/teams-actions", () => ({
+  listTeamsAction: mocks.listTeams,
   setActiveTeamAction: mocks.setActiveTeam,
+}))
+vi.mock("@/lib/billing/plan-offers-actions", () => ({
+  canManageTeamBillingAction: vi.fn(),
+  getTeamCatalogAction: vi.fn(),
 }))
 vi.mock("@/hooks/use-sign-out", () => ({ useSignOut: () => mocks.signOut }))
 vi.mock("next/link", () => ({
@@ -28,7 +35,8 @@ vi.mock("next/link", () => ({
     href: string
   }) => <a href={href}>{children}</a>,
 }))
-vi.mock("@superserve/ui", () => ({
+vi.mock("@superserve/ui", async () => ({
+  ...(await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")),
   Button: ({
     render,
     children,
@@ -57,6 +65,11 @@ const deferred = <T,>() => {
 
 beforeEach(() => {
   mocks.lookup.mockReset()
+  mocks.listTeams.mockReset().mockResolvedValue({
+    activeTeamId: "open-team",
+    activeRegion: "use",
+    teams: [],
+  })
   mocks.setActiveTeam.mockReset().mockResolvedValue(undefined)
   mocks.signOut.mockReset().mockResolvedValue(undefined)
   mocks.assign.mockReset()
@@ -75,6 +88,8 @@ describe("CheckoutElsewhere", () => {
     expect(screen.queryByRole("button")).toBeNull()
     expect(screen.queryByRole("link")).toBeNull()
     expect(mocks.lookup).toHaveBeenCalledExactlyOnceWith(locator)
+    expect(screen.queryByRole("combobox", { name: "Team to open" })).toBeNull()
+    expect(mocks.listTeams).not.toHaveBeenCalled()
   })
 
   it.each([
@@ -127,6 +142,95 @@ describe("CheckoutElsewhere", () => {
     expect(mocks.lookup).toHaveBeenCalledExactlyOnceWith(locator)
     expect(mocks.setActiveTeam).not.toHaveBeenCalled()
     expect(mocks.signOut).not.toHaveBeenCalled()
+  })
+
+  it("offers only other teams while preserving the checkout switch return path", async () => {
+    mocks.lookup.mockResolvedValue({ kind: "switch", team })
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [
+        team,
+        { id: "open-team", name: "Open team", region: "use" },
+        { id: "another-team", name: "Another team", region: "use" },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<CheckoutElsewhere locator={locator} />)
+    const checkoutSwitch = await screen.findByRole("button", {
+      name: "Switch to Example team",
+    })
+    expect(checkoutSwitch).toBeVisible()
+    expect(screen.queryByRole("link", { name: "Check again" })).toBeNull()
+    await user.click(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    )
+    expect(
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Another team"])
+    await user.click(screen.getByRole("option", { name: "Another team" }))
+    const switching = deferred<void>()
+    mocks.setActiveTeam.mockReturnValueOnce(switching.promise)
+    await user.click(screen.getByRole("button", { name: "Open team" }))
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith(
+      "another-team",
+      "use",
+    )
+    expect(mocks.assign).not.toHaveBeenCalled()
+    await act(async () => switching.resolve())
+    expect(mocks.assign).toHaveBeenCalledExactlyOnceWith("/sandboxes")
+    await user.click(checkoutSwitch)
+    expect(mocks.setActiveTeam).toHaveBeenNthCalledWith(2, "team", "use")
+    await waitFor(() =>
+      expect(mocks.assign).toHaveBeenNthCalledWith(2, returnPath),
+    )
+    expect(mocks.setActiveTeam.mock.invocationCallOrder[1]).toBeLessThan(
+      mocks.assign.mock.invocationCallOrder[1]!,
+    )
+  })
+
+  it("offers the user's other teams when they no longer belong to the checkout team", async () => {
+    mocks.lookup.mockResolvedValue({ kind: "not_member" })
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [
+        { id: "open-team", name: "Open team", region: "use" },
+        { id: "zeta", name: "Zeta", region: "use" },
+        { id: "alpha", name: "Alpha", region: "use" },
+      ],
+    })
+    const user = userEvent.setup()
+    render(<CheckoutElsewhere locator={locator} />)
+    expect(await screen.findByText(/You're no longer a member/)).toBeVisible()
+    await user.click(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    )
+    expect(
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Alpha", "Zeta"])
+  })
+
+  it("hides the team dropdown when signed out", async () => {
+    mocks.lookup.mockResolvedValue({ kind: "signed_out" })
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [{ id: "another-team", name: "Another team", region: "use" }],
+    })
+    render(<CheckoutElsewhere locator={locator} />)
+    expect(
+      await screen.findByRole("link", { name: "Sign in" }),
+    ).toHaveAttribute(
+      "href",
+      `/auth/signin?next=${encodeURIComponent(returnPath)}`,
+    )
+    expect(screen.queryByRole("combobox", { name: "Team to open" })).toBeNull()
+    expect(mocks.listTeams).not.toHaveBeenCalled()
   })
 
   it("switches once before navigating once, even on double click", async () => {
