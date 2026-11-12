@@ -310,6 +310,15 @@ vi.mock("@/lib/auth/signup-review-server", async (importOriginal) => ({
     mockUpdateSignupReview(...args),
 }))
 
+// Run `after()` work at once but never wait for it, as Next does once the
+// response is out. Tests can then assert the scheduled events directly.
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (fn: () => unknown) => {
+    void fn()
+  },
+}))
+
 const mockTrackEvent = vi.fn()
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
@@ -721,6 +730,32 @@ describe("auth callback", () => {
       "?reason=exchange_failed",
     )
   })
+
+  it.each([
+    ["missing_code", "https://console.superserve.ai/auth/callback"],
+    [
+      "signup_link_failed",
+      "https://console.superserve.ai/auth/callback?token_hash=used&type=signup",
+    ],
+  ])(
+    "returns the %s redirect while PostHog never answers",
+    async (reason, url) => {
+      authVerifyOtpError = { message: "expired", code: "otp_expired" }
+      mockTrackEvent.mockImplementation(() => new Promise(() => {}))
+
+      const outcome = await Promise.race([
+        GET(new Request(url)).then((response) => response.status),
+        new Promise((resolve) => setTimeout(() => resolve("pending"), 200)),
+      ])
+
+      expect(outcome).toBe(307)
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_callback_failed",
+        expect.any(String),
+        expect.objectContaining({ reason }),
+      )
+    },
+  )
 
   it("records one failure, not a sign-up, for a used signup confirmation link", async () => {
     currentUser!.app_metadata = { provider: "email" }

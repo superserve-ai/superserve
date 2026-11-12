@@ -202,7 +202,7 @@ export async function GET(request: Request) {
           },
           requestedOffer,
         ).catch(() => {})
-        await trackCallbackFailure({ ...failure, reason: "signup_blocked" })
+        trackCallbackFailure({ ...failure, reason: "signup_blocked" })
         return NextResponse.redirect(
           buildRedirectUrl(
             origin,
@@ -219,7 +219,7 @@ export async function GET(request: Request) {
       // again with the same email sends a new link while the account is
       // unconfirmed, so return there with the signup's offer and destination.
       if (!code && type === "signup") {
-        await trackCallbackFailure({ ...failure, reason: "signup_link_failed" })
+        trackCallbackFailure({ ...failure, reason: "signup_link_failed" })
         const signup = new URLSearchParams({ error: "link_expired" })
         for (const param of ["offer", SIGNUP_OFFER_PARAM]) {
           const value = searchParams.get(param)
@@ -535,7 +535,7 @@ export async function GET(request: Request) {
                   ),
                 )
                 await supabase.auth.signOut().catch(() => {})
-                await trackCallbackFailure({
+                trackCallbackFailure({
                   reason: "enterprise_hold_failed",
                   method: "code",
                   type,
@@ -893,7 +893,7 @@ export async function GET(request: Request) {
       : providerErrorCode
         ? "provider_error"
         : "missing_code"
-  await trackCallbackFailure({
+  trackCallbackFailure({
     reason,
     method: code ? "code" : tokenHash ? "token_hash" : "none",
     type,

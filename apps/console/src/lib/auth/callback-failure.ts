@@ -1,6 +1,8 @@
 import "server-only"
 import crypto from "node:crypto"
 
+import { after } from "next/server"
+
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
@@ -54,11 +56,12 @@ export interface CallbackFailure {
 }
 
 /**
- * Records one `auth_callback_failed` event. The properties carry no codes,
- * tokens, emails, or error messages. Without a known user the event uses a
- * random distinct ID and does not create a person profile.
+ * Schedules one `auth_callback_failed` event for after the response. The
+ * properties carry no codes, tokens, emails, or error messages. Without a
+ * known user the event uses a random distinct ID and does not create a person
+ * profile. A slow or failing PostHog never delays or changes the redirect.
  */
-export async function trackCallbackFailure(failure: CallbackFailure) {
+export function trackCallbackFailure(failure: CallbackFailure): void {
   const type =
     failure.type === null
       ? null
@@ -69,19 +72,23 @@ export async function trackCallbackFailure(failure: CallbackFailure) {
     failure.errorCode && ERROR_CODE_PATTERN.test(failure.errorCode)
       ? failure.errorCode
       : null
+  const distinctId = failure.userId ?? crypto.randomUUID()
+  const properties = {
+    method: failure.method,
+    type,
+    error_code: errorCode,
+    reason: failure.reason,
+    ...(failure.userId ? {} : { $process_person_profile: false }),
+  }
   try {
-    await trackEvent(
-      AUTH_EVENTS.CALLBACK_FAILED,
-      failure.userId ?? crypto.randomUUID(),
-      {
-        method: failure.method,
-        type,
-        error_code: errorCode,
-        reason: failure.reason,
-        ...(failure.userId ? {} : { $process_person_profile: false }),
-      },
-    )
+    after(async () => {
+      try {
+        await trackEvent(AUTH_EVENTS.CALLBACK_FAILED, distinctId, properties)
+      } catch {
+        /* Delivery is best effort. */
+      }
+    })
   } catch {
-    // Analytics must not change the callback's redirect.
+    /* No request scope: skip the event rather than fail the redirect. */
   }
 }
