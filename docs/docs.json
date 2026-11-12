@@ -87,6 +87,7 @@
               "sandbox/create",
               "sandbox/connect",
               "sandbox/lifecycle",
+              "sandbox/memory",
               "sandbox/snapshots",
               "sandbox/metadata",
               "sandbox/networking",
