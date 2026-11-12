@@ -95,9 +95,29 @@ describe("trialOutcome", () => {
     [{ trial_block: "trial_unavailable" }, "unavailable"],
     [{ trial_block: "trial_check_unavailable" }, "check_unavailable"],
     [{ trial_block: null, trial: { state: "no_grant" } }, "unknown"],
+    // The server also leaves trial_block null when it could not read the
+    // reason, so only a reason it read and found empty means a denial.
     [
       {
         trial_block: null,
+        trial: { state: "no_grant" },
+        plan: { key: "trial", status: "trial_ended" },
+      },
+      "unknown",
+    ],
+    [
+      {
+        trial_block: null,
+        trial_block_read: false,
+        trial: { state: "no_grant" },
+        plan: { key: "trial", status: "trial_ended" },
+      },
+      "unknown",
+    ],
+    [
+      {
+        trial_block: null,
+        trial_block_read: true,
         trial: { state: "no_grant" },
         plan: { key: "trial", status: "trial_ended" },
       },

@@ -110,9 +110,9 @@ export type PlanPickerReason =
 // share a message:
 // - "ended": the trial grant was spent or expired.
 // - "unavailable": the team never got a trial. Either the server reported the
-//   trial as denied, or the team is held at trial_ended with no trial grant
-//   and no reason, which is how the server reports a denial it keeps generic.
-//   Why a team was denied is never shown.
+//   trial as denied, or it read the trial reason, found none, and holds the
+//   team at trial_ended with no trial grant, which is how it reports a denial
+//   it keeps generic. Why a team was denied is never shown.
 // - "check_unavailable": the trial could not be confirmed because a required
 //   check did not complete. Not a denial and not proof of anything.
 // - "unknown": no reason is known, so the copy claims nothing about the trial.
@@ -126,10 +126,12 @@ export function trialOutcome(summary: unknown): TrialOutcome {
   const {
     trial,
     trial_block: block,
+    trial_block_read: blockRead,
     plan,
   }: {
     trial?: { state?: unknown } | null
     trial_block?: unknown
+    trial_block_read?: unknown
     plan?: { key?: unknown; status?: unknown } | null
   } = summary && typeof summary === "object" ? summary : {}
   // The server's own reason wins over the balance, which can be stale or read
@@ -138,10 +140,12 @@ export function trialOutcome(summary: unknown): TrialOutcome {
   if (block === "trial_exhausted") return "ended"
   if (block === "trial_unavailable") return "unavailable"
   if (trial?.state === "exhausted" || trial?.state === "expired") return "ended"
-  // The server reports a check that did not complete or a claim still in
-  // progress as trial_check_unavailable above, so a team it holds at
-  // trial_ended with no grant and no reason never had a trial.
+  // A null trial_block also means the server could not read the reason, so
+  // only a reason it read and found empty says a team held at trial_ended
+  // with no grant never had a trial. A server that does not send
+  // trial_block_read stays unknown.
   if (
+    blockRead === true &&
     trial?.state === "no_grant" &&
     plan?.key === "trial" &&
     plan.status === "trial_ended"
