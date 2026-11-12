@@ -110,8 +110,18 @@ async function runCheck(
  * further step and returns nothing. In particular it never reaches the server
  * call that replaces the evidence cookie and issues the proof cookie, so a
  * late step cannot write over the evidence of a later attempt. A server call
- * already sent when the deadline passes cannot be recalled; its proof cookie
- * is named for its own attempt ID and the callback URL does not carry that ID.
+ * already sent when the deadline passes cannot be recalled, but Next.js runs a
+ * page's server actions one at a time: its response, with its cookies, is
+ * applied before any later action is sent, so it cannot land on top of a newer
+ * attempt. Its proof cookie is named for its own attempt ID, and the callback
+ * URL does not carry that ID. Because of the same queue, a later action waits
+ * for the call to finish; the call is bounded by the server's own provider
+ * timeouts (reCAPTCHA, fingerprint lookup, backend), so the wait is short.
+ * If the capture is still running at the deadline, the page leaves with its
+ * stored attempt still marked pending, and the recovery page reports that
+ * capture as unavailable instead of starting a second one for the same
+ * session. That is how the capture treats any reload, and the proof then
+ * follows the backend's policy for missing evidence.
  * Cancelling also removes the Turnstile widget the check added, and stops a
  * late feature-flag answer from adding one. A fingerprint capture left running
  * is the shared capture of the page, which the next attempt, or the recovery
