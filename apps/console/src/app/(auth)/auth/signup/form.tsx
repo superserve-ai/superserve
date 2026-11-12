@@ -13,6 +13,7 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { confirmedSignupDestinationAction } from "@/lib/auth/confirmed-signup-actions"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
@@ -152,6 +153,9 @@ const RESEND_COOLDOWN_SECONDS = 60
 // How often a waiting "Check your email" view looks for the session that a
 // confirmation in another tab of this browser leaves behind.
 const CONFIRMATION_CHECK_INTERVAL_MS = 3000
+// How long a tab that saw the confirmation waits for the server to pick the
+// next step before it takes the dashboard entry, which routes it too.
+const CONFIRMED_DESTINATION_TIMEOUT_MS = 5000
 const BOT_CHECK_UNAVAILABLE =
   "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
 
@@ -406,7 +410,7 @@ export default function SignUpContent() {
     setResendNotice(null)
   }
 
-  const confirmedDestination = confirmedSignupReturnPath(nextUrl, rawOffer)
+  const confirmedNext = confirmedSignupReturnPath(nextUrl)
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
@@ -432,7 +436,32 @@ export default function SignUpContent() {
         return
       following = true
       setConfirmedElsewhere(true)
-      window.location.replace(confirmedDestination)
+      void destination().then((path) => {
+        if (!disposed) window.location.replace(path)
+      })
+    }
+    // An explicit next path wins, as in the callback. Otherwise ask the
+    // server, which knows the new team's state, for the step the callback
+    // picks; a slow or failed answer falls back to the dashboard entry.
+    const destination = async () => {
+      if (confirmedNext !== "/") return confirmedNext
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const path = await Promise.race([
+          confirmedSignupDestinationAction(rawOffer),
+          new Promise<string>((resolve) => {
+            timer = setTimeout(
+              () => resolve("/"),
+              CONFIRMED_DESTINATION_TIMEOUT_MS,
+            )
+          }),
+        ])
+        return confirmedSignupReturnPath(path)
+      } catch {
+        return "/"
+      } finally {
+        clearTimeout(timer)
+      }
     }
     const check = () => {
       if (following || document.visibilityState !== "visible") return
@@ -454,7 +483,7 @@ export default function SignUpContent() {
       document.removeEventListener("visibilitychange", check)
       window.removeEventListener("focus", check)
     }
-  }, [emailStatus, submittedEmail, confirmedDestination])
+  }, [emailStatus, submittedEmail, confirmedNext, rawOffer])
 
   const resendControls = (
     <>
