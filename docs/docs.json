@@ -52,6 +52,7 @@
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "redirects": [
+    { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
     {
       "source": "/integrations/virtual-filesystems/mesa",
       "destination": "/storage/archil"
@@ -87,7 +88,7 @@
               "sandbox/create",
               "sandbox/connect",
               "sandbox/lifecycle",
-              "sandbox/memory",
+              "sandbox/live-memory-resizing",
               "sandbox/snapshots",
               "sandbox/metadata",
               "sandbox/networking",
