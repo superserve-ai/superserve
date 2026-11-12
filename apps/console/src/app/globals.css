@@ -13,6 +13,36 @@
   }
 }
 
+/* Keep shared popup fades without scaling; preserve dialog centering. */
+@media (prefers-reduced-motion: reduce) {
+  .ss-dialog-popup {
+    transition: opacity 200ms ease;
+  }
+
+  .ss-dialog-popup[data-starting-style],
+  .ss-dialog-popup[data-ending-style] {
+    transform: translate(-50%, -50%);
+  }
+
+  .ss-popover-popup,
+  .ss-tooltip-popup,
+  .ss-menu-popup,
+  .ss-select-popup {
+    transition: opacity 150ms ease-out;
+  }
+
+  .ss-popover-popup[data-starting-style],
+  .ss-popover-popup[data-ending-style],
+  .ss-tooltip-popup[data-starting-style],
+  .ss-tooltip-popup[data-ending-style],
+  .ss-menu-popup[data-starting-style],
+  .ss-menu-popup[data-ending-style],
+  .ss-select-popup[data-starting-style],
+  .ss-select-popup[data-ending-style] {
+    transform: none;
+  }
+}
+
 /* Hide xterm's built-in scrollbar — FitAddon otherwise reserves scrollbar
    width from usable columns, even when `scrollbar.showScrollbar: false` is
    set in the Terminal options. This is the belt-and-braces CSS guard. */
