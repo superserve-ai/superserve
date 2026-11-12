@@ -304,35 +304,36 @@ describe("return from Stripe's Back link", () => {
   })
 
   it("does not send the customer back to checkout", async () => {
-    vi.mocked(recoverProPayment).mockResolvedValue(
-      "https://checkout.stripe.com/c/pay/again",
-    )
+    const again = "https://checkout.stripe.com/c/pay/again"
+    vi.mocked(recoverProPayment).mockResolvedValue(again)
     render(<PlanSelection initial={pending} billingReturn="cancel" />)
-    await waitFor(() =>
-      expect(recoverProPayment).toHaveBeenCalledWith("use:team", true),
-    )
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Check payment status" }),
-      ).toBeEnabled(),
-    )
-    expect(assign).not.toHaveBeenCalled()
+    const checkButton = () =>
+      screen.getByRole("button", { name: "Check payment status" })
+    const settled = async (calls: number) => {
+      await waitFor(() =>
+        expect(recoverProPayment).toHaveBeenCalledTimes(calls),
+      )
+      await waitFor(() => expect(checkButton()).toBeEnabled())
+    }
+    await settled(1)
+    expect(recoverProPayment).toHaveBeenCalledWith("use:team", true)
     fireEvent(window, new Event("focus"))
-    await waitFor(() => expect(recoverProPayment).toHaveBeenCalledTimes(2))
-    await waitFor(() =>
-      expect(
-        screen.getByRole("button", { name: "Check payment status" }),
-      ).toBeEnabled(),
-    )
+    await settled(2)
     expect(assign).not.toHaveBeenCalled()
-    fireEvent.click(
-      screen.getByRole("button", { name: "Check payment status" }),
+
+    // A click that finds no checkout to open gives no lasting permission.
+    vi.mocked(recoverProPayment).mockResolvedValueOnce(
+      "payment_confirmation_pending",
     )
-    await waitFor(() =>
-      expect(assign).toHaveBeenCalledWith(
-        "https://checkout.stripe.com/c/pay/again",
-      ),
-    )
+    fireEvent.click(checkButton())
+    await settled(3)
+    fireEvent(window, new Event("focus"))
+    await settled(4)
+    expect(assign).not.toHaveBeenCalled()
+
+    // Only the check a click starts opens checkout.
+    fireEvent.click(checkButton())
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(again))
   })
 
   it("clears the marker through the router's history wrapper", async () => {

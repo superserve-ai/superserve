@@ -41,8 +41,9 @@ export function PlanSelection({
   const inFlight = useRef(false)
   // Stripe's Back link returns here with billing=cancel. Act on it once.
   const leftCheckout = useRef(billingReturn === "cancel")
-  // Set once the customer leaves checkout: only a click on this page may
-  // open checkout again, never a background check.
+  // Set once the customer leaves checkout: from then on only the check a click
+  // starts may open checkout again, never a timer or focus check. Starting a
+  // new Pro checkout clears it.
   const stayOffCheckout = useRef(false)
   const mounted = useRef(true)
   const completionSent = useRef(false)
@@ -141,13 +142,13 @@ export function PlanSelection({
   )
 
   const checkPayment = useCallback(
-    (restart = false) =>
+    (restart = false, clicked = false) =>
       run(async () => {
         const latest = await refresh()
         if (latest.state === "pending") {
           const outcome = await recoverProPayment(initial.teamKey, restart)
           if (isStripeCheckoutUrl(outcome)) {
-            if (!stayOffCheckout.current) navigate(outcome)
+            if (clicked || !stayOffCheckout.current) navigate(outcome)
             return
           }
           const recovered = await refresh()
@@ -288,7 +289,7 @@ export function PlanSelection({
           {error ??
             "Check again before choosing a plan. Your previous request may still complete."}
         </p>
-        <Button disabled={busy} onClick={() => void checkPayment()}>
+        <Button disabled={busy} onClick={() => void checkPayment(false, true)}>
           Check again
         </Button>
         <Button
@@ -407,14 +408,8 @@ export function PlanSelection({
             )
         })
       }
-      onCheckPayment={() => {
-        stayOffCheckout.current = false
-        void checkPayment()
-      }}
-      onCancelPayment={() => {
-        stayOffCheckout.current = false
-        void checkPayment(true)
-      }}
+      onCheckPayment={() => void checkPayment(false, true)}
+      onCancelPayment={() => void checkPayment(true, true)}
     />
   )
 }
