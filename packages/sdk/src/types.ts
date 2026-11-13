@@ -292,6 +292,12 @@ export interface CommandOptions {
    * Command timeout, sent to the server rounded up to whole seconds; the
    * client waits 5s past it. 0 is the same as omitting it. Negative,
    * non-finite, or over 2,147,478,000 (~24.8 days) throws `ValidationError`.
+   *
+   * Without callbacks, a timeout over 240 s runs the command over the
+   * streaming endpoint and collects the output, so the run is not cut off by
+   * the runtime's `fetch` response-headers limit (300 s in Node). Like any
+   * streamed run, the sandbox then stops the command if the connection drops
+   * or `signal` aborts.
    */
   timeoutMs?: number
   onStdout?: (data: string) => void
@@ -301,7 +307,11 @@ export interface CommandOptions {
    * Cap (bytes) on the response buffered by a non-streaming `run()`. Defaults to
    * 10 MiB (`MAX_EXEC_RESPONSE_BYTES`). Exceeding it throws `ValidationError`
    * rather than buffering unbounded output from an untrusted sandbox. For
-   * genuinely large output, stream via `onStdout`/`onStderr`.
+   * genuinely large output, stream via `onStdout`/`onStderr`. A run with a
+   * timeout over 240 s and no callbacks runs over the stream: it keeps at
+   * most 8 MiB of output and sets `truncated`, and there `maxOutputBytes`
+   * counts the UTF-8 bytes of stdout plus stderr rather than the encoded
+   * response body. A smaller value throws `ValidationError` once exceeded.
    */
   maxOutputBytes?: number
 }
