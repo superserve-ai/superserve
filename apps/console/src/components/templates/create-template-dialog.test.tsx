@@ -46,6 +46,11 @@ vi.mock("@/hooks/use-templates", () => ({
   useCreateTemplate: () => ({ mutateAsync: mocks.create }),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
+// Shiki loads grammars asynchronously; plain text is enough to assert snippets.
+vi.mock("@superserve/ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@superserve/ui")>()),
+  HighlightedCode: ({ code }: { code: string }) => <pre>{code}</pre>,
+}))
 import { CreateTemplateDialog } from "./create-template-dialog"
 
 beforeEach(() => {
@@ -171,8 +176,7 @@ describe("current image validation with authoritative entitlement", () => {
       fireEvent.change(screen.getByPlaceholderText("e.g. python-ml"), {
         target: { value: "allowed-template" },
       })
-      fireEvent.click(screen.getByRole("button", { name: "Custom image…" }))
-      fireEvent.change(screen.getByPlaceholderText("ghcr.io/myorg/base:v1"), {
+      fireEvent.change(screen.getByPlaceholderText("ghcr.io/example/base:v1"), {
         target: { value: image },
       })
       fireEvent.keyDown(screen.getByPlaceholderText("e.g. python-ml"), {
@@ -236,7 +240,7 @@ describe("resource ranges follow the team's plan caps", () => {
     expect(spin("vCPU")).toHaveAttribute("aria-valuemax", "32")
     expect(spin("Memory")).toHaveAttribute("aria-valuemax", "131072")
     expect(
-      screen.getByText("No plan limit reported · API maximum 32 vCPU"),
+      screen.getByText(/No plan limit reported, so this is the API maximum/),
     ).toBeInTheDocument()
   })
 
@@ -260,6 +264,8 @@ describe("resource ranges follow the team's plan caps", () => {
   })
 })
 
+const radio = (name: string | RegExp) => screen.getByRole("radio", { name })
+
 describe("memory growth", () => {
   beforeEach(() => {
     mocks.cap = 10
@@ -268,29 +274,36 @@ describe("memory growth", () => {
 
   it("is fixed by default and sends no ceiling", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    expect(screen.getByRole("switch")).not.toBeChecked()
+    expect(
+      screen.getByRole("radiogroup", { name: "Auto resize" }),
+    ).toBeInTheDocument()
+    expect(radio("Fixed")).toBeChecked()
+    expect(radio("Up to 4 GB")).not.toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
     expect(await submit()).not.toHaveProperty("memory_max_mib")
   })
 
-  it("offers ceilings above boot memory, up to 4x and within the cap", async () => {
+  it("names the ceiling, 4x boot within the plan, and starts there", async () => {
     mocks.memoryCap = 3072
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(screen.getByRole("switch"))
-    // 1 GB boot under a 3 GB cap: 2 GB, then the cap itself.
+    // 1 GB boot under a 3 GB cap: the cap wins over 4x.
+    fireEvent.click(radio("Up to 3 GB"))
+    expect(radio("Up to 3 GB")).toBeChecked()
+    expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "3072")
     expect(spin("Max memory")).toHaveAttribute("aria-valuemin", "2048")
     expect(spin("Max memory")).toHaveAttribute("aria-valuemax", "3072")
-    fireEvent.keyDown(spin("Max memory"), { key: "End" })
+    // A lower ceiling is one step down, and the option follows it.
+    press("Decrease Max memory")
+    expect(radio("Up to 2 GB")).toBeChecked()
     expect(await submit()).toMatchObject({
       memory_mib: 1024,
-      memory_max_mib: 3072,
+      memory_max_mib: 2048,
     })
   })
 
   it("keeps the ceiling valid as boot memory changes", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(screen.getByRole("switch"))
-    fireEvent.keyDown(spin("Max memory"), { key: "End" })
+    fireEvent.click(radio("Up to 4 GB"))
     expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "4096")
     // Dropping to 512 MB pulls the ceiling down to 4x, 2 GB.
     press("Decrease Memory")
@@ -304,21 +317,120 @@ describe("memory growth", () => {
     })
   })
 
+  it("goes back to fixed and drops the ceiling", async () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.click(radio("Up to 4 GB"))
+    fireEvent.click(radio("Fixed"))
+    expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
+    expect(await submit()).not.toHaveProperty("memory_max_mib")
+  })
+
   it("turns off visibly when boot memory reaches the cap", async () => {
     mocks.memoryCap = 2048
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(screen.getByRole("switch"))
+    fireEvent.click(radio("Up to 2 GB"))
     press("Increase Memory")
-    expect(screen.getByRole("switch")).toHaveAttribute("aria-disabled", "true")
-    expect(screen.getByRole("switch")).not.toBeChecked()
-    expect(
-      screen.getByText(
-        "Boot memory is at your plan's limit, so there is no room to grow.",
-      ),
-    ).toBeInTheDocument()
+    expect(radio("At limit")).toBeDisabled()
+    expect(radio("Fixed")).toBeChecked()
+    expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
+    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+      "Boot memory is at your plan's limit, so there is no room to grow.",
+    )
     // Room to grow again doesn't re-enable it without the user.
     press("Decrease Memory")
-    expect(screen.getByRole("switch")).not.toBeChecked()
+    expect(radio("Fixed")).toBeChecked()
     expect(await submit()).not.toHaveProperty("memory_max_mib")
+  })
+
+  it("links to the live memory resizing docs", () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    expect(
+      screen.getByRole("link", { name: /Live memory resizing docs/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.superserve.ai/sandbox/live-memory-resizing",
+    )
+  })
+})
+
+describe("view as code", () => {
+  beforeEach(() => {
+    mocks.cap = 10
+    mocks.create.mockResolvedValue({ id: "created-template" })
+  })
+
+  const toggle = () => screen.getByRole("button", { name: "View as code" })
+
+  it("is collapsed by default and controls a hidden section", () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    expect(toggle()).toHaveAttribute("aria-expanded", "false")
+    const section = document.getElementById(
+      toggle().getAttribute("aria-controls") ?? "",
+    )
+    expect(section).not.toBeNull()
+    expect(section).not.toBeVisible()
+    fireEvent.click(toggle())
+    expect(toggle()).toHaveAttribute("aria-expanded", "true")
+    expect(section).toBeVisible()
+    expect(screen.getByRole("region", { name: "This template as code" })).toBe(
+      section,
+    )
+  })
+
+  it("shows the CLI command for the shape being built, live", () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.change(screen.getByPlaceholderText("e.g. python-ml"), {
+      target: { value: "python-ml" },
+    })
+    fireEvent.click(toggle())
+    const code = () =>
+      screen.getByRole("tabpanel").querySelector("pre")?.textContent
+    expect(code()).toContain("superserve template create python-ml")
+    expect(code()).toContain("--from python:3.12-slim")
+    expect(code()).not.toContain("--memory-max")
+    fireEvent.click(radio("Up to 4 GB"))
+    expect(code()).toContain("--memory-max 4G")
+  })
+
+  it("switches to the SDK snippets", () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.click(toggle())
+    fireEvent.click(screen.getByRole("tab", { name: "Python" }))
+    expect(screen.getByRole("tabpanel")).toHaveTextContent("Template.create(")
+    expect(screen.getByRole("tabpanel")).toHaveTextContent(
+      'from_="python:3.12-slim"',
+    )
+  })
+
+  it("copies the snippet", async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined)
+    Object.defineProperty(navigator, "clipboard", {
+      value: { writeText },
+      configurable: true,
+    })
+    render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.click(toggle())
+    fireEvent.click(screen.getByRole("button", { name: "Copy CLI code" }))
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Copied" }),
+      ).toBeInTheDocument(),
+    )
+    expect(writeText).toHaveBeenCalledWith(
+      expect.stringContaining("superserve template create"),
+    )
+  })
+
+  it("submits the same shape the code shows", async () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.click(radio("Up to 4 GB"))
+    expect(await submit()).toEqual({
+      name: "sized-template",
+      vcpu: 1,
+      memory_mib: 1024,
+      memory_max_mib: 4096,
+      disk_mib: 4096,
+      build_spec: { from: "python:3.12-slim" },
+    })
   })
 })
