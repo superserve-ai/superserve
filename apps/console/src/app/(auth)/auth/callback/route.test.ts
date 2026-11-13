@@ -1,3 +1,7 @@
+const mockSettle = vi.fn().mockResolvedValue(null)
+vi.mock("@/lib/api/settle-active-team", () => ({
+  settleTeamSelection: (...args: unknown[]) => mockSettle(...args),
+}))
 import { render, screen, cleanup, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import {
@@ -374,6 +378,7 @@ describe("auth callback", () => {
   )
 
   beforeEach(() => {
+    mockSettle.mockReset().mockResolvedValue(null)
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
     mockGetSignupPlanAction.mockReset().mockResolvedValue(undefined)
     mockPrepareTeam.mockReset().mockImplementation(async () => {
@@ -3017,6 +3022,38 @@ describe("auth callback", () => {
     }
   })
 
+  it.each([
+    [false, "/sandboxes", true],
+    [false, "/invite/ssinv_use_" + "a".repeat(43), false],
+    [false, "/admin", false],
+    [true, "/sandboxes", false],
+  ])(
+    "settles only existing dashboard arrivals: %s %s",
+    async (fresh, next, expected) => {
+      currentUser!.app_metadata = { provider: "email" }
+      currentUser!.created_at = new Date(
+        Date.now() - (fresh ? 0 : 3600000),
+      ).toISOString()
+      await GET(
+        new Request(
+          "https://example.com/auth/callback?code=abc&next=" +
+            encodeURIComponent(next),
+        ),
+      )
+      expect(mockSettle).toHaveBeenCalledTimes(expected ? 1 : 0)
+    },
+  )
+
+  it("redirects even when settling fails", async () => {
+    currentUser!.app_metadata = { provider: "email" }
+    currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+    mockSettle.mockRejectedValueOnce(Error("unavailable"))
+    const response = await GET(
+      new Request("https://example.com/auth/callback?code=abc&next=/sandboxes"),
+    )
+    expect(response.headers.get("location")).toContain("/sandboxes")
+    expect(mockSettle).toHaveBeenCalledTimes(1)
+  })
   describe("sign-in recovery", () => {
     it("signs in with an emailed sign-in link without the reset-password step", async () => {
       currentUser!.app_metadata = { provider: "email" }
