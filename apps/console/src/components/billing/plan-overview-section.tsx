@@ -45,7 +45,9 @@ export function PlanOverviewSection({
 }) {
   const scope = useQueryScope()
   const capabilities = useBillingCapabilities()
-  const legacyTransition = useLegacyPlanTransition()
+  const legacyTransition = useLegacyPlanTransition(
+    summary.plan?.key === "trial" && summary.plan.status !== "trial",
+  )
   const planQuery = useTeamPlan(true)
   const plan = planQuery.data
   const allowance = useFreeAllowance(!details && plan?.kind === "free").data
