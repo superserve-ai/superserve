@@ -1,6 +1,7 @@
 "use client"
 
 import { EyeIcon, EyeSlashIcon } from "@phosphor-icons/react"
+import type { Session } from "@supabase/supabase-js"
 import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
@@ -14,7 +15,13 @@ import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import {
+  signupEmailNextPath,
+  signupFollowFallbackPath,
+} from "@/lib/auth/signup-email-next"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import { confirmedSignupDestinationAction } from "@/lib/auth/signup-return-actions"
+import { confirmedSignupReturnPath } from "@/lib/auth/signup-return-path"
 import {
   TURNSTILE_SCRIPT_SRC,
   TURNSTILE_SITE_KEY,
@@ -93,6 +100,12 @@ const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
 
 // Matches the server-side cooldown between confirmation emails.
 const RESEND_COOLDOWN_SECONDS = 60
+// How often a waiting "Check your email" view looks for the session that a
+// confirmation in another tab of this browser leaves behind.
+const CONFIRMATION_CHECK_INTERVAL_MS = 3000
+// How long a tab that saw the confirmation waits for the server to pick the
+// next step before it takes the dashboard entry, which routes it too.
+const CONFIRMED_DESTINATION_TIMEOUT_MS = 5000
 const BOT_CHECK_UNAVAILABLE =
   "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
 
@@ -161,6 +174,7 @@ export default function SignUpContent() {
     text: string
     error: boolean
   } | null>(null)
+  const [confirmedElsewhere, setConfirmedElsewhere] = useState(false)
   const [errors, setErrors] = useState<Record<string, string>>({})
   const posthog = usePostHog()
   const router = useRouter()
@@ -346,6 +360,105 @@ export default function SignUpContent() {
     setResendNotice(null)
   }
 
+  // The next path the confirmation email carries (the email drops others).
+  const confirmedNext = confirmedSignupReturnPath(
+    signupEmailNextPath(nextUrl) ?? "/",
+  )
+
+  // A confirmation link opened in another tab of this browser signs that tab
+  // in and leaves the session cookies here too. Follow them on to the next
+  // step instead of waiting on "Check your email" for a click on "Sign in".
+  // A sign-up held for review (Enterprise) is signed out again by the
+  // callback, leaves no session to follow, and keeps this screen as before.
+  useEffect(() => {
+    if (!emailStatus || !submittedEmail) return
+    const expected = submittedEmail.trim().toLowerCase()
+    let supabase: ReturnType<typeof createBrowserClient>
+    try {
+      supabase = createBrowserClient()
+    } catch {
+      return
+    }
+    let following = false
+    let disposed = false
+    const follow = (session: Session | null) => {
+      // Only the account this tab created counts, not one already signed in.
+      if (
+        disposed ||
+        following ||
+        session?.user.email?.toLowerCase() !== expected
+      )
+        return
+      following = true
+      setConfirmedElsewhere(true)
+      const account = session.user.id
+      void destination(account)
+        .then(async (path) => {
+          // Another tab can switch accounts while the step loads. Go on only
+          // as the account this tab saw sign in; otherwise watch again.
+          const { data } = await supabase.auth.getSession()
+          if (disposed) return
+          if (data.session?.user.id !== account) {
+            following = false
+            setConfirmedElsewhere(false)
+            return
+          }
+          window.location.replace(path)
+        })
+        .catch(() => {
+          following = false
+          setConfirmedElsewhere(false)
+        })
+    }
+    // Ask the server, which knows the new team's state, for the step the
+    // callback picks for this next path; a slow or failed answer takes the
+    // safe fallback for the account that signed in (signupFollowFallbackPath).
+    const destination = async (account: string) => {
+      const fallbackNext = signupFollowFallbackPath(
+        confirmedNext,
+        rawOffer,
+        account,
+      )
+      let timer: ReturnType<typeof setTimeout> | undefined
+      try {
+        const path = await Promise.race([
+          confirmedSignupDestinationAction(rawOffer, confirmedNext),
+          new Promise<string>((resolve) => {
+            timer = setTimeout(
+              () => resolve(fallbackNext),
+              CONFIRMED_DESTINATION_TIMEOUT_MS,
+            )
+          }),
+        ])
+        return confirmedSignupReturnPath(path)
+      } catch {
+        return fallbackNext
+      } finally {
+        clearTimeout(timer)
+      }
+    }
+    const check = () => {
+      if (following || document.visibilityState !== "visible") return
+      void supabase.auth
+        .getSession()
+        .then(({ data }) => follow(data.session))
+        .catch(() => undefined)
+    }
+    const {
+      data: { subscription },
+    } = supabase.auth.onAuthStateChange((_event, session) => follow(session))
+    const timer = setInterval(check, CONFIRMATION_CHECK_INTERVAL_MS)
+    document.addEventListener("visibilitychange", check)
+    window.addEventListener("focus", check)
+    return () => {
+      disposed = true
+      subscription.unsubscribe()
+      clearInterval(timer)
+      document.removeEventListener("visibilitychange", check)
+      window.removeEventListener("focus", check)
+    }
+  }, [emailStatus, submittedEmail, confirmedNext, rawOffer])
+
   const resendControls = (
     <>
       <Button
@@ -514,7 +627,17 @@ export default function SignUpContent() {
             />
           </Link>
         </div>
-        {emailStatus === "sent" ? (
+        {confirmedElsewhere ? (
+          <>
+            <h1 className="text-center text-sm font-medium text-foreground">
+              Email verified
+            </h1>
+            <output className="mt-2 flex items-center justify-center gap-2 text-center text-xs leading-relaxed text-muted">
+              <Spinner />
+              Taking you to Superserve...
+            </output>
+          </>
+        ) : emailStatus === "sent" ? (
           <>
             <h1 className="text-center text-sm font-medium text-foreground">
               Check Your Email

@@ -60,12 +60,34 @@ vi.mock("next/script", () => ({
 }))
 
 const mockSignInWithOAuth = vi.fn()
+type MockSession = { user: { id?: string; email?: string } } | null
+const mockGetSession = vi.fn<() => Promise<{ data: { session: MockSession } }>>(
+  () => Promise.resolve({ data: { session: null } }),
+)
+const mockUnsubscribe = vi.fn()
+let authStateListener: ((event: string, session: MockSession) => void) | null =
+  null
 vi.mock("@/lib/supabase/client", () => ({
   createBrowserClient: () => ({
     auth: {
       signInWithOAuth: mockSignInWithOAuth,
+      getSession: () => mockGetSession(),
+      onAuthStateChange: (
+        listener: (event: string, session: MockSession) => void,
+      ) => {
+        authStateListener = listener
+        return { data: { subscription: { unsubscribe: mockUnsubscribe } } }
+      },
     },
   }),
+}))
+
+const mockConfirmedDestination = vi.fn<
+  (offer: string | undefined, next: string) => Promise<string>
+>((_offer, next) => Promise.resolve(next))
+vi.mock("@/lib/auth/signup-return-actions", () => ({
+  confirmedSignupDestinationAction: (offer: string | undefined, next: string) =>
+    mockConfirmedDestination(offer, next),
 }))
 
 const mockEnsureFingerprintSignupEventId = vi.fn<
@@ -171,6 +193,10 @@ describe("SignUpPage", () => {
       signupAttemptId: "attempt-default",
     })
     mockSignInWithOAuth.mockReset()
+    mockGetSession.mockReset()
+    mockGetSession.mockResolvedValue({ data: { session: null } })
+    mockUnsubscribe.mockReset()
+    authStateListener = null
     mockEnsureFingerprintSignupEventId.mockReset()
     mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
     mockCapture.mockReset()
@@ -1106,6 +1132,387 @@ describe("SignUpPage", () => {
 
       expect(screen.getByPlaceholderText("Email")).toHaveValue("test@test.com")
       expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled()
+    })
+  })
+
+  describe("confirmation in another tab", () => {
+    let mockReplace: ReturnType<typeof vi.spyOn>
+
+    const signUp = async (email = "New.User@Example.com") => {
+      await user.type(
+        await screen.findByPlaceholderText("Full Name"),
+        "Test User",
+      )
+      await user.type(screen.getByPlaceholderText("Email"), email)
+      await user.type(screen.getByPlaceholderText("Password"), "Password123")
+      await user.type(
+        screen.getByPlaceholderText("Confirm Password"),
+        "Password123",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign Up" }))
+      expect(await screen.findByText("Check Your Email")).toBeInTheDocument()
+    }
+
+    beforeEach(() => {
+      mockReplace = vi
+        .spyOn(window.location, "replace")
+        .mockImplementation(() => {})
+      mockSignUpWithEmail.mockResolvedValue({ success: true })
+      mockConfirmedDestination.mockReset()
+      mockConfirmedDestination.mockImplementation((_offer, next) =>
+        Promise.resolve(next),
+      )
+    })
+
+    const confirmedSession = {
+      user: { id: "user-1", email: "new.user@example.com" },
+    }
+    const confirmInOtherTab = () => {
+      mockGetSession.mockResolvedValue({ data: { session: confirmedSession } })
+      act(() => {
+        authStateListener?.("SIGNED_IN", confirmedSession)
+      })
+    }
+
+    afterEach(() => {
+      mockReplace.mockRestore()
+      vi.useRealTimers()
+    })
+
+    it("moves on once the new account signs in from another tab", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      render(<SignUpPage />)
+      await signUp()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000)
+      })
+      expect(mockReplace).not.toHaveBeenCalled()
+
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: { email: "new.user@example.com" } } },
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(3_000)
+      })
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledTimes(1))
+      expect(mockReplace).toHaveBeenCalledWith("/")
+      expect(screen.getByText("Email verified")).toBeInTheDocument()
+      expect(screen.getByRole("status")).toHaveTextContent(
+        "Taking you to Superserve...",
+      )
+      expect(screen.queryByText("Check Your Email")).not.toBeInTheDocument()
+    })
+
+    it("moves on when the other tab reports the sign-in", async () => {
+      mockSearchParams = new URLSearchParams({ next: "/yc/claim" })
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/yc/claim"))
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(
+        undefined,
+        "/yc/claim",
+      )
+    })
+
+    it("asks the server about an explicit offer landing page", async () => {
+      // The callback sends a new Pro trial with next=/billing/pro/ to the
+      // console, so this tab must not go to the upgrade page on its own.
+      mockSearchParams = new URLSearchParams({
+        offer: "pro_monthly",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockResolvedValue("/sandboxes")
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith("/sandboxes"),
+      )
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(
+        "pro_monthly",
+        "/billing/pro/",
+      )
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+    })
+
+    it("uses only the next path the confirmation email carries", async () => {
+      // The email drops /templates, so the callback picks its default step.
+      mockSearchParams = new URLSearchParams({ next: "/templates" })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(undefined, "/")
+    })
+
+    it("takes the requested path when the server is slow", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSearchParams = new URLSearchParams({ next: "/yc/claim" })
+      mockConfirmedDestination.mockReturnValue(new Promise(() => {}))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000)
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/yc/claim")
+    })
+
+    it("takes the dashboard entry for an offer landing when the server is slow", async () => {
+      // The callback may send a new Pro trial to the console instead of the
+      // upgrade page, so this tab must not guess the upgrade page.
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSearchParams = new URLSearchParams({
+        offer: "pro_monthly",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockReturnValue(new Promise(() => {}))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000)
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/")
+      expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
+    })
+
+    it("takes the dashboard entry for an offer landing when the server fails", async () => {
+      mockSearchParams = new URLSearchParams({
+        offer: "pro_monthly",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+      expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
+    })
+
+    it("sends a payment page through the account's preparation when the server fails", async () => {
+      // Without an offer the callback keeps the payment page, after setting
+      // up the first team; the preparation route does that setup too.
+      mockSearchParams = new URLSearchParams({
+        next: "/billing-usage/buy-credit/?amount=500",
+      })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith(
+          `/api/onboarding/prepare/?${new URLSearchParams({
+            account: "user-1",
+            next: "/billing-usage/buy-credit/?amount=500",
+          })}`,
+        ),
+      )
+    })
+
+    it("keeps another offer's upgrade page for that preparation when the server fails", async () => {
+      // /billing/pro/ is not the Free offer's landing page, so the callback
+      // keeps it rather than routing it by the team state.
+      mockSearchParams = new URLSearchParams({
+        offer: "free",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith(
+          `/api/onboarding/prepare/?${new URLSearchParams({
+            account: "user-1",
+            next: "/billing/pro/",
+          })}`,
+        ),
+      )
+    })
+
+    it("does not go on when another account signs in while the step loads", async () => {
+      let answer: (path: string) => void = () => {}
+      mockSearchParams = new URLSearchParams({ next: "/billing/pro/" })
+      mockConfirmedDestination.mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+      )
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+      await waitFor(() => expect(mockConfirmedDestination).toHaveBeenCalled())
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: { user: { id: "user-2", email: "other@example.com" } },
+        },
+      })
+      await act(async () => {
+        answer("/billing/pro/")
+      })
+
+      await waitFor(() => expect(mockGetSession).toHaveBeenCalled())
+      expect(mockReplace).not.toHaveBeenCalled()
+      expect(screen.queryByText("Email verified")).toBeNull()
+    })
+
+    it("checks again when the user comes back to this tab", async () => {
+      render(<SignUpPage />)
+      await signUp()
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: { email: "new.user@example.com" } } },
+      })
+
+      act(() => {
+        window.dispatchEvent(new Event("focus"))
+      })
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+    })
+
+    it("takes the step the server picks for a new account", async () => {
+      // A new Pro trial uses the console, as after the confirmation link.
+      mockSearchParams = new URLSearchParams({ offer: "pro_monthly" })
+      mockConfirmedDestination.mockResolvedValue("/sandboxes")
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith("/sandboxes"),
+      )
+      expect(mockConfirmedDestination).toHaveBeenCalledWith("pro_monthly", "/")
+      expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
+    })
+
+    it("takes the dashboard entry when the server is slow", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockConfirmedDestination.mockReturnValue(new Promise(() => {}))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(4_000)
+      })
+      expect(mockReplace).not.toHaveBeenCalled()
+      expect(screen.getByText("Email verified")).toBeInTheDocument()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(1_000)
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/")
+    })
+
+    it("takes the dashboard entry when the server fails", async () => {
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+    })
+
+    it("follows only a local path from the server", async () => {
+      mockConfirmedDestination.mockResolvedValue("//attacker.example")
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+    })
+
+    it("ignores a session for another account", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockGetSession.mockResolvedValue({
+        data: { session: { user: { email: "someone.else@example.com" } } },
+      })
+      render(<SignUpPage />)
+      await signUp()
+
+      act(() => {
+        authStateListener?.("INITIAL_SESSION", {
+          user: { email: "someone.else@example.com" },
+        })
+      })
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(9_000)
+      })
+
+      expect(mockReplace).not.toHaveBeenCalled()
+      expect(screen.getByText("Check Your Email")).toBeInTheDocument()
+    })
+
+    it("does not follow a next path that leaves the site", async () => {
+      mockSearchParams = new URLSearchParams({ next: "/\\attacker.example" })
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+    })
+
+    it("ignores a session check that ends after the user starts over", async () => {
+      let resolveSession: (value: {
+        data: { session: MockSession }
+      }) => void = () => {}
+      mockGetSession.mockImplementation(
+        () =>
+          new Promise((resolve) => {
+            resolveSession = resolve
+          }),
+      )
+      render(<SignUpPage />)
+      await signUp()
+      act(() => {
+        window.dispatchEvent(new Event("focus"))
+      })
+      await waitFor(() => expect(mockGetSession).toHaveBeenCalled())
+
+      await user.click(screen.getByRole("button", { name: "Start over" }))
+      await act(async () => {
+        resolveSession({
+          data: { session: { user: { email: "new.user@example.com" } } },
+        })
+      })
+
+      expect(mockReplace).not.toHaveBeenCalled()
+      expect(screen.queryByText("Email verified")).not.toBeInTheDocument()
+    })
+
+    it("stops watching when the user starts over", async () => {
+      render(<SignUpPage />)
+      await signUp()
+      expect(authStateListener).not.toBeNull()
+
+      await user.click(screen.getByRole("button", { name: "Start over" }))
+
+      expect(mockUnsubscribe).toHaveBeenCalled()
     })
   })
 

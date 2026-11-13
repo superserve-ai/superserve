@@ -9,15 +9,14 @@ import * as z from "zod"
 
 import { createPromotionSignupAttempt } from "@/lib/api/promotion-device-evidence"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
-import { deviceReturnPath } from "@/lib/auth/device-return-path"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import {
   claimGoogleSignupRecovery,
   isGoogleUser,
   issueGoogleSignupProof,
 } from "@/lib/auth/google-signup-proof"
-import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { signupEmailNextPath } from "@/lib/auth/signup-email-next"
 import {
   beginSignupEvidenceAttempt,
   isSupersededSignupEvidenceAttempt,
@@ -42,10 +41,6 @@ import {
   getPricingVersionAction,
   getPublicBillingPlansAction,
 } from "@/lib/billing/plans-actions"
-import {
-  proAuthReturnPath,
-  starterAuthReturnPath,
-} from "@/lib/billing/pro-auth-return"
 import { DEFAULT_REGION } from "@/lib/cells"
 import {
   isCloudflareSignupObservationEnabled as readCloudflareObservationFlag,
@@ -70,7 +65,6 @@ import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibili
 import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createAdminClient } from "@/lib/supabase/admin"
 import { createServerClient } from "@/lib/supabase/server"
-import { ycReturnPath } from "@/lib/yc/return-path"
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),
@@ -603,12 +597,7 @@ export const signUpWithEmail = async (
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
     const callbackUrl = new URL("/auth/callback", appUrl)
-    const next =
-      proAuthReturnPath(ycNext ?? null) ??
-      starterAuthReturnPath(ycNext ?? null) ??
-      ycReturnPath(ycNext) ??
-      deviceReturnPath(ycNext) ??
-      inviteReturnPath(ycNext)
+    const next = signupEmailNextPath(ycNext)
     if (next) callbackUrl.searchParams.set("next", next)
     if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
     const offerIntent = rawSignupOffer ?? offer
