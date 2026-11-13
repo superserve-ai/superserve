@@ -26,6 +26,7 @@ import type { BillingSummaryResponse } from "@/lib/api/billing"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { AWAITING_PLAN_STATES } from "@/lib/billing/signup-checkout-paths"
 
+import { TrialUpgradeAction } from "./billing/trial-upgrade-action"
 import {
   CustomerBillingSection,
   billingProblem,
@@ -676,6 +677,45 @@ describe("CustomerBillingSection", () => {
       })
     },
   )
+
+  it("shares pending checkout between trial upgrade actions", () => {
+    mocks.offers = [
+      {
+        offer_key: "developer_monthly",
+        display_name: "Builder",
+        sellable: true,
+      },
+    ]
+    const queryClient = new QueryClient()
+    queryClient.setQueryData<SignupPlanContext>(["signup-plan", "use:team-1"], {
+      userId: "signup-account",
+      teamKey: "use:team-1",
+      state: "selecting",
+      offer: null,
+      requestedOffer: "developer",
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TrialUpgradeAction />
+        <TrialUpgradeAction />
+      </QueryClientProvider>,
+    )
+
+    const buttons = screen.getAllByRole("button", {
+      name: "Upgrade to Builder",
+    })
+    expect(fireEvent.submit(buttons[0].closest("form")!)).toBe(true)
+    expect(fireEvent.submit(buttons[1].closest("form")!)).toBe(false)
+    for (const button of buttons) expect(button).toBeDisabled()
+
+    // Back from Checkout restores this page from the back-forward cache.
+    const restore = new Event("pageshow")
+    Object.defineProperty(restore, "persisted", { value: true })
+    act(() => void window.dispatchEvent(restore))
+    for (const button of buttons) expect(button).toBeEnabled()
+    expect(fireEvent.submit(buttons[1].closest("form")!)).toBe(true)
+    expect(fireEvent.submit(buttons[0].closest("form")!)).toBe(false)
+  })
 
   it("uses the requested offer's checkout and offers other plans for a trial", () => {
     mocks.pricingVersion = "v2"

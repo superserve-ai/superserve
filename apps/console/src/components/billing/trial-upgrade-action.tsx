@@ -6,7 +6,7 @@ import Link from "next/link"
 
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
-import { useSubmitOnce } from "@/hooks/use-submit-once"
+import { createSharedSubmitOnce } from "@/hooks/use-submit-once"
 import { useUser } from "@/hooks/use-user"
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { pickerOfferSellable, pickerPlanLabel } from "@/lib/billing/plan-picker"
@@ -15,6 +15,9 @@ import {
   signupCheckoutPath,
   trialPlanOffer,
 } from "@/lib/billing/signup-checkout-paths"
+
+// Share pending checkout between the banner and the Billing plan card.
+const useTrialCheckoutSubmitOnce = createSharedSubmitOnce()
 
 // The trial upgrade action. The banner and the Billing plan card both render
 // it, so a trial team sees one upgrade path with one destination.
@@ -31,7 +34,7 @@ export function TrialUpgradeAction() {
   const requested = trialPlanOffer(signup?.requestedOffer)
   const selected =
     requested && pickerOfferSellable(offers, requested) ? requested : undefined
-  const { submitting, onSubmit } = useSubmitOnce<true>()
+  const { submitting, onSubmit } = useTrialCheckoutSubmitOnce()
 
   return (
     <>
@@ -39,9 +42,9 @@ export function TrialUpgradeAction() {
         <form
           method="post"
           action={signupCheckoutPath(selected, locator)}
-          onSubmit={onSubmit(true)}
+          onSubmit={onSubmit}
         >
-          <Button type="submit" size="sm" disabled={submitting !== null}>
+          <Button type="submit" size="sm" disabled={submitting}>
             {submitting ? <Spinner size="sm" /> : null}
             {`Upgrade to ${pickerPlanLabel(offers, selected)}`}
           </Button>
