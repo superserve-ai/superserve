@@ -1,0 +1,518 @@
+---
+title: "Vercel Eve"
+sidebarTitle: Vercel Eve
+description: Use Superserve sandboxes as the sandbox backend for agents built with Vercel Eve.
+icon: "/logos/integrations/vercel.svg"
+---
+
+[eve](https://eve.dev) is Vercel's framework for durable backend agents. Each eve session gets one sandbox, where the agent's `bash`, `read_file`, and `write_file` tools run. eve's `defineSandboxProvider` API lets you plug in your own backend. This page builds a provider that gives every eve session its own Superserve sandbox, so the commands the model runs and the files it writes stay in an isolated VM. The model API key stays in your app; the sandbox never sees it.
+
+## Setup
+
+eve needs Node.js 24 or later. Create an agent and add the Superserve SDK:
+
+```bash
+npx eve@latest init my-agent
+cd my-agent
+npm install @superserve/sdk
+```
+
+This page uses eve `1.0.0-rc.14` and `@superserve/sdk` `0.12.0`.
+
+The examples call Anthropic directly, so they need no Vercel AI Gateway credentials. Set the model in `agent/agent.ts`:
+
+```typescript agent/agent.ts
+import { defineAgent } from "eve"
+import { anthropic } from "eve/models/anthropic"
+
+export default defineAgent({
+  model: anthropic("claude-haiku-4-5"),
+})
+```
+
+Put your keys in `.env.local`. `eve dev` loads it automatically.
+
+```bash .env.local
+SUPERSERVE_API_KEY=ss_live_...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+See [API keys](/api-key) to create a Superserve API key.
+
+## Add the provider
+
+The provider maps eve's sandbox lifecycle to the Superserve SDK:
+
+- `start()` creates a sandbox the first time a session uses one. It tags the sandbox with a hash of the eve session id, so a later call finds the same sandbox.
+- `resume()` reconnects to that sandbox in later steps and after a server restart. `Sandbox.connect` resumes it if it is paused.
+- `onSessionEnd()` deletes the sandbox when the eve session ends.
+- The connection runs eve's commands with `sandbox.commands.spawn` and moves files with `sandbox.files`. `stop()` pauses the sandbox.
+- `prepare()` bakes workspace files and setup into a snapshot. See [Bake files and setup into a snapshot](#bake-files-and-setup-into-a-snapshot).
+
+Save it as `agent/lib/superserve-sandbox.ts`:
+
+```typescript agent/lib/superserve-sandbox.ts
+import { createHash } from "node:crypto"
+import { readFile, writeFile } from "node:fs/promises"
+import { join } from "node:path"
+
+import {
+  ConflictError,
+  type NetworkConfig,
+  NotFoundError,
+  Sandbox,
+  Snapshot,
+} from "@superserve/sdk"
+import type { SandboxNetworkPolicy } from "eve/sandbox"
+import {
+  defineSandboxProvider,
+  SANDBOX_AGENT_ENV,
+  type SandboxConnection,
+  SandboxSessionGoneError,
+  SandboxTemplateNotProvisionedError,
+} from "eve/sandbox/provider"
+
+export interface SuperserveSandboxOptions {
+  /** Template for new sandboxes. Defaults to the Superserve base template. */
+  readonly template?: string
+  /** Environment variables for every command in the sandbox. */
+  readonly envVars?: Record<string, string>
+  /** Pause a sandbox after this many idle seconds. Defaults to 15 minutes. */
+  readonly idleTimeoutSeconds?: number
+  /** Delete a sandbox after it is paused this long. Defaults to one day. */
+  readonly autoDeleteSeconds?: number
+}
+
+const WORKSPACE = "/workspace"
+const LIVE = ["starting", "active", "pausing", "paused", "resuming"] as const
+
+// Quote a value for /bin/sh.
+const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
+// Tag each sandbox with a short hash of the eve session id.
+const tagFor = (sessionId: string) => ({
+  eveSession: createHash("sha256").update(sessionId).digest("hex").slice(0, 32),
+})
+
+export const SuperserveSandbox = defineSandboxProvider({
+  name: "superserve",
+  environment(options: SuperserveSandboxOptions) {
+    const envVars = { ...SANDBOX_AGENT_ENV, ...options.envVars }
+
+    return {
+      // Bake workspace files, skills, and the `prepare` callback into a snapshot.
+      async prepare(ctx) {
+        if (ctx.isEmpty) return { snapshotId: null }
+        const key = ctx.templateKey({ template: options.template, envVars })
+        const cacheFile = join(ctx.storagePath, "superserve-snapshots.json")
+        const cache: Record<string, string> = JSON.parse(
+          await readFile(cacheFile, "utf8").catch(() => "{}"),
+        )
+        const cached = cache[key]
+        if (cached) {
+          const snapshot = await Snapshot.get(cached).catch(() => null)
+          if (snapshot?.status === "ready") return { snapshotId: cached }
+        }
+        const builder = await Sandbox.create({
+          name: `eve-template-${key.slice(0, 16)}`,
+          fromTemplate: options.template,
+          envVars,
+        })
+        try {
+          await builder.commands.run(`mkdir -p ${WORKSPACE}`)
+          await ctx.populate(connect(builder))
+          const snapshot = await builder.snapshot({
+            name: `eve-${key.slice(0, 16)}`,
+          })
+          await writeFile(
+            cacheFile,
+            JSON.stringify({ ...cache, [key]: snapshot.id }),
+          )
+          ctx.log(`Superserve snapshot ${snapshot.id}`)
+          return { snapshotId: snapshot.id }
+        } finally {
+          await builder.kill()
+        }
+      },
+
+      // Find the session's sandbox by its tag, or create it.
+      async start(
+        ctx,
+        open: { readonly networkPolicy?: SandboxNetworkPolicy } | undefined,
+        artifact,
+      ) {
+        const metadata = tagFor(ctx.session.id)
+        let [found] = await Sandbox.list({ metadata, status: LIVE })
+        if (!found) {
+          const created = await Sandbox.create({
+            name: `eve-${metadata.eveSession}`,
+            ...(artifact.snapshotId
+              ? { fromSnapshot: artifact.snapshotId }
+              : { fromTemplate: options.template }),
+            metadata,
+            envVars,
+            network: toNetwork(open?.networkPolicy),
+            idleTimeoutSeconds: options.idleTimeoutSeconds ?? 15 * 60,
+            autoDeleteSeconds: options.autoDeleteSeconds ?? 24 * 60 * 60,
+          }).catch((error) => {
+            if (artifact.snapshotId && error instanceof NotFoundError) {
+              throw new SandboxTemplateNotProvisionedError({
+                providerName: "superserve",
+                reason: "The snapshot was deleted.",
+                templateKey: artifact.snapshotId,
+              })
+            }
+            throw error
+          })
+          // Two concurrent starts can each create a sandbox. Keep the oldest.
+          const all = await Sandbox.list({ metadata, status: LIVE })
+          all.sort(
+            (a, b) => +a.createdAt - +b.createdAt || a.id.localeCompare(b.id),
+          )
+          found = all[0] ?? created
+          if (found.id !== created.id) await created.kill()
+        }
+        const sandbox = await Sandbox.connect(found.id)
+        await sandbox.commands.run(`mkdir -p ${WORKSPACE}`)
+        return {
+          connection: connect(sandbox),
+          state: { sandboxId: sandbox.id },
+        }
+      },
+
+      // Reconnect to the recorded sandbox. Resumes it if it is paused.
+      async resume(_ctx, _artifact, state) {
+        if (typeof state?.sandboxId !== "string") {
+          throw new SandboxSessionGoneError(
+            "No Superserve sandbox id recorded.",
+          )
+        }
+        try {
+          return connect(await Sandbox.connect(state.sandboxId))
+        } catch (error) {
+          if (error instanceof NotFoundError) {
+            throw new SandboxSessionGoneError(
+              `Sandbox ${state.sandboxId} is gone.`,
+            )
+          }
+          throw error
+        }
+      },
+
+      // Delete every sandbox of the session. Safe to repeat.
+      async onSessionEnd(ctx, state, { signal }) {
+        const ids = new Set(state ? [state.sandboxId] : [])
+        for (const { id } of await Sandbox.list({
+          metadata: tagFor(ctx.session.id),
+          signal,
+        })) {
+          ids.add(id)
+        }
+        for (const id of ids) await Sandbox.killById(id, { signal })
+      },
+    }
+  },
+})
+
+function connect(sandbox: Sandbox): SandboxConnection {
+  return {
+    workspaceRoot: WORKSPACE,
+
+    async spawn({ command, env, workingDirectory, signal, stdin }) {
+      const stdout = pipe()
+      const stderr = pipe()
+      const proc = await sandbox.commands.spawn(`bash -lc ${quote(command)}`, {
+        cwd: workingDirectory,
+        env: { ...env },
+        startupSignal: signal,
+        onStdout: stdout.push,
+        onStderr: stderr.push,
+      })
+      // Abort kills the command and closes its connection.
+      signal?.addEventListener("abort", () => void proc.close(), { once: true })
+      const done = proc.wait().then(
+        ({ exitCode }) => {
+          stdout.end()
+          stderr.end()
+          return { exitCode }
+        },
+        (error: unknown) => {
+          stdout.fail(error)
+          stderr.fail(error)
+          throw error
+        },
+      )
+      done.catch(() => {})
+      return {
+        stdout: stdout.stream,
+        stderr: stderr.stream,
+        stdin: stdin
+          ? new WritableStream<Uint8Array>({
+              write: (chunk) => proc.stdin.write(chunk),
+              close: () => proc.stdin.close(),
+            })
+          : undefined,
+        wait: () => done,
+        kill: async () => proc.kill("SIGKILL"),
+      }
+    },
+
+    async readFile({ path, signal }) {
+      try {
+        return await sandbox.files.read(path, { signal })
+      } catch (error) {
+        if (error instanceof NotFoundError) return null
+        throw error
+      }
+    },
+
+    async writeFiles({ files, signal }) {
+      for (const { path, content } of files) {
+        await sandbox.files.write(path, content, { signal })
+      }
+    },
+
+    async removePath({ path, force, recursive }) {
+      const flags = `-${recursive ? "r" : "d"}${force ? "f" : ""}`
+      const { exitCode, stderr } = await sandbox.commands.run(
+        `rm ${flags} -- ${quote(path)}`,
+      )
+      if (exitCode !== 0) throw new Error(stderr.trim())
+    },
+
+    // Pause the sandbox. Its files stay, and the next command resumes it.
+    async stop() {
+      await sandbox.pause().catch((error) => {
+        if (!(error instanceof ConflictError)) throw error
+      })
+    },
+  }
+}
+
+// A byte stream fed by the SDK's text callbacks.
+function pipe() {
+  const encoder = new TextEncoder()
+  let controller!: ReadableStreamDefaultController<Uint8Array>
+  const stream = new ReadableStream<Uint8Array>({
+    start: (c) => {
+      controller = c
+    },
+  })
+  return {
+    stream,
+    push: (text: string) => controller.enqueue(encoder.encode(text)),
+    end: () => controller.close(),
+    fail: (error: unknown) => controller.error(error),
+  }
+}
+
+// Map an eve network policy to Superserve rules. Reject what they can't enforce.
+function toNetwork(policy?: SandboxNetworkPolicy): NetworkConfig | undefined {
+  if (policy === undefined || policy === "allow-all") return undefined
+  if (policy === "deny-all") return { denyOut: ["0.0.0.0/0"] }
+  const allow = policy.allow ?? []
+  const domains: readonly string[] = Array.isArray(allow)
+    ? allow
+    : Object.keys(allow)
+  if (!Array.isArray(allow) && Object.values(allow).some((r) => r.length > 0)) {
+    throw new Error(
+      "Superserve network rules can't transform or forward requests.",
+    )
+  }
+  return {
+    allowOut: [
+      // Domain rules need the sandbox's DNS resolvers.
+      ...(domains.length > 0 ? ["1.1.1.1/32", "8.8.8.8/32"] : []),
+      ...domains,
+      ...(policy.subnets?.allow ?? []),
+    ],
+    denyOut: ["0.0.0.0/0", ...(policy.subnets?.deny ?? [])],
+  }
+}
+```
+
+A sandbox pauses after 15 idle minutes and is deleted after it stays paused for one day. Pass `idleTimeoutSeconds` and `autoDeleteSeconds` to `environment()` to change this.
+
+## Use it as the agent's sandbox
+
+Point `agent/sandbox.ts` at the provider:
+
+```typescript agent/sandbox.ts
+import { defineSandbox } from "eve/sandbox"
+
+import { SuperserveSandbox } from "./lib/superserve-sandbox"
+
+export const environment = SuperserveSandbox.environment({})
+
+export default defineSandbox(() => environment.open())
+```
+
+## Run the agent
+
+Start the dev server:
+
+```bash
+npx eve dev
+```
+
+You can chat in the terminal UI. To drive the agent from code, save this script as `scripts/chat.ts`. It uses eve's client to send two turns to one session, then ends the session:
+
+```typescript scripts/chat.ts
+import { Client } from "eve/client"
+
+const client = new Client({ baseUrl: "http://127.0.0.1:2000" })
+
+// The first turn creates the sandbox.
+const { session, delivery } = await client.sessions.create({
+  message:
+    "Run `(uname -sr; hostname) | tee notes.txt` with bash. Reply with the output only.",
+})
+console.log((await delivery.result()).reply)
+
+// The second turn reuses it.
+const next = await session.send(
+  "Run `cat notes.txt; hostname` with bash. Reply with the output only.",
+)
+console.log((await next.result()).reply)
+
+// Ending the session deletes the sandbox.
+await session.end()
+console.log(`Ended ${session.id}`)
+```
+
+In a second terminal, run it:
+
+```bash
+node scripts/chat.ts
+```
+
+```text
+Linux 6.1.158
+sandbox-a7823559
+Linux 6.1.158
+sandbox-a7823559
+sandbox-a7823559
+Ended wrun_01M7AZFHTXVN7HEZP0FNE3WN2J
+```
+
+The hostname is `sandbox-` plus the first 8 characters of the Superserve sandbox id. Both turns ran in the same sandbox, and the second turn read the file the first turn wrote. Ending the session deleted the sandbox.
+
+## Restrict network access
+
+Pass eve's `networkPolicy` to `open()`. The provider maps it to Superserve [network rules](/sandbox/networking) when it creates the sandbox:
+
+```typescript agent/sandbox.ts
+import { defineSandbox } from "eve/sandbox"
+
+import { SuperserveSandbox } from "./lib/superserve-sandbox"
+
+export const environment = SuperserveSandbox.environment({})
+
+export default defineSandbox(() =>
+  environment.open({ networkPolicy: { allow: ["example.com"] } }),
+)
+```
+
+To send one message from the command line, save this script as `scripts/ask.ts`:
+
+```typescript scripts/ask.ts
+import { Client } from "eve/client"
+
+const client = new Client({ baseUrl: "http://127.0.0.1:2000" })
+
+const { session, delivery } = await client.sessions.create({
+  message: process.argv[2],
+})
+console.log((await delivery.result()).reply)
+await session.end()
+```
+
+With this policy, a request to `example.com` succeeds and a request to any other host fails:
+
+```bash
+node scripts/ask.ts 'Run `for u in example.com github.com; do curl -s -o /dev/null -m 5 -w "$u %{http_code}\n" https://$u; done` with bash. Reply with the output only.'
+```
+
+```text
+example.com 200
+github.com 000
+```
+
+`"deny-all"` blocks all outbound traffic, and `"allow-all"` adds no rules. `subnets.allow` and `subnets.deny` become CIDR rules. Superserve rules can't change or forward requests, so the provider throws on a policy with `transform` or `forwardURL` rules.
+
+## Bake files and setup into a snapshot
+
+Files under `agent/sandbox/workspace/` seed `/workspace` in every new sandbox. eve's `prepare` option runs setup once per template, not once per session. When the agent has either, the provider's `prepare()` runs them in a builder sandbox and takes a [snapshot](/sandbox/snapshots). New sandboxes start from that snapshot.
+
+eve needs the sandbox file at `agent/sandbox/sandbox.ts` when the `agent/sandbox/` folder exists. Move it there, and add a seed file:
+
+```typescript agent/sandbox/sandbox.ts
+import { defineSandbox } from "eve/sandbox"
+
+import { SuperserveSandbox } from "../lib/superserve-sandbox"
+
+export const environment = SuperserveSandbox.environment({
+  prepare: async (sandbox) => {
+    await sandbox.run({
+      command: "apt-get update -qq && apt-get install -y -qq ripgrep",
+    })
+  },
+})
+
+export default defineSandbox(() => environment.open())
+```
+
+```markdown agent/sandbox/workspace/NOTES.md
+# Project notes
+
+The deploy key is rotated every Monday.
+```
+
+The first sandbox access after `eve dev` starts builds the snapshot. Each new session then starts from it, with the file and the tool in place:
+
+```bash
+node scripts/ask.ts 'Run `rg -n deploy NOTES.md; rg --version | head -1` with bash. Reply with the output only.'
+```
+
+```text
+3:The deploy key is rotated every Monday.
+ripgrep 14.1.0
+```
+
+The provider caches the snapshot id in eve's storage directory (`.eve/sandbox-cache/` under `eve dev`). It reuses the snapshot until the workspace files, the `prepare` code, or the sandbox file change, or until the snapshot is deleted. `eve build` runs `prepare()` too, so each build can take a new snapshot. Delete snapshots you no longer need with `Snapshot.deleteById`. See [Snapshot limits](/sandbox/snapshots#limits).
+
+## Good to know
+
+- The lookup in `start()` is not atomic. If two processes create a sandbox for the same session at the same time, each keeps the oldest one and deletes its own, but a narrow race can still leave two sandboxes. The extra one is deleted when the session ends.
+- eve's `bash` tool waits up to 60 seconds by default. A longer command keeps running in the sandbox, and the model can check on it in a later call. The provider sets no command timeout for this reason, so the idle timeout is the limit.
+- Don't rely on stopping `eve dev` to pause the sandbox. The idle timeout pauses it. Run `eve dev --resume` to continue a session after a restart.
+- Commands run as `root` in `/workspace`. The default sandbox has `python3` but no `python`. Use `prepare`, or start from a [template](/templates/overview) that has the tools you need:
+
+  ```typescript agent/sandbox.ts {6}
+  import { defineSandbox } from "eve/sandbox"
+
+  import { SuperserveSandbox } from "./lib/superserve-sandbox"
+
+  export const environment = SuperserveSandbox.environment({
+    template: "superserve/python-3.11",
+  })
+
+  export default defineSandbox(() => environment.open())
+  ```
+- Each Superserve sandbox is a full VM, so one session's processes and files never reach another session's.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="eve sandbox docs" icon="book" href="https://eve.dev/docs/sandbox">
+    Sandbox environments, workspace seeds, and `prepare` in eve.
+  </Card>
+  <Card title="Custom sandbox providers" icon="plug" href="https://eve.dev/docs/sandbox/custom-providers">
+    The `defineSandboxProvider` contract this provider implements.
+  </Card>
+  <Card title="Sandbox lifecycle" icon="clock" href="/sandbox/lifecycle">
+    Pause, resume, idle timeout, and auto-delete.
+  </Card>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Options for `commands.spawn`, including environment variables and working directory.
+  </Card>
+</CardGroup>
