@@ -21,7 +21,13 @@ const shortDate = (value: string) =>
     timeZone: "UTC",
   })
 
-function priceLabel(plan: BillingPlan, currency: string): string {
+function priceLabel(
+  plan: BillingPlan,
+  currency: string,
+  legacyTransition?: boolean,
+): string {
+  if (legacyTransition && plan.key === "trial" && plan.status === "trial_ended")
+    return "Choose a plan to continue"
   if (plan.key === "trial")
     return plan.status === "trial"
       ? "Trial credit · no card needed"
@@ -68,9 +74,11 @@ function creditNote(
 export function CurrentPlan({
   summary,
   billingControls,
+  legacyTransition,
 }: {
   summary: BillingSummaryResponse
   billingControls?: ReactNode
+  legacyTransition?: boolean
 }) {
   const plan = summary.plan
   const currency = currencyCode(summary)
@@ -96,11 +104,15 @@ export function CurrentPlan({
             plan ? "text-foreground" : "text-muted",
           )}
         >
-          {plan?.name ?? "Unavailable"}
+          {legacyTransition &&
+          plan?.key === "trial" &&
+          plan.status === "trial_ended"
+            ? "No plan"
+            : (plan?.name ?? "Unavailable")}
         </p>
         <p className="text-sm text-muted">
           {plan
-            ? priceLabel(plan, currency)
+            ? priceLabel(plan, currency, legacyTransition)
             : "Plan details couldn't be loaded."}
         </p>
         {billingControls ? <div className="pt-1">{billingControls}</div> : null}

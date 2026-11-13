@@ -37,6 +37,13 @@ it.each([
   expect(screen.queryByText(/Pay as you go/)).toBeNull()
 })
 
+it("shows neutral plan copy for a migrated team", () => {
+  render(<CurrentPlan summary={summary("trial_ended")} legacyTransition />)
+  expect(screen.getByText("No plan")).toBeInTheDocument()
+  expect(screen.getByText("Choose a plan to continue")).toBeInTheDocument()
+  expect(screen.queryByText(/Trial ended|Free trial/i)).toBeNull()
+})
+
 it("tells a team that needs a plan it never had a trial", () => {
   const plan = summary("plan_required")
   plan.plan!.name = "No plan"
