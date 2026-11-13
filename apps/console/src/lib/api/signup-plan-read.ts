@@ -53,6 +53,7 @@ export async function readSignupPlan(
   if (error && error.code !== "42P01" && error.code !== "PGRST205")
     throw new Error("Unable to check your plan. Please retry.")
   const choice = parseSignupChoice(error ? null : data)
+  let planAssigned = false
   if (
     (choice.state === "selecting" || choice.state === "pending") &&
     (await hasPlanAssignment(admin, team.teamId))
@@ -60,6 +61,7 @@ export async function readSignupPlan(
     // Pricing v2 assigns every plan directly; the signup picker doesn't apply.
     choice.state = "legacy"
     choice.offer = null
+    planAssigned = true
   }
   if (choice.state === "selecting" || choice.state === "pending") {
     const [intent, billing] = await Promise.all([
@@ -167,5 +169,6 @@ export async function readSignupPlan(
     requestedOffer,
     ...(entryState ? { entryState } : {}),
     ...(paymentSettling ? { paymentSettling } : {}),
+    ...(planAssigned ? { planAssigned } : {}),
   }
 }

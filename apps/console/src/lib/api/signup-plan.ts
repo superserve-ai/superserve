@@ -1,5 +1,8 @@
 import type { RequestedOffer } from "@/lib/auth/requested-offer"
-import type { AwaitingPlanState } from "@/lib/billing/signup-checkout-paths"
+import {
+  PAYMENT_ACTIVATING,
+  type AwaitingPlanState,
+} from "@/lib/billing/signup-checkout-paths"
 
 export type SignupPlanState =
   | "legacy"
@@ -28,6 +31,8 @@ export interface SignupPlanContext {
   requestedOffer?: RequestedOffer
   entryState?: AwaitingPlanState
   paymentSettling?: boolean
+  // The team already has a pricing v2 plan and skips the legacy picker.
+  planAssigned?: boolean
 }
 
 export function parseSignupChoice(
@@ -43,6 +48,26 @@ export function parseSignupChoice(
   )
     return { state: row.state, offer }
   throw new Error("Plan status is unavailable. Please retry.")
+}
+
+// A team the legacy picker skips never chose a plan, so it records why it
+// skipped instead of a Free completion.
+export function skippedPlanEvent(
+  context: SignupPlanContext,
+  billingReturn?: string,
+) {
+  return {
+    action: "skipped",
+    requested_offer: context.requestedOffer ?? "not_specified",
+    entry_state:
+      context.entryState ??
+      (context.paymentSettling
+        ? PAYMENT_ACTIVATING
+        : context.planAssigned
+          ? "plan_assigned"
+          : "legacy"),
+    ...(billingReturn ? { billing_return: billingReturn } : {}),
+  }
 }
 
 export function needsPlanSelection(context: Pick<SignupPlanContext, "state">) {
