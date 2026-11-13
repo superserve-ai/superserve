@@ -249,6 +249,25 @@ export async function scheduleFingerprintObservation(
   }
 }
 
+/**
+ * Sends a PostHog event once the response is out. `trackEvent` waits for a
+ * PostHog flush, and the sign-in page waits for the Google sign-up proof
+ * within a deadline, so the flush must not come before the answer.
+ */
+function trackEventAfterResponse(...event: Parameters<typeof trackEvent>) {
+  try {
+    after(async () => {
+      try {
+        await trackEvent(...event)
+      } catch {
+        // Analytics only.
+      }
+    })
+  } catch {
+    // Analytics only: `after` throws outside a request scope.
+  }
+}
+
 export const beginGoogleSignup = async (
   recaptchaToken?: string,
   turnstileToken?: string,
@@ -300,20 +319,24 @@ export const beginGoogleSignup = async (
   )
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_google")
   const recaptchaBlock = strictRecaptchaBlock(recaptcha)
-  await trackEvent(AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED, signupAttemptId, {
-    provider: "recaptcha",
-    signup_attempt_id: signupAttemptId,
-    signup_method: "google",
-    entry_point,
-    verified: recaptcha.verified,
-    provider_outcome: recaptcha.providerOutcome,
-    reason: "reason" in recaptcha ? recaptcha.reason : null,
-    block_reason: recaptchaBlock?.reason ?? null,
-    score: recaptcha.score,
-    recaptcha_assessment_id: recaptcha.assessmentId ?? null,
-    recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
-    observed_at: new Date().toISOString(),
-  })
+  trackEventAfterResponse(
+    AUTH_EVENTS.SIGNUP_RECAPTCHA_OBSERVED,
+    signupAttemptId,
+    {
+      provider: "recaptcha",
+      signup_attempt_id: signupAttemptId,
+      signup_method: "google",
+      entry_point,
+      verified: recaptcha.verified,
+      provider_outcome: recaptcha.providerOutcome,
+      reason: "reason" in recaptcha ? recaptcha.reason : null,
+      block_reason: recaptchaBlock?.reason ?? null,
+      score: recaptcha.score,
+      recaptcha_assessment_id: recaptcha.assessmentId ?? null,
+      recaptcha_risk_reasons: recaptcha.riskReasons ?? [],
+      observed_at: new Date().toISOString(),
+    },
+  )
   if (recaptchaBlock) {
     if (fingerprintEventId)
       await consumeFingerprintSignupEventId(fingerprintEventId)
@@ -324,7 +347,7 @@ export const beginGoogleSignup = async (
       signupAttemptId,
       entry_point,
     )
-    await trackEvent(
+    trackEventAfterResponse(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED,
       signupAttemptId,
       {
@@ -367,7 +390,7 @@ export const beginGoogleSignup = async (
       // Attestation or publication outages remain authority failures.
       routineMissing: !verified && !attestationFailed,
     })
-    await trackEvent(
+    trackEventAfterResponse(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
       signupAttemptId,
       {
@@ -380,7 +403,7 @@ export const beginGoogleSignup = async (
   } catch (error) {
     if (fingerprintEventId)
       await consumeFingerprintSignupEventId(fingerprintEventId)
-    await trackEvent(
+    trackEventAfterResponse(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_FAILED,
       signupAttemptId,
       {
