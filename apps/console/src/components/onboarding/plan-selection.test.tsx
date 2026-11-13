@@ -240,6 +240,105 @@ describe("onboarding plan flow", () => {
   })
 })
 
+describe("return from Stripe's Back link", () => {
+  const again = "https://checkout.stripe.com/c/pay/again"
+  const checkButton = () =>
+    screen.getByRole("button", { name: "Check payment status" })
+  const settled = async (calls: number) => {
+    await waitFor(() => expect(recoverProPayment).toHaveBeenCalledTimes(calls))
+    await waitFor(() => expect(checkButton()).toBeEnabled())
+  }
+
+  beforeEach(() => {
+    vi.mocked(getSignupPlanAction).mockResolvedValue(pending)
+  })
+
+  it("says the customer left checkout and waits for a choice", async () => {
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    expect(
+      screen.getByRole("heading", { name: "You left checkout" }),
+    ).toBeVisible()
+    expect(
+      screen.getByText(/To choose another plan, cancel checkout/),
+    ).toBeVisible()
+    await settled(1)
+    expect(
+      screen.getByRole("button", { name: "Cancel checkout and change plan" }),
+    ).toBeEnabled()
+  })
+
+  it("never closes a checkout without a click", async () => {
+    // Checkout A came back after checkout B started in another tab. The
+    // return can't say which checkout it was, so B must stay open.
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    await settled(1)
+    fireEvent(window, new Event("focus"))
+    await settled(2)
+    fireEvent(window, Object.assign(new Event("pageshow"), { persisted: true }))
+    await settled(3)
+    for (const [, restart] of vi.mocked(recoverProPayment).mock.calls)
+      expect(restart).toBe(false)
+  })
+
+  it("closes the checkout when the customer asks", async () => {
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    await settled(1)
+    vi.mocked(recoverProPayment).mockImplementation(async (_team, restart) => {
+      if (!restart) return "payment_confirmation_pending"
+      vi.mocked(getSignupPlanAction).mockResolvedValue(selecting)
+      return "retryable"
+    })
+    fireEvent.click(
+      screen.getByRole("button", { name: "Cancel checkout and change plan" }),
+    )
+    expect(
+      await screen.findByRole("button", { name: "Continue with Free" }),
+    ).toBeVisible()
+    expect(recoverProPayment).toHaveBeenLastCalledWith("use:team", true)
+  })
+
+  it("does not send the customer back to checkout on its own", async () => {
+    vi.mocked(recoverProPayment).mockResolvedValue(again)
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    await settled(1)
+    fireEvent(window, new Event("focus"))
+    await settled(2)
+    expect(assign).not.toHaveBeenCalled()
+
+    // A click that finds no checkout to open gives no lasting permission.
+    vi.mocked(recoverProPayment).mockResolvedValueOnce(
+      "payment_confirmation_pending",
+    )
+    fireEvent.click(checkButton())
+    await settled(3)
+    fireEvent(window, new Event("focus"))
+    await settled(4)
+    expect(assign).not.toHaveBeenCalled()
+
+    // Only the check a click starts opens checkout.
+    fireEvent.click(checkButton())
+    await waitFor(() => expect(assign).toHaveBeenCalledWith(again))
+  })
+
+  it("keeps the payment wait text once the customer checks", async () => {
+    render(<PlanSelection initial={pending} billingReturn="cancel" />)
+    await settled(1)
+    fireEvent.click(checkButton())
+    expect(
+      await screen.findByRole("heading", {
+        name: "We’re checking your payment",
+      }),
+    ).toBeVisible()
+  })
+
+  it("keeps today's wait for a return that is not a cancel", () => {
+    render(<PlanSelection initial={pending} />)
+    expect(
+      screen.getByRole("heading", { name: "We’re checking your payment" }),
+    ).toBeVisible()
+  })
+})
+
 it("rechecks checkout after browser Back restores the previous page", async () => {
   vi.mocked(startProCheckout).mockResolvedValue(
     "https://checkout.stripe.com/c/pay/test",

@@ -37,6 +37,14 @@ export function PlanSelection({
   const [busy, setBusy] = useState(false)
   const [uncertain, setUncertain] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // Stripe's Back link returns here with billing=cancel. The page says so and
+  // waits for the customer to choose. It never closes the checkout by itself:
+  // the cancel URL doesn't say which checkout it came from, so a closure could
+  // hit a newer checkout open in another tab.
+  const [leftCheckout, setLeftCheckout] = useState(billingReturn === "cancel")
+  // After that return, only a check a click starts may open checkout again,
+  // never a timer or focus check. Starting a new Pro checkout clears it.
+  const stayOffCheckout = useRef(billingReturn === "cancel")
   const inFlight = useRef(false)
   const mounted = useRef(true)
   const completionSent = useRef(false)
@@ -132,13 +140,13 @@ export function PlanSelection({
   )
 
   const checkPayment = useCallback(
-    (restart = false) =>
+    (restart = false, clicked = false) =>
       run(async () => {
         const latest = await refresh()
         if (latest.state === "pending") {
           const outcome = await recoverProPayment(initial.teamKey, restart)
           if (isStripeCheckoutUrl(outcome)) {
-            navigate(outcome)
+            if (clicked || !stayOffCheckout.current) navigate(outcome)
             return
           }
           const recovered = await refresh()
@@ -250,7 +258,7 @@ export function PlanSelection({
           {error ??
             "Check again before choosing a plan. Your previous request may still complete."}
         </p>
-        <Button disabled={busy} onClick={() => void checkPayment()}>
+        <Button disabled={busy} onClick={() => void checkPayment(false, true)}>
           Check again
         </Button>
         <Button
@@ -266,6 +274,7 @@ export function PlanSelection({
   return (
     <PlanSelectionView
       step={step}
+      leftCheckout={leftCheckout}
       offers={offers}
       selection={selection}
       cadence={cadence}
@@ -287,6 +296,8 @@ export function PlanSelection({
       }
       onPro={() =>
         void run(async () => {
+          stayOffCheckout.current = false
+          setLeftCheckout(false)
           if (!(await confirmSelecting())) return
           const offer = `pro_${cadence}` as const
           setSelection("pro")
@@ -367,8 +378,14 @@ export function PlanSelection({
             )
         })
       }
-      onCheckPayment={() => void checkPayment()}
-      onCancelPayment={() => void checkPayment(true)}
+      onCheckPayment={() => {
+        setLeftCheckout(false)
+        void checkPayment(false, true)
+      }}
+      onCancelPayment={() => {
+        setLeftCheckout(false)
+        void checkPayment(true, true)
+      }}
     />
   )
 }
