@@ -49,6 +49,8 @@ describe("template", () => {
         "pip install x",
         "--memory",
         "2G",
+        "--memory-max",
+        "8G",
         "--disk",
         "8192",
         "--vcpu",
@@ -76,6 +78,7 @@ describe("template", () => {
       name: "py-env",
       vcpu: 2,
       memory_mib: 2048,
+      memory_max_mib: 8192,
       disk_mib: 8192,
       build_spec: {
         from: "python:3.11",
@@ -95,6 +98,20 @@ describe("template", () => {
     for (const args of [
       ["template", "create", "Bad_Name", "--from", "x"],
       ["template", "create", "ok", "--from", "x", "--memory", "64"],
+      ["template", "create", "ok", "--from", "x", "--memory-max", "1G"],
+      ["template", "create", "ok", "--from", "x", "--memory-max", "4097"],
+      ["template", "create", "ok", "--from", "x", "--memory-max", "2X"],
+      [
+        "template",
+        "create",
+        "ok",
+        "--from",
+        "x",
+        "--memory",
+        "2G",
+        "--memory-max",
+        "1G",
+      ],
       ["template", "create", "ok"],
     ]) {
       const r = await runCli(args)

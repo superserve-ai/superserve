@@ -1,0 +1,142 @@
+---
+title: "Run coding agents in sandboxes"
+sidebarTitle: Coding agents
+description: Give a coding agent its own sandbox with your repository, let it edit and run code there, and read the changes back.
+icon: "terminal"
+---
+
+A coding agent reads a repository, edits files, and runs commands such as tests and package installs. Run it in a sandbox, not on your laptop or your server. The agent gets a full Linux machine to work in, and its commands can't touch anything outside that machine.
+
+## Why use a sandbox
+
+- **Isolation:** the agent can install packages and run any command. A wrong command breaks only the sandbox, which you delete.
+- **Keys stay out of the sandbox:** a [secret](/secrets/overview) gives the agent its model API key as a stand-in token. Superserve adds the real key only on requests to the provider.
+- **One sandbox per task:** run many agents at the same time, each on its own branch in its own sandbox.
+- **Ready to start:** public templates such as `superserve/claude-code` include the agent CLI, git, and common tools.
+
+## How it works
+
+<Steps>
+  <Step title="Store the model API key as a secret">
+    Create the secret once. The sandbox gets a stand-in token, not the key.
+  </Step>
+  <Step title="Create a sandbox from an agent template">
+    Bind the secret to the environment variable that the agent reads.
+  </Step>
+  <Step title="Clone the repository and run the agent">
+    Run the agent's non-interactive mode with `commands.run`.
+  </Step>
+  <Step title="Read the changes back">
+    Read `git diff`, run the tests, or push a branch. Then delete the sandbox.
+  </Step>
+</Steps>
+
+## Run Claude Code on a repository
+
+This example clones a repository, asks Claude Code to add a file, and prints the changes.
+
+First store your Anthropic API key as a secret named `anthropic-key`. You do this once per team. The CLI reads the value from stdin, so the key doesn't appear in your shell history:
+
+```bash
+printf %s "$ANTHROPIC_API_KEY" | superserve secret create anthropic-key --provider anthropic
+```
+
+You can also create the secret in the console or with the SDK, as shown in [Claude Code](/integrations/coding-agents/claude).
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "coding-task",
+  fromTemplate: "superserve/claude-code",
+  secrets: { ANTHROPIC_API_KEY: "anthropic-key" },
+})
+
+try {
+  await sandbox.commands.run(
+    "git clone --depth 1 https://github.com/octocat/Hello-World repo",
+    { timeoutMs: 60_000 },
+  )
+
+  const task = "Add a Python file hello.py that prints Hello, World. Don't change the README."
+  const agent = await sandbox.commands.run(
+    'claude -p "$TASK" --permission-mode acceptEdits',
+    { cwd: "/home/user/repo", env: { TASK: task }, timeoutMs: 600_000 },
+  )
+  console.log(agent.stdout)
+  if (agent.exitCode !== 0) {
+    throw new Error(`Claude Code exited with ${agent.exitCode}`)
+  }
+
+  const changes = await sandbox.commands.run("git add -N . && git diff", {
+    cwd: "/home/user/repo",
+  })
+  console.log(changes.stdout) // diff --git a/hello.py b/hello.py ...
+} finally {
+  await sandbox.kill()
+}
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="coding-task",
+    from_template="superserve/claude-code",
+    secrets={"ANTHROPIC_API_KEY": "anthropic-key"},
+)
+
+try:
+    sandbox.commands.run(
+        "git clone --depth 1 https://github.com/octocat/Hello-World repo",
+        timeout_seconds=60,
+    )
+
+    task = (
+        "Add a Python file hello.py that prints Hello, World. Don't change the README."
+    )
+    agent = sandbox.commands.run(
+        'claude -p "$TASK" --permission-mode acceptEdits',
+        cwd="/home/user/repo",
+        env={"TASK": task},
+        timeout_seconds=600,
+    )
+    print(agent.stdout)
+    if agent.exit_code != 0:
+        raise RuntimeError(f"Claude Code exited with {agent.exit_code}")
+
+    changes = sandbox.commands.run("git add -N . && git diff", cwd="/home/user/repo")
+    print(changes.stdout)  # diff --git a/hello.py b/hello.py ...
+finally:
+    sandbox.kill()
+```
+</CodeGroup>
+
+- The task goes in through the `TASK` environment variable, so quotes and other shell characters in it reach the agent unchanged.
+- `--permission-mode acceptEdits` lets Claude Code edit files without a prompt. Give more permissions only for commands that the task needs.
+- `git diff` alone doesn't show files that the agent created. `git add -N .` marks new files as intent-to-add, so `git diff` shows their full content next to the changes to existing files. It doesn't stage the content.
+- `try` / `finally` kills the sandbox also when a command throws or the agent fails, so a failed run doesn't leave the sandbox running.
+- Agents can work for many minutes. Give `commands.run` a timeout that is longer than the task: `timeoutMs` in TypeScript, `timeout_seconds` in Python. A command that runs past it stops with exit code `124`. See [Timeouts](/commands/overview#timeouts). You can also [stream the output](/commands/streaming) to watch the agent work.
+- To keep the agent's work, push a branch from the sandbox, or take a [snapshot](/sandbox/snapshots) to continue later. Take the snapshot before the `finally` block kills the sandbox.
+
+## Integrations
+
+Each integration guide shows the template, the secret, and the command for one agent. See the [coding agents](/integrations/overview#coding-agents), such as [Claude Code](/integrations/coding-agents/claude), [Codex](/integrations/coding-agents/codex), and [OpenCode](/integrations/coding-agents/opencode). To let a platform run the agent loop on a Superserve sandbox, see the [agent platforms](/integrations/overview#agent-platforms).
+
+## Related guides
+
+<CardGroup cols={2}>
+  <Card title="Secrets" icon="key" href="/secrets/overview">
+    Give agents API keys without exposing them.
+  </Card>
+  <Card title="Snapshots" icon="camera" href="/sandbox/snapshots">
+    Save a sandbox's state and continue later.
+  </Card>
+  <Card title="CI workers" icon="gears" href="/guides/run-ci-jobs">
+    Run builds and tests in sandboxes.
+  </Card>
+  <Card title="Code interpreter" icon="code" href="/guides/code-interpreter">
+    Run model-generated code and read the output back.
+  </Card>
+</CardGroup>

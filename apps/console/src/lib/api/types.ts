@@ -13,6 +13,10 @@ export interface SandboxListItem {
   status: SandboxStatus
   vcpu_count: number
   memory_mib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memory_max_mib?: number
+  /** Memory the sandbox last held; absent when memory is fixed. */
+  memory_current_mib?: number | null
   snapshot_id?: string
   /** The saved snapshot this sandbox was created from. */
   source_snapshot_id?: string
@@ -150,7 +154,12 @@ export interface SnapshotResponse {
   status: SnapshotStatus
   name: string | null
   size_bytes: number
-  resources: { vcpu_count: number; memory_mib: number; disk_mib: number }
+  resources: {
+    vcpu_count: number
+    memory_mib: number
+    disk_mib: number
+    memory_max_mib?: number
+  }
   created_at: string
   ready_at: string | null
 }
@@ -249,6 +258,7 @@ export interface CreateTemplateRequest {
   name: string
   vcpu?: number
   memory_mib?: number
+  memory_max_mib?: number
   disk_mib?: number
   build_spec: BuildSpec
 }
@@ -261,6 +271,8 @@ export interface CreateTemplateResponse {
   vcpu: number
   memory_mib: number
   disk_mib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memory_max_mib?: number
   created_at: string
   build_id: string
 }
@@ -273,6 +285,8 @@ export interface TemplateResponse {
   vcpu: number
   memory_mib: number
   disk_mib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memory_max_mib?: number
   size_bytes?: number
   error_message?: string
   created_at: string

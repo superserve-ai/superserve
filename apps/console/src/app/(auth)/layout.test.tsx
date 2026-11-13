@@ -4,8 +4,11 @@ import { expect, it, vi } from "vitest"
 vi.mock("@/components/fingerprint-signup-observer", () => ({
   FingerprintSignupObserver: () => null,
 }))
-vi.mock("@/components/account-device-recorder", () => ({
-  AccountDeviceRecorder: () => null,
+vi.mock("@/components/fingerprint-account-device-observer", () => ({
+  FingerprintAccountDeviceObserver: () => null,
+}))
+vi.mock("@/lib/cells", () => ({
+  configuredRegions: () => ["use", "usw"],
 }))
 vi.mock("next/image", () => ({
   default: ({ alt }: { alt: string }) => <span>{alt}</span>,

@@ -1,7 +1,8 @@
 ---
-title: "Run Docker inside a sandbox"
-sidebarTitle: Run Docker
-description: Bake Docker into a template, then build images and run containers in any sandbox started from it.
+title: "Run Docker services in a sandbox"
+sidebarTitle: Docker services
+description: Bake Docker into a template, run containers and Docker Compose apps in a sandbox, and expose a service with a Preview URL.
+icon: "docker"
 ---
 
 Every Superserve sandbox is a full Firecracker microVM with its own kernel, so Docker runs **inside** the sandbox the same way it does on any Linux machine: install it, start the daemon, and use `docker` as usual.
@@ -52,9 +53,9 @@ template.wait_until_ready()
 ```
 </CodeGroup>
 
-## 2. Use it
+## 2. Run a container
 
-Create a sandbox from the template and use `docker` right away. Run containers, build images, and use Compose as you would anywhere else. Published ports are reachable from inside the sandbox, and containers can reach the internet.
+Create a sandbox from the template and use `docker` right away. Containers can reach the internet, and published ports are reachable from inside the sandbox.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -88,8 +89,160 @@ print(page.stdout)
 
 `docker run -d` returns once the container starts, before the server inside it is listening, so the `curl` retries until nginx answers.
 
-Running containers are part of the sandbox, so they keep running across a [pause and resume](/sandbox/lifecycle).
+## 3. Run services with Docker Compose
 
-<Note>
-Commands run without `HOME` set. If the Docker CLI warns that it can't load its config, prefix the command with `HOME=/root`.
-</Note>
+Write a Compose file into the sandbox with [`files.write`](/filesystem/read-write), then start it with `docker compose up`. This example runs two services: a small Python web app and the Redis server it uses to count visits. The app listens on port `8000` in its container, and Compose publishes it on port `3000` of the sandbox. Port `8080` is still taken by the nginx container from step 2, and two containers can't publish the same sandbox port.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.files.write(
+  "/app/app.py",
+  `import redis
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+db = redis.Redis(host="redis")
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        visits = db.incr("visits")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(f"Hello from Docker Compose. Visits: {visits}".encode())
+
+
+HTTPServer(("", 8000), Handler).serve_forever()
+`,
+)
+
+await sandbox.files.write(
+  "/app/compose.yaml",
+  `services:
+  web:
+    image: python:3.12-slim
+    command: sh -c "pip install --quiet redis && python /app/app.py"
+    volumes:
+      - ./app.py:/app/app.py
+    ports:
+      - "3000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000))"]
+      interval: 2s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 15
+`,
+)
+
+const up = await sandbox.commands.run("docker compose up -d --wait", {
+  cwd: "/app",
+  timeoutMs: 300_000,
+})
+if (up.exitCode !== 0) throw new Error(up.stderr)
+
+const services = await sandbox.commands.run("docker compose ps", { cwd: "/app" })
+console.log(services.stdout)
+
+const visit = await sandbox.commands.run("curl -s localhost:3000")
+console.log(visit.stdout) // Hello from Docker Compose. Visits: 1
+```
+
+```python Python
+sandbox.files.write(
+    "/app/app.py",
+    """import redis
+from http.server import BaseHTTPRequestHandler, HTTPServer
+
+db = redis.Redis(host="redis")
+
+
+class Handler(BaseHTTPRequestHandler):
+    def do_GET(self):
+        visits = db.incr("visits")
+        self.send_response(200)
+        self.send_header("Content-Type", "text/plain")
+        self.end_headers()
+        self.wfile.write(f"Hello from Docker Compose. Visits: {visits}".encode())
+
+
+HTTPServer(("", 8000), Handler).serve_forever()
+""",
+)
+
+sandbox.files.write(
+    "/app/compose.yaml",
+    """services:
+  web:
+    image: python:3.12-slim
+    command: sh -c "pip install --quiet redis && python /app/app.py"
+    volumes:
+      - ./app.py:/app/app.py
+    ports:
+      - "3000:8000"
+    depends_on:
+      redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "python", "-c", "import socket; socket.create_connection(('localhost', 8000))"]
+      interval: 2s
+      retries: 30
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 2s
+      retries: 15
+""",
+)
+
+up = sandbox.commands.run(
+    "docker compose up -d --wait", cwd="/app", timeout_seconds=300
+)
+if up.exit_code != 0:
+    raise RuntimeError(up.stderr)
+
+services = sandbox.commands.run("docker compose ps", cwd="/app")
+print(services.stdout)
+
+visit = sandbox.commands.run("curl -s localhost:3000")
+print(visit.stdout)  # Hello from Docker Compose. Visits: 1
+```
+</CodeGroup>
+
+`--wait` makes `docker compose up` return only after every service passes its healthcheck, so the app answers on the first request. The `web` service starts after Redis is healthy because of `depends_on`. Pulling the images and installing the Redis client takes time on the first run, so the command gets a longer timeout. `commands.run` doesn't throw when a command exits non-zero, so check `exitCode` / `exit_code`: a failed `up` (for example, a port that's already in use) prints the reason to stderr.
+
+## 4. Expose a service with a Preview URL
+
+To reach a service from outside the sandbox, publish its sandbox port with a [Preview URL](/sandbox/preview-urls). Publish the sandbox side of the Compose port mapping (`3000`), not the container port (`8000`).
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.publishPreviewPort(3000, { access: "public" })
+
+const url = sandbox.getPreviewUrl(3000) // https://3000-{sandbox-id}.sandbox.superserve.ai
+const response = await fetch(url)
+console.log(response.status, await response.text())
+```
+
+```python Python
+import httpx
+
+sandbox.publish_preview_port(3000, access="public")
+
+url = sandbox.get_preview_url(3000)  # https://3000-{sandbox-id}.sandbox.superserve.ai
+response = httpx.get(url)
+print(response.status_code, response.text)
+```
+</CodeGroup>
+
+A `public` port needs no credential, so anyone with the URL can open it. Use `access: "private"` / `access="private"` to require a per-port token or a signed URL instead. See [Preview URLs](/sandbox/preview-urls) for access policies, tokens, and how to revoke access.
+
+Running containers are part of the sandbox, so they keep running across a [pause and resume](/sandbox/lifecycle).

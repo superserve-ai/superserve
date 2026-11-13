@@ -1,0 +1,817 @@
+---
+title: "Claude computer use"
+sidebarTitle: Claude computer use
+description: Run Claude's computer use, bash, and text editor tools against a desktop in a Superserve sandbox.
+icon: "/logos/integrations/claude.svg"
+---
+
+Claude's computer use toolset lets Claude operate a graphical desktop: it asks for screenshots, returns mouse and keyboard actions as tool calls, and your code runs them. The bash and text editor tools give it a shell and file edits in the same machine. Point all three at a `superserve/desktop` sandbox so Claude works an isolated Linux desktop (xfce and Google Chrome) instead of your machine. Each mouse or keyboard call is one [`desktop.step`](/sandbox/desktop#the-agent-loop) request, and the bash and text editor calls run through [commands](/commands/overview) and [files](/filesystem/read-write).
+
+## Setup
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk @anthropic-ai/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+
+```bash Python
+pip install superserve anthropic
+export SUPERSERVE_API_KEY=ss_live_...
+export ANTHROPIC_API_KEY=sk-ant-...
+```
+</CodeGroup>
+
+## Run the agent loop
+
+The script creates a desktop sandbox and sends the task with the three tools. It answers every tool call in Claude's response, in order, and sends the results back. It stops when Claude replies without a tool call, and kills the sandbox at the end.
+
+The TypeScript sample uses top-level `await`, so it must run as an ES module: save it as `agent.mts` (or set `"type": "module"` in `package.json`) and run it with `npx tsx agent.mts`.
+
+<CodeGroup>
+```typescript TypeScript
+import Anthropic from "@anthropic-ai/sdk"
+import { type DesktopAction, Sandbox, type Screenshot } from "@superserve/sdk"
+
+const client = new Anthropic()
+const MODEL = "claude-sonnet-5-5"
+const MAX_TURNS = 30
+const TIMEOUT_MS = 120_000
+const HALT_TEXT =
+  "Not executed: an earlier computer action in this turn failed."
+
+const TOOLS: Anthropic.ToolUnion[] = [
+  {
+    type: "computer_toolset_20260801",
+    // The sandbox has no region capture or key hold, so withhold those members.
+    configs: { zoom: { enabled: false }, hold_key: { enabled: false } },
+  },
+  { type: "bash_20250124", name: "bash" },
+  { type: "text_editor_20250728", name: "str_replace_based_edit_tool" },
+]
+
+const SYSTEM =
+  "You operate a Linux xfce desktop. Google Chrome is in the dock at the bottom of the screen. Each bash call runs in a new shell."
+
+const BUTTONS = {
+  left_click: "left",
+  right_click: "right",
+  middle_click: "middle",
+} as const
+
+interface BashInput {
+  command?: string
+  restart?: boolean
+}
+
+interface EditorInput {
+  command: "view" | "create" | "str_replace" | "insert"
+  path: string
+  view_range?: [number, number]
+  file_text?: string
+  old_str?: string
+  new_str?: string
+  insert_line?: number
+  insert_text?: string
+}
+
+function image(screen: Screenshot): Anthropic.ImageBlockParam {
+  return {
+    type: "image",
+    source: {
+      type: "base64",
+      media_type: "image/jpeg",
+      data: Buffer.from(screen.data).toString("base64"),
+    },
+  }
+}
+
+function noModifiers(text?: string | null): void {
+  if (text)
+    throw new Error(`holding ${text} during a mouse action is not supported`)
+}
+
+async function cursor(sandbox: Sandbox): Promise<{ x: number; y: number }> {
+  // Prints "x:640 y:400 screen:0 window:...".
+  const { stdout } = await sandbox.commands.run("xdotool getmouselocation", {
+    timeoutMs: TIMEOUT_MS,
+  })
+  const [x, y] = stdout.match(/\d+/g)?.map(Number) ?? []
+  if (x === undefined || y === undefined) {
+    throw new Error("cannot read the cursor position")
+  }
+  return { x, y }
+}
+
+// Claude omits the coordinate to act at the current cursor position.
+async function point(
+  sandbox: Sandbox,
+  coordinate?: number[] | null,
+): Promise<{ x: number; y: number }> {
+  if (!coordinate) return cursor(sandbox)
+  const [x, y] = coordinate
+  return { x, y }
+}
+
+async function toDesktopActions(
+  sandbox: Sandbox,
+  block: Anthropic.ComputerToolUseBlock,
+): Promise<DesktopAction[]> {
+  switch (block.name) {
+    case "left_click":
+    case "right_click":
+    case "middle_click": {
+      noModifiers(block.input.text)
+      const at = await point(sandbox, block.input.coordinate)
+      return [{ type: "click", ...at, button: BUTTONS[block.name] }]
+    }
+    case "double_click": {
+      noModifiers(block.input.text)
+      return [
+        {
+          type: "doubleClick",
+          ...(await point(sandbox, block.input.coordinate)),
+        },
+      ]
+    }
+    case "triple_click": {
+      noModifiers(block.input.text)
+      const at = await point(sandbox, block.input.coordinate)
+      return Array.from({ length: 3 }, (): DesktopAction => ({
+        type: "click",
+        ...at,
+      }))
+    }
+    case "left_click_drag": {
+      noModifiers(block.input.text)
+      const [startX, startY] = block.input.start_coordinate
+      const [x, y] = block.input.coordinate
+      return [
+        { type: "mouseDown", x: startX, y: startY },
+        { type: "move", x, y },
+        { type: "mouseUp", x, y },
+      ]
+    }
+    case "mouse_move":
+      return [
+        { type: "move", ...(await point(sandbox, block.input.coordinate)) },
+      ]
+    case "left_mouse_down":
+      return [{ type: "mouseDown", ...(await cursor(sandbox)) }]
+    case "left_mouse_up":
+      return [{ type: "mouseUp", ...(await cursor(sandbox)) }]
+    case "scroll": {
+      noModifiers(block.input.text)
+      const { scroll_direction: direction, scroll_amount: clicks } = block.input
+      const move: DesktopAction[] = block.input.coordinate
+        ? [{ type: "move", ...(await point(sandbox, block.input.coordinate)) }]
+        : []
+      return [
+        ...move,
+        {
+          type: "scroll",
+          dx:
+            direction === "left" ? -clicks : direction === "right" ? clicks : 0,
+          dy: direction === "up" ? -clicks : direction === "down" ? clicks : 0,
+        },
+      ]
+    }
+    case "type":
+      return [{ type: "write", text: block.input.text }]
+    case "key":
+      return Array.from(
+        { length: block.input.repeat ?? 1 },
+        (): DesktopAction => ({ type: "press", key: block.input.text }),
+      )
+    default:
+      throw new Error(`${block.name} is not supported`)
+  }
+}
+
+class Computer {
+  // The screen after the latest input, until Claude takes a screenshot.
+  frame?: Screenshot
+
+  constructor(private readonly sandbox: Sandbox) {}
+
+  async run(
+    block: Anthropic.ComputerToolUseBlock,
+  ): Promise<string | Anthropic.ImageBlockParam[]> {
+    const { desktop } = this.sandbox
+    switch (block.name) {
+      case "screenshot":
+        this.frame = undefined
+        return [image(await desktop.screenshot({ format: "jpeg" }))]
+      case "cursor_position": {
+        const { x, y } = await cursor(this.sandbox)
+        return `X=${x}, Y=${y}`
+      }
+      case "wait":
+        await new Promise((resolve) =>
+          setTimeout(resolve, block.input.duration * 1000),
+        )
+        // Show Claude the screen after the pause.
+        this.frame = await desktop.screenshot({ format: "jpeg" })
+        return "OK"
+      default: {
+        const step = await desktop.step(
+          await toDesktopActions(this.sandbox, block),
+          {
+            waitForChange: true,
+            quietMs: 300,
+            format: "jpeg",
+          },
+        )
+        if (step.actionError) throw new Error(step.actionError)
+        this.frame = step.screenshot
+        // The input ran even when the capture after it failed.
+        return step.screenshot
+          ? "OK"
+          : `OK, but the screen capture failed: ${step.screenshotError}`
+      }
+    }
+  }
+}
+
+async function bash(sandbox: Sandbox, input: BashInput): Promise<string> {
+  if (input.restart)
+    return "Each command runs in a new shell, so there is nothing to restart."
+  // Pass the command in the environment so it needs no quoting.
+  const { stdout, stderr, exitCode } = await sandbox.commands.run(
+    'bash -c "$CMD"',
+    {
+      env: { CMD: input.command ?? "" },
+      timeoutMs: TIMEOUT_MS,
+    },
+  )
+  const output = `${stdout}${stderr}`.slice(-10_000)
+  return exitCode === 0
+    ? output || "(no output)"
+    : `${output}\n(exit code ${exitCode})`
+}
+
+async function edit(sandbox: Sandbox, input: EditorInput): Promise<string> {
+  const { commands, files } = sandbox
+  const { path } = input
+  switch (input.command) {
+    case "view": {
+      const dir = await commands.run(
+        'test -d "$P" && find "$P" -maxdepth 2 -not -path "*/.*"',
+        {
+          env: { P: path },
+          timeoutMs: TIMEOUT_MS,
+        },
+      )
+      if (dir.exitCode === 0) return dir.stdout
+      const [start, end] = input.view_range ?? [1, -1]
+      // Number the lines without the empty string after the final newline.
+      const lines = (await files.readText(path)).replace(/\n$/, "").split("\n")
+      return lines
+        .slice(start - 1, end === -1 ? undefined : end)
+        .map((line, i) => `${start + i}\t${line}`)
+        .join("\n")
+    }
+    case "create": {
+      const exists = await commands.run('test -e "$P"', {
+        user: "root",
+        env: { P: path },
+        timeoutMs: TIMEOUT_MS,
+      })
+      if (exists.exitCode === 0) throw new Error(`${path} already exists`)
+      await files.write(path, input.file_text ?? "")
+      // The files API writes as root; give the file to the user that runs bash.
+      await commands.run('chown desktop: "$P"', {
+        user: "root",
+        env: { P: path },
+        timeoutMs: TIMEOUT_MS,
+      })
+      return `Created ${path}`
+    }
+    case "str_replace": {
+      const parts = (await files.readText(path)).split(input.old_str ?? "")
+      if (parts.length !== 2) {
+        throw new Error(
+          `old_str must match exactly once in ${path}, found ${parts.length - 1}`,
+        )
+      }
+      await files.write(path, parts.join(input.new_str ?? ""))
+      return `Edited ${path}`
+    }
+    case "insert": {
+      const lines = (await files.readText(path)).split("\n")
+      // The text becomes whole lines, so drop its own final newline.
+      const text = (input.insert_text ?? "").replace(/\n$/, "")
+      lines.splice(input.insert_line ?? 0, 0, text)
+      await files.write(path, lines.join("\n"))
+      return `Edited ${path}`
+    }
+    default:
+      throw new Error(`Unknown command ${String(input.command)}`)
+  }
+}
+
+// Answer every tool call in one response, in order.
+async function runTools(
+  sandbox: Sandbox,
+  computer: Computer,
+  content: Anthropic.ContentBlock[],
+): Promise<Anthropic.ToolResultBlockParam[]> {
+  const results: Anthropic.ToolResultBlockParam[] = []
+  // The result of the call that captured computer.frame.
+  let frameOwner: Anthropic.ToolResultBlockParam | undefined
+  let failed = false
+  for (const block of content) {
+    if (block.type !== "tool_use") continue
+    console.log(block.name, JSON.stringify(block.input))
+    const isComputer = block.toolset_name === "computer"
+    const result: Anthropic.ToolResultBlockParam = {
+      type: "tool_result",
+      tool_use_id: block.id,
+    }
+    if (isComputer) result.toolset_name = "computer"
+    if (isComputer && failed) {
+      // Claude planned the rest of the batch on the earlier actions succeeding.
+      result.content = HALT_TEXT
+      result.is_error = true
+    } else {
+      try {
+        if (isComputer) {
+          const before = computer.frame
+          result.content = await computer.run(
+            block as Anthropic.ComputerToolUseBlock,
+          )
+          if (computer.frame !== before) frameOwner = result
+        } else if (block.name === "bash") {
+          result.content = await bash(sandbox, block.input as BashInput)
+        } else if (block.name === "str_replace_based_edit_tool") {
+          result.content = await edit(sandbox, block.input as EditorInput)
+        } else {
+          throw new Error(`Unknown tool ${block.name}`)
+        }
+      } catch (error) {
+        result.content = `Error: ${error instanceof Error ? error.message : String(error)}`
+        result.is_error = true
+        if (isComputer) {
+          failed = true
+          // The frame shows the screen from before the failed action.
+          computer.frame = undefined
+        }
+      }
+    }
+    results.push(result)
+  }
+  // When a batch does not end with a screenshot, send the screen anyway,
+  // with the call that captured it, since later bash calls can change it.
+  const { frame } = computer
+  computer.frame = undefined
+  if (frame && typeof frameOwner?.content === "string") {
+    frameOwner.content = [
+      { type: "text", text: frameOwner.content },
+      image(frame),
+    ]
+  }
+  return results
+}
+
+async function runTask(sandbox: Sandbox, task: string): Promise<string> {
+  const computer = new Computer(sandbox)
+  const messages: Anthropic.MessageParam[] = [{ role: "user", content: task }]
+  for (let turn = 0; ; turn++) {
+    const response = await client.messages.create({
+      model: MODEL,
+      max_tokens: 4096,
+      system: SYSTEM,
+      tools: TOOLS,
+      messages,
+    })
+    if (!response.content.some((block) => block.type === "tool_use")) {
+      return response.content
+        .flatMap((block) => (block.type === "text" ? [block.text] : []))
+        .join("\n")
+    }
+    if (turn === MAX_TURNS) {
+      throw new Error(`No answer after ${MAX_TURNS} turns`)
+    }
+    messages.push({ role: "assistant", content: response.content })
+    messages.push({
+      role: "user",
+      content: await runTools(sandbox, computer, response.content),
+    })
+  }
+}
+
+const sandbox = await Sandbox.create({
+  name: "claude-computer-use",
+  fromTemplate: "superserve/desktop",
+  previewAccess: "private",
+})
+try {
+  console.log(
+    "Watch live:",
+    await sandbox.desktop.getStreamUrl({ viewOnly: true }),
+  )
+  const answer = await runTask(
+    sandbox,
+    "Open Google Chrome, go to https://example.com, and tell me the title of the page.",
+  )
+  console.log(answer)
+} finally {
+  await sandbox.kill()
+}
+```
+
+```python Python
+from __future__ import annotations
+
+import base64
+import json
+import re
+import time
+from typing import Any, TypedDict, cast
+
+from anthropic import Anthropic
+from anthropic.types import (
+    ContentBlock,
+    ImageBlockParam,
+    MessageParam,
+    ToolResultBlockParam,
+    ToolUnionParam,
+    ToolUseBlock,
+)
+from superserve import Sandbox, SandboxError, Screenshot
+
+client = Anthropic()
+MODEL = "claude-sonnet-5-5"
+MAX_TURNS = 30
+TIMEOUT_SECONDS = 120
+HALT_TEXT = "Not executed: an earlier computer action in this turn failed."
+
+TOOLS: list[ToolUnionParam] = [
+    {
+        "type": "computer_toolset_20260801",
+        # The sandbox has no region capture or key hold, so withhold those members.
+        "configs": {"zoom": {"enabled": False}, "hold_key": {"enabled": False}},
+    },
+    {"type": "bash_20250124", "name": "bash"},
+    {"type": "text_editor_20250728", "name": "str_replace_based_edit_tool"},
+]
+
+SYSTEM = (
+    "You operate a Linux xfce desktop. "
+    "Google Chrome is in the dock at the bottom of the screen. "
+    "Each bash call runs in a new shell."
+)
+
+BUTTONS = {"left_click": "left", "right_click": "right", "middle_click": "middle"}
+
+
+class ComputerInput(TypedDict, total=False):
+    coordinate: list[int] | None
+    start_coordinate: list[int]
+    text: str | None
+    repeat: int | None
+    scroll_direction: str
+    scroll_amount: int
+    duration: float
+
+
+class BashInput(TypedDict, total=False):
+    command: str
+    restart: bool
+
+
+class EditorInput(TypedDict, total=False):
+    command: str
+    path: str
+    view_range: list[int]
+    file_text: str
+    old_str: str
+    new_str: str
+    insert_line: int
+    insert_text: str
+
+
+def image(screen: Screenshot) -> ImageBlockParam:
+    return {
+        "type": "image",
+        "source": {
+            "type": "base64",
+            "media_type": "image/jpeg",
+            "data": base64.b64encode(screen.data).decode(),
+        },
+    }
+
+
+def no_modifiers(args: ComputerInput) -> None:
+    if args.get("text"):
+        raise RuntimeError(
+            f"holding {args['text']} during a mouse action is not supported"
+        )
+
+
+def cursor(sandbox: Sandbox) -> dict[str, int]:
+    # Prints "x:640 y:400 screen:0 window:...".
+    out = sandbox.commands.run(
+        "xdotool getmouselocation", timeout_seconds=TIMEOUT_SECONDS
+    ).stdout
+    match = re.match(r"x:(\d+) y:(\d+)", out)
+    if match is None:
+        raise RuntimeError("cannot read the cursor position")
+    return {"x": int(match[1]), "y": int(match[2])}
+
+
+# Claude omits the coordinate to act at the current cursor position.
+def point(sandbox: Sandbox, coordinate: list[int] | None) -> dict[str, int]:
+    if not coordinate:
+        return cursor(sandbox)
+    x, y = coordinate
+    return {"x": x, "y": y}
+
+
+def to_desktop_actions(sandbox: Sandbox, block: ToolUseBlock) -> list[dict[str, Any]]:
+    args = cast(ComputerInput, block.input)
+    if block.name in ("left_click", "right_click", "middle_click"):
+        no_modifiers(args)
+        at = point(sandbox, args.get("coordinate"))
+        return [{"type": "click", **at, "button": BUTTONS[block.name]}]
+    elif block.name == "double_click":
+        no_modifiers(args)
+        return [{"type": "double_click", **point(sandbox, args.get("coordinate"))}]
+    elif block.name == "triple_click":
+        no_modifiers(args)
+        return [{"type": "click", **point(sandbox, args.get("coordinate"))}] * 3
+    elif block.name == "left_click_drag":
+        no_modifiers(args)
+        end = point(sandbox, args["coordinate"])
+        return [
+            {"type": "mouse_down", **point(sandbox, args["start_coordinate"])},
+            {"type": "move", **end},
+            {"type": "mouse_up", **end},
+        ]
+    elif block.name == "mouse_move":
+        return [{"type": "move", **point(sandbox, args["coordinate"])}]
+    elif block.name == "left_mouse_down":
+        return [{"type": "mouse_down", **cursor(sandbox)}]
+    elif block.name == "left_mouse_up":
+        return [{"type": "mouse_up", **cursor(sandbox)}]
+    elif block.name == "scroll":
+        no_modifiers(args)
+        clicks = args["scroll_amount"]
+        dx, dy = {
+            "up": (0, -clicks),
+            "down": (0, clicks),
+            "left": (-clicks, 0),
+            "right": (clicks, 0),
+        }[args["scroll_direction"]]
+        coordinate = args.get("coordinate")
+        move = [{"type": "move", **point(sandbox, coordinate)}] if coordinate else []
+        return [*move, {"type": "scroll", "dx": dx, "dy": dy}]
+    elif block.name == "type":
+        return [{"type": "write", "text": args["text"]}]
+    elif block.name == "key":
+        return [{"type": "press", "key": args["text"]}] * (args.get("repeat") or 1)
+    else:
+        raise RuntimeError(f"{block.name} is not supported")
+
+
+class Computer:
+    def __init__(self, sandbox: Sandbox) -> None:
+        self.sandbox = sandbox
+        # The screen after the latest input, until Claude takes a screenshot.
+        self.frame: Screenshot | None = None
+
+    def run(self, block: ToolUseBlock) -> str | list[ImageBlockParam]:
+        desktop = self.sandbox.desktop
+        if block.name == "screenshot":
+            self.frame = None
+            return [image(desktop.screenshot(format="jpeg"))]
+        elif block.name == "cursor_position":
+            at = cursor(self.sandbox)
+            return f"X={at['x']}, Y={at['y']}"
+        elif block.name == "wait":
+            time.sleep(cast(ComputerInput, block.input)["duration"])
+            # Show Claude the screen after the pause.
+            self.frame = desktop.screenshot(format="jpeg")
+            return "OK"
+        else:
+            step = desktop.step(
+                to_desktop_actions(self.sandbox, block),
+                wait_for_change=True,
+                quiet_ms=300,
+                format="jpeg",
+            )
+            if step.action_error:
+                raise RuntimeError(step.action_error)
+            self.frame = step.screenshot
+            # The input ran even when the capture after it failed.
+            if step.screenshot is None:
+                return f"OK, but the screen capture failed: {step.screenshot_error}"
+            return "OK"
+
+
+def bash(sandbox: Sandbox, args: BashInput) -> str:
+    if args.get("restart"):
+        return "Each command runs in a new shell, so there is nothing to restart."
+    # Pass the command in the environment so it needs no quoting.
+    result = sandbox.commands.run(
+        'bash -c "$CMD"',
+        env={"CMD": args.get("command", "")},
+        timeout_seconds=TIMEOUT_SECONDS,
+    )
+    output = (result.stdout + result.stderr)[-10_000:]
+    if result.exit_code != 0:
+        return f"{output}\n(exit code {result.exit_code})"
+    return output or "(no output)"
+
+
+def edit(sandbox: Sandbox, args: EditorInput) -> str:
+    files, path = sandbox.files, args["path"]
+    command = args["command"]
+    if command == "view":
+        listing = sandbox.commands.run(
+            'test -d "$P" && find "$P" -maxdepth 2 -not -path "*/.*"',
+            env={"P": path},
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if listing.exit_code == 0:
+            return listing.stdout
+        start, end = args.get("view_range", [1, -1])
+        # Number the lines without the empty string after the final newline.
+        lines = files.read_text(path).removesuffix("\n").split("\n")
+        shown = lines[start - 1 : None if end == -1 else end]
+        return "\n".join(f"{start + i}\t{line}" for i, line in enumerate(shown))
+    elif command == "create":
+        exists = sandbox.commands.run(
+            'test -e "$P"',
+            user="root",
+            env={"P": path},
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if exists.exit_code == 0:
+            raise RuntimeError(f"{path} already exists")
+        files.write(path, args.get("file_text", ""))
+        # The files API writes as root; give the file to the user that runs bash.
+        sandbox.commands.run(
+            'chown desktop: "$P"',
+            user="root",
+            env={"P": path},
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        return f"Created {path}"
+    elif command == "str_replace":
+        parts = files.read_text(path).split(args["old_str"])
+        if len(parts) != 2:
+            raise RuntimeError(
+                f"old_str must match exactly once in {path}, found {len(parts) - 1}"
+            )
+        files.write(path, args.get("new_str", "").join(parts))
+        return f"Edited {path}"
+    elif command == "insert":
+        lines = files.read_text(path).split("\n")
+        # The text becomes whole lines, so drop its own final newline.
+        lines.insert(args["insert_line"], args["insert_text"].removesuffix("\n"))
+        files.write(path, "\n".join(lines))
+        return f"Edited {path}"
+    else:
+        raise RuntimeError(f"Unknown command {command}")
+
+
+# Answer every tool call in one response, in order.
+def run_tools(
+    sandbox: Sandbox, computer: Computer, content: list[ContentBlock]
+) -> list[ToolResultBlockParam]:
+    results: list[ToolResultBlockParam] = []
+    # The result of the call that captured computer.frame.
+    frame_owner: ToolResultBlockParam | None = None
+    failed = False
+    for block in content:
+        if block.type != "tool_use":
+            continue
+        print(block.name, json.dumps(block.input))
+        is_computer = block.toolset_name == "computer"
+        result: ToolResultBlockParam = {"type": "tool_result", "tool_use_id": block.id}
+        if is_computer:
+            result["toolset_name"] = "computer"
+        if is_computer and failed:
+            # Claude planned the rest of the batch on the earlier actions succeeding.
+            result["content"] = HALT_TEXT
+            result["is_error"] = True
+        else:
+            try:
+                if is_computer:
+                    before = computer.frame
+                    result["content"] = computer.run(block)
+                    if computer.frame is not before:
+                        frame_owner = result
+                elif block.name == "bash":
+                    result["content"] = bash(sandbox, cast(BashInput, block.input))
+                elif block.name == "str_replace_based_edit_tool":
+                    result["content"] = edit(sandbox, cast(EditorInput, block.input))
+                else:
+                    raise RuntimeError(f"Unknown tool {block.name}")
+            except (SandboxError, RuntimeError, LookupError, ValueError) as error:
+                # Report sandbox failures and bad tool input back to Claude.
+                result["content"] = f"Error: {error}"
+                result["is_error"] = True
+                if is_computer:
+                    failed = True
+                    # The frame shows the screen from before the failed action.
+                    computer.frame = None
+        results.append(result)
+    # When a batch does not end with a screenshot, send the screen anyway,
+    # with the call that captured it, since later bash calls can change it.
+    frame, computer.frame = computer.frame, None
+    text = frame_owner.get("content") if frame_owner else None
+    if frame_owner and frame and isinstance(text, str):
+        frame_owner["content"] = [{"type": "text", "text": text}, image(frame)]
+    return results
+
+
+def run_task(sandbox: Sandbox, task: str) -> str:
+    computer = Computer(sandbox)
+    messages: list[MessageParam] = [{"role": "user", "content": task}]
+    turn = 0
+    while True:
+        response = client.messages.create(
+            model=MODEL,
+            max_tokens=4096,
+            system=SYSTEM,
+            tools=TOOLS,
+            messages=messages,
+        )
+        if not any(b.type == "tool_use" for b in response.content):
+            return "\n".join(b.text for b in response.content if b.type == "text")
+        if turn == MAX_TURNS:
+            raise RuntimeError(f"No answer after {MAX_TURNS} turns")
+        messages.append({"role": "assistant", "content": response.content})
+        messages.append(
+            {"role": "user", "content": run_tools(sandbox, computer, response.content)}
+        )
+        turn += 1
+
+
+sandbox = Sandbox.create(
+    name="claude-computer-use",
+    from_template="superserve/desktop",
+    preview_access="private",
+)
+try:
+    print("Watch live:", sandbox.desktop.get_stream_url(view_only=True))
+    answer = run_task(
+        sandbox,
+        "Open Google Chrome, go to https://example.com, "
+        "and tell me the title of the page.",
+    )
+    print(answer)
+finally:
+    sandbox.kill()
+```
+</CodeGroup>
+
+The display starts at 1280x800, which is within the image size that current Claude models read without downscaling, so Claude's coordinates land on the screen as they are, with no scaling. `waitForChange` / `wait_for_change` with `quietMs` / `quiet_ms` waits for the screen to repaint and then stay still for 300 ms, for at most the step's settle timeout, so check the frame for what you expect. When a response does not end with a screenshot, the loop attaches the latest frame to the result of the call that captured it, so Claude sees the result of its actions without another turn. A `wait` takes a new frame. A failed computer action drops the frame, because the screen may have changed after the capture. If the capture after an action fails, the result says so. After `MAX_TURNS` rounds of tool calls, the loop stops with an error if Claude still asks for tools. Set `MODEL` to any Claude model that supports the `computer_toolset_20260801` tool.
+
+## How tool calls map to the sandbox
+
+| Claude tool call                              | Sandbox call                                                                    |
+| --------------------------------------------- | ------------------------------------------------------------------------------- |
+| `screenshot`                                  | `desktop.screenshot`                                                            |
+| `left_click`, `right_click`, `middle_click`   | `click` with button `left`, `right`, or `middle`                                |
+| `double_click`                                | `doubleClick` / `double_click`                                                  |
+| `triple_click`                                | Three `click` actions                                                           |
+| `left_click_drag`                             | `mouseDown` at `start_coordinate`, `move`, then `mouseUp` at `coordinate`       |
+| `mouse_move`                                  | `move`                                                                          |
+| `left_mouse_down`, `left_mouse_up`            | `mouseDown` / `mouseUp` at the cursor                                           |
+| `scroll`                                      | `move` to the point, then `scroll` by `scroll_amount` wheel clicks              |
+| `key`                                         | `press`, `repeat` times                                                         |
+| `type`                                        | `write`                                                                         |
+| `cursor_position`                             | `xdotool getmouselocation` through `commands.run`                               |
+| `wait`                                        | Pauses in your code                                                             |
+| `bash`                                        | `commands.run` with `bash -c`                                                   |
+| `str_replace_based_edit_tool`                 | `files.readText` / `files.read_text` and `files.write`, `find` for a directory  |
+
+Clicks without a `coordinate` act at the cursor. Claude spells keys as X keysyms joined with `+`, such as `Return`, `ctrl+s`, and `alt+Tab`, and `press` reads those names as written. The tool definition turns off `zoom` and `hold_key` with `configs`, and mouse actions that hold a modifier key in `text` return an error; add them to `toDesktopActions` / `to_desktop_actions` if your tasks need them. The [desktop API](/sandbox/desktop) lists every action the sandbox accepts.
+
+Claude can send several tool calls in one response, and it plans the later ones on the earlier ones succeeding. So after a computer action fails, `runTools` / `run_tools` skips the rest of the computer actions in that response and answers each with `Not executed: an earlier computer action in this turn failed.` Every computer result echoes `toolset_name: "computer"`, which the API requires.
+
+Each `bash` call runs in a new shell as the `desktop` user, with `/home/desktop` as its home directory, so `cd` and exported variables do not carry over to the next call. The `create` command refuses a path that already exists. The files API creates files as `root`, so `create` gives the new file to `desktop` for the bash calls that follow.
+
+## Watch it live
+
+`getStreamUrl` / `get_stream_url` returns a browser URL for the desktop viewer. The script creates the sandbox with the `private` [preview policy](/sandbox/preview-urls), so that URL carries a signed credential that expires after 60 seconds. On first open, the viewer moves the credential into a cookie and drops it from the address bar. Until then, treat the URL as a secret, and mint a fresh one for each viewer. `viewOnly` / `view_only` stops that viewer from sending input, but anyone who has the URL can open it without the flag, so keep the policy `private` when the screen shows anything sensitive.
+
+## Safety
+
+- Everything Claude reads from the screen, from files, and from command output is untrusted input: web pages, files, and dialogs can carry instructions aimed at the model. Keep credentials and personal data out of the desktop.
+- The `desktop` user has passwordless `sudo`, so Claude controls the whole sandbox. The sandbox is the boundary: do not give it secrets that the task does not need.
+- The model calls run in your code, not in the sandbox, so the sandbox needs to reach only the sites the task uses. Restrict everything else with [network rules](/sandbox/networking).
+- Keep a person in the loop before actions with an outside effect, such as sending a message, submitting a form, or making a purchase.
+
+## Related
+
+- [Computer use](/sandbox/desktop): screenshots, mouse, keyboard, and the live viewer
+- [Commands](/commands/overview): run shell commands in the sandbox
+- [Files](/filesystem/read-write): read and write sandbox files
+- [Preview URLs](/sandbox/preview-urls): access policies for the viewer port
+- [Network rules](/sandbox/networking): limit where the sandbox can connect
+- [OpenAI computer use](/integrations/computer-use/openai): the same desktop driven by the OpenAI `computer` tool
