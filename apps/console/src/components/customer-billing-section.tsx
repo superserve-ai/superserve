@@ -15,11 +15,15 @@ import {
   billingCredits,
   formatCurrency,
 } from "@/components/billing-summary"
+import { TrialUpgradeAction } from "@/components/billing/trial-upgrade-action"
+import { useQueryScope } from "@/components/query-provider"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
+import { useTeamEntry } from "@/hooks/use-billing-v2"
 import { useCustomerBillingPeriods } from "@/hooks/use-customer-billing"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import type { CustomerBillingPeriodResponse } from "@/lib/api/billing-stripe"
 import { billingKeys } from "@/lib/api/query-keys"
+import { isAwaitingPlanState } from "@/lib/billing/signup-checkout-paths"
 
 interface CustomerBillingSectionProps {
   teamId: string
@@ -92,15 +96,18 @@ export function billingProblem(
       >
     | null
     | undefined,
+  { checkoutReady = false }: { checkoutReady?: boolean } = {},
 ): string | null {
   if (!summary) return null
   if (summary.payment_setup_required)
     return "Payment setup required. Start checkout to connect Stripe for this team."
   if (summary.billing_mode === "shadow") return null
-  if (!summary.portal_available)
+  if (!summary.portal_available) {
+    if (checkoutReady) return null
     return summary.billing_mode === "live"
       ? "Billing is live, but no customer portal is currently available."
       : "Usage is tracked, but billing actions are not available yet."
+  }
   if (!period) return null
   if (period.cancel_at_period_end)
     return "Billing is scheduled to end at the close of the current period."
@@ -148,12 +155,17 @@ function useBillingAction(
   cardless: boolean,
   enabled = true,
 ) {
-  const { submitting, available, openSession } = useBillingPayment(
-    cardless && summary
-      ? { ...summary, checkout_available: false, payment_setup_required: false }
-      : summary,
-    teamKey,
-  )
+  const { submitting, available, checkoutSupported, openSession } =
+    useBillingPayment(
+      cardless && summary
+        ? {
+            ...summary,
+            checkout_available: false,
+            payment_setup_required: false,
+          }
+        : summary,
+      teamKey,
+    )
   const { periodsQuery, latestPeriod } = useLatestBillingPeriod(
     teamId,
     teamKey,
@@ -161,7 +173,8 @@ function useBillingAction(
   )
   const canManageBilling = Boolean(summary?.permissions?.can_manage)
   const canOpenPortal = Boolean(summary?.portal_available)
-  const canStartCheckout = !cardless && Boolean(summary?.checkout_available)
+  const canStartCheckout =
+    !cardless && Boolean(summary?.checkout_available) && checkoutSupported
 
   const manageLabel = canOpenPortal
     ? "Open Customer Portal"
@@ -197,7 +210,13 @@ function useBillingAction(
       </Button>
     ) : null
 
-  return { actionButton, canManageBilling, canOpenPortal, latestPeriod }
+  return {
+    actionButton,
+    canManageBilling,
+    canOpenPortal,
+    checkoutReady: canStartCheckout && available,
+    latestPeriod,
+  }
 }
 
 // The payment action and any billing problem, shown inside the plan card.
@@ -213,16 +232,40 @@ export function usePlanBillingControls({
   enabled?: boolean
 }): ReactNode {
   const active = enabled && !!team
-  const { actionButton, canManageBilling, latestPeriod } = useBillingAction(
-    team?.teamId ?? null,
-    team ? `${team.region}:${team.teamId}` : null,
-    summary,
-    false,
-    active,
-  )
-  const problem = billingProblem(summary, latestPeriod)
+  const entryQuery = useTeamEntry(active)
+  const scope = useQueryScope()
+  const { actionButton, canManageBilling, checkoutReady, latestPeriod } =
+    useBillingAction(
+      team?.teamId ?? null,
+      team ? `${team.region}:${team.teamId}` : null,
+      summary,
+      false,
+      active,
+    )
+  // Wait for the entry state so trial teams never see legacy billing actions.
+  if (!active || entryQuery.isPending) return null
+  const entry = entryQuery.isError ? null : entryQuery.data
+  if (entry === "activating") return null
+  if (isAwaitingPlanState(entry)) {
+    return (
+      <div className="space-y-3" data-testid="plan-billing-controls">
+        {scope === "self" && canManageBilling ? (
+          <div className="flex flex-wrap items-center gap-4">
+            <TrialUpgradeAction />
+          </div>
+        ) : (
+          <p className="text-xs text-muted">
+            Ask a team billing admin to upgrade.
+          </p>
+        )}
+      </div>
+    )
+  }
+  const problem = billingProblem(summary, latestPeriod, {
+    checkoutReady,
+  })
   const viewOnly = !canManageBilling && Boolean(summary)
-  if (!active || (!actionButton && !viewOnly && !problem)) return null
+  if (!actionButton && !viewOnly && !problem) return null
 
   return (
     <div className="space-y-3" data-testid="plan-billing-controls">
