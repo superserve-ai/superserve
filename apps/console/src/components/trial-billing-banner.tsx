@@ -16,6 +16,7 @@ import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamEntry } from "@/hooks/use-billing-v2"
+import { useLegacyPlanTransition } from "@/hooks/use-legacy-plan-transition"
 import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { useUser } from "@/hooks/use-user"
 import type {
@@ -110,8 +111,11 @@ export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
   block?: BillingTrialBlock | null,
+  legacyTransition?: boolean,
 ): TrialStage {
   if (entry === "payment_failed" || entry === "plan_required") return entry
+  // Migrated legacy teams never had the current free trial.
+  if (legacyTransition && entry === "trial_ended") return "unknown"
   if (block === "trial_check_unavailable") return "check_unavailable"
   if (block === "trial_exhausted") return "ended"
   if (block === "trial_unavailable") return "unavailable"
@@ -138,6 +142,7 @@ function TrialEntryBanner({
   const { teamKey } = useBillingContext()
   const scope = useQueryScope()
   const offers = useBillingCapabilities().data?.offers
+  const legacyTransition = useLegacyPlanTransition()
   const signup = useQueryClient().getQueryData<SignupPlanContext>([
     "signup-plan",
     teamKey,
@@ -148,7 +153,12 @@ function TrialEntryBanner({
   const requested = trialPlanOffer(signup?.requestedOffer)
   const selected =
     requested && pickerOfferSellable(offers, requested) ? requested : undefined
-  const stage = trialStage(entry, summary.trial, summary.trial_block)
+  const stage = trialStage(
+    entry,
+    summary.trial,
+    summary.trial_block,
+    legacyTransition,
+  )
   const remaining = formatUsd(summary.trial?.remaining_usd)
   const plan = selected ? pickerPlanLabel(offers, selected) : null
   const upgrade = plan ? `Upgrade to ${plan}` : "Upgrade"

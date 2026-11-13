@@ -22,10 +22,13 @@ const mocks = vi.hoisted(() => ({
   toast: vi.fn(),
   entry: vi.fn(),
   offers: undefined as unknown[] | undefined,
+  admissionSource: "new_team",
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({ useTeamEntry: mocks.entry }))
 vi.mock("@/hooks/use-billing-capabilities", () => ({
-  useBillingCapabilities: () => ({ data: { offers: mocks.offers } }),
+  useBillingCapabilities: () => ({
+    data: { offers: mocks.offers, admission_source: mocks.admissionSource },
+  }),
 }))
 vi.mock("@superserve/ui", async () => ({
   ...(await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")),
@@ -72,6 +75,7 @@ function mount(requestedOffer?: string) {
 beforeEach(() => {
   mocks.toast.mockClear()
   mocks.offers = undefined
+  mocks.admissionSource = "new_team"
   mocks.entry.mockReturnValue({ data: null, isPending: false, isError: false })
   mocks.summary.mockReturnValue({ data: summary(), isError: false })
   mocks.context.mockReturnValue({ teamKey: "use:a", ready: true })
@@ -522,6 +526,39 @@ describe("TrialBillingBanner for a new team's trial", () => {
     expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
   })
 
+  it("shows neutral copy for a migrated team with exhausted trial credit", () => {
+    entry("trial_ended")
+    mocks.admissionSource = "legacy_transition"
+    mocks.summary.mockReturnValue({
+      data: summary({
+        trial: { state: "exhausted", remaining_usd: 0 },
+        trial_block: null,
+      }),
+    })
+    const { container } = mount()
+    expect(screen.getByRole("region", { name: "No plan" })).toHaveTextContent(
+      "Upgrade to run sandboxes.",
+    )
+    expect(container.textContent).not.toMatch(/free trial|trial ended/i)
+  })
+
+  it("uses the cached signup flag after capabilities switch to all teams", () => {
+    entry("trial_ended")
+    mocks.admissionSource = "all_teams"
+    mocks.summary.mockReturnValue({
+      data: summary({ trial: { state: "exhausted", remaining_usd: 0 } }),
+    })
+    const client = new QueryClient()
+    client.setQueryData(["signup-plan", "use:a"], { legacyPlanEntry: true })
+    const { container } = render(
+      <QueryClientProvider client={client}>
+        <TrialBillingBanner />
+      </QueryClientProvider>,
+    )
+    expect(screen.getByRole("region", { name: "No plan" })).toBeInTheDocument()
+    expect(container.textContent).not.toMatch(/free trial|trial ended/i)
+  })
+
   it("says the trial could not be confirmed, not denied or ended", () => {
     entry("trial_ended")
     mocks.summary.mockReturnValue({
@@ -598,6 +635,33 @@ describe("TrialBillingBanner for a new team's trial", () => {
 })
 
 describe("trialStage", () => {
+  it("claims nothing about a trial for a migrated team", () => {
+    expect(
+      trialStage(
+        "trial_ended",
+        { state: "exhausted", remaining_usd: 0 },
+        null,
+        true,
+      ),
+    ).toBe("unknown")
+  })
+
+  it("keeps a live trial's stage for a migrated team", () => {
+    expect(
+      trialStage("trial", { state: "active", remaining_usd: 4 }, null, true),
+    ).toBe(trialStage("trial", { state: "active", remaining_usd: 4 }, null))
+    expect(
+      trialStage("trial", { state: "active", remaining_usd: 4 }, null, true),
+    ).not.toBe("unknown")
+  })
+
+  it.each(["payment_failed", "plan_required"] as const)(
+    "keeps %s ahead of migration status",
+    (entry) => {
+      expect(trialStage(entry, { state: "exhausted" }, null, true)).toBe(entry)
+    },
+  )
+
   it.each<
     [
       AwaitingPlanState,

@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   intent: vi.fn(),
   billing: vi.fn(),
   assignment: vi.fn(),
+  legacyEntry: vi.fn(),
   from: vi.fn(),
   rpc: vi.fn(),
   settling: vi.fn(),
@@ -43,6 +44,8 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mocks.cookie }),
 }))
 
+import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
+
 import { needsPlanSelection, parseSignupChoice } from "./signup-plan"
 import { getSignupPlanAction } from "./signup-plan-actions"
 
@@ -63,6 +66,10 @@ beforeEach(() => {
   mocks.upgrade.mockResolvedValue({ data: null, error: null })
   mocks.billing.mockResolvedValue({ data: null, error: null })
   mocks.assignment.mockResolvedValue({
+    data: null,
+    error: { code: "PGRST205" },
+  })
+  mocks.legacyEntry.mockResolvedValue({
     data: null,
     error: { code: "PGRST205" },
   })
@@ -90,7 +97,9 @@ beforeEach(() => {
                     ? mocks.intent
                     : table === "billing_yc_operation"
                       ? mocks.billing
-                      : mocks.single,
+                      : table === "billing_legacy_plan_entry"
+                        ? mocks.legacyEntry
+                        : mocks.single,
               }
             },
           }),
@@ -100,6 +109,152 @@ beforeEach(() => {
   mocks.settling.mockResolvedValue({ data: null, error: null })
   mocks.cell.mockReturnValue({
     createAdminClient: () => ({ from: mocks.from, rpc: mocks.rpc }),
+  })
+})
+
+describe("legacy teams entering paid plans", () => {
+  beforeEach(() => {
+    mocks.single.mockResolvedValue({ data: null, error: null })
+    mocks.legacyEntry.mockResolvedValue({
+      data: { team_id: "west-team" },
+      error: null,
+    })
+  })
+
+  it.each(["trial_ended", "payment_failed"])(
+    "sends a migrated team without a signup choice to the picker for %s",
+    async (entryState) => {
+      mocks.rpc.mockResolvedValue({ data: entryState, error: null })
+      const context = await getSignupPlanAction()
+      expect(context).toMatchObject({
+        state: "legacy",
+        offer: null,
+        entryState,
+        legacyPlanEntry: true,
+      })
+      expect(mocks.rpc).toHaveBeenCalledWith("billing_team_entry_state", {
+        p_team: "west-team",
+      })
+      expect(mocks.legacyEntry).toHaveBeenCalledTimes(1)
+      expect(awaitingPlanRedirect(context)).toBe(
+        `/auth/choose-plan/?reason=${entryState}&account=user&team=usw%3Awest-team`,
+      )
+    },
+  )
+
+  it("keeps a migrated team with an assigned plan out of the picker", async () => {
+    mocks.assignment.mockResolvedValue({ data: [{ id: "a1" }], error: null })
+    const context = await getSignupPlanAction()
+    expect(context).toMatchObject({ state: "legacy", legacyPlanEntry: true })
+    expect(awaitingPlanRedirect(context)).toBeNull()
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    { data: null, error: { code: "PGRST202" } },
+    { data: "active", error: null },
+  ])(
+    "never sends an unresolved migrated team to old onboarding (%j)",
+    async (entry) => {
+      mocks.rpc.mockResolvedValue(entry)
+      const context = await getSignupPlanAction()
+      expect(context).toMatchObject({
+        state: "legacy",
+        offer: null,
+        legacyPlanEntry: true,
+      })
+      expect(needsPlanSelection(context)).toBe(false)
+      expect(awaitingPlanRedirect(context)).toBeNull()
+      expect(mocks.upgrade).toHaveBeenCalled()
+    },
+  )
+
+  it("keeps a synthesized pending upgrade out of old onboarding", async () => {
+    mocks.upgrade.mockResolvedValue({
+      data: { state: "open", offer_key: "pro_monthly" },
+      error: null,
+    })
+    const context = await getSignupPlanAction()
+    expect(context).toMatchObject({ state: "legacy", offer: null })
+    expect(awaitingPlanRedirect(context)).toBeNull()
+  })
+
+  it("waits for a migrated team's paid upgrade to settle", async () => {
+    mocks.rpc.mockResolvedValue({ data: "trial_ended", error: null })
+    mocks.settling.mockResolvedValue({ data: { state: "paid" }, error: null })
+    const context = await getSignupPlanAction()
+    expect(context).toMatchObject({
+      state: "legacy",
+      entryState: "trial_ended",
+      legacyPlanEntry: true,
+      paymentSettling: true,
+    })
+    expect(awaitingPlanRedirect(context)).toBe(
+      "/onboarding/payment/?account=user&team=usw%3Awest-team",
+    )
+  })
+
+  it.each([null, { code: "PGRST205" }, { code: "42P01" }])(
+    "keeps today's flow without a migration row or table (%j)",
+    async (error) => {
+      mocks.legacyEntry.mockResolvedValue({ data: null, error })
+      const context = await getSignupPlanAction()
+      expect(context).toEqual({
+        userId: "user",
+        teamKey: "usw:west-team",
+        state: "legacy",
+        offer: null,
+        requestedOffer: undefined,
+      })
+      expect(mocks.rpc).not.toHaveBeenCalled()
+      expect(mocks.assignment).not.toHaveBeenCalled()
+    },
+  )
+
+  it("blocks when migration status cannot be read", async () => {
+    mocks.legacyEntry.mockResolvedValue({
+      data: null,
+      error: { code: "XX000" },
+    })
+    await expect(getSignupPlanAction()).rejects.toThrow(
+      "Unable to check your plan. Please retry.",
+    )
+  })
+
+  it.each(["selecting", "pending"])(
+    "flags a migrated %s team after reading trial_ended",
+    async (state) => {
+      mocks.single.mockResolvedValue({
+        data: { state, offer_key: state === "pending" ? "pro_monthly" : null },
+        error: null,
+      })
+      mocks.rpc.mockResolvedValue({ data: "trial_ended", error: null })
+      expect(await getSignupPlanAction()).toMatchObject({
+        state: "legacy",
+        entryState: "trial_ended",
+        legacyPlanEntry: true,
+      })
+      expect(mocks.legacyEntry).toHaveBeenCalledTimes(1)
+    },
+  )
+
+  it("does not check migration status for a selecting team on a trial", async () => {
+    mocks.single.mockResolvedValue({
+      data: { state: "selecting", offer_key: null },
+      error: null,
+    })
+    mocks.rpc.mockResolvedValue({ data: "trial", error: null })
+    const context = await getSignupPlanAction()
+    expect(context.entryState).toBe("trial")
+    expect(context.legacyPlanEntry).toBeUndefined()
+    expect(mocks.legacyEntry).not.toHaveBeenCalled()
+  })
+
+  it("does not check migration status when the choice table is missing", async () => {
+    mocks.single.mockResolvedValue({ data: null, error: { code: "PGRST205" } })
+    expect((await getSignupPlanAction()).state).toBe("legacy")
+    expect(mocks.legacyEntry).not.toHaveBeenCalled()
+    expect(mocks.rpc).not.toHaveBeenCalled()
   })
 })
 
