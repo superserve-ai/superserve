@@ -100,7 +100,7 @@ print(result.stdout)
 ```
 </CodeGroup>
 
-Add `--stream-json` to get one JSON event per line instead of only the final message. The last event has `type: "result"` and the thread ID in `session_id`. If the turn succeeds, the final answer is in `result`. If it fails, `is_error` is `true` and the message is in `error`. Check `is_error`, because Amp can exit with code `0` when a turn fails.
+Add `--stream-json` to get one JSON event per line instead of only the final message. The last event has `type: "result"` and the thread ID in `session_id`. If the turn succeeds, the final answer is in `result`. If it fails, `is_error` is `true` and the message is in `error`. Check `is_error`, because Amp can exit with code `0` when a turn fails. Check the command result before you parse: at the timeout, `run()` stops Amp and returns exit code `124`, and `truncated` is `true` when the output was cut off. In both cases the last event can be missing or incomplete.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -109,8 +109,13 @@ const result = await sandbox.commands.run(
   { timeoutMs: 600_000 },
 )
 
+if (result.exitCode !== 0 || result.truncated) {
+  throw new Error(`amp exited with ${result.exitCode} (truncated: ${result.truncated}): ${result.stderr}`)
+}
+
 const events = result.stdout.trim().split("\n").map((line) => JSON.parse(line))
 const done = events.find((e) => e.type === "result")
+if (!done) throw new Error("amp returned no result event")
 console.log(done.is_error ? done.error : done.result)
 ```
 
@@ -122,8 +127,15 @@ result = sandbox.commands.run(
     timeout_seconds=600,
 )
 
+if result.exit_code != 0 or result.truncated:
+    raise RuntimeError(
+        f"amp exited with {result.exit_code} (truncated: {result.truncated}): {result.stderr}"
+    )
+
 events = [json.loads(line) for line in result.stdout.strip().splitlines()]
-done = next(e for e in events if e["type"] == "result")
+done = next((e for e in events if e["type"] == "result"), None)
+if done is None:
+    raise RuntimeError("amp returned no result event")
 print(done["error"] if done["is_error"] else done["result"])
 ```
 </CodeGroup>
