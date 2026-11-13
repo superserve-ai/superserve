@@ -83,11 +83,11 @@ vi.mock("@/lib/supabase/client", () => ({
 }))
 
 const mockConfirmedDestination = vi.fn<
-  (offer: string | undefined) => Promise<string>
->(() => Promise.resolve("/"))
+  (offer: string | undefined, next: string) => Promise<string>
+>((_offer, next) => Promise.resolve(next))
 vi.mock("@/lib/auth/signup-return-actions", () => ({
-  confirmedSignupDestinationAction: (offer: string | undefined) =>
-    mockConfirmedDestination(offer),
+  confirmedSignupDestinationAction: (offer: string | undefined, next: string) =>
+    mockConfirmedDestination(offer, next),
 }))
 
 const mockEnsureFingerprintSignupEventId = vi.fn<
@@ -1159,7 +1159,9 @@ describe("SignUpPage", () => {
         .mockImplementation(() => {})
       mockSignUpWithEmail.mockResolvedValue({ success: true })
       mockConfirmedDestination.mockReset()
-      mockConfirmedDestination.mockResolvedValue("/")
+      mockConfirmedDestination.mockImplementation((_offer, next) =>
+        Promise.resolve(next),
+      )
     })
 
     const confirmInOtherTab = () =>
@@ -1207,8 +1209,48 @@ describe("SignUpPage", () => {
       confirmInOtherTab()
 
       await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/yc/claim"))
-      // An explicit next path wins without asking the server.
-      expect(mockConfirmedDestination).not.toHaveBeenCalled()
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(
+        undefined,
+        "/yc/claim",
+      )
+    })
+
+    it("asks the server about an explicit offer landing page", async () => {
+      // The callback sends a new Pro trial with next=/billing/pro/ to the
+      // console, so this tab must not go to the upgrade page on its own.
+      mockSearchParams = new URLSearchParams({
+        offer: "pro_monthly",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockResolvedValue("/sandboxes")
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith("/sandboxes"),
+      )
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(
+        "pro_monthly",
+        "/billing/pro/",
+      )
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+    })
+
+    it("takes the requested path when the server is slow", async () => {
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSearchParams = new URLSearchParams({ next: "/yc/claim" })
+      mockConfirmedDestination.mockReturnValue(new Promise(() => {}))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000)
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/yc/claim")
     })
 
     it("checks again when the user comes back to this tab", async () => {
@@ -1237,7 +1279,7 @@ describe("SignUpPage", () => {
       await waitFor(() =>
         expect(mockReplace).toHaveBeenCalledWith("/sandboxes"),
       )
-      expect(mockConfirmedDestination).toHaveBeenCalledWith("pro_monthly")
+      expect(mockConfirmedDestination).toHaveBeenCalledWith("pro_monthly", "/")
       expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
     })
 

@@ -49,6 +49,10 @@ import {
   SignupRestrictedError,
 } from "@/lib/auth/signup-restrictions"
 import {
+  signupReturnStep,
+  signupStepUsesEntryState,
+} from "@/lib/auth/signup-return-step"
+import {
   hasPendingEnterprisePricing,
   isSignupReviewBlocked,
   signupReviewStatus,
@@ -68,12 +72,7 @@ import {
   starterAuthReturnPath,
   signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
-import {
-  isSignupCheckoutOffer,
-  isPlanPickerPath,
-  isSignupCheckoutPath,
-  isSignupCheckoutReturnPath,
-} from "@/lib/billing/signup-checkout-paths"
+import { isSignupCheckoutOffer } from "@/lib/billing/signup-checkout-paths"
 import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
@@ -83,8 +82,6 @@ import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
 import { notifySlackOfNewUser } from "@/lib/slack/signup-notification"
 import { createServerClient } from "@/lib/supabase/server"
-import { ycReturnPath } from "@/lib/yc/return-path"
-import { staffReturnPath } from "@/lib/yc/staff-return-path"
 import {
   completeStaffGoogle,
   STAFF_SESSION_COOKIE,
@@ -753,45 +750,13 @@ export async function GET(request: Request) {
           },
         )
 
-        const proNext = proAuthReturnPath(next) ?? starterAuthReturnPath(next)
-        const preparationNext = signupPreparationReturnPath(next)
-        const inviteNext = inviteReturnPath(next)
-        const ycNext =
-          ycReturnPath(next) ??
-          (process.env.YC_STAFF_UI_ENABLED === "true"
-            ? staffReturnPath(next)
-            : null)
-        if (
-          !next.startsWith("/device") &&
-          !next.startsWith("https://") &&
-          !/^\/onboarding\/(?:plan|payment)\/?(?:\?|$)/.test(next) &&
-          !isSignupCheckoutPath(next) &&
-          !isSignupCheckoutReturnPath(next) &&
-          !isPlanPickerPath(next) &&
-          !ycNext &&
-          !proNext &&
-          !preparationNext &&
-          !inviteNext
-        ) {
-          next = "/sandboxes"
-        }
-        if (inviteNext) next = inviteNext
-        if (ycNext) next = ycNext
-        if (proNext) next = proNext
-        if (preparationNext) next = preparationNext
-        if (
-          next === "/sandboxes" &&
-          (await cookies()).get("yc_claim_confirmation")
-        ) {
-          next = "/yc/claim"
-        }
-        if (
-          signupOffer &&
-          next === "/sandboxes" &&
-          (!searchParams.get("next") || searchParams.get("next") === "/") &&
-          (newSignup || signupOffer !== "enterprise")
-        )
-          next = SIGNUP_OFFER_DESTINATIONS[signupOffer]
+        next = signupReturnStep(next, {
+          signupOffer,
+          nextRequested:
+            !!searchParams.get("next") && searchParams.get("next") !== "/",
+          newSignup,
+          ycClaimPending: !!(await cookies()).get("yc_claim_confirmation"),
+        })
         if (
           newSignup &&
           (proAuthReturnPath(next) || starterAuthReturnPath(next))
@@ -826,8 +791,7 @@ export async function GET(request: Request) {
         if (
           newSignup &&
           (checkoutOffer || !signupOffer || signupOffer === "free") &&
-          (next === "/sandboxes" ||
-            (signupOffer && next === SIGNUP_OFFER_DESTINATIONS[signupOffer])) &&
+          signupStepUsesEntryState(next, signupOffer) &&
           (await getPricingVersionAction()) === "v2"
         ) {
           next =

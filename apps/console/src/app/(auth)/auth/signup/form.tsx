@@ -440,25 +440,24 @@ export default function SignUpContent() {
         if (!disposed) window.location.replace(path)
       })
     }
-    // An explicit next path wins, as in the callback. Otherwise ask the
-    // server, which knows the new team's state, for the step the callback
-    // picks; a slow or failed answer falls back to the dashboard entry.
+    // Ask the server, which knows the new team's state, for the step the
+    // callback picks for this next path; a slow or failed answer falls back
+    // to the requested path (the dashboard entry when there is none).
     const destination = async () => {
-      if (confirmedNext !== "/") return confirmedNext
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
         const path = await Promise.race([
-          confirmedSignupDestinationAction(rawOffer),
+          confirmedSignupDestinationAction(rawOffer, confirmedNext),
           new Promise<string>((resolve) => {
             timer = setTimeout(
-              () => resolve("/"),
+              () => resolve(confirmedNext),
               CONFIRMED_DESTINATION_TIMEOUT_MS,
             )
           }),
         ])
         return confirmedSignupReturnPath(path)
       } catch {
-        return "/"
+        return confirmedNext
       } finally {
         clearTimeout(timer)
       }
