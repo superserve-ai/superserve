@@ -178,9 +178,41 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
     expect(callbackOf(0).searchParams.get("signup_attempt_id")).toBe(
       "attempt-1",
     )
-    // Server actions run one at a time: the capture action leads the queue.
-    expect(mocks.ensureCapture.mock.invocationCallOrder[0]).toBeLessThan(
-      mocks.beginGoogleSignIn.mock.invocationCallOrder[0],
+    // Server actions run one at a time: the short origin action goes first.
+    expect(mocks.beginGoogleSignIn.mock.invocationCallOrder[0]).toBeLessThan(
+      mocks.ensureCapture.mock.invocationCallOrder[0],
+    )
+  })
+
+  it("keeps the sign-up origin when the capture server action stalls (server actions run one at a time)", async () => {
+    let queue: Promise<unknown> = Promise.resolve()
+    const inOrder = <T,>(run: () => Promise<T>): Promise<T> => {
+      const result = queue.then(run)
+      queue = result.catch(() => {})
+      return result
+    }
+    mocks.ensureCapture.mockImplementation(() =>
+      inOrder(() => new Promise(() => {})),
+    )
+    mocks.beginGoogleSignup
+      .mockReset()
+      .mockImplementation(() =>
+        inOrder(async () => ({ success: true, signupAttemptId: "attempt-1" })),
+      )
+    mocks.beginGoogleSignIn
+      .mockReset()
+      .mockImplementation(() => inOrder(async () => "signin-origin"))
+
+    render(<SignInPage />)
+    await clickGoogle()
+    await act(() =>
+      vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_PROOF_DEADLINE_MS),
+    )
+
+    expect(mocks.signInWithOAuth).toHaveBeenCalledTimes(1)
+    expect(callbackOf(0).searchParams.has("signup_attempt_id")).toBe(false)
+    expect(callbackOf(0).searchParams.get("google_signin_intent")).toBe(
+      "signin-origin",
     )
   })
 

@@ -487,10 +487,10 @@ describe("SignInPage", () => {
     )
     await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
     expect(mockGoogleSignupAttempt).toHaveBeenCalledTimes(1)
-    // Next.js runs server actions one at a time: the check's capture action
-    // must lead the queue, ahead of the origin action.
-    expect(mockGoogleSignupAttempt.mock.invocationCallOrder[0]).toBeLessThan(
-      mockBeginGoogleSignIn.mock.invocationCallOrder[0],
+    // Next.js runs server actions one at a time: the short origin action
+    // goes first, so a stalled check cannot hold it back.
+    expect(mockBeginGoogleSignIn.mock.invocationCallOrder[0]).toBeLessThan(
+      mockGoogleSignupAttempt.mock.invocationCallOrder[0],
     )
     const { options } = mockSignInWithOAuth.mock.calls[0][0]
     const callback = new URL(options.redirectTo)

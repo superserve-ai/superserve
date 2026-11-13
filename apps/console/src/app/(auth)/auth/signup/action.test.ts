@@ -1910,12 +1910,21 @@ describe("beginGoogleSignup", () => {
       },
     )
 
-    it("answers when PostHog cannot be scheduled or fails", async () => {
+    it("answers when PostHog cannot be scheduled", async () => {
       mockAfter.mockReset().mockImplementation((callback) => {
         if (mockAfter.mock.calls.length > 1)
           throw new Error("Request lifecycle unavailable")
         queued.push(callback)
       })
+
+      await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+        success: true,
+        signupAttemptId: expect.any(String),
+      })
+      expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
+    })
+
+    it("does not let a failed PostHog flush reject the scheduled work", async () => {
       mockTrackEvent.mockReset().mockRejectedValue(new Error("posthog down"))
 
       await expect(beginGoogleSignup("google-token")).resolves.toEqual({
@@ -1923,6 +1932,7 @@ describe("beginGoogleSignup", () => {
         signupAttemptId: expect.any(String),
       })
       await expect(runQueued()).resolves.toBeDefined()
+      expect(mockTrackEvent).toHaveBeenCalledTimes(2)
       expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
     })
   })

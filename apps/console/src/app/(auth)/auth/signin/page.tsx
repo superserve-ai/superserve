@@ -267,15 +267,19 @@ function SignInContent() {
       // Superserve finishes sign-up in this one trip to Google. The check is
       // optional and stops by its own deadlines, so it cannot hold back an
       // existing account for long; a cancelled check starts no further step.
-      // Next.js runs server actions one at a time, so the check starts first:
-      // its capture action then leads the queue. The origin action is
+      // Next.js runs server actions one at a time. The origin action is
+      // short and goes first, so a stalled capture or proof call cannot
+      // hold it back: the callback then keeps the sign-up origin. It is
       // optional too and gets the browser deadline of the check, because
       // after a stalled check it would queue behind that check's request on
       // a retry.
-      const signupAttempt = googleSignupAttemptForSignIn()
+      const intentResult = withinDeadline(
+        beginGoogleSignIn(),
+        GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
+      )
       const [intent, signupAttemptResult] = await Promise.allSettled([
-        withinDeadline(beginGoogleSignIn(), GOOGLE_SIGNUP_CHECK_DEADLINE_MS),
-        signupAttempt,
+        intentResult,
+        googleSignupAttemptForSignIn(),
       ])
       // The user left this page during the wait (for example to "Create an
       // account"), so this attempt must not take them to Google.
