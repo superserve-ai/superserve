@@ -3,7 +3,7 @@
  *
  * Tests exercise the configured path (all three env vars set), which the
  * signup action/page tests don't cover since they run without reCAPTCHA
- * configured and only prove the unconfigured fail-open behavior.
+ * configured and only prove the unconfigured behavior outside production.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -42,14 +42,19 @@ describe("verifyRecaptcha (unconfigured)", () => {
     delete process.env.RECAPTCHA_API_KEY
     delete process.env.RECAPTCHA_PROJECT_ID
     delete process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
+    // Outside production unless a test says otherwise, whatever the shell has.
+    vi.stubEnv("VERCEL_ENV", "")
+    vi.stubEnv("NODE_ENV", "test")
+    vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", "")
   })
 
   afterEach(() => {
+    vi.unstubAllEnvs()
     restoreEnv()
     fetchSpy.mockReset()
   })
 
-  it("fails open without calling the assessment API", async () => {
+  it("fails open outside production without calling the assessment API", async () => {
     const result = await verifyRecaptcha("some-token", "signup")
     expect(result).toEqual({
       verified: true,
@@ -57,6 +62,91 @@ describe("verifyRecaptcha (unconfigured)", () => {
     })
     expect(fetchSpy).not.toHaveBeenCalled()
   })
+
+  it("fails closed in production so lost keys cannot turn the check off", async () => {
+    vi.stubEnv("VERCEL_ENV", "production")
+    try {
+      const result = await verifyRecaptcha("some-token", "signup")
+      expect(result).toEqual({
+        verified: false,
+        providerOutcome: "configuration_error",
+        reason: "missing_configuration",
+      })
+      expect(fetchSpy).not.toHaveBeenCalled()
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it("still passes on preview builds without keys", async () => {
+    vi.stubEnv("VERCEL_ENV", "preview")
+    try {
+      await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
+        verified: true,
+        providerOutcome: "unconfigured",
+      })
+    } finally {
+      vi.unstubAllEnvs()
+    }
+  })
+
+  it("fails closed in a production build outside Vercel", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+
+    await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "missing_configuration",
+    })
+    expect(fetchSpy).not.toHaveBeenCalled()
+  })
+
+  it("lets a local or self-hosted production build opt out", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", "true")
+
+    await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
+      verified: true,
+      providerOutcome: "unconfigured",
+    })
+  })
+
+  it.each(["1", "TRUE", "yes"])(
+    "accepts only the exact value true for the opt-out, not %s",
+    async (value) => {
+      vi.stubEnv("NODE_ENV", "production")
+      vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", value)
+
+      await expect(
+        verifyRecaptcha("some-token", "signup"),
+      ).resolves.toMatchObject({ verified: false })
+    },
+  )
+
+  it("ignores the opt-out in Vercel production", async () => {
+    vi.stubEnv("NODE_ENV", "production")
+    vi.stubEnv("VERCEL_ENV", "production")
+    vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", "true")
+
+    await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "missing_configuration",
+    })
+  })
+
+  it.each(["preview", "development"])(
+    "still passes a production build on a Vercel %s deployment",
+    async (vercelEnv) => {
+      vi.stubEnv("NODE_ENV", "production")
+      vi.stubEnv("VERCEL_ENV", vercelEnv)
+
+      await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
+        verified: true,
+        providerOutcome: "unconfigured",
+      })
+    },
+  )
 
   it("fails closed when reCAPTCHA is only partially configured", async () => {
     process.env.RECAPTCHA_API_KEY = "test-api-key"

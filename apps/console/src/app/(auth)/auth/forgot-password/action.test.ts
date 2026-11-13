@@ -226,6 +226,26 @@ describe("sendPasswordResetEmail", () => {
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
 
+  it("says reset is unavailable, not a failed check, when reCAPTCHA is not configured", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "missing_configuration",
+    })
+
+    const result = await sendPasswordResetEmail("user@example.com", "token")
+
+    expect(result).toEqual({
+      success: false,
+      error:
+        "Password reset is not available right now. Please try again later.",
+      errorCode: "captcha_unavailable",
+    })
+    expect(mockConsumeAuthRateLimit).not.toHaveBeenCalled()
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
   it("fails closed when the reCAPTCHA provider is unavailable", async () => {
     mockVerifyRecaptcha.mockResolvedValue({
       verified: true,

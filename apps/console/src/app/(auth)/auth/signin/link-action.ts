@@ -117,16 +117,34 @@ export const sendSignInLink = async (
   next?: unknown,
 ): Promise<
   | { success: true }
-  | { success: false; errorCode: "captcha_failed" | "captcha_unavailable" }
+  | { success: false; errorCode: "captcha_failed" }
+  | { success: false; errorCode: "captcha_unavailable"; error: string }
 > => {
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signin_link")
+  // A broken setup on our side gets its own message, so the visitor does not
+  // retry a check that cannot pass.
+  if (
+    !recaptcha.verified &&
+    recaptcha.providerOutcome === "configuration_error"
+  ) {
+    return {
+      success: false,
+      errorCode: "captcha_unavailable",
+      error:
+        "Email sign-in links are not available right now. Please try again later.",
+    }
+  }
   if (!recaptcha.verified) {
     return { success: false, errorCode: "captcha_failed" }
   }
   // verifyRecaptcha also passes when the provider is down. This action has no
   // other throttle, so it must not send email without a real verdict.
   if (recaptcha.providerOutcome === "unavailable") {
-    return { success: false, errorCode: "captcha_unavailable" }
+    return {
+      success: false,
+      errorCode: "captcha_unavailable",
+      error: "We couldn't reach our bot-check. Please try again in a minute.",
+    }
   }
 
   const parsed = linkSchema.safeParse({ email })

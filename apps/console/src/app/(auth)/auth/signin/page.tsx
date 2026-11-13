@@ -226,7 +226,7 @@ function SignInContent() {
         setLinkError(
           result.errorCode === "captcha_failed"
             ? "We couldn't verify you're human. Please try again."
-            : "Could not send the link. Please try again.",
+            : result.error,
         )
         return
       }

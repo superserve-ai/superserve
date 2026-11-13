@@ -17,6 +17,7 @@ import {
   issueGoogleSignupProof,
 } from "@/lib/auth/google-signup-proof"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { passwordTooLongError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
@@ -74,7 +75,15 @@ import { ycReturnPath } from "@/lib/yc/return-path"
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),
-  password: z.string().min(8, "Password must be at least 8 characters."),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .superRefine((password, ctx) => {
+      // Auth's bcrypt hash reads only 72 bytes; the form checks this too,
+      // but a direct call to this action skips the form.
+      const message = passwordTooLongError(password)
+      if (message) ctx.addIssue({ code: "custom", message })
+    }),
   fullName: z.string().min(1, "Name is required.").max(200),
 })
 
@@ -165,10 +174,24 @@ async function readCloudflareClientContext() {
 }
 
 // verifyRecaptcha also passes when the provider is down. Signup creates an
-// account, so it must not run without a real verdict.
+// account, so it must not run without a real verdict. A missing or invalid
+// token is refused; a broken setup on our side gets its own message so the
+// visitor does not retry a check they cannot pass.
 function strictRecaptchaBlock(
   recaptcha: Awaited<ReturnType<typeof verifyRecaptcha>>,
 ) {
+  if (
+    !recaptcha.verified &&
+    recaptcha.providerOutcome === "configuration_error"
+  ) {
+    return {
+      reason: recaptcha.reason,
+      response: {
+        error: "Sign-up is not available right now. Please try again later.",
+        errorCode: "captcha_unavailable" as const,
+      },
+    }
+  }
   if (!recaptcha.verified) {
     return {
       reason: recaptcha.reason,
@@ -807,6 +830,7 @@ export type ResendSignupConfirmationResult =
       error: string
       errorCode:
         | "captcha_failed"
+        | "captcha_unavailable"
         | "resend_unavailable"
         | "already_confirmed"
         | "cooldown"
@@ -833,6 +857,18 @@ export const resendSignupConfirmation = async (
   shownEmail?: string,
 ): Promise<ResendSignupConfirmationResult> => {
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_resend")
+  // A broken setup on our side gets its own message, so the visitor does not
+  // retry a check that cannot pass.
+  if (
+    !recaptcha.verified &&
+    recaptcha.providerOutcome === "configuration_error"
+  )
+    return {
+      success: false,
+      error:
+        "Resending the email is not available right now. Please try again later.",
+      errorCode: "captcha_unavailable",
+    }
   if (!recaptcha.verified)
     return {
       success: false,

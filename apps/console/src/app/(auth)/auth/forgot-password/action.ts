@@ -58,6 +58,19 @@ export const sendPasswordResetEmail = async (
     }
 > => {
   const recaptcha = await verifyRecaptcha(recaptchaToken, "password_reset")
+  // A broken setup on our side gets its own message, so the visitor does not
+  // retry a check that cannot pass.
+  if (
+    !recaptcha.verified &&
+    recaptcha.providerOutcome === "configuration_error"
+  ) {
+    return {
+      success: false,
+      error:
+        "Password reset is not available right now. Please try again later.",
+      errorCode: "captcha_unavailable",
+    }
+  }
   if (!recaptcha.verified) {
     return {
       success: false,

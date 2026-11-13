@@ -1010,6 +1010,95 @@ describe("signUpWithEmail", () => {
     },
   )
 
+  it.each([
+    [
+      "no token",
+      { verified: false, providerOutcome: "rejected", reason: "missing_token" },
+    ],
+    [
+      "an invalid token",
+      { verified: false, providerOutcome: "rejected", reason: "invalid_token" },
+    ],
+  ])("refuses email signup with %s", async (_label, recaptcha) => {
+    mockVerifyRecaptcha.mockResolvedValue(recaptcha)
+
+    const result = await signUpWithEmail(
+      "user@test.com",
+      "Password123",
+      "Test User",
+    )
+
+    expect(result).toEqual({
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+      errorCode: "captcha_failed",
+    })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it("refuses email signup when the bot check is not set up", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "missing_configuration",
+    })
+
+    const result = await signUpWithEmail(
+      "user@test.com",
+      "Password123",
+      "Test User",
+      "recaptcha-token",
+    )
+
+    expect(result).toEqual({
+      success: false,
+      error: "Sign-up is not available right now. Please try again later.",
+      errorCode: "captcha_unavailable",
+    })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["Password1".padEnd(73, "x"), "Use 72 characters or fewer."],
+    [
+      "Password1" + "é".repeat(32),
+      "Use 72 characters or fewer. Accented letters, symbols, and emoji count as more than one.",
+    ],
+  ])(
+    "refuses a password over 72 bytes before any other check",
+    async (password, error) => {
+      const result = await signUpWithEmail(
+        "user@test.com",
+        password,
+        "Test User",
+        "recaptcha-token",
+      )
+
+      expect(result).toEqual({ success: false, error })
+      expect(mockVerifyRecaptcha).not.toHaveBeenCalled()
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+    },
+  )
+
+  it("accepts a password of exactly 72 bytes", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: "abc123" } },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue({ success: true })
+
+    const result = await signUpWithEmail(
+      "user@test.com",
+      "Password1".padEnd(72, "x"),
+      "Test User",
+      "recaptcha-token",
+    )
+
+    expect(result).toEqual({ success: true })
+  })
+
   it("returns error when email is already registered", async () => {
     mockGenerateLink.mockResolvedValue({
       data: null,
@@ -1316,6 +1405,42 @@ describe("confirmation email delivery", () => {
       expect(mockGenerateLink.mock.lastCall![0].options.redirectTo).toBe(
         saved.redirect,
       )
+    })
+
+    it("says resend is unavailable, not a failed check, when reCAPTCHA is not configured", async () => {
+      mockVerifyRecaptcha.mockResolvedValue({
+        verified: false,
+        providerOutcome: "configuration_error",
+        reason: "missing_configuration",
+      })
+
+      const result = await resendSignupConfirmation("resend-token", SHOWN_EMAIL)
+
+      expect(result).toEqual({
+        success: false,
+        error:
+          "Resending the email is not available right now. Please try again later.",
+        errorCode: "captcha_unavailable",
+      })
+      expect(mockGetUserById).not.toHaveBeenCalled()
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+    })
+
+    it("still reports a failed check as captcha_failed on resend", async () => {
+      mockVerifyRecaptcha.mockResolvedValue({
+        verified: false,
+        providerOutcome: "rejected",
+        reason: "low_score",
+      })
+
+      const result = await resendSignupConfirmation("resend-token", SHOWN_EMAIL)
+
+      expect(result).toEqual({
+        success: false,
+        error: "We couldn't verify you're human. Please try again.",
+        errorCode: "captcha_failed",
+      })
+      expect(mockGenerateLink).not.toHaveBeenCalled()
     })
 
     it("sends a new link through the app email path with the original params", async () => {
@@ -1935,6 +2060,21 @@ describe("beginGoogleSignup", () => {
       expect(mockTrackEvent).toHaveBeenCalledTimes(2)
       expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
     })
+  })
+
+  it("names a setup problem instead of asking to retry the bot check", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      providerOutcome: "configuration_error",
+      reason: "missing_configuration",
+    })
+
+    await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+      success: false,
+      error: "Sign-up is not available right now. Please try again later.",
+      errorCode: "captcha_unavailable",
+    })
+    expect(mockIssueGoogleSignupProof).not.toHaveBeenCalled()
   })
 
   it("still issues proof when reCAPTCHA is not configured", async () => {
