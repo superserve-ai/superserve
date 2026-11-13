@@ -342,6 +342,50 @@ describe("memory growth", () => {
     expect(await submit()).not.toHaveProperty("memory_max_mib")
   })
 
+  it("clamps the ceiling when the plan limit drops while growth is on", async () => {
+    const { rerender } = render(<CreateTemplateDialog open hideTrigger />)
+    press("Increase Memory")
+    fireEvent.click(radio("Up to 8 GB"))
+    expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "8192")
+    // A 6 GB limit is under 4x the 2 GB boot, so the limit is the new ceiling.
+    mocks.memoryCap = 6144
+    rerender(<CreateTemplateDialog open hideTrigger />)
+    expect(radio("Up to 6 GB")).toBeChecked()
+    expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "6144")
+    expect(spin("Max memory")).toHaveAttribute("aria-valuemax", "6144")
+    mocks.memoryCap = 3072
+    rerender(<CreateTemplateDialog open hideTrigger />)
+    expect(radio("Up to 3 GB")).toBeChecked()
+    expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "3072")
+    expect(spin("Memory")).toHaveAttribute("aria-valuenow", "2048")
+    expect(await submit()).toMatchObject({
+      memory_mib: 2048,
+      memory_max_mib: 3072,
+    })
+  })
+
+  it("shows the limit state when the plan limit drops to boot memory", async () => {
+    const { rerender } = render(<CreateTemplateDialog open hideTrigger />)
+    press("Increase Memory", 2)
+    fireEvent.click(radio("Up to 16 GB"))
+    // The limit falls below the 4 GB boot size, so boot memory clamps to it
+    // and there is no room left to grow.
+    mocks.memoryCap = 2048
+    rerender(<CreateTemplateDialog open hideTrigger />)
+    expect(spin("Memory")).toHaveAttribute("aria-valuenow", "2048")
+    expect(radio("At limit")).toBeDisabled()
+    expect(radio("Fixed")).toBeChecked()
+    expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
+    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+      "Boot memory is at your plan's limit, so there is no room to grow.",
+    )
+    // A raised limit doesn't turn growth back on without the user.
+    mocks.memoryCap = 8192
+    rerender(<CreateTemplateDialog open hideTrigger />)
+    expect(radio("Fixed")).toBeChecked()
+    expect(await submit()).not.toHaveProperty("memory_max_mib")
+  })
+
   it("links to the live memory resizing docs", () => {
     render(<CreateTemplateDialog open hideTrigger />)
     expect(
