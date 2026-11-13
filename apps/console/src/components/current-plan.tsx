@@ -104,9 +104,7 @@ export function CurrentPlan({
             plan ? "text-foreground" : "text-muted",
           )}
         >
-          {legacyTransition &&
-          plan?.key === "trial" &&
-          plan.status === "trial_ended"
+          {legacyTransition && plan?.key === "trial" && plan.status !== "trial"
             ? "No plan"
             : (plan?.name ?? "Unavailable")}
         </p>

@@ -44,6 +44,15 @@ it("shows neutral plan copy for a migrated team", () => {
   expect(screen.queryByText(/Trial ended|Free trial/i)).toBeNull()
 })
 
+it("keeps payment failure copy for a migrated team with no plan", () => {
+  render(<CurrentPlan summary={summary("payment_failed")} legacyTransition />)
+  expect(screen.getByText("No plan")).toBeInTheDocument()
+  expect(
+    screen.getByText("Payment didn’t go through · choose a plan to try again"),
+  ).toBeInTheDocument()
+  expect(screen.queryByText("Free trial")).toBeNull()
+})
+
 it("tells a team that needs a plan it never had a trial", () => {
   const plan = summary("plan_required")
   plan.plan!.name = "No plan"

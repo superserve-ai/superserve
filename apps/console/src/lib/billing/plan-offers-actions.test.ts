@@ -18,7 +18,10 @@ vi.mock("@/lib/api/proxy-auth", () => ({
 }))
 vi.mock("@/lib/cells", () => ({ cellFor: mocks.cell }))
 
-import { getTrialOutcomeAction } from "./plan-offers-actions"
+import {
+  getLegacyPlanEntryAction,
+  getTrialOutcomeAction,
+} from "./plan-offers-actions"
 
 const locator = { account: "user", team: "usw:west-team" }
 
@@ -45,6 +48,46 @@ beforeEach(() => {
 })
 
 afterEach(() => vi.unstubAllGlobals())
+
+describe("getLegacyPlanEntryAction", () => {
+  it.each([true, false])(
+    "returns the durable flag (%s) for the active team",
+    async (migrated) => {
+      mocks.legacyEntry.mockResolvedValue({
+        data: migrated ? { team_id: "west-team" } : null,
+        error: null,
+      })
+      expect(await getLegacyPlanEntryAction(locator.team)).toBe(migrated)
+      expect(mocks.team).toHaveBeenCalledWith({ id: "user" })
+      expect(mocks.cell).toHaveBeenCalledWith("usw")
+      expect(mocks.from).toHaveBeenCalledWith("billing_legacy_plan_entry")
+      expect(mocks.eq).toHaveBeenCalledWith("team_id", "west-team")
+    },
+  )
+
+  it.each(["use:west-team", "usw:other-team"])(
+    "does not read the flag for another team (%s)",
+    async (teamKey) => {
+      expect(await getLegacyPlanEntryAction(teamKey)).toBe(false)
+      expect(mocks.from).not.toHaveBeenCalled()
+    },
+  )
+
+  it("returns false when the flag cannot be read", async () => {
+    mocks.legacyEntry.mockResolvedValue({
+      data: null,
+      error: { code: "XX000" },
+    })
+    expect(await getLegacyPlanEntryAction(locator.team)).toBe(false)
+  })
+
+  it("does not read the flag without a signed-in user", async () => {
+    mocks.user.mockResolvedValue({ data: { user: null } })
+    expect(await getLegacyPlanEntryAction(locator.team)).toBe(false)
+    expect(mocks.team).not.toHaveBeenCalled()
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+})
 
 describe("getTrialOutcomeAction", () => {
   it("uses neutral copy for a migrated team with exhausted credit", async () => {

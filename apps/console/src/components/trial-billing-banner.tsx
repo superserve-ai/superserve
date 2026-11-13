@@ -129,7 +129,9 @@ function TrialEntryBanner({
   summary: BillingSummaryResponse
 }) {
   const scope = useQueryScope()
-  const legacyTransition = useLegacyPlanTransition()
+  const legacyTransition = useLegacyPlanTransition(
+    entry === "trial_ended" || entry === "payment_failed",
+  )
   const stage = trialStage(
     entry,
     summary.trial,
@@ -142,7 +144,9 @@ function TrialEntryBanner({
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
       label={
-        stage === "plan_required" || stage === "unknown"
+        (legacyTransition && stage !== "trial") ||
+        stage === "plan_required" ||
+        stage === "unknown"
           ? "No plan"
           : "Free trial"
       }

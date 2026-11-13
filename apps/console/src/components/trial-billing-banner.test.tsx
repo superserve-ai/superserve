@@ -23,6 +23,10 @@ const mocks = vi.hoisted(() => ({
   entry: vi.fn(),
   offers: undefined as unknown[] | undefined,
   admissionSource: "new_team",
+  legacyEntry: vi.fn(),
+}))
+vi.mock("@/lib/billing/plan-offers-actions", () => ({
+  getLegacyPlanEntryAction: mocks.legacyEntry,
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({ useTeamEntry: mocks.entry }))
 vi.mock("@/hooks/use-billing-capabilities", () => ({
@@ -76,9 +80,14 @@ beforeEach(() => {
   mocks.toast.mockClear()
   mocks.offers = undefined
   mocks.admissionSource = "new_team"
+  mocks.legacyEntry.mockReset().mockResolvedValue(false)
   mocks.entry.mockReturnValue({ data: null, isPending: false, isError: false })
   mocks.summary.mockReturnValue({ data: summary(), isError: false })
-  mocks.context.mockReturnValue({ teamKey: "use:a", ready: true })
+  mocks.context.mockReturnValue({
+    cacheScope: "self",
+    teamKey: "use:a",
+    ready: true,
+  })
   mocks.payment.mockReturnValue({
     submitting: null,
     available: true,
@@ -540,6 +549,19 @@ describe("TrialBillingBanner for a new team's trial", () => {
       "Upgrade to run sandboxes.",
     )
     expect(container.textContent).not.toMatch(/free trial|trial ended/i)
+  })
+
+  it.each([
+    ["legacy_transition", "No plan"],
+    ["new_team", "Free trial"],
+  ])("keeps payment failure copy for %s teams", (source, label) => {
+    entry("payment_failed")
+    mocks.admissionSource = source
+    mount()
+    expect(screen.getByRole("region", { name: label })).toHaveTextContent(
+      "We couldn't confirm a card for your plan. Your sandboxes are paused and nothing is deleted. Upgrade to resume.",
+    )
+    expect(screen.getByRole("link", { name: "Upgrade" })).toBeInTheDocument()
   })
 
   it("uses the cached signup flag after capabilities switch to all teams", () => {
