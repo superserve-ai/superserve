@@ -1,0 +1,196 @@
+---
+title: "Amp"
+sidebarTitle: Amp
+description: Run the Amp CLI in a Superserve sandbox.
+icon: "/logos/integrations/amp.svg"
+---
+
+Amp is a terminal coding agent from [ampcode.com](https://ampcode.com). Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+<Note>
+Amp bills agent usage to your Amp account. The free Hobby tier includes no usage, so buy credits or pick a paid tier ([pricing](https://ampcode.com/docs/pricing)) before you run the agent. To bill your own provider instead, set up [model routing](https://ampcode.com/docs/customize/model-routing).
+</Note>
+
+## Via the console
+
+1. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+2. Pick the **`superserve/node-22`** template.
+3. Under **Advanced Options → Environment Variables**, add `AMP_API_KEY` and paste your Amp [access token](https://ampcode.com/settings/security#access-token) (it starts with `sgamp_`).
+4. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   curl -fsSL https://ampcode.com/install.sh | bash
+   export PATH=$HOME/.amp/bin:$PATH
+   amp
+   ```
+
+## Via the SDK
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+export AMP_API_KEY=sgamp_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "amp",
+  fromTemplate: "superserve/node-22",
+  envVars: { AMP_API_KEY: process.env.AMP_API_KEY! },
+})
+
+await sandbox.commands.run("curl -fsSL https://ampcode.com/install.sh | bash")
+```
+
+```python Python
+import os
+
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="amp",
+    from_template="superserve/node-22",
+    env_vars={"AMP_API_KEY": os.environ["AMP_API_KEY"]},
+)
+
+sandbox.commands.run("curl -fsSL https://ampcode.com/install.sh | bash")
+```
+</CodeGroup>
+
+Amp reads `AMP_API_KEY` from the environment. [Environment variables](/sandbox/environment-variables) are plain text, so any process in the sandbox, including the agent, can read the token. Revoke it on the [access token](https://ampcode.com/settings/security#access-token) page if it leaks.
+
+<Warning>
+Don't bind the token as a [secret](/secrets/overview). Amp runs each agent turn over a WebSocket connection to `ampcode.com`. When a secret is bound, the sandbox sends outbound HTTPS traffic through the secrets proxy, and Amp's WebSocket client can't connect through it. Amp then exits with `WebSocket connection failed`.
+</Warning>
+
+Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `amp`.
+
+## Run headless
+
+Pass a prompt with `-x` (execute mode). Amp runs it in the sandbox, prints its final message, and exits. Amp doesn't ask for approval before it runs tools, so the agent runs shell commands and edits files without stopping.
+
+<Warning>
+Use `-x`, not `-ox`. `-ox` runs the agent in an orb on Amp's servers, so its commands and file edits don't happen in your Superserve sandbox.
+</Warning>
+
+<Note>
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect.
+</Note>
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp -x "Create a hello world HTTP server in Node.js"',
+  { timeoutMs: 600_000 },
+)
+
+console.log(result.stdout)
+```
+
+```python Python
+result = sandbox.commands.run(
+    'mkdir -p ~/app && cd ~/app && ~/.amp/bin/amp -x "Create a hello world HTTP server in Node.js"',
+    timeout_seconds=600,
+)
+
+print(result.stdout)
+```
+</CodeGroup>
+
+Add `--stream-json` to get one JSON event per line instead of only the final message. The last event has `type: "result"` and the thread ID in `session_id`. If the turn succeeds, the final answer is in `result`. If it fails, `is_error` is `true` and the message is in `error`. Check `is_error`, because Amp can exit with code `0` when a turn fails. Check the command result before you parse: at the timeout, `run()` stops Amp and returns exit code `124`, and `truncated` is `true` when the output was cut off. In both cases the last event can be missing or incomplete.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'cd ~/app && ~/.amp/bin/amp --stream-json --no-archive-after-execute -x "Add a /health endpoint"',
+  { timeoutMs: 600_000 },
+)
+
+if (result.exitCode !== 0 || result.truncated) {
+  throw new Error(`amp exited with ${result.exitCode} (truncated: ${result.truncated}): ${result.stderr}`)
+}
+
+const events = result.stdout.trim().split("\n").map((line) => JSON.parse(line))
+const done = events.find((e) => e.type === "result")
+if (!done) throw new Error("amp returned no result event")
+console.log(done.is_error ? done.error : done.result)
+```
+
+```python Python
+import json
+
+result = sandbox.commands.run(
+    'cd ~/app && ~/.amp/bin/amp --stream-json --no-archive-after-execute -x "Add a /health endpoint"',
+    timeout_seconds=600,
+)
+
+if result.exit_code != 0 or result.truncated:
+    raise RuntimeError(
+        f"amp exited with {result.exit_code} (truncated: {result.truncated}): {result.stderr}"
+    )
+
+events = [json.loads(line) for line in result.stdout.strip().splitlines()]
+done = next((e for e in events if e["type"] == "result"), None)
+if done is None:
+    raise RuntimeError("amp returned no result event")
+print(done["error"] if done["is_error"] else done["result"])
+```
+</CodeGroup>
+
+## Continue a thread
+
+Amp saves each conversation as a thread. Pass the thread ID to `amp threads continue` to send a follow-up with the earlier context. Amp archives a thread that `-x` creates when the command finishes, and an archived thread can't be continued. Pass `--no-archive-after-execute` on the first turn, as the `--stream-json` example above does.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  `cd ~/app && ~/.amp/bin/amp threads continue ${done.session_id} -x "Now add tests for it"`,
+  { timeoutMs: 600_000 },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    f'cd ~/app && ~/.amp/bin/amp threads continue {done["session_id"]} -x "Now add tests for it"',
+    timeout_seconds=600,
+)
+```
+</CodeGroup>
+
+## Keep the version fixed
+
+Amp updates itself in the background, so a long-lived or resumed sandbox can end up on a newer version than the one you installed. Set `AMP_SKIP_UPDATE_CHECK=1` to turn off update checks:
+
+<CodeGroup>
+```typescript TypeScript
+const sandbox = await Sandbox.create({
+  name: "amp",
+  fromTemplate: "superserve/node-22",
+  envVars: {
+    AMP_API_KEY: process.env.AMP_API_KEY!,
+    AMP_SKIP_UPDATE_CHECK: "1",
+  },
+})
+```
+
+```python Python
+sandbox = Sandbox.create(
+    name="amp",
+    from_template="superserve/node-22",
+    env_vars={
+        "AMP_API_KEY": os.environ["AMP_API_KEY"],
+        "AMP_SKIP_UPDATE_CHECK": "1",
+    },
+)
+```
+</CodeGroup>
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
