@@ -9,7 +9,10 @@ import { isSignupCheckoutOffer } from "@/lib/billing/signup-checkout-paths"
 import { createServerClient } from "@/lib/supabase/server"
 import { YC_COOKIE } from "@/lib/yc-claims"
 
-import { signupEmailNextPath } from "./signup-email-next"
+import {
+  signupEmailNextPath,
+  signupFollowFallbackPath,
+} from "./signup-email-next"
 import { isSelfServeSignupOffer, parseSignupOffer } from "./signup-offer"
 import { confirmedSignupReturnPath } from "./signup-return-path"
 import {
@@ -35,7 +38,9 @@ export async function confirmedSignupDestinationAction(
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  if (!user) return requested
+  // No user here can be a failed lookup with the session intact, so do not
+  // keep an offer's landing page the callback may have replaced.
+  if (!user) return signupFollowFallbackPath(requested, rawOffer)
   const ycClaimPending = !!(await cookies()).get(YC_COOKIE)
   const stepFor = (pricing: PricingVersion) => {
     const signupOffer =

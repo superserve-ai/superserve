@@ -218,4 +218,20 @@ describe("confirmedSignupDestinationAction", () => {
       confirmedSignupDestinationAction(undefined, "/yc/claim"),
     ).resolves.toBe("/yc/claim")
   })
+
+  it("does not keep an offer's landing page when the user lookup fails", async () => {
+    // A failed lookup can keep the session, and the callback may have sent
+    // a trial to the console instead.
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: new Error("Service Unavailable"),
+    })
+    await expect(
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+    ).resolves.toBe("/")
+    getUser.mockResolvedValue({ data: { user: null } })
+    await expect(
+      confirmedSignupDestinationAction(undefined, "/billing/pro/"),
+    ).resolves.toBe("/billing/pro/")
+  })
 })

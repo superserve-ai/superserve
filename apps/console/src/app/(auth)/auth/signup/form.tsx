@@ -15,11 +15,11 @@ import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
-import { signupEmailNextPath } from "@/lib/auth/signup-email-next"
 import {
-  SIGNUP_OFFER_DESTINATIONS,
-  SIGNUP_OFFER_PARAM,
-} from "@/lib/auth/signup-offer"
+  signupEmailNextPath,
+  signupFollowFallbackPath,
+} from "@/lib/auth/signup-email-next"
+import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import { confirmedSignupDestinationAction } from "@/lib/auth/signup-return-actions"
 import { confirmedSignupReturnPath } from "@/lib/auth/signup-return-path"
 import {
@@ -418,16 +418,7 @@ export default function SignUpContent() {
   const confirmedNext = confirmedSignupReturnPath(
     signupEmailNextPath(nextUrl) ?? "/",
   )
-  // With an offer, the callback may swap its landing page for another step
-  // the team's state decides, so without the server's answer the dashboard
-  // entry is the safe step.
-  const fallbackNext =
-    rawOffer &&
-    (Object.values(SIGNUP_OFFER_DESTINATIONS) as string[]).includes(
-      confirmedNext,
-    )
-      ? "/"
-      : confirmedNext
+  const fallbackNext = signupFollowFallbackPath(confirmedNext, rawOffer)
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
