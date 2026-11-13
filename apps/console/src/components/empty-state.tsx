@@ -8,6 +8,7 @@ interface EmptyStateProps {
   title: string
   description: string
   actionLabel?: string
+  actionRef?: React.Ref<HTMLButtonElement>
   onAction?: () => void
 }
 
@@ -16,6 +17,7 @@ export function EmptyState({
   title,
   description,
   actionLabel,
+  actionRef,
   onAction,
 }: EmptyStateProps) {
   return (
@@ -28,7 +30,7 @@ export function EmptyState({
         <p className="mt-2 text-xs leading-relaxed text-muted">{description}</p>
         {actionLabel && onAction && (
           <div className="mt-5">
-            <Button size="sm" onClick={onAction}>
+            <Button ref={actionRef} size="sm" onClick={onAction}>
               {actionLabel}
             </Button>
           </div>

@@ -22,7 +22,8 @@ export default function AuthLayout({
       <FingerprintAccountDeviceObserver
         regions={configuredRegions().join(",")}
       />
-      {children}
+      {/* The one main landmark for every auth page; pages must not add another. */}
+      <main>{children}</main>
     </>
   )
 }

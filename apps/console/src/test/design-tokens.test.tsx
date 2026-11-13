@@ -396,7 +396,7 @@ const inputRing =
   "focus:border-border-focus focus:ring-2 focus:ring-border-focus focus:outline-none"
 
 describe("console control borders and focus", () => {
-  it("uses the full muted token for the pagination placeholder", () => {
+  it("uses the full muted token for the pagination placeholder and summary", () => {
     const source = readFileSync(
       resolve(
         dirname(fileURLToPath(import.meta.url)),
@@ -410,6 +410,7 @@ describe("console control borders and focus", () => {
       .flatMap((part) => part.split('"')[0].split(/\s+/))
     expect(classes).toContain("placeholder:text-muted")
     expect(classes).not.toContain("placeholder:text-muted/60")
+    expect(source).not.toContain("text-muted/60")
   })
 
   it.each(consoleControls)(
