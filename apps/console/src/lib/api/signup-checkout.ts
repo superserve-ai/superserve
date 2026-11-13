@@ -210,7 +210,7 @@ export async function startSignupCheckout(
         apiKey: headers["X-API-Key"],
         response: result,
         reason: entry,
-        planSwitch: switchPlan,
+        explicitChoice: switchPlan,
       })
     return result.url
   }

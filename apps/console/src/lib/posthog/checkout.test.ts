@@ -151,21 +151,26 @@ describe("checkout_opened", () => {
       apiKey: "key",
       response: { id: "cs_live_a1B2", url: CHECKOUT_URL },
       reason: "trial_ended",
-      planSwitch: true,
+      explicitChoice: true,
     })
     expect(m.trackEvent).not.toHaveBeenCalled()
     await flush()
-    expect(m.trackEvent).toHaveBeenCalledWith("checkout_opened", "u1", {
-      surface: "plan_picker",
-      offer: "pro_monthly",
-      plan: "pro",
-      billing_interval: "monthly",
-      price_cents: 2500,
-      reason: "trial_ended",
-      plan_switch: true,
-      checkout_session_id: "cs_live_a1B2",
-      ...teamProps,
-    })
+    expect(m.trackEvent).toHaveBeenCalledWith(
+      "checkout_opened",
+      "u1",
+      {
+        surface: "plan_picker",
+        offer: "pro_monthly",
+        plan: "pro",
+        billing_interval: "monthly",
+        price_cents: 2500,
+        reason: "trial_ended",
+        explicit_choice: true,
+        checkout_session_id: "cs_live_a1B2",
+        ...teamProps,
+      },
+      expect.any(Date),
+    )
     const [url, init] = fetchMock.mock.calls[0]
     expect(String(url)).toBe("https://api.example.test/billing/capabilities")
     expect(init?.headers).toEqual({ "X-API-Key": "key" })
@@ -189,9 +194,10 @@ describe("checkout_opened", () => {
       expect.objectContaining({
         price_cents: null,
         reason: null,
-        plan_switch: false,
+        explicit_choice: false,
         checkout_session_id: "cs_live_a1B2",
       }),
+      expect.any(Date),
     )
   })
 })
@@ -223,15 +229,20 @@ describe("checkout_returned", () => {
     })
     await flush()
     expect(m.member).toHaveBeenCalledWith("use", "u1", TEAM_ID)
-    expect(m.trackEvent).toHaveBeenCalledWith("checkout_returned", "u1", {
-      surface: "plan_picker",
-      outcome: "success",
-      offer: "pro_monthly",
-      plan: "pro",
-      billing_interval: "monthly",
-      checkout_session_id: "cs_live_new",
-      ...teamProps,
-    })
+    expect(m.trackEvent).toHaveBeenCalledWith(
+      "checkout_returned",
+      "u1",
+      {
+        surface: "plan_picker",
+        outcome: "success",
+        offer: "pro_monthly",
+        plan: "pro",
+        billing_interval: "monthly",
+        checkout_session_id: "cs_live_new",
+        ...teamProps,
+      },
+      expect.any(Date),
+    )
   })
 
   it("falls back to the offer from the URL when no checkout is on record", async () => {
@@ -251,6 +262,7 @@ describe("checkout_returned", () => {
         offer: "developer_monthly",
         checkout_session_id: null,
       }),
+      expect.any(Date),
     )
   })
 
@@ -298,6 +310,7 @@ describe("checkout_returned", () => {
       "checkout_returned",
       "u1",
       expect.objectContaining({ surface: "billing_pro", outcome: "cancel" }),
+      expect.any(Date),
     )
   })
 
@@ -323,6 +336,45 @@ describe("isOperatorView", () => {
   })
 })
 
+describe("event order", () => {
+  it("keeps a return before its completion when the callbacks finish out of order", async () => {
+    m.rows.billing_signup_choice = {
+      data: {
+        offer_key: "pro_monthly",
+        session_id: "cs_live_signup",
+        generation: "2026-11-10T00:00:00Z",
+      },
+      error: null,
+    }
+    // The return's membership lookup is slow, so its callback finishes last.
+    m.member.mockImplementation(
+      () => new Promise((resolve) => setTimeout(() => resolve(true), 20)),
+    )
+    recordCheckoutReturned({
+      userId: "u1",
+      surface: "onboarding_plan",
+      outcome: "success",
+      teamKey: TEAM_KEY,
+    })
+    recordCheckoutCompleted({ userId: "u1", surface: "onboarding_plan", team })
+    await Promise.all(m.queue.splice(0).map((run) => run()))
+    const sent = m.trackEvent.mock.calls as unknown as [
+      string,
+      string,
+      unknown,
+      Date,
+    ][]
+    expect(sent.map(([event]) => event)).toEqual([
+      "checkout_completed",
+      "checkout_returned",
+    ])
+    const at = Object.fromEntries(
+      sent.map(([event, , , timestamp]) => [event, timestamp.getTime()]),
+    )
+    expect(at.checkout_returned).toBeLessThan(at.checkout_completed)
+  })
+})
+
 describe("checkout_completed", () => {
   const input = {
     userId: "u1",
@@ -345,16 +397,21 @@ describe("checkout_completed", () => {
     recordCheckoutCompleted(input)
     expect(m.trackEvent).not.toHaveBeenCalled()
     await flush()
-    expect(m.trackEvent).toHaveBeenCalledWith("checkout_completed", "u1", {
-      surface: "plan_picker",
-      offer: "pro_monthly",
-      plan: "pro",
-      billing_interval: "monthly",
-      price_cents: 2500,
-      amount_cents: 1830,
-      checkout_session_id: "cs_live_paid",
-      ...teamProps,
-    })
+    expect(m.trackEvent).toHaveBeenCalledWith(
+      "checkout_completed",
+      "u1",
+      {
+        surface: "plan_picker",
+        offer: "pro_monthly",
+        plan: "pro",
+        billing_interval: "monthly",
+        price_cents: 2500,
+        amount_cents: 1830,
+        checkout_session_id: "cs_live_paid",
+        ...teamProps,
+      },
+      expect.any(Date),
+    )
   })
 
   it("is sent without a list price when no backend key is given", async () => {
@@ -376,6 +433,7 @@ describe("checkout_completed", () => {
         price_cents: null,
         checkout_session_id: "cs_live_signup",
       }),
+      expect.any(Date),
     )
   })
 
@@ -423,6 +481,7 @@ describe("recordProxyCheckout", () => {
         reason: null,
         checkout_session_id: "cs_test_P1",
       }),
+      expect.any(Date),
     )
   })
 
@@ -498,6 +557,7 @@ describe("recordProxyCheckout", () => {
         checkout_session_id: "cs_live_paid",
         amount_cents: 2500,
       }),
+      expect.any(Date),
     )
   })
 })

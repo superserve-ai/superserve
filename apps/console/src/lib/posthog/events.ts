@@ -73,7 +73,11 @@ export const PLAN_PICKER_EVENTS = {
 // values: a reload of a return page can send an event again.
 //   checkout_opened: Checkout session created or resumed. Adds `price_cents`
 //     (catalog list price), `reason` (the team's entry state on the plan
-//     picker, for example trial_ended) and `plan_switch`.
+//     picker, for example trial_ended) and `explicit_choice` (true when the
+//     customer submitted a plan on the plan picker, including a first
+//     purchase; false when a link resumed Checkout or on other surfaces).
+//   All three events carry the time they happened as the PostHog timestamp,
+//   so a return is never ordered after its completion.
 //   checkout_returned: the customer came back from Checkout. Adds `outcome`
 //     (success or cancel).
 //   checkout_completed: the backend confirmed the paid plan after a return.

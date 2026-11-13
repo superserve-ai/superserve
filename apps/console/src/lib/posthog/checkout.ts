@@ -179,18 +179,33 @@ export async function isOperatorView(user: User): Promise<boolean> {
   }
 }
 
+// When an event happened. Each value is later than the one before it in this
+// process, so two events recorded in order keep that order in PostHog even
+// within one millisecond.
+let lastOccurredAt = 0
+function occurredAt(): Date {
+  lastOccurredAt = Math.max(Date.now(), lastOccurredAt + 1)
+  return new Date(lastOccurredAt)
+}
+
 // Sends the event after the response, so that a slow or failing PostHog or
 // lookup never delays or fails a checkout. Outside a request it does nothing.
+// The event is stamped with the time it was recorded, not the time it was
+// sent: the callbacks run concurrently and their lookups take different
+// times, so a later event (checkout_completed) can be sent before an earlier
+// one (checkout_returned).
 function record(
   event: string,
   distinctId: string,
   build: () => Promise<Properties | null>,
 ) {
+  const timestamp = occurredAt()
   try {
     after(async () => {
       try {
         const properties = await build()
-        if (properties) await trackEvent(event, distinctId, properties)
+        if (properties)
+          await trackEvent(event, distinctId, properties, timestamp)
       } catch {
         // Analytics must never affect checkout.
       }
@@ -208,7 +223,7 @@ interface OpenedInput {
   apiKey: string
   response: { id?: unknown; url?: unknown }
   reason?: string | null
-  planSwitch?: boolean
+  explicitChoice?: boolean
 }
 
 // A paid purchase that needs a new card resumes with a setup-only Checkout
@@ -236,7 +251,7 @@ async function openedProperties(
     ...offerProperties(input.offer),
     price_cents: await offerPriceCents(input.base, input.apiKey, input.offer),
     reason: input.reason ?? null,
-    plan_switch: input.planSwitch ?? false,
+    explicit_choice: input.explicitChoice ?? false,
     checkout_session_id: sessionId,
     ...teamProperties(input.team),
   }

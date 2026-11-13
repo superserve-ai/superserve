@@ -68,7 +68,7 @@ describe("checkout_opened from the plan picker", () => {
       apiKey: "server-only",
       response: { id: "cs_test_1", url: CHECKOUT_URL },
       reason: "trial_ended",
-      planSwitch: true,
+      explicitChoice: true,
     })
   })
 
