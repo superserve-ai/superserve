@@ -186,13 +186,7 @@
               "guides/evals-and-rl",
               "guides/headless-browser"
             ]
-          }
-        ]
-      },
-      {
-        "tab": "Integrations",
-        "icon": "plug",
-        "groups": [
+          },
           {
             "group": "Integrations",
             "pages": [
