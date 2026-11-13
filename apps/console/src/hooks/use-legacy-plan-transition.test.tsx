@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { renderHook, waitFor } from "@testing-library/react"
+import { act, renderHook, waitFor } from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -76,6 +76,49 @@ describe("useLegacyPlanTransition", () => {
       )
       expect(result.current).toBe(migrated)
       expect(mocks.legacyEntry).toHaveBeenCalledExactlyOnceWith("usw:west-team")
+    },
+  )
+
+  it("keeps an unreadable flag in error state and recovers on remount", async () => {
+    const queryKey = ["legacy-plan-entry", "self", "usw:west-team"]
+    mocks.legacyEntry.mockResolvedValue(null)
+    const { result, client, unmount } = mount(true)
+    await waitFor(() =>
+      expect(client.getQueryState(queryKey)?.status).toBe("error"),
+    )
+    expect(result.current).toBe(false)
+    expect(client.getQueryState(queryKey)?.error).toEqual(
+      new Error("Unable to check the plan migration"),
+    )
+    expect(mocks.legacyEntry).toHaveBeenCalledTimes(1)
+
+    unmount()
+    mocks.legacyEntry.mockResolvedValue(true)
+    const remounted = mount(true, client)
+    await waitFor(() => expect(remounted.result.current).toBe(true))
+    expect(client.getQueryState(queryKey)?.status).toBe("success")
+    expect(mocks.legacyEntry).toHaveBeenCalledTimes(2)
+  })
+
+  it.each([true, false])(
+    "keeps a true flag fresh forever and a false flag fresh for five minutes (%s)",
+    async (migrated) => {
+      vi.useFakeTimers()
+      try {
+        const queryKey = ["legacy-plan-entry", "self", "usw:west-team"]
+        mocks.legacyEntry.mockResolvedValue(migrated)
+        const { client } = mount(true)
+        await act(() => vi.advanceTimersByTimeAsync(1))
+        expect(client.getQueryState(queryKey)?.data).toBe(migrated)
+        const query = client.getQueryCache().find({ queryKey })!
+        expect(query.isStale()).toBe(false)
+
+        await act(() => vi.advanceTimersByTimeAsync(5 * 60_000))
+        expect(query.isStale()).toBe(!migrated)
+        expect(mocks.legacyEntry).toHaveBeenCalledTimes(1)
+      } finally {
+        vi.useRealTimers()
+      }
     },
   )
 
