@@ -28,6 +28,10 @@ import {
 } from "@/lib/auth/signup-review"
 import { isBuyCreditPath } from "@/lib/billing/buy-credit-path"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import {
+  type ProxyCheckoutRequest,
+  recordProxyCheckout,
+} from "@/lib/posthog/checkout"
 import { createServerClient } from "@/lib/supabase/server"
 
 const SANDBOX_API_URL =
@@ -333,6 +337,8 @@ async function proxyRequest(
   let apiBaseUrl = cellFor(DEFAULT_REGION).apiBaseUrl
   let teamRegion: string | null = null
   let checkoutTeam: TeamMembership | null = null
+  // Checkout analytics for a plan request, sent once the backend answers.
+  let checkoutTracking: ProxyCheckoutRequest | null = null
 
   // Inject server-side API key for authenticated requests
   let authMode = skipKeyInjection ? "skipped" : "none"
@@ -632,6 +638,11 @@ async function proxyRequest(
           { status: 400 },
         )
       upstreamUrl.pathname = "/stripe/checkout-session"
+      checkoutTracking = {
+        kind: "opened",
+        offer: input.offer as string,
+        successUrl: input.success_url as string,
+      }
       body = JSON.stringify({
         offer: input.offer,
         operation_id: input.operation_id,
@@ -662,6 +673,10 @@ async function proxyRequest(
           { status: 400 },
         )
       body = JSON.stringify({ restart: input.restart })
+      checkoutTracking = {
+        kind: "recovered",
+        referer: request.headers.get("referer"),
+      }
     }
     upstreamUrl.search = ""
   }
@@ -911,6 +926,15 @@ async function proxyRequest(
     headers,
     body,
   })
+  if (checkoutTracking && user && checkoutTeam && !impersonating)
+    recordProxyCheckout({
+      request: checkoutTracking,
+      response,
+      userId: user.id,
+      team: checkoutTeam,
+      base: apiBaseUrl,
+      apiKey: headers.get("X-API-Key") ?? "",
+    })
 
   return forwardResponse(
     response,

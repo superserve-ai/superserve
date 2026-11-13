@@ -19,6 +19,7 @@ import {
   signupCheckoutReturnPath,
   type TrialOutcome,
 } from "@/lib/billing/signup-checkout-paths"
+import { recordPlanPickerCancelAction } from "@/lib/posthog/checkout-actions"
 import { PLAN_PICKER_EVENTS } from "@/lib/posthog/events"
 
 const SUPPORT_EMAIL = "support@superserve.ai"
@@ -135,6 +136,20 @@ function ChoosePlanContent() {
       /* Analytics never controls the picker. */
     }
   }, [settling, reason, preselected, picking])
+  // Stripe's cancel URL for a picker checkout lands here. The server records
+  // it with the checkout's session; the ref skips StrictMode's replay.
+  const recordedCancel = useRef<string | null>(null)
+  const account = locator?.account
+  const team = locator?.team
+  useEffect(() => {
+    if (reason !== "checkout_canceled" || !account || !team) return
+    const key = JSON.stringify([account, team, preselected])
+    if (recordedCancel.current === key) return
+    recordedCancel.current = key
+    recordPlanPickerCancelAction({ account, team, offer: preselected }).catch(
+      () => {},
+    )
+  }, [reason, account, team, preselected])
   if (settling) return null
 
   return (

@@ -35,7 +35,14 @@ export function PlanSelectionLoader({
     let active = true
     setRetrying(true)
     // Invoke as a server action: first signup provisioning can consume proof cookies.
-    void getSignupPlanAction(expectedTeam, expectedUser, billingReturn)
+    // The page recorded no Checkout return because its own lookup failed.
+    void getSignupPlanAction(
+      expectedTeam,
+      expectedUser,
+      billingReturn,
+      undefined,
+      "return_and_completion",
+    )
       .then((value) => {
         if (active) {
           setInitial(value)

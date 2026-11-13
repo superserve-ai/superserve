@@ -46,7 +46,7 @@ describe("checkout return", () => {
       arrange()
       const location = await visit()
       expect(location.pathname).toBe("/onboarding/payment/")
-      expect(location.search).toBe("?account=u1&team=use%3At1")
+      expect(location.search).toBe("?account=u1&team=use%3At1&returned=1")
     },
   )
 

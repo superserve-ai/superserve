@@ -13,13 +13,29 @@ import {
   starterAuthReturnPath,
   signupPreparationReturnPath,
 } from "@/lib/billing/pro-auth-return"
+import { cellFor } from "@/lib/cells"
+import {
+  recordCheckoutCompleted,
+  recordCheckoutReturned,
+} from "@/lib/posthog/checkout"
 import { createServerClient } from "@/lib/supabase/server"
+
+export type SignupCheckoutEvents =
+  | "completion"
+  | "return_and_completion"
+  | "none"
 
 export async function getSignupPlanAction(
   expectedTeam?: string,
   expectedUser?: string,
   billingReturn?: string,
   paidContinuation?: string,
+  // Which Checkout events this call records after a return from Checkout.
+  // "completion": the onboarding page's refresh; the page already recorded
+  // the return. "return_and_completion": the page's retry after its own
+  // lookup failed, so the page recorded no return. "none": the preparation
+  // route, which redirects to the page that records both, in that order.
+  checkoutEvents: SignupCheckoutEvents = "completion",
 ): Promise<SignupPlanContext> {
   const paidNext =
     proAuthReturnPath(paidContinuation ?? null) ??
@@ -53,7 +69,7 @@ export async function getSignupPlanAction(
   if (await getImpersonationContext(user))
     throw new SignupSetupBlockedError("impersonation")
   // Resolve/provision through the existing signup path, before reading billing state.
-  const { team } = await getAuthApiKeyAndTeamForUser(
+  const { apiKey, team } = await getAuthApiKeyAndTeamForUser(
     user,
     new Date().toISOString(),
   ).catch((error: unknown) => {
@@ -63,5 +79,36 @@ export async function getSignupPlanAction(
       )
     throw error
   })
-  return readSignupPlan(user.id, team, expectedTeam)
+  const context = await readSignupPlan(user.id, team, expectedTeam)
+  const ownTeam = context.teamKey === `${team.region}:${team.teamId}`
+  if (
+    checkoutEvents === "return_and_completion" &&
+    (billingReturn === "success" || billingReturn === "cancel") &&
+    context.offer !== "free" &&
+    ownTeam
+  )
+    recordCheckoutReturned({
+      userId: user.id,
+      surface: "onboarding_plan",
+      outcome: billingReturn,
+      teamKey: context.teamKey,
+    })
+  // The onboarding page's refresh is where a successful Checkout return first
+  // sees the paid plan committed; it is the one completion for that page.
+  if (
+    checkoutEvents !== "none" &&
+    billingReturn === "success" &&
+    context.state === "committed" &&
+    context.offer &&
+    context.offer !== "free" &&
+    ownTeam
+  )
+    recordCheckoutCompleted({
+      userId: user.id,
+      surface: "onboarding_plan",
+      team,
+      base: cellFor(team.region).apiBaseUrl,
+      apiKey,
+    })
+  return context
 }
