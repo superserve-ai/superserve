@@ -432,6 +432,8 @@ export default function SignUpContent() {
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
   // step instead of waiting on "Check your email" for a click on "Sign in".
+  // A sign-up held for review (Enterprise) is signed out again by the
+  // callback, leaves no session to follow, and keeps this screen as before.
   useEffect(() => {
     if (!emailStatus || !submittedEmail) return
     const expected = submittedEmail.trim().toLowerCase()

@@ -88,8 +88,16 @@ describe("confirmedSignupDestinationAction", () => {
     ).resolves.toBe("/sandboxes")
   })
 
-  it("uses the offer's landing page when the team state is unknown", async () => {
+  it("takes the dashboard entry when the team state lookup fails", async () => {
+    // The callback's own lookup may have sent a trial to the console.
     plan = { ok: false, body: {} }
+    await expect(
+      confirmedSignupDestinationAction("pro_monthly", "/"),
+    ).resolves.toBe("/")
+  })
+
+  it("keeps the offer's landing page when the team awaits no plan", async () => {
+    plan = { ok: true, body: {} }
     await expect(
       confirmedSignupDestinationAction("pro_monthly", "/"),
     ).resolves.toBe("/billing/pro/")
@@ -127,7 +135,7 @@ describe("confirmedSignupDestinationAction", () => {
     plan = { ok: false, body: {} }
     await expect(
       confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
-    ).resolves.toBe("/billing/pro/")
+    ).resolves.toBe("/")
   })
 
   it("keeps an explicit landing page ahead of a YC claim, as the callback does", async () => {

@@ -54,8 +54,13 @@ export async function confirmedSignupDestinationAction(
   const checkoutOffer = isSignupCheckoutOffer(signupOffer)
     ? signupOffer
     : undefined
-  const entry = await signupEntryDestination(user, checkoutOffer).catch(
-    () => null,
+  // A failed lookup here says nothing about the one the callback made, which
+  // may have swapped the offer's landing page for the console, so take the
+  // dashboard entry rather than guess. A null answer means the team awaits no
+  // plan, and the callback keeps its step for that too.
+  const entry = await signupEntryDestination(user, checkoutOffer).then(
+    (path) => path ?? step,
+    () => "/",
   )
-  return confirmedSignupReturnPath(entry ?? step)
+  return confirmedSignupReturnPath(entry)
 }
