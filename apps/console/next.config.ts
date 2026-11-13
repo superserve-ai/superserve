@@ -25,6 +25,14 @@ const nextConfig: NextConfig = {
   reactCompiler: true,
   trailingSlash: true,
   reactStrictMode: true,
+  experimental: {
+    // Custom routes match any case by default, so /INGEST/... would reach
+    // the PostHog rewrite with the console's cookies. Only lowercase paths
+    // rewrite now. The /user-management redirects below also match only
+    // lowercase, which is the case of every link to them; app pages already
+    // match by exact case.
+    caseSensitiveRoutes: true,
+  },
   async redirects() {
     return [
       { source: "/user-management", destination: "/team", permanent: true },

@@ -13,6 +13,19 @@ import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
+import {
+  csrfMatches,
+  decodePendingEmailLink,
+  EMAIL_LINK_CALLBACK_PATH,
+  EMAIL_LINK_CONFIRM_PATH,
+  EMAIL_LINK_CSRF_FIELD,
+  emailLinkCookieName,
+  emailLinkCookieOptions,
+  encodePendingEmailLink,
+  isSameOriginPost,
+  newPendingEmailLink,
+  readRequestCookie,
+} from "@/lib/auth/email-link-confirm"
 import { isGenericAuthSignupFailure } from "@/lib/auth/errors"
 import {
   classifyGoogleMembershipState,
@@ -92,8 +105,9 @@ import {
   staffCookieOptions,
 } from "@/lib/yc/staff-session"
 
-const TRUSTED_REDIRECT_PATTERN =
-  /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
+// Backslashes and control characters turn "/\\host" or "/<tab>/host" into a
+// link to another host once a browser parses the URL.
+const UNSAFE_PATH_CHARACTERS = /[\\\u0000-\u0020\u007f]/
 
 function buildRedirectUrl(origin: string, path: string): string {
   const base =
@@ -103,11 +117,45 @@ function buildRedirectUrl(origin: string, path: string): string {
   return new URL(path, base).toString()
 }
 
-function sanitizeNext(raw: string | null): string {
+/**
+ * The console's own origins. An absolute `next` is accepted only on one of
+ * these and is turned into a relative path, so the path allowlist below
+ * applies to it too. Other superserve.ai hosts are not accepted.
+ */
+function trustedOrigins(origin: string): Set<string> {
+  const origins = new Set([origin, "https://console.superserve.ai"])
+  try {
+    if (process.env.NEXT_PUBLIC_APP_URL)
+      origins.add(new URL(process.env.NEXT_PUBLIC_APP_URL).origin)
+  } catch {
+    // An invalid app URL adds no origin.
+  }
+  return origins
+}
+
+function safeRelativePath(path: string): string {
+  return path.startsWith("/") &&
+    !path.startsWith("//") &&
+    !UNSAFE_PATH_CHARACTERS.test(path)
+    ? path
+    : "/"
+}
+
+function sanitizeNext(raw: string | null, origin: string): string {
   const next = raw ?? "/"
-  if (next.startsWith("/") && !next.startsWith("//")) return next
-  if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
-  return "/"
+  if (next.startsWith("/")) return safeRelativePath(next)
+  if (!next.startsWith("https://") || UNSAFE_PATH_CHARACTERS.test(next))
+    return "/"
+  try {
+    const url = new URL(next)
+    if (url.username || url.password || !trustedOrigins(origin).has(url.origin))
+      return "/"
+    // Checked again: a console URL such as "https://console.../\/evil.example"
+    // has the pathname "//evil.example", which is another host as a path.
+    return safeRelativePath(`${url.pathname}${url.search}${url.hash}`)
+  } catch {
+    return "/"
+  }
 }
 
 /** Ends the session of an account awaiting Enterprise setup. */
@@ -136,7 +184,83 @@ async function pendingSignupResponse(
   return response
 }
 
+/**
+ * Email token links stop at a confirm page first; see email-link-confirm.ts.
+ * The OAuth code flow returns from Google and finishes here on GET.
+ */
 export async function GET(request: Request) {
+  const url = new URL(request.url)
+  // The same test as completeCallback's, so an empty `code=` cannot send a
+  // token link past this step.
+  if (url.searchParams.get("token_hash") && !url.searchParams.get("code")) {
+    const secure = url.protocol === "https:"
+    const response = NextResponse.redirect(
+      new URL(EMAIL_LINK_CONFIRM_PATH, url.origin),
+      303,
+    )
+    response.headers.set("Cache-Control", "no-store")
+    response.cookies.set(
+      emailLinkCookieName(secure),
+      encodePendingEmailLink(newPendingEmailLink(url.searchParams)),
+      emailLinkCookieOptions(secure),
+    )
+    return response
+  }
+  return completeCallback(request)
+}
+
+/**
+ * Uses an email link's token after the confirm page posts back. The post must
+ * come from this site and carry the CSRF value saved with the link.
+ */
+export async function POST(request: Request) {
+  const url = new URL(request.url)
+  const secure = url.protocol === "https:"
+  const cookieName = emailLinkCookieName(secure)
+  const pending = decodePendingEmailLink(readRequestCookie(request, cookieName))
+  let csrf: unknown = null
+  try {
+    csrf = (await request.formData()).get(EMAIL_LINK_CSRF_FIELD)
+  } catch {
+    csrf = null
+  }
+  if (
+    !pending ||
+    !isSameOriginPost(request) ||
+    !csrfMatches(pending.csrf, csrf)
+  ) {
+    // The confirm page shows a fresh button, or asks for the email link
+    // again when the saved link is gone.
+    const retry = new URL(EMAIL_LINK_CONFIRM_PATH, url.origin)
+    if (pending) retry.searchParams.set("retry", "1")
+    const response = NextResponse.redirect(retry, 303)
+    response.headers.set("Cache-Control", "no-store")
+    return response
+  }
+
+  const callback = new URL(EMAIL_LINK_CALLBACK_PATH, url.origin)
+  callback.search = pending.query
+  const headers = new Headers(request.headers)
+  headers.delete("content-type")
+  headers.delete("content-length")
+  const result = await completeCallback(new Request(callback, { headers }))
+  // A 307 or 308 would repeat the POST at the next page; 303 turns it into a
+  // GET. The cookies the callback set carry over.
+  const location = result.headers.get("location")
+  let response = result
+  if (location && (result.status === 307 || result.status === 308)) {
+    response = NextResponse.redirect(location, 303)
+    for (const cookie of result.cookies.getAll()) response.cookies.set(cookie)
+  }
+  response.headers.set("Cache-Control", "no-store")
+  response.cookies.set(cookieName, "", {
+    ...emailLinkCookieOptions(secure),
+    maxAge: 0,
+  })
+  return response
+}
+
+async function completeCallback(request: Request) {
   const { searchParams, origin } = new URL(request.url)
   const requestedOffer = normalizeSignupRequestedOffer(
     searchParams.get("offer"),
@@ -150,7 +274,7 @@ export async function GET(request: Request) {
     | "magiclink"
     | "email"
     | null
-  let next = sanitizeNext(searchParams.get("next"))
+  let next = sanitizeNext(searchParams.get("next"), origin)
   // Set by the sign-in recovery options after a failed password sign-in.
   const rawSignInRecovery = searchParams.get("sign_in_recovery")
   const signInRecovery =
@@ -763,7 +887,6 @@ export async function GET(request: Request) {
             : null)
         if (
           !next.startsWith("/device") &&
-          !next.startsWith("https://") &&
           !/^\/onboarding\/(?:plan|payment)\/?(?:\?|$)/.test(next) &&
           !isSignupCheckoutPath(next) &&
           !isSignupCheckoutReturnPath(next) &&
@@ -837,9 +960,7 @@ export async function GET(request: Request) {
         }
       }
 
-      const response = NextResponse.redirect(
-        next.startsWith("https://") ? next : buildRedirectUrl(origin, next),
-      )
+      const response = NextResponse.redirect(buildRedirectUrl(origin, next))
       if (user && newSignup && requestedOffer) {
         response.cookies.set(
           PLAN_OFFER_COOKIE,

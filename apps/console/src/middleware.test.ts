@@ -96,34 +96,44 @@ describe("middleware", () => {
     expect(res).toBe(mockClient.response)
   })
 
-  it.each(["/ingest", "/ingest/i/v0/e/", "/ingest/static/array.js"])(
-    "strips Referer and bypasses auth for %s",
-    async (path) => {
-      const request = new NextRequest(
-        new URL(`https://console.superserve.ai${path}`),
-        {
-          headers: {
-            referer: `https://console.superserve.ai/auth/signin?next=/invite/ssinv_use_${"A".repeat(43)}`,
-            "user-agent": "test-browser",
-          },
+  it.each([
+    "/ingest",
+    "/ingest/i/v0/e/",
+    "/ingest/static/array.js",
+    "/INGEST/static/array.js",
+    "/Ingest/e/",
+  ])("strips Referer and cookies and bypasses auth for %s", async (path) => {
+    const request = new NextRequest(
+      new URL(`https://console.superserve.ai${path}`),
+      {
+        headers: {
+          referer: `https://console.superserve.ai/auth/signin?next=/invite/ssinv_use_${"A".repeat(43)}`,
+          "user-agent": "test-browser",
         },
-      )
-      const res = await middleware(request)
+      },
+    )
+    // Set after construction: the test DOM's Request drops Cookie.
+    request.headers.set(
+      "cookie",
+      "__Host-ss_email_link=pending; sb-project-auth-token=session",
+    )
+    const res = await middleware(request)
 
-      expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
-      expect(res.status).toBe(200)
-      expect(res.headers.has("location")).toBe(false)
-      const overrides = res.headers
-        .get("x-middleware-override-headers")!
-        .split(",")
-      expect(overrides).not.toContain("referer")
-      expect(res.headers.has("x-middleware-request-referer")).toBe(false)
-      expect(overrides).toContain("user-agent")
-      expect(res.headers.get("x-middleware-request-user-agent")).toBe(
-        "test-browser",
-      )
-    },
-  )
+    expect(mockClient.supabase!.auth.getUser).not.toHaveBeenCalled()
+    expect(res.status).toBe(200)
+    expect(res.headers.has("location")).toBe(false)
+    const overrides = res.headers
+      .get("x-middleware-override-headers")!
+      .split(",")
+    expect(overrides).not.toContain("referer")
+    expect(res.headers.has("x-middleware-request-referer")).toBe(false)
+    expect(overrides).not.toContain("cookie")
+    expect(res.headers.has("x-middleware-request-cookie")).toBe(false)
+    expect(overrides).toContain("user-agent")
+    expect(res.headers.get("x-middleware-request-user-agent")).toBe(
+      "test-browser",
+    )
+  })
 
   it.each(["/ingestion", "/ingest-private"])(
     "still authenticates and redirects signed-out requests to %s",
@@ -339,6 +349,7 @@ describe("middleware", () => {
       "/auth/signup",
       "/auth/forgot-password",
       "/auth/callback",
+      "/auth/confirm/",
       "/device",
     ]) {
       const res = await middleware(buildRequest(path))
@@ -477,16 +488,23 @@ describe("middleware matcher", () => {
     "/ingest/i/v0/e/?ip=0",
     "/ingest/s/",
     "/ingest/static/array.js",
-  ])("matches analytics request %s to strip Referer", (url) => {
+    "/INGEST",
+    "/INGEST/static/array.js",
+    "/Ingest/e/",
+  ])("matches analytics request %s to strip Referer and cookies", (url) => {
     expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
   })
 
-  it.each(["/", "/sandboxes", "/settings", "/ingestion", "/ingest-private"])(
-    "still protects %s",
-    (url) => {
-      expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
-    },
-  )
+  it.each([
+    "/",
+    "/sandboxes",
+    "/settings",
+    "/ingestion",
+    "/ingest-private",
+    "/INGESTION",
+  ])("still protects %s", (url) => {
+    expect(unstable_doesMiddlewareMatch({ config, url })).toBe(true)
+  })
 })
 
 it.each([
