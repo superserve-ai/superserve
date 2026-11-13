@@ -65,31 +65,32 @@ export async function ownsTeam(
 }
 
 /**
- * Renames the team only while it still has its expected name, so two
- * concurrent conversions cannot both apply. A concurrent conversion to the
- * same name counts as renamed.
+ * Checks ownership and renames the team in one database step, so a revoked
+ * owner role cannot rename. A concurrent conversion to the same name counts
+ * as renamed.
  */
-export async function renameTeam(
+export async function renameOwnedTeam(
   region: string,
+  userId: string,
   teamId: string,
   from: string,
   to: string,
-): Promise<"renamed" | "name_taken" | "changed"> {
-  const admin = cellFor(region).createAdminClient()
-  const { data, error } = await admin
-    .from("team")
-    .update({ name: to, updated_at: new Date().toISOString() })
-    .eq("id", teamId)
-    .eq("name", from)
-    .select("id")
-  if (error?.code === "23505") return "name_taken"
+): Promise<"renamed" | "name_taken" | "changed" | "not_owner"> {
+  const { data, error } = await cellFor(region)
+    .createAdminClient()
+    .rpc("rename_owned_team", {
+      p_user: userId,
+      p_team: teamId,
+      p_from: from,
+      p_to: to,
+    })
   if (error) throw new Error(`Failed to rename team: ${error.message}`)
-  if (data?.length) return "renamed"
-  const { data: current, error: readError } = await admin
-    .from("team")
-    .select("name")
-    .eq("id", teamId)
-    .limit(1)
-  if (readError) throw new Error(`Failed to read team: ${readError.message}`)
-  return current?.[0]?.name === to ? "renamed" : "changed"
+  if (
+    data !== "renamed" &&
+    data !== "name_taken" &&
+    data !== "changed" &&
+    data !== "not_owner"
+  )
+    throw new Error(`Failed to rename team: unexpected outcome ${data}`)
+  return data
 }
