@@ -445,9 +445,24 @@ export default function SignUpContent() {
         return
       following = true
       setConfirmedElsewhere(true)
-      void destination(session.user.id).then((path) => {
-        if (!disposed) window.location.replace(path)
-      })
+      const account = session.user.id
+      void destination(account)
+        .then(async (path) => {
+          // Another tab can switch accounts while the step loads. Go on only
+          // as the account this tab saw sign in; otherwise watch again.
+          const { data } = await supabase.auth.getSession()
+          if (disposed) return
+          if (data.session?.user.id !== account) {
+            following = false
+            setConfirmedElsewhere(false)
+            return
+          }
+          window.location.replace(path)
+        })
+        .catch(() => {
+          following = false
+          setConfirmedElsewhere(false)
+        })
     }
     // Ask the server, which knows the new team's state, for the step the
     // callback picks for this next path; a slow or failed answer takes the

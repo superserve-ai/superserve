@@ -1164,12 +1164,15 @@ describe("SignUpPage", () => {
       )
     })
 
-    const confirmInOtherTab = () =>
+    const confirmedSession = {
+      user: { id: "user-1", email: "new.user@example.com" },
+    }
+    const confirmInOtherTab = () => {
+      mockGetSession.mockResolvedValue({ data: { session: confirmedSession } })
       act(() => {
-        authStateListener?.("SIGNED_IN", {
-          user: { id: "user-1", email: "new.user@example.com" },
-        })
+        authStateListener?.("SIGNED_IN", confirmedSession)
       })
+    }
 
     afterEach(() => {
       mockReplace.mockRestore()
@@ -1345,6 +1348,33 @@ describe("SignUpPage", () => {
           })}`,
         ),
       )
+    })
+
+    it("does not go on when another account signs in while the step loads", async () => {
+      let answer: (path: string) => void = () => {}
+      mockSearchParams = new URLSearchParams({ next: "/billing/pro/" })
+      mockConfirmedDestination.mockReturnValue(
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+      )
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+      await waitFor(() => expect(mockConfirmedDestination).toHaveBeenCalled())
+      mockGetSession.mockResolvedValue({
+        data: {
+          session: { user: { id: "user-2", email: "other@example.com" } },
+        },
+      })
+      await act(async () => {
+        answer("/billing/pro/")
+      })
+
+      await waitFor(() => expect(mockGetSession).toHaveBeenCalled())
+      expect(mockReplace).not.toHaveBeenCalled()
+      expect(screen.queryByText("Email verified")).toBeNull()
     })
 
     it("checks again when the user comes back to this tab", async () => {
