@@ -764,7 +764,12 @@ describe("CustomerBillingSection", () => {
   )
 
   it.each([
-    { data: undefined, isPending: true, isError: false },
+    {
+      data: undefined,
+      isPending: true,
+      isError: false,
+      fetchStatus: "fetching",
+    },
     { data: "activating", isPending: false, isError: false },
   ])(
     "hides all billing controls while entry is $data (pending: $isPending)",
@@ -796,6 +801,19 @@ describe("CustomerBillingSection", () => {
     renderControls({ ...baseSummary, portal_available: false })
     expect(screen.getByRole("button", { name: "Set Up Billing" })).toBeEnabled()
     expect(screen.queryByTestId("plan-billing-problem")).not.toBeInTheDocument()
+  })
+
+  it("keeps paid billing controls when the entry read cannot run", () => {
+    mocks.entry.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      fetchStatus: "idle",
+    })
+    renderControls()
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeEnabled()
   })
 
   it("keeps legacy billing recovery when the entry read fails", () => {

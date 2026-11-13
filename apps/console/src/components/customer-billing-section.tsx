@@ -243,7 +243,10 @@ export function usePlanBillingControls({
       active,
     )
   // Wait for the entry state so trial teams never see legacy billing actions.
-  if (!active || entryQuery.isPending) return null
+  // A disabled read (no team context yet) never loads, so it keeps the
+  // summary-based controls instead of hiding them for good.
+  if (!active || (entryQuery.isPending && entryQuery.fetchStatus !== "idle"))
+    return null
   const entry = entryQuery.isError ? null : entryQuery.data
   if (entry === "activating") return null
   if (isAwaitingPlanState(entry)) {
