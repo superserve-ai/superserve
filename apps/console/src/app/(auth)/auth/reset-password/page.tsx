@@ -108,9 +108,14 @@ function ResetPasswordContent() {
             </h1>
 
             <form onSubmit={handleResetPassword} className="space-y-3">
+              <label htmlFor="reset-password-new" className="sr-only">
+                New password
+              </label>
               <Input
                 type={showPassword ? "text" : "password"}
-                placeholder="New Password"
+                id="reset-password-new"
+                autoComplete="new-password"
+                placeholder="New password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 error={errors.password}
@@ -121,7 +126,11 @@ function ResetPasswordContent() {
                   <button
                     type="button"
                     onClick={() => setShowPassword(!showPassword)}
-                    className="text-muted"
+                    aria-label={
+                      showPassword ? "Hide password" : "Show password"
+                    }
+                    aria-pressed={showPassword}
+                    className="-m-1 p-1 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   >
                     {showPassword ? (
                       <EyeSlashIcon className="size-4" weight="light" />
@@ -139,9 +148,14 @@ function ResetPasswordContent() {
                   {PASSWORD_RULE_HINT}
                 </p>
               )}
+              <label htmlFor="reset-password-confirm" className="sr-only">
+                Confirm new password
+              </label>
               <Input
                 type={showConfirmPassword ? "text" : "password"}
-                placeholder="Confirm New Password"
+                id="reset-password-confirm"
+                autoComplete="new-password"
+                placeholder="Confirm new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 error={errors.confirmPassword}
@@ -149,7 +163,13 @@ function ResetPasswordContent() {
                   <button
                     type="button"
                     onClick={() => setShowConfirmPassword(!showConfirmPassword)}
-                    className="text-muted"
+                    aria-label={
+                      showConfirmPassword
+                        ? "Hide password confirmation"
+                        : "Show password confirmation"
+                    }
+                    aria-pressed={showConfirmPassword}
+                    className="-m-1 p-1 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   >
                     {showConfirmPassword ? (
                       <EyeSlashIcon className="size-4" weight="light" />

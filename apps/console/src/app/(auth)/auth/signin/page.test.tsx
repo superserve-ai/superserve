@@ -192,6 +192,37 @@ describe("SignInPage", () => {
     })
   })
 
+  describe("accessibility", () => {
+    it.each([
+      ["Email", "signin-email", "email"],
+      ["Password", "signin-password", "current-password"],
+    ])(
+      "labels %s and identifies its autocomplete purpose",
+      (label, id, autocomplete) => {
+        render(<SignInPage />)
+
+        const input = screen.getByLabelText(label)
+        expect(input).toBe(screen.getByPlaceholderText(label))
+        expect(input).toHaveAttribute("id", id)
+        expect(input).toHaveAttribute("autocomplete", autocomplete)
+      },
+    )
+
+    it("keeps privacy text and the Forgot password link readable", () => {
+      render(<SignInPage />)
+
+      const privacy = screen.getByText(/By continuing, you agree to our/)
+      const forgotPassword = screen.getByRole("link", {
+        name: "Forgot password?",
+      })
+      for (const element of [privacy, forgotPassword]) {
+        expect(element).toHaveClass("text-muted")
+        expect(element.className).not.toMatch(/text-muted\/\d/)
+      }
+      expect(forgotPassword).toHaveClass("hover:text-foreground")
+    })
+  })
+
   it.each([
     ["starter", "/sandboxes"],
     ["starter_monthly", "/sandboxes"],
