@@ -42,7 +42,7 @@ describe("signup payment wait", () => {
       .mockResolvedValue("/sandboxes")
     render(<PaymentWait />)
     await advance(0)
-    expect(check).toHaveBeenCalledExactlyOnceWith("u1", "use:team-1")
+    expect(check).toHaveBeenCalledExactlyOnceWith("u1", "use:team-1", false)
     expect(screen.getByText("Processing payment…")).toBeTruthy()
     expect(screen.queryByRole("button")).toBeNull()
     await advance(1499)
@@ -105,5 +105,17 @@ describe("signup payment wait", () => {
     await advance(5000)
     expect(check).not.toHaveBeenCalled()
     expect(screen.getByRole("link", { name: "Back to console" })).toBeTruthy()
+  })
+
+  it("lets the check record a completion only after a counted Checkout return", async () => {
+    params = new URLSearchParams({
+      account: "u1",
+      team: "use:team-1",
+      returned: "1",
+    })
+    check.mockResolvedValue("/sandboxes")
+    render(<PaymentWait />)
+    await advance(0)
+    expect(check).toHaveBeenCalledExactlyOnceWith("u1", "use:team-1", true)
   })
 })

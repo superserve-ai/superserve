@@ -225,6 +225,9 @@ export async function settleSignupCheckout(
   user: User,
   account: string | null,
   teamKey: string | null,
+  // The payment page passes true only when the customer reached it from a
+  // counted Checkout return, so a completion never comes before its return.
+  recordCompletion = true,
 ): Promise<string | null> {
   if (!account || !teamKey) return planPickerPath("checkout_elsewhere")
   const original = { account, team: teamKey }
@@ -260,7 +263,7 @@ export async function settleSignupCheckout(
   if (entry === "activating" || (active && unpaid)) return null
   if (unpaid || entry === "payment_failed")
     return planPickerPath(entry, undefined, locator)
-  if (active && !(await isOperatorView(user)))
+  if (recordCompletion && active && !(await isOperatorView(user)))
     recordCheckoutCompleted({
       userId: user.id,
       surface: "plan_picker",

@@ -49,7 +49,7 @@ export async function GET(request: Request) {
       params.account,
       params.billing,
       continuation ?? undefined,
-      false,
+      "none",
     )
   } catch (error) {
     unstable_rethrow(error)

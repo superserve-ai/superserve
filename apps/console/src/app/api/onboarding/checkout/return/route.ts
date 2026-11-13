@@ -23,12 +23,15 @@ export async function GET(request: Request) {
         origin,
       ),
     )
+  // Stripe sends the customer here only after a successful payment.
+  const counted = account === user.id && !(await isOperatorView(user))
+  // returned=1 lets the payment page record the completion: this return is
+  // already recorded, so the completion comes after it.
   const settling =
     account && team
-      ? paymentSettlingPath({ account, team })
+      ? `${paymentSettlingPath({ account, team })}${counted ? "&returned=1" : ""}`
       : planPickerPath("checkout_elsewhere")
-  // Stripe sends the customer here only after a successful payment.
-  if (account === user.id && !(await isOperatorView(user)))
+  if (counted)
     recordCheckoutReturned({
       userId: user.id,
       surface: "plan_picker",

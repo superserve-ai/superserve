@@ -110,6 +110,14 @@ describe("checkout_completed from the plan picker", () => {
     })
   })
 
+  it("is not recorded by a payment page the customer did not reach from a return", async () => {
+    m.entry = "none"
+    await expect(
+      settleSignupCheckout(user, "u1", "use:team-1", false),
+    ).resolves.toBe("/sandboxes")
+    expect(m.completed).not.toHaveBeenCalled()
+  })
+
   it("is not recorded while an operator views another team", async () => {
     m.entry = "none"
     m.operator = true

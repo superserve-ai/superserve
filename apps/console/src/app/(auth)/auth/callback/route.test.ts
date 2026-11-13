@@ -2120,7 +2120,7 @@ describe("auth callback", () => {
         "u1",
         undefined,
         "/billing/pro/?team=use%3Aoriginal-team",
-        false,
+        "none",
       )
     })
 

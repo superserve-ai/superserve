@@ -55,6 +55,17 @@ describe("checkout return events", () => {
     expect(m.returned).toHaveBeenCalledOnce()
   })
 
+  it("tells the payment page the return is recorded only when it is", async () => {
+    m.settle.mockResolvedValue(null)
+    const counted = new URL((await visit("u1")).headers.get("location")!)
+    expect(counted.pathname).toBe("/onboarding/payment/")
+    expect(counted.searchParams.get("returned")).toBe("1")
+    m.operator = true
+    const operator = new URL((await visit("u1")).headers.get("location")!)
+    expect(operator.pathname).toBe("/onboarding/payment/")
+    expect(operator.searchParams.get("returned")).toBeNull()
+  })
+
   it("records nothing for another account's return or a signed-out visit", async () => {
     await visit("someone-else")
     m.user = null

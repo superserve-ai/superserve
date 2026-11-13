@@ -31,7 +31,7 @@ it("provisions before redirecting with the original checkout identity", async ()
     "owner",
     "cancel",
     undefined,
-    false,
+    "none",
   )
 })
 it("returns to recovery after an error without accepting a redirect destination", async () => {
@@ -70,7 +70,7 @@ it.each([
       "owner",
       undefined,
       next,
-      false,
+      "none",
     )
     m.prepare.mockRejectedValueOnce(new Error("Response lost"))
     const failure = await GET(new Request(url)).catch(
