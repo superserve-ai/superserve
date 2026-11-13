@@ -29,7 +29,7 @@ function priceLabel(plan: BillingPlan, currency: string): string {
         ? "Payment didn’t go through · choose a plan to try again"
         : plan.status === "plan_required"
           ? "Free covers your first team · choose a plan"
-          : "Trial ended · choose a plan to continue"
+          : "Choose a plan to continue"
   if (plan.price_usd == null || plan.billing_interval_months == null) {
     return "Pay as you go"
   }
@@ -96,7 +96,9 @@ export function CurrentPlan({
             plan ? "text-foreground" : "text-muted",
           )}
         >
-          {plan?.name ?? "Unavailable"}
+          {plan?.key === "trial" && plan.status === "trial_ended"
+            ? "No plan"
+            : (plan?.name ?? "Unavailable")}
         </p>
         <p className="text-sm text-muted">
           {plan

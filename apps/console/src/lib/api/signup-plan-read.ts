@@ -61,7 +61,7 @@ export async function readSignupPlan(
     choice.state = "legacy"
     choice.offer = null
   }
-  if (choice.state === "selecting" || choice.state === "pending") {
+  if (choice.state === "selecting" || choice.state === "pending" || !data) {
     const [intent, billing] = await Promise.all([
       admin
         .from("yc_claim_team_intent")
@@ -98,7 +98,8 @@ export async function readSignupPlan(
   }
   let entryState: AwaitingPlanState | undefined
   let paymentSettling = false
-  if (choice.state === "selecting" || choice.state === "pending") {
+  // Entry authority also covers older teams without a signup-choice row.
+  if (choice.state !== "yc_claim") {
     const entry = await admin.rpc("billing_team_entry_state", {
       p_team: team.teamId,
     })

@@ -140,3 +140,40 @@ it("offers an upgrade from the default plans when only unrelated offers are list
   )
   expect(canStartAnyPlan(upgradesOffSale)).toBe(false)
 })
+
+it.each([true, false])(
+  "reads migrated team capabilities with entry open=%s",
+  (open) => {
+    const response = {
+      ...wire("v2", open),
+      admission_source: "legacy_transition",
+      fresh_entry: {
+        starter: false,
+        pro: open,
+        auto_recharge: false,
+        choose_free: false,
+      },
+      offers: [offer("developer_monthly", true), offer("pro_monthly", true)],
+      catalog: {
+        ...wire("v2", open).catalog,
+        signup_admission: {
+          schema_version: 1,
+          pricing_version: "v2",
+          source: "legacy_transition",
+          entry_open: open,
+          epoch: null,
+        },
+      },
+    }
+    const capabilities = parseBillingCapabilities(response, `use:${team}`)
+    expect(capabilities.admission_source).toBe("legacy_transition")
+    expect(canStartAnyPlan(capabilities)).toBe(open)
+    expect(canStartPlan(capabilities, { key: "free", kind: "free" })).toBe(
+      false,
+    )
+    expect(
+      canStartPlan(capabilities, { key: "starter", kind: "prepaid" }),
+    ).toBe(false)
+    expect(capabilities.actions.recover_payment).toBe(true)
+  },
+)

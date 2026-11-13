@@ -15,7 +15,12 @@ export const billingCapabilitiesSchema = z
     schema_version: z.literal(1),
     team_id: z.string().uuid(),
     pricing_version: z.enum(["legacy", "v2"]),
-    admission_source: z.enum(["legacy", "all_teams", "new_team"]),
+    admission_source: z.enum([
+      "legacy",
+      "all_teams",
+      "new_team",
+      "legacy_transition",
+    ]),
     entry_open: z.boolean(),
     epoch: z.string().uuid().nullable(),
     enrollment_epoch: z.string().uuid().nullable(),

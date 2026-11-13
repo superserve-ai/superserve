@@ -43,6 +43,8 @@ vi.mock("next/headers", () => ({
   cookies: async () => ({ get: mocks.cookie }),
 }))
 
+import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
+
 import { needsPlanSelection, parseSignupChoice } from "./signup-plan"
 import { getSignupPlanAction } from "./signup-plan-actions"
 
@@ -499,4 +501,68 @@ describe("real paid preparation handler permanent recovery", () => {
       ).toThrow()
     },
   )
+})
+
+describe("legacy teams without signup choices", () => {
+  beforeEach(() => {
+    mocks.single.mockResolvedValue({ data: null, error: null })
+  })
+
+  it("routes a migrated team to paid plan selection", async () => {
+    mocks.rpc.mockResolvedValue({ data: "trial_ended", error: null })
+    const context = await getSignupPlanAction("usw:west-team")
+    expect(context.entryState).toBe("trial_ended")
+    expect(awaitingPlanRedirect(context)).toBe(
+      "/auth/choose-plan/?reason=trial_ended&account=user&team=usw%3Awest-team",
+    )
+    expect(mocks.rpc).toHaveBeenCalledWith("billing_team_entry_state", {
+      p_team: "west-team",
+    })
+  })
+
+  it.each(["activating", "trial_ended"])(
+    "waits for a paid checkout in %s instead of selling again",
+    async (state) => {
+      mocks.rpc.mockResolvedValue({ data: state, error: null })
+      mocks.settling.mockResolvedValue({ data: { state: "paid" }, error: null })
+      const context = await getSignupPlanAction()
+      expect(awaitingPlanRedirect(context)).toBe(
+        "/onboarding/payment/?account=user&team=usw%3Awest-team",
+      )
+    },
+  )
+
+  it("leaves an unmigrated or already paid team on its existing path", async () => {
+    mocks.rpc.mockResolvedValue({ data: "active", error: null })
+    const context = await getSignupPlanAction()
+    expect(context.state).toBe("legacy")
+    expect(awaitingPlanRedirect(context)).toBeNull()
+  })
+
+  it("keeps YC routing ahead of entry state even without a choice", async () => {
+    mocks.intent.mockResolvedValue({
+      data: { claim_id: "claim", released_at: null },
+      error: null,
+    })
+    mocks.rpc.mockResolvedValue({ data: "trial_ended", error: null })
+    const context = await getSignupPlanAction()
+    expect(context.state).toBe("yc_claim")
+    expect(awaitingPlanRedirect(context)).toBeNull()
+    expect(mocks.rpc).not.toHaveBeenCalled()
+  })
+
+  it.each(["PGRST202", "42883"])(
+    "supports older cells without the entry RPC (%s)",
+    async (code) => {
+      mocks.rpc.mockResolvedValue({ data: null, error: { code } })
+      expect(awaitingPlanRedirect(await getSignupPlanAction())).toBeNull()
+    },
+  )
+
+  it("blocks on an unavailable entry-state read instead of bypassing the picker", async () => {
+    mocks.rpc.mockResolvedValue({ data: null, error: { code: "08006" } })
+    await expect(getSignupPlanAction()).rejects.toThrow(
+      "Unable to check your plan",
+    )
+  })
 })

@@ -132,7 +132,7 @@ export const publicBillingPlansSchema = z.object({
     .object({
       schema_version: z.literal(1),
       pricing_version: pricingVersionSchema,
-      source: z.enum(["legacy", "all_teams", "new_team"]),
+      source: z.enum(["legacy", "all_teams", "new_team", "legacy_transition"]),
       entry_open: z.boolean(),
       epoch: z.string().uuid().nullable(),
     })
