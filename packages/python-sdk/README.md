@@ -146,6 +146,7 @@ from superserve import (
     ValidationError,         # 400
     NotFoundError,           # 404
     ConflictError,           # 409 — invalid state for operation
+    BillingError,            # 402 — billing blocks the request; has code and action_url
     SandboxTimeoutError,     # request timed out (does not shadow builtin TimeoutError)
     ServerError,             # 500
 )
