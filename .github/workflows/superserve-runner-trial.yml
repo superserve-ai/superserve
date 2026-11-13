@@ -15,8 +15,6 @@ on:
       - "turbo.json"
       - ".github/workflows/**"
   pull_request:
-  merge_group:
-    types: [checks_requested]
   workflow_dispatch:
     inputs:
       runner_label:
