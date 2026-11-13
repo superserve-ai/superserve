@@ -44,6 +44,9 @@ vi.mock("@/hooks/use-billing-v2", () => ({
   useAllowancePricing: () => ({ data: undefined }),
   usePrepaidBalance: () => ({ data: undefined }),
 }))
+vi.mock("@/hooks/use-legacy-plan-transition", () => ({
+  useLegacyPlanTransition: () => false,
+}))
 
 vi.mock("@/components/settings/team-details-section", () => ({
   TeamDetailsSection: () => null,
