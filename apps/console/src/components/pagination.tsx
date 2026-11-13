@@ -114,7 +114,7 @@ export function Pagination({
       aria-label="Pagination"
       className="flex h-12 shrink-0 items-center justify-between border-t border-dashed border-border bg-background px-4"
     >
-      <p className="font-mono text-xs text-muted tabular-nums">
+      <p className="font-mono text-xs text-foreground tabular-nums">
         {start}
         <span className="text-muted">–</span>
         {end} <span className="text-muted">of</span> {total}

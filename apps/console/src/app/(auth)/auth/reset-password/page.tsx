@@ -115,7 +115,7 @@ function ResetPasswordContent() {
                 type={showPassword ? "text" : "password"}
                 id="reset-password-new"
                 autoComplete="new-password"
-                placeholder="New Password"
+                placeholder="New password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 error={errors.password}
@@ -155,7 +155,7 @@ function ResetPasswordContent() {
                 type={showConfirmPassword ? "text" : "password"}
                 id="reset-password-confirm"
                 autoComplete="new-password"
-                placeholder="Confirm New Password"
+                placeholder="Confirm new password"
                 value={confirmPassword}
                 onChange={(e) => setConfirmPassword(e.target.value)}
                 error={errors.confirmPassword}

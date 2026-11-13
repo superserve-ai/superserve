@@ -676,7 +676,7 @@ export default function SignUpContent() {
                 type="text"
                 id="signup-full-name"
                 autoComplete="name"
-                placeholder="Full Name"
+                placeholder="Full name"
                 value={fullName}
                 onChange={(e) => setFormValue("fullName", e.target.value)}
                 error={errors.fullName}
@@ -740,7 +740,7 @@ export default function SignUpContent() {
                 type={showConfirmPassword ? "text" : "password"}
                 id="signup-confirm-password"
                 autoComplete="new-password"
-                placeholder="Confirm Password"
+                placeholder="Confirm password"
                 value={confirmPassword}
                 onChange={(e) =>
                   setFormValue("confirmPassword", e.target.value)

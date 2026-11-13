@@ -101,8 +101,8 @@ describe("ResetPasswordPage", () => {
 
   async function fillAndSubmit(value = "Password123") {
     // Suspense boundary — wait for it to resolve to the real content.
-    const password = await screen.findByPlaceholderText("New Password")
-    const confirm = screen.getByPlaceholderText("Confirm New Password")
+    const password = await screen.findByPlaceholderText("New password")
+    const confirm = screen.getByPlaceholderText("Confirm new password")
     fireEvent.change(password, { target: { value } })
     fireEvent.change(confirm, { target: { value } })
     const button = screen.getByRole("button", { name: /Update Password/ })
@@ -111,10 +111,10 @@ describe("ResetPasswordPage", () => {
 
   describe("accessibility", () => {
     it.each([
-      ["New password", "New Password", "reset-password-new"],
+      ["New password", "New password", "reset-password-new"],
       [
         "Confirm new password",
-        "Confirm New Password",
+        "Confirm new password",
         "reset-password-confirm",
       ],
     ])(
@@ -222,7 +222,7 @@ describe("ResetPasswordPage", () => {
   it("shows the password rule before submit", async () => {
     render(<ResetPasswordPage />)
 
-    const password = await screen.findByPlaceholderText("New Password")
+    const password = await screen.findByPlaceholderText("New password")
     expect(
       screen.getByText(
         "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number.",

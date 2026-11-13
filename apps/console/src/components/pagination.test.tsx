@@ -157,7 +157,7 @@ describe("Pagination", () => {
 })
 
 describe("Pagination accessibility", () => {
-  it("keeps range separators readable", () => {
+  it("uses foreground range numbers and muted separators", () => {
     render(
       <Pagination
         page={1}
@@ -167,6 +167,10 @@ describe("Pagination accessibility", () => {
         onPageSizeChange={noop}
       />,
     )
+
+    const range = screen.getByText("–").closest("p")
+    expect(range).toHaveClass("text-foreground")
+    expect(range).not.toHaveClass("text-muted")
 
     for (const separator of [screen.getByText("–"), screen.getByText("of")]) {
       expect(separator).toHaveClass("text-muted")
