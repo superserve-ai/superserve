@@ -126,9 +126,10 @@ export async function getTrialOutcomeAction(
   }
 }
 
+// null means "could not check".
 export async function getLegacyPlanEntryAction(
   teamKey: string,
-): Promise<boolean> {
+): Promise<boolean | null> {
   try {
     const {
       data: { user },
@@ -141,6 +142,6 @@ export async function getLegacyPlanEntryAction(
       team.teamId,
     )
   } catch {
-    return false
+    return null
   }
 }

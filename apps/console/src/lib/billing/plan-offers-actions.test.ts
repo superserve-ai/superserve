@@ -73,12 +73,25 @@ describe("getLegacyPlanEntryAction", () => {
     },
   )
 
-  it("returns false when the flag cannot be read", async () => {
+  it("returns null when the flag cannot be read", async () => {
     mocks.legacyEntry.mockResolvedValue({
       data: null,
       error: { code: "XX000" },
     })
-    expect(await getLegacyPlanEntryAction(locator.team)).toBe(false)
+    expect(await getLegacyPlanEntryAction(locator.team)).toBeNull()
+  })
+
+  it("returns null when team resolution throws", async () => {
+    mocks.team.mockRejectedValue(new Error("Unable to resolve the team"))
+    expect(await getLegacyPlanEntryAction(locator.team)).toBeNull()
+    expect(mocks.from).not.toHaveBeenCalled()
+  })
+
+  it("returns null when authentication throws", async () => {
+    mocks.user.mockRejectedValue(new Error("Unable to authenticate"))
+    expect(await getLegacyPlanEntryAction(locator.team)).toBeNull()
+    expect(mocks.team).not.toHaveBeenCalled()
+    expect(mocks.from).not.toHaveBeenCalled()
   })
 
   it("does not read the flag without a signed-in user", async () => {

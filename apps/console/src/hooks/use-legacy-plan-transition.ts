@@ -20,9 +20,15 @@ export function useLegacyPlanTransition(enabled: boolean): boolean {
     isLegacyTransition(capabilities.data) || signup?.legacyPlanEntry === true
   const query = useQuery({
     queryKey: ["legacy-plan-entry", cacheScope, teamKey],
-    queryFn: () => getLegacyPlanEntryAction(teamKey!),
+    queryFn: async () => {
+      const legacyPlanEntry = await getLegacyPlanEntryAction(teamKey!)
+      if (legacyPlanEntry === null)
+        throw new Error("Unable to check the plan migration")
+      return legacyPlanEntry
+    },
     enabled: enabled && ready && teamKey !== null && !fastPath,
-    staleTime: Number.POSITIVE_INFINITY,
+    staleTime: (query) =>
+      query.state.data === true ? Number.POSITIVE_INFINITY : 5 * 60_000,
     retry: false,
   })
   return fastPath || query.data === true
