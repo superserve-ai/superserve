@@ -156,6 +156,10 @@ function TrialEntryBanner({
   const { submitting, onSubmit } = useSubmitOnce<true>()
   return (
     <BannerShell
+      // Browser translation replaces text nodes React still tracks, so a copy
+      // change in place can throw and take down the page. A new key per copy
+      // swaps the whole banner instead.
+      key={`${stage}:${remaining ? "amount" : "none"}`}
       tone={stage === "trial" ? "info" : "danger"}
       label={
         stage === "plan_required" || stage === "unknown"
@@ -279,6 +283,9 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
   const exhausted = block === "trial_exhausted" || trial?.state === "exhausted"
   const urgent = blocked || exhausted || currentUrgentRunway
   const remaining = formatUsd(trial?.remaining_usd)
+  // A new key per copy, as in TrialEntryBanner, so browser translation cannot
+  // make a copy change throw.
+  const copyKey = `${block ?? (exhausted ? "exhausted" : "")}:${urgent}:${!!remaining}`
 
   return (
     <div
@@ -291,7 +298,7 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
           : "border-yellow-500/40 bg-yellow-100 text-yellow-950 dark:bg-yellow-950 dark:text-yellow-100",
       )}
     >
-      <p className="min-w-0 flex-1 basis-72">
+      <p key={copyKey} className="min-w-0 flex-1 basis-72">
         {block === "trial_check_unavailable" ? (
           <>
             We couldn&apos;t confirm the free trial for this account because a

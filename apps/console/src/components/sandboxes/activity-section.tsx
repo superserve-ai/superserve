@@ -11,6 +11,11 @@ import {
   TooltipTrigger,
 } from "@superserve/ui"
 
+import {
+  activityActionLabel,
+  BILLING_PAUSE_ACTIVITY,
+} from "@/components/audit/activity-labels"
+import { BillingActivityAction } from "@/components/billing/billing-activity-action"
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
 import { StickyHoverTableBody } from "@/components/sticky-hover-table"
@@ -31,6 +36,10 @@ export function ActivitySection({
   error,
   onRetry,
 }: ActivitySectionProps) {
+  // Only the first billing pause records that the link was shown.
+  const firstBillingPauseId = activity?.find(
+    (entry) => entry.action === BILLING_PAUSE_ACTIVITY,
+  )?.id
   return (
     <>
       <div className="flex h-10 items-center border-b border-border px-4">
@@ -95,7 +104,16 @@ export function ActivitySection({
                       {entry.category}
                     </TableCell>
                     <TableCell className="text-foreground/80">
-                      {entry.action}
+                      {entry.action === BILLING_PAUSE_ACTIVITY ? (
+                        <span className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                          <span>{activityActionLabel(entry.action)}</span>
+                          <BillingActivityAction
+                            trackShown={entry.id === firstBillingPauseId}
+                          />
+                        </span>
+                      ) : (
+                        activityActionLabel(entry.action)
+                      )}
                     </TableCell>
                     <TableCell className="font-mono text-xs text-muted tabular-nums">
                       {formatDuration(entry.duration_ms)}

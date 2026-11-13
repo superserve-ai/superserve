@@ -1,12 +1,21 @@
 export class ApiError extends Error {
   status: number
   code: string
+  // The server's next-step link (402 billing blocks). Untrusted: pass it
+  // through safeBillingActionHref before use.
+  actionUrl?: string
 
-  constructor(status: number, code: string, message: string) {
+  constructor(
+    status: number,
+    code: string,
+    message: string,
+    actionUrl?: string,
+  ) {
     super(message)
     this.name = "ApiError"
     this.status = status
     this.code = code
+    if (actionUrl) this.actionUrl = actionUrl
   }
 }
 
@@ -76,11 +85,14 @@ async function request<R>(
     if (!response.ok) {
       let code = "unknown_error"
       let message = response.statusText
+      let actionUrl: string | undefined
 
       try {
         const body = await response.json()
         if (body?.error?.code) code = body.error.code
         if (body?.error?.message) message = body.error.message
+        if (typeof body?.error?.action_url === "string")
+          actionUrl = body.error.action_url
       } catch {
         // response body is not JSON, use defaults
       }
@@ -91,7 +103,7 @@ async function request<R>(
       )
         window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
 
-      throw new ApiError(response.status, code, message)
+      throw new ApiError(response.status, code, message, actionUrl)
     }
 
     return await read(response)
