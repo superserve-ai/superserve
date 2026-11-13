@@ -12,8 +12,13 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
-import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
+import {
+  PASSWORD_RULE_HINT,
+  passwordRuleError,
+  passwordRuleFailure,
+} from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { SIGN_UP_MESSAGES } from "@/lib/auth/sign-up-messages"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   TURNSTILE_SCRIPT_SRC,
@@ -209,9 +214,7 @@ export default function SignUpContent() {
     }
   }, [searchParams])
 
-  const handleSignUp = async (e: React.FormEvent) => {
-    e.preventDefault()
-    setErrors({})
+  const captureValidationFailure = (emailInvalid = false) => {
     const newErrors: Record<string, string> = {}
     if (!fullName) newErrors.fullName = "Name is required."
     if (!email) newErrors.email = "Email is required."
@@ -219,6 +222,33 @@ export default function SignUpContent() {
     if (passwordError) newErrors.password = passwordError
     if (password && password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match."
+    const fields = [
+      ["fullName", "full_name"],
+      ["email", "email"],
+      ["password", "password"],
+      ["confirmPassword", "confirm_password"],
+    ]
+      .filter(
+        ([field]) => newErrors[field] || (field === "email" && emailInvalid),
+      )
+      .map(([, field]) => field)
+    if (fields.length > 0) {
+      const failure = passwordRuleFailure(password)
+      posthog.capture(AUTH_EVENTS.SIGN_UP_VALIDATION_FAILED, {
+        method: "email",
+        fields,
+        email_rule: !email ? "required" : emailInvalid ? "format" : null,
+        password_rule: failure?.rule ?? null,
+        password_missing: failure?.missing ?? [],
+      })
+    }
+    return newErrors
+  }
+
+  const handleSignUp = async (e: React.FormEvent) => {
+    e.preventDefault()
+    setErrors({})
+    const newErrors = captureValidationFailure()
     if (Object.keys(newErrors).length > 0) {
       setErrors(newErrors)
       return
@@ -254,6 +284,9 @@ export default function SignUpContent() {
         posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
           reason: result.error,
+          error_code: ("errorCode" in result && result.errorCode) || null,
+          auth_error_code:
+            ("authErrorCode" in result && result.authErrorCode) || null,
         })
         if ("errorCode" in result && result.errorCode === "blocked_email") {
           router.push("/auth/auth-code-error?reason=signup_blocked")
@@ -266,7 +299,7 @@ export default function SignUpContent() {
           setEmailStatus("not_sent")
           return
         }
-        setErrors({ form: result.error || "Error creating account." })
+        setErrors({ form: result.error || SIGN_UP_MESSAGES.signUpFailed })
         return
       }
       posthog.capture(AUTH_EVENTS.SIGN_UP_COMPLETED, {
@@ -624,6 +657,7 @@ export default function SignUpContent() {
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setFormValue("email", e.target.value)}
+                onInvalid={() => captureValidationFailure(true)}
                 error={errors.email}
               />
               <Input
@@ -680,7 +714,32 @@ export default function SignUpContent() {
                 }
               />
               {errors.form && (
-                <p className="text-xs text-destructive">{errors.form}</p>
+                <p className="text-xs text-destructive">
+                  {errors.form === SIGN_UP_MESSAGES.emailExists ? (
+                    <>
+                      This email already has an account.{" "}
+                      <Link
+                        href={signInHref}
+                        className={cn(
+                          "font-medium text-foreground hover:underline",
+                          inviteLinkReplayClass(signInHref),
+                        )}
+                      >
+                        Sign in
+                      </Link>
+                      , or{" "}
+                      <Link
+                        href="/auth/forgot-password"
+                        className="font-medium text-foreground hover:underline"
+                      >
+                        reset your password
+                      </Link>{" "}
+                      if you forgot it.
+                    </>
+                  ) : (
+                    errors.form
+                  )}
+                </p>
               )}
               <Button
                 type="submit"

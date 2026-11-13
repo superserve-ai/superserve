@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { passwordRuleError } from "./password-rule"
+import { passwordRuleError, passwordRuleFailure } from "./password-rule"
 
 describe("passwordRuleError", () => {
   it("accepts a password with every required part", () => {
@@ -56,6 +56,52 @@ describe("passwordRuleError", () => {
   it("names a missing part only after the length checks pass", () => {
     expect(passwordRuleError("x".repeat(73))).toBe(
       "Use 72 characters or fewer.",
+    )
+  })
+})
+
+describe("passwordRuleFailure", () => {
+  it.each([
+    ["", { rule: "required", missing: [] }],
+    ["Ab1", { rule: "too_short", missing: [] }],
+    ["x".repeat(73), { rule: "too_long", missing: [] }],
+    ["Sandbox42".padEnd(69, "x") + "🙂", { rule: "too_long", missing: [] }],
+    ["SANDBOX42", { rule: "missing_characters", missing: ["lowercase"] }],
+    ["sandbox42", { rule: "missing_characters", missing: ["uppercase"] }],
+    ["Sandboxes", { rule: "missing_characters", missing: ["number"] }],
+    [
+      "sandboxes",
+      { rule: "missing_characters", missing: ["uppercase", "number"] },
+    ],
+    [
+      "!!!!!!!!",
+      {
+        rule: "missing_characters",
+        missing: ["lowercase", "uppercase", "number"],
+      },
+    ],
+    ["Sandbox42", null],
+    ["Sandbox42".padEnd(68, "x") + "🙂", null],
+  ] as const)("classifies %j in validation order", (password, failure) => {
+    expect(passwordRuleFailure(password)).toEqual(failure)
+  })
+
+  it.each([
+    "",
+    "Ab1",
+    "Sandbox42".padEnd(73, "x"),
+    "Sandbox42".padEnd(68, "x") + "🙂",
+    "Sandbox42" + "é".repeat(32),
+    "SANDBOX42",
+    "sandbox42",
+    "Sandboxes",
+    "sandboxes",
+    "!!!!!!!!",
+    "ÉÀÜéàü١٢",
+    "Sandbox42",
+  ])("matches passwordRuleError's validity for %j", (password) => {
+    expect(passwordRuleFailure(password) === null).toBe(
+      passwordRuleError(password) === null,
     )
   })
 })

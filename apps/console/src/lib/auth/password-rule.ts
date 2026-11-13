@@ -7,9 +7,9 @@ export const PASSWORD_RULE_HINT =
   "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number."
 
 const REQUIRED_PARTS = [
-  { pattern: /[a-z]/, label: "a lowercase letter" },
-  { pattern: /[A-Z]/, label: "an uppercase letter" },
-  { pattern: /[0-9]/, label: "a number" },
+  { pattern: /[a-z]/, label: "a lowercase letter", code: "lowercase" },
+  { pattern: /[A-Z]/, label: "an uppercase letter", code: "uppercase" },
+  { pattern: /[0-9]/, label: "a number", code: "number" },
 ] as const
 
 const MAX_PASSWORD_BYTES = 72
@@ -31,4 +31,19 @@ export function passwordRuleError(password: string): string | null {
   if (missing.length === 0) return `Add ${last}.`
   const comma = missing.length > 1 ? "," : ""
   return `Add ${missing.join(", ")}${comma} and ${last}.`
+}
+
+export function passwordRuleFailure(password: string): {
+  rule: "required" | "too_short" | "too_long" | "missing_characters"
+  missing: Array<"lowercase" | "uppercase" | "number">
+} | null {
+  if (!password) return { rule: "required", missing: [] }
+  if (password.length < 8) return { rule: "too_short", missing: [] }
+  if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {
+    return { rule: "too_long", missing: [] }
+  }
+  const missing = REQUIRED_PARTS.filter(
+    ({ pattern }) => !pattern.test(password),
+  ).map(({ code }) => code)
+  return missing.length ? { rule: "missing_characters", missing } : null
 }

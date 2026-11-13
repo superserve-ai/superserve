@@ -10,6 +10,7 @@ export const AUTH_EVENTS = {
   SIGN_IN_LINK_FAILED: "auth_sign_in_link_failed",
   SIGN_UP_COMPLETED: "auth_sign_up_completed",
   SIGN_UP_FAILED: "auth_sign_up_failed",
+  SIGN_UP_VALIDATION_FAILED: "auth_sign_up_validation_failed",
   GOOGLE_SIGNUP_CAPTCHA_VERIFIED: "auth_google_signup_captcha_verified",
   GOOGLE_SIGNUP_CAPTCHA_FAILED: "auth_google_signup_captcha_failed",
   GOOGLE_SIGNUP_BYPASS_BLOCKED: "auth_google_signup_bypass_blocked",
