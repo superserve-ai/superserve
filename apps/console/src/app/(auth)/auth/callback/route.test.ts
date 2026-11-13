@@ -1722,6 +1722,11 @@ describe("auth callback", () => {
               const admin = original.createAdminClient()
               return {
                 ...admin,
+                rpc: async (name: string) => {
+                  if (name !== "billing_team_entry_state")
+                    throw new Error(`Unexpected RPC: ${name}`)
+                  return { data: "active", error: null }
+                },
                 from: (table: string) => {
                   if (table === "billing_signup_choice")
                     return {
