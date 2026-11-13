@@ -183,7 +183,7 @@ export function SyntheticBrowserDependencies({
     if (caseId() !== "ss640-email-missing-capture") {
       registerFingerprintGetData(async (options) => {
         signupTrace.captures += 1
-        if (options?.tag.signup_challenge !== attempt.challenge) {
+        if (options?.tags.signup_challenge !== attempt.challenge) {
           throw new Error("synthetic_challenge_mismatch")
         }
         if (caseId() === "ss640-email-loading") {
