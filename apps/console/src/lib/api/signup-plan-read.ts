@@ -1,6 +1,7 @@
 import "server-only"
 import { cookies } from "next/headers"
 
+import { hasLegacyPlanEntry } from "@/lib/api/legacy-plan-entry"
 import {
   parseSignupChoice,
   type SignupPlanContext,
@@ -43,11 +44,17 @@ export async function readSignupPlan(
   if (expectedTeam && expectedTeam !== teamKey)
     throw new SignupSetupBlockedError("team_changed")
   const admin = cellFor(team.region).createAdminClient()
-  const { data, error } = await admin
+  const { data: row, error } = await admin
     .from("billing_signup_choice")
     .select("state, offer_key")
     .eq("team_id", team.teamId)
     .maybeSingle()
+  // Legacy teams migrated to paid-plan entry have no choice row; treat them as
+  // still choosing so the entry state below sends them to the plan picker.
+  const synthesizedChoice =
+    !error && row === null && (await hasLegacyPlanEntry(admin, team.teamId))
+  let legacyPlanEntry = synthesizedChoice
+  const data = synthesizedChoice ? { state: "selecting", offer_key: null } : row
   // A cell without the onboarding migration still runs the existing signup flow.
   // Once the table exists, every error is blocking rather than proof of completion.
   if (error && error.code !== "42P01" && error.code !== "PGRST205")
@@ -156,6 +163,16 @@ export async function readSignupPlan(
       choice.offer = paid.offer
     }
   }
+  if (
+    synthesizedChoice &&
+    (choice.state === "selecting" || choice.state === "pending")
+  ) {
+    // An unresolved migrated team must never enter the old signup picker.
+    choice.state = "legacy"
+    choice.offer = null
+  }
+  if (!legacyPlanEntry && entryState === "trial_ended")
+    legacyPlanEntry = await hasLegacyPlanEntry(admin, team.teamId)
   const requestedOffer = readPlanOffer(
     (await cookies()).get(PLAN_OFFER_COOKIE)?.value,
     userId,
@@ -165,6 +182,7 @@ export async function readSignupPlan(
     teamKey,
     ...choice,
     requestedOffer,
+    ...(legacyPlanEntry ? { legacyPlanEntry } : {}),
     ...(entryState ? { entryState } : {}),
     ...(paymentSettling ? { paymentSettling } : {}),
   }

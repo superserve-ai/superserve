@@ -11,6 +11,7 @@ import {
   usePrepaidBalance,
   useTeamPlan,
 } from "@/hooks/use-billing-v2"
+import { useLegacyPlanTransition } from "@/hooks/use-legacy-plan-transition"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import { canStartAnyPlan, canStartPlan } from "@/lib/api/billing-capabilities"
 import { fundedByCredit, planTopoff } from "@/lib/api/billing-v2"
@@ -44,6 +45,7 @@ export function PlanOverviewSection({
 }) {
   const scope = useQueryScope()
   const capabilities = useBillingCapabilities()
+  const legacyTransition = useLegacyPlanTransition()
   const planQuery = useTeamPlan(true)
   const plan = planQuery.data
   const allowance = useFreeAllowance(!details && plan?.kind === "free").data
@@ -67,7 +69,13 @@ export function PlanOverviewSection({
       </div>
     )
   if (!plan || plan.kind === "legacy_payg")
-    return <CurrentPlan summary={summary} billingControls={billingControls} />
+    return (
+      <CurrentPlan
+        summary={summary}
+        billingControls={billingControls}
+        legacyTransition={legacyTransition}
+      />
+    )
   const commercial = summary.plan?.key === plan.key ? summary.plan : null
   const matchingPeriod =
     Date.parse(plan.period_start ?? "") ===

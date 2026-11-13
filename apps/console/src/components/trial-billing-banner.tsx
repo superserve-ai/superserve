@@ -14,6 +14,7 @@ import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamEntry } from "@/hooks/use-billing-v2"
+import { useLegacyPlanTransition } from "@/hooks/use-legacy-plan-transition"
 import type {
   BillingSummaryResponse,
   BillingTrialBalance,
@@ -99,8 +100,11 @@ export function trialStage(
   entry: AwaitingPlanState,
   trial: BillingTrialBalance | null | undefined,
   block?: BillingTrialBlock | null,
+  legacyTransition?: boolean,
 ): TrialStage {
   if (entry === "payment_failed" || entry === "plan_required") return entry
+  // Migrated legacy teams never had the current free trial.
+  if (legacyTransition && entry === "trial_ended") return "unknown"
   if (block === "trial_check_unavailable") return "check_unavailable"
   if (block === "trial_exhausted") return "ended"
   if (block === "trial_unavailable") return "unavailable"
@@ -125,7 +129,13 @@ function TrialEntryBanner({
   summary: BillingSummaryResponse
 }) {
   const scope = useQueryScope()
-  const stage = trialStage(entry, summary.trial, summary.trial_block)
+  const legacyTransition = useLegacyPlanTransition()
+  const stage = trialStage(
+    entry,
+    summary.trial,
+    summary.trial_block,
+    legacyTransition,
+  )
   const remaining = formatUsd(summary.trial?.remaining_usd)
   const canManage = scope === "self" && summary.permissions.can_manage
   return (

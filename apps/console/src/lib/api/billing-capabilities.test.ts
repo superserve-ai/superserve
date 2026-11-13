@@ -3,6 +3,7 @@ import { expect, it } from "vitest"
 import {
   canStartAnyPlan,
   canStartPlan,
+  isLegacyTransition,
   parseBillingCapabilities,
 } from "./billing-capabilities"
 
@@ -38,6 +39,22 @@ it("retains enrolled display and recovery when new entry closes", () => {
   expect(closed.actions.recover_payment).toBe(true)
   expect(closed.actions.disable_auto_recharge).toBe(true)
 })
+it("accepts legacy teams entering paid plans", () => {
+  const migrated = parseBillingCapabilities(
+    { ...wire("v2", true), admission_source: "legacy_transition" },
+    `use:${team}`,
+  )
+  expect(migrated.admission_source).toBe("legacy_transition")
+  expect(migrated.entry_open).toBe(true)
+  expect(migrated.fresh_entry.pro).toBe(true)
+  expect(isLegacyTransition(migrated)).toBe(true)
+  expect(isLegacyTransition(undefined)).toBe(false)
+  expect(
+    isLegacyTransition(
+      parseBillingCapabilities(wire("v2", true), `use:${team}`),
+    ),
+  ).toBe(false)
+})
 it.each([
   (v: ReturnType<typeof wire>) => ({ ...v, schema_version: 2 }),
   (v: ReturnType<typeof wire>) => ({
@@ -50,6 +67,7 @@ it.each([
   }),
   (v: ReturnType<typeof wire>) => ({ ...v, entry_open: false }),
   (v: ReturnType<typeof wire>) => ({ ...v, fresh_entry: undefined }),
+  (v: ReturnType<typeof wire>) => ({ ...v, admission_source: "bogus" }),
 ])(
   "fails closed on skew, wrong identity, mismatched catalog or invalid admission",
   (change) => {
