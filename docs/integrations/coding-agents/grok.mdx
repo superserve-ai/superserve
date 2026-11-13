@@ -1,0 +1,295 @@
+---
+title: "Grok Build"
+sidebarTitle: Grok Build
+description: Run xAI's Grok Build coding agent in a Superserve sandbox.
+icon: "/logos/integrations/grok.svg"
+---
+
+Grok Build is xAI's terminal coding agent. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+## Via the console
+
+1. On the [Secrets page](https://console.superserve.ai/secrets?utm_source=docs&utm_medium=link), create a secret with the **xAI** provider and paste your API key — you only do this once, and the key never enters the sandbox.
+2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+3. Pick the **`superserve/node-22`** template.
+4. Under **Advanced Options → Secrets**, bind that secret to `XAI_API_KEY`.
+5. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   npm install -g @xai-official/grok && grok
+   ```
+
+## Via the SDK
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({ name: "xai-key", value: "xai-...", provider: "xai" })
+
+const sandbox = await Sandbox.create({
+  name: "grok",
+  fromTemplate: "superserve/node-22",
+  secrets: { XAI_API_KEY: "xai-key" },
+})
+
+await sandbox.commands.run("npm install -g @xai-official/grok", {
+  timeoutMs: 300_000,
+})
+```
+
+```python Python
+import sys
+
+from superserve import Sandbox, Secret
+
+# One-time: store your key as a secret. It never enters the sandbox.
+Secret.create(name="xai-key", value="xai-...", provider="xai")
+
+sandbox = Sandbox.create(
+    name="grok",
+    from_template="superserve/node-22",
+    secrets={"XAI_API_KEY": "xai-key"},
+)
+
+sandbox.commands.run("npm install -g @xai-official/grok", timeout_seconds=300)
+```
+</CodeGroup>
+
+Grok Build reads `XAI_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to the xAI API, never exposed to the agent.
+
+Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `grok`. With `XAI_API_KEY` set, Grok Build signs in with the key and skips the browser login.
+
+## Run headless
+
+Pass a prompt with `-p`. Grok Build runs it in the sandbox, prints its final answer, and exits. Add `--always-approve` so the agent runs shell commands and edits files without stopping to ask for approval.
+
+An agent run can take several minutes. Pass output callbacks to each `run()` that starts the agent: a streamed `run()` gets keepalive messages while the agent works, so the connection stays open. A `run()` without callbacks gets no response until the command ends, and in TypeScript on Node.js it fails after 300 seconds, even with a longer `timeoutMs`. See [Streaming output](/commands/streaming).
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'mkdir -p ~/app && cd ~/app && grok -p "Create primes.js, a Node.js script that prints the first 10 prime numbers" --always-approve',
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+if (result.exitCode !== 0) throw new Error(`Grok Build exited with ${result.exitCode}`)
+```
+
+```python Python
+result = sandbox.commands.run(
+    'mkdir -p ~/app && cd ~/app && grok -p "Create primes.js, a Node.js script that prints the first 10 prime numbers" --always-approve',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+if result.exit_code != 0:
+    raise RuntimeError(f"Grok Build exited with {result.exit_code}")
+```
+</CodeGroup>
+
+A headless run exits only after every command that the agent started in the background has ended. If the agent starts a dev server to test its work and leaves it running, `grok -p` keeps waiting after the agent's turn ends. For a task that can start a server, tell the agent in the prompt to stop the server before it finishes, for example `"... Test it, then stop the server before you finish."`
+
+Grok Build picks a default model unless you pass `-m`, for example `grok -m grok-4.3 -p "..."`. The JSON output below names the model that ran in `modelUsage`.
+
+<Note>
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect. With an API key, Grok Build needs only `api.x.ai` to run, plus `registry.npmjs.org` if you install it after you restrict the network. If you deny all other traffic, also allow the sandbox's DNS resolvers, `1.1.1.1/32` and `8.8.8.8/32`, so these names resolve.
+</Note>
+
+## Get JSON output
+
+Use `--output-format json` to get one JSON object when the run ends. It holds the final answer in `text`, the session ID in `sessionId`, and the token usage and cost. If the run fails, for example because the key is not valid, Grok Build exits with a non-zero code and prints an object with `type: "error"` and a `message`.
+
+These runs pass only a stderr callback, so the JSON on stdout isn't printed while it arrives. The callback still keeps the connection open, and `result.stdout` holds the complete JSON when the run ends.
+
+<CodeGroup>
+```typescript TypeScript
+const jsonResult = await sandbox.commands.run(
+  'cd ~/app && grok -p "Add a --count option to primes.js" --always-approve --output-format json',
+  { timeoutMs: 600_000, onStderr: (data) => process.stderr.write(data) },
+)
+if (jsonResult.exitCode !== 0) throw new Error(jsonResult.stdout || jsonResult.stderr)
+
+const output = JSON.parse(jsonResult.stdout)
+const sessionId: string = output.sessionId
+
+console.log(output.text)
+```
+
+```python Python
+import json
+
+result = sandbox.commands.run(
+    'cd ~/app && grok -p "Add a --count option to primes.js" --always-approve --output-format json',
+    timeout_seconds=600,
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+if result.exit_code != 0:
+    raise RuntimeError(result.stdout or result.stderr)
+
+output = json.loads(result.stdout)
+session_id = output["sessionId"]
+
+print(output["text"])
+```
+</CodeGroup>
+
+Use `--output-format streaming-json` instead to get one JSON event per line while the agent works.
+
+## Get structured output
+
+Pass a JSON Schema to `--json-schema` together with `--output-format json`. The answer that matches the schema is in `structuredOutput`.
+
+<CodeGroup>
+```typescript TypeScript
+const schema = JSON.stringify({
+  type: "object",
+  properties: {
+    files: { type: "array", items: { type: "string" } },
+    command: { type: "string" },
+  },
+  required: ["files", "command"],
+})
+
+const structuredResult = await sandbox.commands.run(
+  `cd ~/app && grok -p "List the files here and the command that runs primes.js" --always-approve --output-format json --json-schema '${schema}'`,
+  { timeoutMs: 600_000, onStderr: (data) => process.stderr.write(data) },
+)
+if (structuredResult.exitCode !== 0) {
+  throw new Error(structuredResult.stdout || structuredResult.stderr)
+}
+
+const { structuredOutput } = JSON.parse(structuredResult.stdout)
+console.log(structuredOutput.files, structuredOutput.command)
+```
+
+```python Python
+import shlex
+
+schema = {
+    "type": "object",
+    "properties": {
+        "files": {"type": "array", "items": {"type": "string"}},
+        "command": {"type": "string"},
+    },
+    "required": ["files", "command"],
+}
+
+result = sandbox.commands.run(
+    'cd ~/app && grok -p "List the files here and the command that runs primes.js" '
+    f"--always-approve --output-format json --json-schema {shlex.quote(json.dumps(schema))}",
+    timeout_seconds=600,
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+if result.exit_code != 0:
+    raise RuntimeError(result.stdout or result.stderr)
+
+structured = json.loads(result.stdout)["structuredOutput"]
+print(structured["files"], structured["command"])
+```
+</CodeGroup>
+
+## Continue a session
+
+Grok Build saves each run as a session in `~/.grok/sessions`. Pass the session ID to `--resume` to send a follow-up with the earlier context, or use `-c` to continue the most recent session in the current directory.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  `cd ~/app && grok --resume ${sessionId} -p "Now add a test for it" --always-approve`,
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    f'cd ~/app && grok --resume {session_id} -p "Now add a test for it" --always-approve',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+```
+</CodeGroup>
+
+## Work on a repository
+
+Clone a repository into the sandbox, stream Grok Build's output while it works, then read the diff.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+)
+
+await sandbox.commands.run(
+  'cd ~/repo && grok -p "Add JSDoc comments to all exported functions" --always-approve',
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+
+const diff = await sandbox.commands.run("cd ~/repo && git diff")
+console.log(diff.stdout)
+```
+
+```python Python
+sandbox.commands.run(
+    "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+)
+
+sandbox.commands.run(
+    'cd ~/repo && grok -p "Add JSDoc comments to all exported functions" --always-approve',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+
+diff = sandbox.commands.run("cd ~/repo && git diff")
+print(diff.stdout)
+```
+</CodeGroup>
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
+
+## Delete when finished
+
+A paused sandbox is kept until you delete it. When you no longer need the sandbox, delete it. This also deletes its files and saved state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).
