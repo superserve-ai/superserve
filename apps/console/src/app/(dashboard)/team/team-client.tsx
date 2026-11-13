@@ -524,7 +524,7 @@ export function TeamClient() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Team" description={teamName} />
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState error={error} onRetry={() => refetch()} />
         {/* Leaving needs no team-management permission. */}
         {!impersonating &&
           error instanceof ApiError &&
