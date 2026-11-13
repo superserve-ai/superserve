@@ -6,7 +6,7 @@ import {
 } from "@/lib/billing/pro-auth-return"
 import { ycReturnPath } from "@/lib/yc/return-path"
 
-import { SIGNUP_OFFER_DESTINATIONS } from "./signup-offer"
+import { parseSignupOffer, SIGNUP_OFFER_DESTINATIONS } from "./signup-offer"
 
 // The next path a sign-up confirmation email carries: only these steps
 // survive into the link, and any other path is dropped (the callback then
@@ -24,15 +24,25 @@ export function signupEmailNextPath(
 }
 
 // Where a tab that follows a confirmation goes when it cannot learn the
-// callback's step. With an offer, the callback may swap the offer's landing
+// callback's step. With an offer, the callback may swap that offer's landing
 // page for another step the team's state decides, so the dashboard entry is
-// the safe step then; any other emailed next stays as it is.
+// the safe step then. A payment step goes through the account's bounded
+// preparation, which sets up a missing first team and keeps the payment page
+// (or takes the account-bound recovery) instead of losing it in the
+// dashboard's generic preparation. Any other emailed next stays as it is.
 export function signupFollowFallbackPath(
   emailedNext: string,
   rawOffer: string | null | undefined,
+  account: string,
 ): string {
-  return rawOffer &&
-    (Object.values(SIGNUP_OFFER_DESTINATIONS) as string[]).includes(emailedNext)
-    ? "/"
+  if (
+    rawOffer &&
+    emailedNext === SIGNUP_OFFER_DESTINATIONS[parseSignupOffer(rawOffer)]
+  )
+    return "/"
+  const paid =
+    proAuthReturnPath(emailedNext) ?? starterAuthReturnPath(emailedNext)
+  return paid
+    ? `/api/onboarding/prepare/?${new URLSearchParams({ account, next: paid })}`
     : emailedNext
 }

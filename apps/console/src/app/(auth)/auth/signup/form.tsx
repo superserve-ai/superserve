@@ -418,7 +418,6 @@ export default function SignUpContent() {
   const confirmedNext = confirmedSignupReturnPath(
     signupEmailNextPath(nextUrl) ?? "/",
   )
-  const fallbackNext = signupFollowFallbackPath(confirmedNext, rawOffer)
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
@@ -446,15 +445,19 @@ export default function SignUpContent() {
         return
       following = true
       setConfirmedElsewhere(true)
-      void destination().then((path) => {
+      void destination(session.user.id).then((path) => {
         if (!disposed) window.location.replace(path)
       })
     }
     // Ask the server, which knows the new team's state, for the step the
-    // callback picks for this next path; a slow or failed answer falls back
-    // to the requested path, or the dashboard entry when there is none or
-    // the callback could replace it.
-    const destination = async () => {
+    // callback picks for this next path; a slow or failed answer takes the
+    // safe fallback for the account that signed in (signupFollowFallbackPath).
+    const destination = async (account: string) => {
+      const fallbackNext = signupFollowFallbackPath(
+        confirmedNext,
+        rawOffer,
+        account,
+      )
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
         const path = await Promise.race([
@@ -493,7 +496,7 @@ export default function SignUpContent() {
       document.removeEventListener("visibilitychange", check)
       window.removeEventListener("focus", check)
     }
-  }, [emailStatus, submittedEmail, confirmedNext, fallbackNext, rawOffer])
+  }, [emailStatus, submittedEmail, confirmedNext, rawOffer])
 
   const resendControls = (
     <>

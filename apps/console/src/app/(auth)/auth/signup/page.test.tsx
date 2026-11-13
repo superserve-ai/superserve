@@ -60,7 +60,7 @@ vi.mock("next/script", () => ({
 }))
 
 const mockSignInWithOAuth = vi.fn()
-type MockSession = { user: { email?: string } } | null
+type MockSession = { user: { id?: string; email?: string } } | null
 const mockGetSession = vi.fn<() => Promise<{ data: { session: MockSession } }>>(
   () => Promise.resolve({ data: { session: null } }),
 )
@@ -1167,7 +1167,7 @@ describe("SignUpPage", () => {
     const confirmInOtherTab = () =>
       act(() => {
         authStateListener?.("SIGNED_IN", {
-          user: { email: "new.user@example.com" },
+          user: { id: "user-1", email: "new.user@example.com" },
         })
       })
 
@@ -1302,9 +1302,12 @@ describe("SignUpPage", () => {
       expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
     })
 
-    it("keeps an explicit upgrade page without an offer when the server fails", async () => {
-      // Without an offer the callback keeps the Pro return path as it is.
-      mockSearchParams = new URLSearchParams({ next: "/billing/pro/" })
+    it("sends a payment page through the account's preparation when the server fails", async () => {
+      // Without an offer the callback keeps the payment page, after setting
+      // up the first team; the preparation route does that setup too.
+      mockSearchParams = new URLSearchParams({
+        next: "/billing-usage/buy-credit/?amount=500",
+      })
       mockConfirmedDestination.mockRejectedValue(new Error("offline"))
       render(<SignUpPage />)
       await signUp()
@@ -1312,7 +1315,35 @@ describe("SignUpPage", () => {
       confirmInOtherTab()
 
       await waitFor(() =>
-        expect(mockReplace).toHaveBeenCalledWith("/billing/pro/"),
+        expect(mockReplace).toHaveBeenCalledWith(
+          `/api/onboarding/prepare/?${new URLSearchParams({
+            account: "user-1",
+            next: "/billing-usage/buy-credit/?amount=500",
+          })}`,
+        ),
+      )
+    })
+
+    it("keeps another offer's upgrade page for that preparation when the server fails", async () => {
+      // /billing/pro/ is not the Free offer's landing page, so the callback
+      // keeps it rather than routing it by the team state.
+      mockSearchParams = new URLSearchParams({
+        offer: "free",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith(
+          `/api/onboarding/prepare/?${new URLSearchParams({
+            account: "user-1",
+            next: "/billing/pro/",
+          })}`,
+        ),
       )
     })
 

@@ -5,6 +5,7 @@ import { cookies } from "next/headers"
 import { signupEntryDestination } from "@/lib/api/signup-checkout"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
+import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 import type { PricingVersion } from "@/lib/billing/plans"
 import { getPublicBillingPlansAction } from "@/lib/billing/plans-actions"
 import {
@@ -15,10 +16,7 @@ import { isSignupCheckoutOffer } from "@/lib/billing/signup-checkout-paths"
 import { createServerClient } from "@/lib/supabase/server"
 import { YC_COOKIE } from "@/lib/yc-claims"
 
-import {
-  signupEmailNextPath,
-  signupFollowFallbackPath,
-} from "./signup-email-next"
+import { signupEmailNextPath } from "./signup-email-next"
 import { isSelfServeSignupOffer, parseSignupOffer } from "./signup-offer"
 import { confirmedSignupReturnPath } from "./signup-return-path"
 import {
@@ -44,9 +42,9 @@ export async function confirmedSignupDestinationAction(
   const {
     data: { user },
   } = await supabase.auth.getUser()
-  // No user here can be a failed lookup with the session intact, so do not
-  // keep an offer's landing page the callback may have replaced.
-  if (!user) return signupFollowFallbackPath(requested, rawOffer)
+  // No user here can be a failed lookup with the session intact. Fail, so the
+  // tab takes its own fallback for the account it saw sign in.
+  if (!user) throw new Error("No signed-in user to follow")
   const ycClaimPending = !!(await cookies()).get(YC_COOKIE)
   const stepFor = (pricing: PricingVersion) => {
     const signupOffer =
@@ -85,6 +83,10 @@ export async function confirmedSignupDestinationAction(
       )
       return null
     } catch (error) {
+      // A restricted sign-up gets the callback's restriction notice, not a
+      // setup retry.
+      if (error instanceof SignupRestrictedError)
+        return "/auth/auth-code-error?reason=signup_blocked"
       return `/auth/auth-code-error?${new URLSearchParams({
         reason:
           error instanceof SignupSetupBlockedError

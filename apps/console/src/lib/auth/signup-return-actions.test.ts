@@ -34,6 +34,7 @@ vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
 }))
 
+import { SignupRestrictedError } from "./signup-restrictions"
 import { confirmedSignupDestinationAction } from "./signup-return-actions"
 
 let plan: { ok: boolean; body: unknown }
@@ -152,11 +153,19 @@ describe("confirmedSignupDestinationAction", () => {
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
-  it("sends a visitor with no session to the dashboard entry", async () => {
+  it("fails without a signed-in user, so the tab takes its own fallback", async () => {
+    // A failed lookup can keep the session, so no step is guessed here.
     getUser.mockResolvedValue({ data: { user: null } })
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
-    ).resolves.toBe("/")
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+    ).rejects.toThrow()
+    getUser.mockResolvedValue({
+      data: { user: null },
+      error: new Error("Service Unavailable"),
+    })
+    await expect(
+      confirmedSignupDestinationAction(undefined, "/yc/claim"),
+    ).rejects.toThrow()
     expect(pricing).not.toHaveBeenCalled()
   })
 
@@ -211,36 +220,6 @@ describe("confirmedSignupDestinationAction", () => {
     )
   })
 
-  it("treats a next path that leaves the site as none", async () => {
-    getUser.mockResolvedValue({ data: { user: null } })
-    await expect(
-      confirmedSignupDestinationAction(undefined, "/\\attacker.example"),
-    ).resolves.toBe("/")
-  })
-
-  it("keeps the requested path for a visitor with no session", async () => {
-    getUser.mockResolvedValue({ data: { user: null } })
-    await expect(
-      confirmedSignupDestinationAction(undefined, "/yc/claim"),
-    ).resolves.toBe("/yc/claim")
-  })
-
-  it("does not keep an offer's landing page when the user lookup fails", async () => {
-    // A failed lookup can keep the session, and the callback may have sent
-    // a trial to the console instead.
-    getUser.mockResolvedValue({
-      data: { user: null },
-      error: new Error("Service Unavailable"),
-    })
-    await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
-    ).resolves.toBe("/")
-    getUser.mockResolvedValue({ data: { user: null } })
-    await expect(
-      confirmedSignupDestinationAction(undefined, "/billing/pro/"),
-    ).resolves.toBe("/billing/pro/")
-  })
-
   it("sets up the first team before a payment step, as the callback does", async () => {
     pricing.mockResolvedValue("legacy")
     await expect(
@@ -278,5 +257,18 @@ describe("confirmedSignupDestinationAction", () => {
       ),
     ).resolves.toMatch(/^\/auth\/auth-code-error\?reason=account_setup&/)
     expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("gives a restricted sign-up the callback's restriction notice", async () => {
+    signupPlan.mockRejectedValue(new SignupRestrictedError())
+    await expect(
+      confirmedSignupDestinationAction(undefined, "/billing/pro/"),
+    ).resolves.toBe("/auth/auth-code-error?reason=signup_blocked")
+  })
+
+  it("treats a next path that leaves the site as none", async () => {
+    await expect(
+      confirmedSignupDestinationAction(undefined, "/\\attacker.example"),
+    ).resolves.toBe("/sandboxes")
   })
 })
