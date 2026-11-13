@@ -38,7 +38,7 @@ function DetailSkeleton() {
     <div className="flex h-full flex-col">
       {/* Breadcrumb */}
       <div className="flex h-10 items-center border-b border-border px-4">
-        <div className="h-3 w-24 animate-pulse bg-muted/20" />
+        <div className="h-3 w-24 bg-muted/20 motion-safe:animate-pulse" />
       </div>
 
       <div className="flex-1 overflow-y-auto">
@@ -46,20 +46,20 @@ function DetailSkeleton() {
         <div className="border-b border-border bg-foreground/[0.02] px-4 py-6">
           <div className="flex items-start justify-between gap-6">
             <div className="flex items-start gap-3">
-              <div className="mt-2 size-2 shrink-0 animate-pulse bg-muted/40" />
+              <div className="mt-2 size-2 shrink-0 bg-muted/40 motion-safe:animate-pulse" />
               <div>
-                <div className="h-6 w-48 animate-pulse bg-muted/30" />
+                <div className="h-6 w-48 bg-muted/30 motion-safe:animate-pulse" />
                 <div className="mt-2 flex items-center gap-2">
-                  <div className="h-3 w-12 animate-pulse bg-muted/20" />
-                  <div className="h-3 w-16 animate-pulse bg-muted/20" />
-                  <div className="h-3 w-24 animate-pulse bg-muted/20" />
+                  <div className="h-3 w-12 bg-muted/20 motion-safe:animate-pulse" />
+                  <div className="h-3 w-16 bg-muted/20 motion-safe:animate-pulse" />
+                  <div className="h-3 w-24 bg-muted/20 motion-safe:animate-pulse" />
                 </div>
               </div>
             </div>
             <div className="flex items-center gap-2">
-              <div className="h-8 w-24 animate-pulse bg-muted/20" />
-              <div className="h-8 w-20 animate-pulse bg-muted/20" />
-              <div className="size-8 animate-pulse bg-muted/20" />
+              <div className="h-8 w-24 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-8 w-20 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="size-8 bg-muted/20 motion-safe:animate-pulse" />
             </div>
           </div>
         </div>
@@ -68,8 +68,8 @@ function DetailSkeleton() {
         <div className="flex h-10 items-center gap-6 border-b border-border px-4">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="flex items-center gap-2">
-              <div className="h-2.5 w-12 animate-pulse bg-muted/20" />
-              <div className="h-3 w-10 animate-pulse bg-muted/20" />
+              <div className="h-2.5 w-12 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-3 w-10 bg-muted/20 motion-safe:animate-pulse" />
             </div>
           ))}
         </div>
@@ -82,11 +82,11 @@ function DetailSkeleton() {
               className={i === 0 ? "border-r border-border" : undefined}
             >
               <div className="flex h-10 items-center border-b border-border px-4">
-                <div className="h-2.5 w-16 animate-pulse bg-muted/20" />
+                <div className="h-2.5 w-16 bg-muted/20 motion-safe:animate-pulse" />
               </div>
               <div className="flex flex-wrap gap-1.5 px-4 py-4">
-                <div className="h-6 w-28 animate-pulse bg-muted/20" />
-                <div className="h-6 w-20 animate-pulse bg-muted/20" />
+                <div className="h-6 w-28 bg-muted/20 motion-safe:animate-pulse" />
+                <div className="h-6 w-20 bg-muted/20 motion-safe:animate-pulse" />
               </div>
             </div>
           ))}
@@ -95,36 +95,36 @@ function DetailSkeleton() {
         {/* Files */}
         <div className="border-b border-border">
           <div className="flex h-10 items-center border-b border-border px-4">
-            <div className="h-2.5 w-12 animate-pulse bg-muted/20" />
+            <div className="h-2.5 w-12 bg-muted/20 motion-safe:animate-pulse" />
           </div>
           <div className="grid grid-cols-2">
             <div className="flex flex-col gap-3 border-r border-border px-4 py-4">
-              <div className="h-3 w-16 animate-pulse bg-muted/20" />
-              <div className="h-40 animate-pulse border border-dashed border-border" />
-              <div className="h-9 animate-pulse bg-muted/20" />
-              <div className="h-8 w-24 animate-pulse bg-muted/20" />
+              <div className="h-3 w-16 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-40 border border-dashed border-border motion-safe:animate-pulse" />
+              <div className="h-9 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-8 w-24 bg-muted/20 motion-safe:animate-pulse" />
             </div>
             <div className="flex flex-col gap-3 px-4 py-4">
-              <div className="h-3 w-20 animate-pulse bg-muted/20" />
-              <div className="h-9 animate-pulse bg-muted/20" />
-              <div className="h-8 w-28 animate-pulse bg-muted/20" />
+              <div className="h-3 w-20 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-9 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-8 w-28 bg-muted/20 motion-safe:animate-pulse" />
             </div>
           </div>
         </div>
 
         {/* Activity */}
         <div className="flex h-10 items-center border-b border-border px-4">
-          <div className="h-2.5 w-16 animate-pulse bg-muted/20" />
+          <div className="h-2.5 w-16 bg-muted/20 motion-safe:animate-pulse" />
         </div>
         {Array.from({ length: 3 }).map((_, i) => (
           <div
             key={`activity-${i}`}
             className="flex items-center gap-6 border-b border-border px-4 py-3"
           >
-            <div className="h-3 w-24 animate-pulse bg-muted/20" />
-            <div className="h-3 w-16 animate-pulse bg-muted/20" />
-            <div className="h-3 w-20 animate-pulse bg-muted/20" />
-            <div className="h-3 w-12 animate-pulse bg-muted/20" />
+            <div className="h-3 w-24 bg-muted/20 motion-safe:animate-pulse" />
+            <div className="h-3 w-16 bg-muted/20 motion-safe:animate-pulse" />
+            <div className="h-3 w-20 bg-muted/20 motion-safe:animate-pulse" />
+            <div className="h-3 w-12 bg-muted/20 motion-safe:animate-pulse" />
           </div>
         ))}
       </div>
