@@ -4,7 +4,11 @@ import userEvent from "@testing-library/user-event"
 import type { ComponentProps } from "react"
 import { beforeEach, expect, it, vi } from "vitest"
 
-import { ConnectSandboxDialog } from "./connect-sandbox-dialog"
+import {
+  ConnectSandboxDialog,
+  getConnectSnippet,
+  LANGUAGES,
+} from "./connect-sandbox-dialog"
 
 const { keyState, mutation, push } = vi.hoisted(() => ({
   keyState: {
@@ -42,10 +46,10 @@ beforeEach(() => {
   mutation.isPending = false
 })
 
-function renderDialog() {
+function renderDialog(sandboxId = "sbx-42") {
   return render(
     <ToastProvider>
-      <ConnectSandboxDialog sandboxId="sbx-42" open onOpenChange={vi.fn()} />
+      <ConnectSandboxDialog sandboxId={sandboxId} open onOpenChange={vi.fn()} />
     </ToastProvider>,
   )
 }
@@ -235,3 +239,50 @@ it("shows the Python connection syntax when switching tabs with a key", async ()
   )
   expect(screen.getByRole("dialog")).not.toHaveTextContent("api_key=")
 })
+
+it.each(LANGUAGES)(
+  "wraps $label code and copies the full snippet with a UUID sandbox ID",
+  async ({ label, value }) => {
+    const user = userEvent.setup()
+    const writeText = vi
+      .spyOn(navigator.clipboard, "writeText")
+      .mockResolvedValue(undefined)
+    const sandboxId = "3f6c2a9e-8b41-4d7a-9c2e-5a1b7d3e9f04"
+    const snippet = getConnectSnippet(value, sandboxId)
+    keyState.data = [{ name: "Existing key" }]
+    renderDialog(sandboxId)
+
+    await user.click(screen.getByRole("button", { name: label }))
+
+    const copyButtons = screen.getAllByRole("button", { name: "Copy" })
+    expect(copyButtons).toHaveLength(2)
+    for (const copyButton of copyButtons) {
+      expect(copyButton).toHaveClass(
+        "focus-visible:outline-none",
+        "focus-visible:ring-2",
+        "focus-visible:ring-border-focus",
+      )
+      expect(copyButton.previousElementSibling).toHaveClass(
+        "min-w-0",
+        "flex-1",
+        "[&_pre]:whitespace-pre-wrap",
+        "[&_pre]:[overflow-wrap:anywhere]",
+      )
+      expect(copyButton.parentElement).toHaveClass("gap-3")
+    }
+
+    const runCopyButton = copyButtons[1]
+    const runBox = runCopyButton.parentElement!
+    expect(runBox).not.toHaveClass("max-h-[180px]")
+    expect(runBox).not.toHaveClass("overflow-y-auto")
+    await waitFor(() => {
+      expect(runBox.querySelector("code")?.textContent).toBe(snippet)
+    })
+    expect(runBox.querySelector("code")).toHaveTextContent(
+      `Sandbox.connect("${sandboxId}")`,
+    )
+
+    await user.click(runCopyButton)
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(snippet)
+  },
+)

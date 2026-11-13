@@ -63,6 +63,9 @@ result = sandbox.commands.run("echo 'Hello from Superserve!'")
 print(result.stdout)`
 }
 
+const CODE_WRAPPER_CLASS_NAME =
+  "min-w-0 flex-1 [&_pre]:whitespace-pre-wrap [&_pre]:[overflow-wrap:anywhere]"
+
 function CopyButton({ text, label }: { text: string; label?: string }) {
   const [copied, setCopied] = useState(false)
 
@@ -77,7 +80,7 @@ function CopyButton({ text, label }: { text: string; label?: string }) {
       type="button"
       onClick={copy}
       aria-label={copied ? "Copied" : (label ?? "Copy")}
-      className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground"
+      className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
     >
       {copied ? (
         <CheckIcon className="size-4 text-success" weight="light" />
@@ -258,8 +261,8 @@ export function ConnectSandboxDialog({
             <span className="block text-sm font-medium text-foreground">
               {installStep}. Install the SDK
             </span>
-            <div className="flex items-start border border-dashed border-border bg-background px-4 py-3">
-              <div className="min-w-0 flex-1">
+            <div className="flex items-start gap-3 border border-dashed border-border bg-background px-4 py-3">
+              <div className={CODE_WRAPPER_CLASS_NAME}>
                 <HighlightedCode
                   code={INSTALL_COMMANDS[language]}
                   lang="bash"
@@ -287,8 +290,8 @@ export function ConnectSandboxDialog({
               </p>
             )}
             {hasKey ? (
-              <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
-                <div className="min-w-0 flex-1">
+              <div className="flex items-start gap-3 border border-dashed border-border bg-background px-4 py-3">
+                <div className={CODE_WRAPPER_CLASS_NAME}>
                   <HighlightedCode
                     code={getConnectSnippet(language, sandboxId)}
                     lang={language}
