@@ -55,6 +55,7 @@ import { sendEmail } from "@/lib/email/send"
 import { ConfirmationEmail } from "@/lib/email/templates/confirmation"
 import { WelcomeEmail } from "@/lib/email/templates/welcome"
 import { signSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
+import { signupCaptureFailure } from "@/lib/fingerprint/capture-failure"
 import type { SignupFingerprintResult } from "@/lib/fingerprint/client"
 import { FINGERPRINT_SIGNUP_COOKIE } from "@/lib/fingerprint/constants"
 import type { BrowserFingerprintDiagnostics } from "@/lib/fingerprint/diagnostics"
@@ -382,13 +383,19 @@ export const beginGoogleSignup = async (
       : null
     if (fingerprintEventId)
       await consumeFingerprintSignupEventId(fingerprintEventId)
+    const routineMissing = !verified && !attestationFailed
+    const captureFailure = routineMissing
+      ? signupCaptureFailure(browserDiagnostics)
+      : undefined
     await issueGoogleSignupProof(signupAttemptId, {
       attemptId: verified ? capture?.attemptId : undefined,
       eventId: fingerprintEventId,
       visitor: visitor ?? undefined,
       // Missing capture is governed by the backend evidence-required policy.
       // Attestation or publication outages remain authority failures.
-      routineMissing: !verified && !attestationFailed,
+      routineMissing,
+      // Only a device script blocked in the browser withholds the trial.
+      ...(captureFailure ? { captureFailure } : {}),
     })
     trackEventAfterResponse(
       AUTH_EVENTS.GOOGLE_SIGNUP_CAPTCHA_VERIFIED,
@@ -715,6 +722,8 @@ export const signUpWithEmail = async (
           deviceVerified ? capture?.attemptId : undefined,
           !deviceVerified && !attestationFailed,
           signupAttemptId,
+          // Only a device script blocked in the browser withholds the trial.
+          signupCaptureFailure(browserDiagnostics),
         )
       } catch {
         // Publication is best effort; an unavailable snapshot must not change

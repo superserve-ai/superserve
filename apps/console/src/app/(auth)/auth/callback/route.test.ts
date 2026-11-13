@@ -2384,6 +2384,7 @@ describe("auth callback", () => {
         "original-attempt",
         false,
         "attempt-1",
+        undefined,
       )
       expect(
         mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
@@ -2425,6 +2426,33 @@ describe("auth callback", () => {
       "original-attempt",
       false,
       "attempt-1",
+      undefined,
+    )
+  })
+
+  it("passes a blocked device script from the Google proof to publication", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockReadGooglePromotionEvidence.mockResolvedValue({
+      originalSignup: true,
+      attemptId: undefined,
+      routineMissing: true,
+      captureFailure: "script_load_fail",
+    })
+    mockPublishOriginalSignupEvidence.mockResolvedValue(undefined)
+
+    await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+      ),
+    )
+
+    expect(mockPublishOriginalSignupEvidence).toHaveBeenCalledWith(
+      currentUser,
+      undefined,
+      true,
+      "attempt-1",
+      "script_load_fail",
     )
   })
 
@@ -2450,6 +2478,7 @@ describe("auth callback", () => {
       undefined,
       true,
       "attempt-1",
+      undefined,
     )
     expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
       "user@example.com",

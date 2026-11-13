@@ -594,6 +594,24 @@ describe("google-signup-proof", () => {
       { reason: "missing_or_invalid_proof", scope: "first_team_provisioning" },
     )
   })
+  it("carries a blocked device script in the signed proof to the callback", async () => {
+    vi.useFakeTimers()
+    const start = Date.now()
+    await issueGoogleSignupProof("blocked", {
+      routineMissing: true,
+      captureFailure: "script_load_fail",
+    })
+    vi.setSystemTime(start + 10_000)
+    const created_at = new Date().toISOString()
+    await markGoogleSignupAttempt("blocked", "new-google")
+    expect(
+      await readGooglePromotionEvidence("blocked", "new-google", created_at),
+    ).toMatchObject({
+      originalSignup: true,
+      routineMissing: true,
+      captureFailure: "script_load_fail",
+    })
+  })
   it("retains original signup evidence across sign-in -> signup recovery without authorizing CAPTCHA", async () => {
     vi.useFakeTimers()
     const start = Date.now()

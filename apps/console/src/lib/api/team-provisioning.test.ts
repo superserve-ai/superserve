@@ -49,6 +49,18 @@ let memberInsertGate: Promise<void> | null = null
 let completionLookupGate: Promise<void> | null = null
 let completionLookups: string[] = []
 const mockTrackEvent = vi.fn()
+let mockRegions = ["use"]
+let freeTeamElsewhere = false
+let mockTrialWithheld: string | undefined
+let mockCompletionReason: string | undefined
+const mockPrepareInputs: Array<Record<string, unknown>> = []
+const afterQueue: Array<() => Promise<void>> = []
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (task: () => Promise<void>) => {
+    afterQueue.push(task)
+  },
+}))
 const mockReadSignupEvidence = vi.fn()
 const mockClearSignupEvidence = vi.fn()
 const mockEvaluateSignupRestriction = vi.fn()
@@ -214,7 +226,9 @@ function recordingClient(
                       : state.joinedAt
                         ? [{ joined_at: state.joinedAt, role: state.role }]
                         : []
-                    : []
+                    : table === "billing_account_free_team" && freeTeamElsewhere
+                      ? [{ team_id: "free-team" }]
+                      : []
           return { data, error: null }
         },
         single: async () => ({ data: { id: "role-owner" }, error: null }),
@@ -252,7 +266,7 @@ vi.mock("@/lib/api/promotion-identity", () => ({
 }))
 vi.mock("@/lib/cells", () => ({
   DEFAULT_REGION: "use",
-  configuredRegions: () => ["use"],
+  configuredRegions: () => mockRegions,
   cellFor: (region: string) => ({
     region,
     createAdminClient: () => clients[region],
@@ -265,6 +279,7 @@ vi.mock("@/lib/posthog/events", () => ({
   AUTH_EVENTS: {
     GOOGLE_SIGNUP_BYPASS_BLOCKED: "auth_google_signup_bypass_blocked",
     GOOGLE_SIGNUP_PROOF_CONSUMED: "auth_google_signup_proof_consumed",
+    SIGNUP_TRIAL_WITHHELD: "auth_signup_trial_withheld",
   },
 }))
 vi.mock("@/lib/supabase/server", () => ({
@@ -341,6 +356,12 @@ describe("provisionTeam", () => {
     completionLookupGate = null
     completionLookups = []
     mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    mockRegions = ["use"]
+    freeTeamElsewhere = false
+    mockTrialWithheld = undefined
+    mockCompletionReason = undefined
+    mockPrepareInputs.length = 0
+    afterQueue.length = 0
     mockReadSignupEvidence.mockReset().mockResolvedValue(null)
     mockClearSignupEvidence.mockReset().mockResolvedValue(undefined)
     mockEvaluateSignupRestriction.mockReset().mockResolvedValue(undefined)
@@ -855,6 +876,122 @@ describe("provisionTeam", () => {
       provisionTeam("usw", "u1", "ignored@example.com", "west pilot"),
     ).resolves.toMatchObject({ id: "team-new" })
     expect(clients.usw.writes.team).toBeUndefined()
+  })
+
+  it("creates the team without the trial and counts it when the signup device script was blocked", async () => {
+    mockTrialWithheld = "device_unverified"
+    await expect(
+      provisionTeam("usw", "u1", "ignored@example.com", "west pilot"),
+    ).resolves.toEqual({ id: "team-new", name: "west pilot", region: "usw" })
+    expect(mockPrepareInputs).toEqual([
+      expect.objectContaining({
+        authorityUnavailable: true,
+        additionalTeam: false,
+      }),
+    ])
+    expect(mockPrepareInputs[0]).not.toHaveProperty("trialWithheld")
+    expect(clients.usw.writes.team_member).toEqual([
+      { team_id: "team-new", profile_id: "u1", role: "owner" },
+    ])
+    // The event is sent after the response, never on the provisioning path.
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      expect.anything(),
+      expect.anything(),
+    )
+    for (const task of afterQueue.splice(0)) await task()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      "u1",
+      {
+        reason: "device_unverified",
+        capture_reason: "script_load_fail",
+        region: "usw",
+        team_id: "team-new",
+        signup_method: "email",
+      },
+    )
+  })
+
+  it("still provisions when the withheld-trial event cannot be delivered", async () => {
+    mockTrialWithheld = "device_unverified"
+    mockTrackEvent.mockReturnValue(new Promise(() => {}))
+    await expect(
+      provisionTeam("usw", "u1", "ignored@example.com", "west pilot"),
+    ).resolves.toMatchObject({ id: "team-new" })
+    mockTrackEvent.mockRejectedValue(new Error("analytics unavailable"))
+    for (const task of afterQueue.splice(0)) await task()
+  })
+
+  it("does not count a withheld trial for a team that could not have one", async () => {
+    mockTrialWithheld = "device_unverified"
+    mockRegions = ["use", "usw"]
+    freeTeamElsewhere = true
+    await provisionTeam("usw", "u1", "ignored@example.com", "west pilot")
+    expect(mockPrepareInputs).toEqual([
+      expect.objectContaining({ additionalTeam: true }),
+    ])
+    for (const task of afterQueue.splice(0)) await task()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  it("does not count a withheld trial for a team that is not the account's first", async () => {
+    // The backend can store authority_unavailable for an additional team that
+    // has no Free-team record, so the console checks the first-team state too.
+    mockTrialWithheld = "device_unverified"
+    directoryState = {
+      memberships: [{ teamId: "old", region: "usw" }],
+      degradedRegions: [],
+    }
+    await provisionTeam("usw", "u1", "ignored@example.com", "west pilot")
+    expect(mockPrepareInputs).toEqual([
+      expect.objectContaining({
+        authorityUnavailable: true,
+        additionalTeam: false,
+      }),
+    ])
+    for (const task of afterQueue.splice(0)) await task()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  it("does not count a withheld trial when the backend refused it for another reason", async () => {
+    // A second team in the same region is only found to be additional by the backend.
+    mockTrialWithheld = "device_unverified"
+    mockCompletionReason = "additional_team"
+    await provisionTeam("usw", "u1", "ignored@example.com", "west pilot")
+    expect(mockPrepareInputs).toEqual([
+      expect.objectContaining({
+        authorityUnavailable: true,
+        additionalTeam: false,
+      }),
+    ])
+    for (const task of afterQueue.splice(0)) await task()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      expect.anything(),
+      expect.anything(),
+    )
+  })
+
+  it("does not count a withheld trial when the device was verified", async () => {
+    await provisionTeam("usw", "u1", "ignored@example.com", "west pilot")
+    expect(mockPrepareInputs).toEqual([
+      expect.objectContaining({ authorityUnavailable: false }),
+    ])
+    for (const task of afterQueue.splice(0)) await task()
+    expect(mockTrackEvent).not.toHaveBeenCalledWith(
+      "auth_signup_trial_withheld",
+      expect.anything(),
+      expect.anything(),
+    )
   })
 
   it("uses the authenticated raw email rather than the caller email", async () => {
@@ -1549,7 +1686,15 @@ vi.mock("@/lib/api/promotion-publication", () => ({
   ) => {
     try {
       await mockPublishPromotionIdentity(region, user.id, user, observedAt)
-      return { authorityUnavailable: false }
+      return mockTrialWithheld
+        ? {
+            authorityUnavailable: false,
+            trialWithheld: {
+              reason: mockTrialWithheld,
+              captureReason: "script_load_fail",
+            },
+          }
+        : { authorityUnavailable: false }
     } catch {
       return { authorityUnavailable: true }
     }
@@ -1569,14 +1714,21 @@ vi.mock("@/lib/api/promotion-device-evidence", () => ({
     state: "completed",
   }),
   recoverPromotionTeam: async () => null,
-  preparePromotionTeam: async (input: object) => ({
-    ...input,
+  preparePromotionTeam: async (input: Record<string, unknown>) => ({
+    ...(mockPrepareInputs.push(input), input),
     teamId: "team-new",
     attemptId: "backend-attempt",
     state: "prepared",
   }),
-  completePromotionTeam: async (input: object) => ({
+  completePromotionTeam: async (input: Record<string, unknown>) => ({
     ...input,
     state: "completed",
+    // The backend checks for an additional team before the no-credit flag.
+    ...(input.additionalTeam
+      ? { outcome: "promotion_ineligible", reason: "additional_team" }
+      : input.authorityUnavailable
+        ? { outcome: "promotion_ineligible", reason: "authority_unavailable" }
+        : { outcome: "granted", reason: "first_identity_claim" }),
+    ...(mockCompletionReason ? { reason: mockCompletionReason } : {}),
   }),
 }))

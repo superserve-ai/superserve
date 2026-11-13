@@ -1,4 +1,5 @@
 import type { User } from "@supabase/supabase-js"
+import { after } from "next/server"
 
 import {
   authorizeEnterpriseProvisioning,
@@ -16,6 +17,7 @@ import {
 import {
   publishAccountPromotion,
   publishEnterpriseAccountPromotion,
+  type AccountPromotionPublication,
 } from "@/lib/api/promotion-publication"
 import {
   listTeamMembershipsForUserDetailed,
@@ -39,6 +41,8 @@ import {
   signupReviewStatus,
 } from "@/lib/auth/signup-review"
 import { cellFor, configuredRegions, DEFAULT_REGION } from "@/lib/cells"
+import { trackEvent } from "@/lib/posthog/actions"
+import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createServerClient } from "@/lib/supabase/server"
 
 const TEAM_OWNER_ROLE = "team_owner"
@@ -346,6 +350,24 @@ export async function provisionHeldApplicantTeam(
   )
 }
 
+/** Telemetry runs after the response and never delays or fails provisioning. */
+function recordTrialWithheld(
+  userId: string,
+  properties: Record<string, string>,
+) {
+  try {
+    after(async () => {
+      try {
+        await trackEvent(AUTH_EVENTS.SIGNUP_TRIAL_WITHHELD, userId, properties)
+      } catch {
+        // Telemetry cannot alter provisioning.
+      }
+    })
+  } catch {
+    // Telemetry cannot alter provisioning.
+  }
+}
+
 async function provisionTeamFor(
   region: string,
   user: User,
@@ -370,6 +392,7 @@ async function provisionTeamFor(
   if (!operationId && region !== DEFAULT_REGION)
     throw new Error("Team creation requires its original operation identifier")
   const locator = { userId, region, operationId: operationId ?? userId }
+  let trialWithheld: AccountPromotionPublication["trialWithheld"]
   let prepared = enterpriseAuthority
     ? await recoverPromotionTeamForEnterprise(locator, enterpriseAuthority)
     : await recoverPromotionTeam(locator)
@@ -384,10 +407,14 @@ async function provisionTeamFor(
           enterpriseAuthority,
         )
       : await publishAccountPromotion(region, user, observedAt)
+    trialWithheld = publication.trialWithheld
     const preparation = {
       ...locator,
       name,
-      ...publication,
+      // A blocked sign-up device script stores the same no-credit decision as
+      // a failed publication: the team is created, and the trial is withheld.
+      authorityUnavailable:
+        publication.authorityUnavailable || trialWithheld !== undefined,
       additionalTeam:
         !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
     }
@@ -414,6 +441,21 @@ async function provisionTeamFor(
     : await completePromotionTeam(prepared)
   if (completed.state === "deleted")
     throw new Error("This team creation has already been deleted")
+  // Count only a first team whose trial this request withheld and the backend
+  // then refused for that reason. A team that could not take the trial anyway
+  // (an additional team, or pricing without a trial) is not counted.
+  if (
+    trialWithheld &&
+    firstTeam &&
+    completed.reason === "authority_unavailable"
+  )
+    recordTrialWithheld(userId, {
+      reason: trialWithheld.reason,
+      capture_reason: trialWithheld.captureReason,
+      region,
+      team_id: completed.teamId,
+      signup_method: isGoogleUser(user) ? "google" : "email",
+    })
   const team = { id: completed.teamId, name: completed.name }
 
   try {
