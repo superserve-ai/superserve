@@ -117,25 +117,35 @@ function turnstileTokenWithinBudget(
 
 /**
  * The capture, or `{ unavailable: true }` once its budget runs out. The
- * capture itself keeps running: it is the shared capture of the page.
+ * capture itself keeps running: it is the shared capture of the page, and
+ * `latest` gives its result if it finishes before the server call is sent.
  */
-function captureWithinBudget(): Promise<SignupFingerprintResult | undefined> {
-  return new Promise((resolve, reject) => {
-    const timer = setTimeout(
-      () => resolve({ unavailable: true }),
-      FINGERPRINT_CAPTURE_BUDGET_MS,
-    )
-    ensureFingerprintSignupCapture().then(
-      (capture) => {
-        clearTimeout(timer)
-        resolve(capture)
-      },
-      (error: unknown) => {
-        clearTimeout(timer)
-        reject(error)
-      },
-    )
-  })
+function captureWithinBudget(): {
+  result: Promise<SignupFingerprintResult | undefined>
+  latest: () => SignupFingerprintResult | undefined
+} {
+  let finished: SignupFingerprintResult | undefined
+  const capture = ensureFingerprintSignupCapture()
+  const result = new Promise<SignupFingerprintResult | undefined>(
+    (resolve, reject) => {
+      const timer = setTimeout(
+        () => resolve({ unavailable: true }),
+        FINGERPRINT_CAPTURE_BUDGET_MS,
+      )
+      capture.then(
+        (value) => {
+          clearTimeout(timer)
+          finished = value
+          resolve(value)
+        },
+        (error: unknown) => {
+          clearTimeout(timer)
+          reject(error)
+        },
+      )
+    },
+  )
+  return { result, latest: () => finished }
 }
 
 async function runCheck(
@@ -147,17 +157,20 @@ async function runCheck(
   const capture = captureWithinBudget()
   const recaptcha = getRecaptchaToken("signup_google")
   const turnstile = turnstileTokenWithinBudget(cancelled)
-  const [captureResult, recaptchaToken] = await Promise.all([
-    capture,
+  const [budgetedCapture, recaptchaToken] = await Promise.all([
+    capture.result,
     recaptcha,
   ])
   if (!isCurrent()) return undefined
   if (RECAPTCHA_SITE_KEY && !recaptchaToken) return undefined
-  const diagnostics = getFingerprintSignupDiagnostics()
   const turnstileToken = await turnstile
   // The last point where the check can be stopped: the server call below
   // replaces the evidence cookie and issues the proof cookie.
   if (!isCurrent()) return undefined
+  // A capture that finished after its budget, while reCAPTCHA or Turnstile
+  // was still running, is still the better evidence.
+  const captureResult = capture.latest() ?? budgetedCapture
+  const diagnostics = getFingerprintSignupDiagnostics()
   onSend()
   const proof = await beginGoogleSignup(
     recaptchaToken,

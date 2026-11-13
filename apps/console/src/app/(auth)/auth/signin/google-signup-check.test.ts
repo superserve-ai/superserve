@@ -328,6 +328,22 @@ describe("googleSignupAttemptForSignIn", () => {
       expect(mocks.beginGoogleSignup).toHaveBeenCalledTimes(1)
     })
 
+    it("sends a capture that finished after its budget but before the server call", async () => {
+      vi.useFakeTimers()
+      const slowCapture = stall(capture)
+      const slowToken = stall("token")
+      mocks.ensureCapture.mockReturnValue(slowCapture.promise)
+      mocks.getRecaptchaToken.mockReturnValue(slowToken.promise)
+      const result = googleSignupAttemptForSignIn()
+      await vi.advanceTimersByTimeAsync(3_200)
+      slowCapture.finish()
+      await vi.advanceTimersByTimeAsync(300)
+      expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
+      slowToken.finish()
+      await expect(result).resolves.toBe("attempt-1")
+      expect(mocks.beginGoogleSignup.mock.calls[0][2]).toEqual(capture)
+    })
+
     it("uses a proof that answers after the browser deadline but inside the proof deadline", async () => {
       // The production case: a slow capture and server call put the answer
       // just past four seconds, and the page went to Google without it.
