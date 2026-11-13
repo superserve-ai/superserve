@@ -54,19 +54,24 @@ export async function settleTeamSelection(
         memberships,
         await readTeamCreationDates(memberships),
       )
-      for (const team of ordered.slice(0, 5)) {
-        try {
-          const context = await readSignupPlan(user.id, team)
-          if (
-            !needsPlanSelection(context) &&
-            awaitingPlanRedirect(context) === null
-          ) {
-            chosen = team
-            break
-          }
-        } catch {
-          // Try the next team when its plan cannot be read.
-        }
+      for (let start = 0; start < ordered.length; start += 5) {
+        const batch = ordered.slice(start, start + 5)
+        const able = await Promise.all(
+          batch.map(async (team) => {
+            try {
+              const context = await readSignupPlan(user.id, team)
+              return (
+                !needsPlanSelection(context) &&
+                awaitingPlanRedirect(context) === null
+              )
+            } catch {
+              // Skip teams whose plans cannot be read.
+              return false
+            }
+          }),
+        )
+        chosen = batch.find((_, index) => able[index])
+        if (chosen) break
       }
       chosen ??= ordered[0]
     }

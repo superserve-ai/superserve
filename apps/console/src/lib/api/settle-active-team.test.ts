@@ -94,15 +94,56 @@ it("uses the oldest when all plans are gated or throw", async () => {
   expect(await settleTeamSelection(user())).toEqual(older)
   expect(mocks.plan).toHaveBeenCalledTimes(2)
 })
-it("checks at most five plans", async () => {
-  const memberships = Array.from({ length: 7 }, (_, i) => ({
+function setMemberships(count: number) {
+  const memberships = Array.from({ length: count }, (_, i) => ({
     region: "use",
     teamId: String(i),
   }))
   mocks.directory.mockResolvedValue({ memberships, degradedRegions: [] })
-  mocks.plan.mockResolvedValue({ state: "selecting" })
-  await settleTeamSelection(user())
-  expect(mocks.plan).toHaveBeenCalledTimes(5)
+  mocks.dates.mockResolvedValue(
+    new Map(
+      memberships.map((team, i) => [`use:${team.teamId}`, `2020-01-0${i + 1}`]),
+    ),
+  )
+  return memberships
+}
+
+it("finds an able sixth team after five gated teams", async () => {
+  const memberships = setMemberships(6)
+  mocks.plan.mockImplementation(async (_id, team) => ({
+    state: team === memberships[5] ? "legacy" : "selecting",
+  }))
+  expect(await settleTeamSelection(user())).toEqual(memberships[5])
+  expect(mocks.write).toHaveBeenCalledWith(memberships[5])
+  expect(mocks.plan).toHaveBeenCalledTimes(6)
+})
+it("chooses the oldest able team even when a younger read resolves first", async () => {
+  let resolveOlder!: (value: { state: string }) => void
+  const olderPlan = new Promise<{ state: string }>((resolve) => {
+    resolveOlder = resolve
+  })
+  let resolveYounger!: (value: { state: string }) => void
+  const youngerPlan = new Promise<{ state: string }>((resolve) => {
+    resolveYounger = resolve
+  })
+  mocks.plan.mockImplementation((_id, team) =>
+    team === older ? olderPlan : youngerPlan,
+  )
+  const selection = settleTeamSelection(user())
+  await vi.waitFor(() => expect(mocks.plan).toHaveBeenCalledTimes(2))
+  resolveYounger({ state: "legacy" })
+  await youngerPlan
+  resolveOlder({ state: "legacy" })
+  expect(await selection).toEqual(older)
+  expect(mocks.write).toHaveBeenCalledWith(older)
+  expect(mocks.plan).toHaveBeenCalledTimes(2)
+})
+it("does not read later batches after finding an able team", async () => {
+  const memberships = setMemberships(7)
+  expect(await settleTeamSelection(user())).toEqual(memberships[0])
+  expect(mocks.plan.mock.calls.map((call) => call[1])).toEqual(
+    memberships.slice(0, 5),
+  )
 })
 it("does not choose on a degraded directory", async () => {
   mocks.directory.mockResolvedValue({

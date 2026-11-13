@@ -1,30 +1,41 @@
-import {
-  proAuthReturnPath,
-  starterAuthReturnPath,
-} from "@/lib/billing/pro-auth-return"
-import {
-  isPlanPickerPath,
-  isSignupCheckoutPath,
-  isSignupCheckoutReturnPath,
-} from "@/lib/billing/signup-checkout-paths"
+const PLAIN_DASHBOARD_SECTIONS = [
+  "/sandboxes",
+  "/templates",
+  "/secrets",
+  "/snapshots",
+  "/audit-logs",
+  "/api-keys",
+  "/settings",
+  "/team",
+  "/get-started",
+  "/billing-usage",
+]
 
-// A dashboard page that no flow pins to one team, so sign-in may choose the
-// team it opens.
+// These dashboard pages let sign-in choose the team they open.
 export function isPlainDashboardPath(path: string): boolean {
   if (
     !path.startsWith("/") ||
     path.startsWith("//") ||
-    /[\\\u0000-\u0020\u007f]/.test(path)
+    /[\\\u0000-\u0020\u007f]/.test(path) ||
+    path.split(/[?#]/, 1)[0].includes("%")
   )
     return false
-  const pathname = new URL(path, "https://example.com").pathname
-  if (/^\/(auth|onboarding|api|invite|yc|device|admin)(\/|$)/.test(pathname))
+
+  const url = new URL(path, "https://example.com")
+  if (url.searchParams.has("team") || url.searchParams.has("account"))
     return false
+
+  const pathname = url.pathname.replace(/\/+$/, "") || "/"
+  if (
+    pathname === "/billing-usage/buy-credit" ||
+    pathname.startsWith("/billing-usage/buy-credit/")
+  )
+    return false
+
   return (
-    !isSignupCheckoutPath(path) &&
-    !isSignupCheckoutReturnPath(path) &&
-    !isPlanPickerPath(path) &&
-    proAuthReturnPath(path) === null &&
-    starterAuthReturnPath(path) === null
+    pathname === "/" ||
+    PLAIN_DASHBOARD_SECTIONS.some(
+      (section) => pathname === section || pathname.startsWith(`${section}/`),
+    )
   )
 }
