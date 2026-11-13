@@ -7,7 +7,10 @@ import { useRouter, useSearchParams } from "next/navigation"
 import posthog from "posthog-js"
 import { Suspense, useEffect, useRef, useState } from "react"
 
-import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
+import {
+  OtherTeams,
+  PlanPickerOptions,
+} from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { getTrialOutcomeAction } from "@/lib/billing/plan-offers-actions"
 import {
@@ -181,30 +184,33 @@ function ChoosePlanContent() {
             </p>
           )}
           {reason === "checkout_elsewhere" ? (
-            locator ? (
-              <Button
-                render={
-                  <Link
-                    href={signupCheckoutReturnPath(
-                      locator.account,
-                      locator.team,
-                    )}
-                  />
-                }
-                size="sm"
-                className="mt-5"
-              >
-                Check again
-              </Button>
-            ) : (
-              <Button
-                render={<Link href="/sandboxes" />}
-                size="sm"
-                className="mt-5"
-              >
-                Back to console
-              </Button>
-            )
+            <>
+              {locator ? (
+                <Button
+                  render={
+                    <Link
+                      href={signupCheckoutReturnPath(
+                        locator.account,
+                        locator.team,
+                      )}
+                    />
+                  }
+                  size="sm"
+                  className="mt-5"
+                >
+                  Check again
+                </Button>
+              ) : (
+                <Button
+                  render={<Link href="/sandboxes" />}
+                  size="sm"
+                  className="mt-5"
+                >
+                  Back to console
+                </Button>
+              )}
+              <OtherTeams className="mt-5" />
+            </>
           ) : !locator ? (
             <Button
               render={<Link href="/sandboxes" />}

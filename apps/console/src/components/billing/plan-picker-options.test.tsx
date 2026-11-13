@@ -15,11 +15,16 @@ const mocks = vi.hoisted(() => ({
   canManage: null as boolean | null,
   signOut: vi.fn(),
   teams: [] as TeamSummary[],
+  activeTeamId: null as string | null,
   switchTeam: vi.fn(async (_teamId: string, _region: string) => {}),
 }))
 vi.mock("@/hooks/use-sign-out", () => ({ useSignOut: () => mocks.signOut }))
 vi.mock("@/lib/api/teams-actions", () => ({
-  listTeamsAction: async () => ({ teams: mocks.teams }),
+  listTeamsAction: async () => ({
+    teams: mocks.teams,
+    activeTeamId: mocks.activeTeamId,
+    activeRegion: "use",
+  }),
   setActiveTeamAction: mocks.switchTeam,
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
@@ -85,6 +90,7 @@ afterEach(() => {
   cleanup()
   mocks.cards = []
   mocks.canManage = null
+  mocks.activeTeamId = null
   mocks.teams = []
   mocks.switchTeam.mockClear()
   vi.unstubAllGlobals()
@@ -230,6 +236,83 @@ describe("PlanPickerOptions", () => {
       await screen.findByRole("button", { name: "Developer" }),
     ).toBeTruthy()
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
+  })
+
+  it("lets a billing administrator with plans open another of their teams", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.cards = [card("developer")]
+    mocks.canManage = true
+    mocks.teams = [
+      { id: "team-1", name: "Team B", region: "use" },
+      { id: "team-2", name: "Team A", region: "use" },
+    ]
+    const user = userEvent.setup()
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("form", { name: "Builder plan" }),
+    ).toBeTruthy()
+    expect(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    ).toHaveTextContent("Team A")
+    await user.click(screen.getByRole("button", { name: "Open team" }))
+    expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
+    expect(mocks.switchTeam).toHaveBeenCalledWith("team-2", "use")
+    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+    expect(mocks.switchTeam.mock.invocationCallOrder[0]).toBeLessThan(
+      assign.mock.invocationCallOrder[0]!,
+    )
+  })
+
+  it("hides the locator team even when a different team is active", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.activeTeamId = "team-2"
+    mocks.teams = [
+      { id: "team-1", name: "Locator team", region: "use" },
+      { id: "team-2", name: "Active team", region: "use" },
+    ]
+    const user = userEvent.setup()
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    await user.click(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    )
+    expect(
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Active team"])
+  })
+
+  it("shows other teams to a billing administrator when offers can't be read", async () => {
+    mocks.offers = null
+    mocks.canManage = true
+    mocks.teams = [
+      { id: "team-1", name: "Team B", region: "use" },
+      { id: "team-2", name: "Team A", region: "use" },
+    ]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("button", { name: "Developer" }),
+    ).toBeTruthy()
+    expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
+    expect(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    ).toHaveTextContent("Team A")
+    expect(screen.getByRole("button", { name: "Open team" })).toBeTruthy()
+  })
+
+  it("offers no other team to a billing administrator with plans and no other team", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.cards = [card("developer")]
+    mocks.canManage = true
+    mocks.teams = [{ id: "team-1", name: "Team B", region: "use" }]
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    expect(
+      await screen.findByRole("form", { name: "Builder plan" }),
+    ).toBeTruthy()
+    await act(async () => {})
+    expect(screen.queryByRole("combobox", { name: "Team to open" })).toBeNull()
   })
 
   it("sends only the first plan choice while Checkout opens", async () => {
