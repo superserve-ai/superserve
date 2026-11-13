@@ -114,6 +114,16 @@ export function PlanSelectionLoader({
             {recoveryError}
           </p>
         )}
+        <p className="mt-6 text-xs text-muted">
+          Still stuck? Contact{" "}
+          <a
+            href="mailto:support@superserve.ai"
+            className="text-foreground underline underline-offset-4 hover:text-primary"
+          >
+            support@superserve.ai
+          </a>
+          .
+        </p>
       </main>
     )
   if (!initial) return null
