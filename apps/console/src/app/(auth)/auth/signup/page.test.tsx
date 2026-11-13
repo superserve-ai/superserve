@@ -1266,6 +1266,56 @@ describe("SignUpPage", () => {
       expect(mockReplace).toHaveBeenCalledWith("/yc/claim")
     })
 
+    it("takes the dashboard entry for an offer landing when the server is slow", async () => {
+      // The callback may send a new Pro trial to the console instead of the
+      // upgrade page, so this tab must not guess the upgrade page.
+      vi.useFakeTimers({ shouldAdvanceTime: true })
+      mockSearchParams = new URLSearchParams({
+        offer: "pro_monthly",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockReturnValue(new Promise(() => {}))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(5_000)
+      })
+
+      expect(mockReplace).toHaveBeenCalledWith("/")
+      expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
+    })
+
+    it("takes the dashboard entry for an offer landing when the server fails", async () => {
+      mockSearchParams = new URLSearchParams({
+        offer: "pro_monthly",
+        next: "/billing/pro/",
+      })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+      expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
+    })
+
+    it("keeps an explicit upgrade page without an offer when the server fails", async () => {
+      // Without an offer the callback keeps the Pro return path as it is.
+      mockSearchParams = new URLSearchParams({ next: "/billing/pro/" })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledWith("/billing/pro/"),
+      )
+    })
+
     it("checks again when the user comes back to this tab", async () => {
       render(<SignUpPage />)
       await signUp()

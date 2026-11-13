@@ -16,7 +16,10 @@ import { GoogleIcon, Spinner } from "@/components/icons"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { signupEmailNextPath } from "@/lib/auth/signup-email-next"
-import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import {
+  SIGNUP_OFFER_DESTINATIONS,
+  SIGNUP_OFFER_PARAM,
+} from "@/lib/auth/signup-offer"
 import { confirmedSignupDestinationAction } from "@/lib/auth/signup-return-actions"
 import { confirmedSignupReturnPath } from "@/lib/auth/signup-return-path"
 import {
@@ -415,6 +418,16 @@ export default function SignUpContent() {
   const confirmedNext = confirmedSignupReturnPath(
     signupEmailNextPath(nextUrl) ?? "/",
   )
+  // With an offer, the callback may swap its landing page for another step
+  // the team's state decides, so without the server's answer the dashboard
+  // entry is the safe step.
+  const fallbackNext =
+    rawOffer &&
+    (Object.values(SIGNUP_OFFER_DESTINATIONS) as string[]).includes(
+      confirmedNext,
+    )
+      ? "/"
+      : confirmedNext
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next
@@ -446,7 +459,8 @@ export default function SignUpContent() {
     }
     // Ask the server, which knows the new team's state, for the step the
     // callback picks for this next path; a slow or failed answer falls back
-    // to the requested path (the dashboard entry when there is none).
+    // to the requested path, or the dashboard entry when there is none or
+    // the callback could replace it.
     const destination = async () => {
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
@@ -454,14 +468,14 @@ export default function SignUpContent() {
           confirmedSignupDestinationAction(rawOffer, confirmedNext),
           new Promise<string>((resolve) => {
             timer = setTimeout(
-              () => resolve(confirmedNext),
+              () => resolve(fallbackNext),
               CONFIRMED_DESTINATION_TIMEOUT_MS,
             )
           }),
         ])
         return confirmedSignupReturnPath(path)
       } catch {
-        return confirmedNext
+        return fallbackNext
       } finally {
         clearTimeout(timer)
       }
@@ -486,7 +500,7 @@ export default function SignUpContent() {
       document.removeEventListener("visibilitychange", check)
       window.removeEventListener("focus", check)
     }
-  }, [emailStatus, submittedEmail, confirmedNext, rawOffer])
+  }, [emailStatus, submittedEmail, confirmedNext, fallbackNext, rawOffer])
 
   const resendControls = (
     <>
