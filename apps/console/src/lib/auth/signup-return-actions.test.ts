@@ -17,6 +17,10 @@ vi.mock("@/lib/billing/plans-actions", () => ({
     pricing_version: await pricing(),
   }),
 }))
+const signupPlan = vi.hoisted(() => vi.fn())
+vi.mock("@/lib/api/signup-plan-actions", () => ({
+  getSignupPlanAction: (...args: unknown[]) => signupPlan(...args),
+}))
 // The real signupEntryDestination runs, so the backend answer decides the
 // step just as it does for the confirmation link.
 vi.mock("@/lib/api/proxy-auth", () => ({
@@ -44,6 +48,8 @@ beforeEach(() => {
   cookieJar.clear()
   pricing.mockReset()
   pricing.mockResolvedValue("v2")
+  signupPlan.mockReset()
+  signupPlan.mockResolvedValue({})
   plan = { ok: true, body: { entry_state: "trial" } }
   fetchMock.mockClear()
   vi.stubGlobal("fetch", fetchMock)
@@ -233,5 +239,44 @@ describe("confirmedSignupDestinationAction", () => {
     await expect(
       confirmedSignupDestinationAction(undefined, "/billing/pro/"),
     ).resolves.toBe("/billing/pro/")
+  })
+
+  it("sets up the first team before a payment step, as the callback does", async () => {
+    pricing.mockResolvedValue("legacy")
+    await expect(
+      confirmedSignupDestinationAction("pro_monthly", "/"),
+    ).resolves.toBe("/billing/pro/")
+    expect(signupPlan).toHaveBeenCalledWith(
+      undefined,
+      "u1",
+      undefined,
+      "/billing/pro/",
+    )
+  })
+
+  it("takes the callback's recovery when first-team setup fails", async () => {
+    // The session survives a failed setup, and the payment page alone would
+    // lose its continuation in the dashboard's generic preparation.
+    signupPlan.mockRejectedValue(new Error("directory unavailable"))
+    await expect(
+      confirmedSignupDestinationAction(
+        undefined,
+        "/billing-usage/buy-credit/?amount=500",
+      ),
+    ).resolves.toBe(
+      `/auth/auth-code-error?${new URLSearchParams({
+        reason: "account_setup",
+        account: "u1",
+        next: "/billing-usage/buy-credit/?amount=500",
+      })}`,
+    )
+    pricing.mockRejectedValue(new Error("Plans are unavailable"))
+    await expect(
+      confirmedSignupDestinationAction(
+        undefined,
+        "/billing-usage/buy-credit/?amount=500",
+      ),
+    ).resolves.toMatch(/^\/auth\/auth-code-error\?reason=account_setup&/)
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 })

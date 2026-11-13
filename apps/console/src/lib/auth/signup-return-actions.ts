@@ -3,8 +3,14 @@
 import { cookies } from "next/headers"
 
 import { signupEntryDestination } from "@/lib/api/signup-checkout"
+import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
+import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 import type { PricingVersion } from "@/lib/billing/plans"
 import { getPublicBillingPlansAction } from "@/lib/billing/plans-actions"
+import {
+  proAuthReturnPath,
+  starterAuthReturnPath,
+} from "@/lib/billing/pro-auth-return"
 import { isSignupCheckoutOffer } from "@/lib/billing/signup-checkout-paths"
 import { createServerClient } from "@/lib/supabase/server"
 import { YC_COOKIE } from "@/lib/yc-claims"
@@ -63,19 +69,51 @@ export async function confirmedSignupDestinationAction(
     (plans) => plans.pricing_version,
     () => null,
   )
+  // As the callback does, a payment step needs the first team set up first;
+  // otherwise the dashboard's generic preparation drops the payment page.
+  // When that setup fails, take the callback's account-bound recovery.
+  const paidSetupRecovery = async (step: string) => {
+    if (!proAuthReturnPath(step) && !starterAuthReturnPath(step)) return null
+    try {
+      await getSignupPlanAction(
+        new URL(step, "https://console.superserve.ai").searchParams.get(
+          "team",
+        ) ?? undefined,
+        user.id,
+        undefined,
+        step,
+      )
+      return null
+    } catch (error) {
+      return `/auth/auth-code-error?${new URLSearchParams({
+        reason:
+          error instanceof SignupSetupBlockedError
+            ? error.reason
+            : "account_setup",
+        account: user.id,
+        next: step,
+      })}`
+    }
+  }
   if (!pricing) {
     const legacy = stepFor("legacy")
     const v2 = stepFor("v2")
-    return v2.signupOffer !== "enterprise" &&
-      legacy.step === v2.step &&
-      !signupStepUsesEntryState(v2.step, v2.signupOffer)
-      ? confirmedSignupReturnPath(v2.step)
-      : "/"
+    if (
+      v2.signupOffer === "enterprise" ||
+      legacy.step !== v2.step ||
+      signupStepUsesEntryState(v2.step, v2.signupOffer)
+    )
+      return "/"
+    return confirmedSignupReturnPath(
+      (await paidSetupRecovery(v2.step)) ?? v2.step,
+    )
   }
   const { signupOffer, step } = stepFor(pricing)
   // The callback alone puts a new Enterprise account on hold. This tab only
   // follows it, and the dashboard routes whatever state that left.
   if (signupOffer === "enterprise") return "/"
+  const recovery = await paidSetupRecovery(step)
+  if (recovery) return confirmedSignupReturnPath(recovery)
   if (pricing !== "v2" || !signupStepUsesEntryState(step, signupOffer))
     return confirmedSignupReturnPath(step)
   const checkoutOffer = isSignupCheckoutOffer(signupOffer)
