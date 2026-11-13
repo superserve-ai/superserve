@@ -11,7 +11,7 @@ import { spawnCommand } from "./commandSession.js"
  */
 import { dataPlaneTarget } from "./config.js"
 import { SandboxError, ValidationError } from "./errors.js"
-import { request, streamSSE } from "./http.js"
+import { composeSignals, request, streamSSE } from "./http.js"
 import { routingHintHeaders } from "./routingHint.js"
 import { withTokenRetry } from "./tokenRetry.js"
 import type {
@@ -73,6 +73,24 @@ function commandTimeoutSeconds(timeoutMs: number | undefined) {
   return Math.ceil(timeoutMs / 1000)
 }
 
+/**
+ * Longest `timeout_s` a `run()` without callbacks sends to `/exec`. That
+ * endpoint sends no response headers until the command ends, and Node's
+ * built-in `fetch` (undici) fails any response whose headers take longer than
+ * 300 s (`UND_ERR_HEADERS_TIMEOUT`), whatever `timeoutMs` is. A longer run goes
+ * through `/exec/stream` instead: the sandbox sends keepalive comments on it
+ * while the command runs, so the connection stays open, and the SDK collects
+ * the output into the same result.
+ */
+export const MAX_SYNC_EXEC_TIMEOUT_S = 240
+
+/**
+ * Bytes of combined stdout/stderr a long `run()` without callbacks keeps, the
+ * same cap the sandbox applies to `/exec` output. The rest is dropped and
+ * `truncated` is set, as for `/exec`.
+ */
+export const SYNC_EXEC_OUTPUT_CAP_BYTES = 8 * 1024 * 1024
+
 function clientDeadlineMs(timeoutS: number | undefined) {
   return timeoutS === undefined
     ? undefined
@@ -97,6 +115,11 @@ export class Commands {
    * streamed via SSE. Otherwise, it runs synchronously (waits for completion).
    *
    * Paused sandboxes are transparently resumed before execution.
+   *
+   * Without callbacks and with a `timeoutMs` over 240 s, the command runs
+   * over the streaming endpoint and the output is collected, because the
+   * synchronous endpoint sends no response until the command ends and Node's
+   * `fetch` gives up on a response after 300 s.
    *
    * @example
    * ```typescript
@@ -129,6 +152,14 @@ export class Commands {
 
     if (isStreaming) {
       return this._runStreaming(body, timeoutS, options)
+    }
+    if (timeoutS !== undefined && timeoutS > MAX_SYNC_EXEC_TIMEOUT_S) {
+      const limit = options.maxOutputBytes ?? MAX_EXEC_RESPONSE_BYTES
+      return this._runStreaming(body, timeoutS, options, {
+        capBytes: Math.min(SYNC_EXEC_OUTPUT_CAP_BYTES, limit),
+        // A caller-set cap below the sandbox's own cap throws, as on `/exec`.
+        throwOverCap: limit < SYNC_EXEC_OUTPUT_CAP_BYTES,
+      })
     }
     return this._runSync(body, timeoutS, options)
   }
@@ -196,6 +227,7 @@ export class Commands {
     body: Record<string, unknown>,
     timeoutS: number | undefined,
     options: CommandOptions,
+    collect?: OutputCap,
   ): Promise<CommandResult> {
     const send = async (token: string) =>
       this._consumeStream(
@@ -208,6 +240,7 @@ export class Commands {
         body,
         timeoutS,
         options,
+        collect,
       )
     // Safe for streaming: the resumable status (401/503) is returned before any
     // SSE data is written, so a retry can't double-emit callbacks.
@@ -220,6 +253,7 @@ export class Commands {
     body: Record<string, unknown>,
     timeoutS: number | undefined,
     options: CommandOptions,
+    collect?: OutputCap,
   ): Promise<CommandResult> {
     let stdout = ""
     let stderr = ""
@@ -227,28 +261,73 @@ export class Commands {
     let error: string | undefined
     let sawFinished = false
 
-    await streamSSE({
-      url,
-      headers,
-      body,
-      timeoutMs: clientDeadlineMs(timeoutS),
-      signal: options.signal,
-      onEvent: (event: ApiExecStreamEvent) => {
-        if (event.stdout) {
-          stdout += event.stdout
-          options.onStdout?.(event.stdout)
-        }
-        if (event.stderr) {
-          stderr += event.stderr
-          options.onStderr?.(event.stderr)
-        }
-        if (event.finished) {
-          sawFinished = true
-          exitCode = event.exit_code ?? 0
-          error = event.error
-        }
-      },
-    })
+    // Only a long run without callbacks (see MAX_SYNC_EXEC_TIMEOUT_S) caps
+    // what it keeps; a caller with callbacks gets every chunk, as before.
+    const encoder = new TextEncoder()
+    let kept = 0
+    let truncated = false
+    let overCap = false
+    const stop = collect ? new AbortController() : undefined
+    const keep = (chunk: string): string => {
+      if (!collect) return chunk
+      if (truncated) return ""
+      const bytes = encoder.encode(chunk)
+      if (kept + bytes.byteLength <= collect.capBytes) {
+        kept += bytes.byteLength
+        return chunk
+      }
+      if (collect.throwOverCap) {
+        overCap = true
+        stop?.abort()
+        return ""
+      }
+      truncated = true
+      // stream: true holds back a split multi-byte character.
+      const part = new TextDecoder().decode(
+        bytes.subarray(0, collect.capBytes - kept),
+        { stream: true },
+      )
+      kept = collect.capBytes
+      return part
+    }
+
+    const composed = stop
+      ? composeSignals(stop.signal, options.signal)
+      : undefined
+    try {
+      await streamSSE({
+        url,
+        headers,
+        body,
+        timeoutMs: clientDeadlineMs(timeoutS),
+        signal: composed ? composed.signal : options.signal,
+        onEvent: (event: ApiExecStreamEvent) => {
+          if (event.stdout) {
+            stdout += keep(event.stdout)
+            options.onStdout?.(event.stdout)
+          }
+          if (event.stderr) {
+            stderr += keep(event.stderr)
+            options.onStderr?.(event.stderr)
+          }
+          if (event.finished) {
+            sawFinished = true
+            exitCode = event.exit_code ?? 0
+            error = event.error
+          }
+        },
+      })
+    } catch (err) {
+      if (!overCap) throw err
+    } finally {
+      composed?.release()
+    }
+    // The stream can end before the abort lands, so check after it too.
+    if (overCap) {
+      throw new ValidationError(
+        `Command output exceeds the maximum size of ${collect?.capBytes} bytes`,
+      )
+    }
 
     if (!sawFinished) {
       throw new SandboxError(
@@ -260,6 +339,16 @@ export class Commands {
       stderr += error
     }
 
-    return { stdout, stderr, exitCode, truncated: false }
+    if (truncated) {
+      stderr += `\n[superserve] output truncated: combined stdout/stderr exceeded ${collect?.capBytes} bytes; pass onStdout/onStderr for full output\n`
+    }
+    return { stdout, stderr, exitCode, truncated }
   }
+}
+
+interface OutputCap {
+  /** Most bytes of combined stdout/stderr to keep. */
+  capBytes: number
+  /** Throw `ValidationError` past the cap instead of truncating. */
+  throwOverCap: boolean
 }

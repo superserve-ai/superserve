@@ -4,6 +4,8 @@ import {
   Commands,
   MAX_COMMAND_TIMEOUT_MS,
   MAX_EXEC_RESPONSE_BYTES,
+  MAX_SYNC_EXEC_TIMEOUT_S,
+  SYNC_EXEC_OUTPUT_CAP_BYTES,
   type CommandsDeps,
 } from "../src/commands.js"
 import {
@@ -675,4 +677,139 @@ describe("Commands.run timeouts", () => {
       expect(mock).not.toHaveBeenCalled()
     },
   )
+})
+
+describe("Commands.run without callbacks and a long timeout", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  const longTimeoutMs = (MAX_SYNC_EXEC_TIMEOUT_S + 1) * 1000
+  const finished = (exitCode = 0) =>
+    `data: ${JSON.stringify({ finished: true, exit_code: exitCode })}\n\n`
+
+  it("keeps using /exec at the longest sync timeout", async () => {
+    const mock = vi.fn(async () =>
+      jsonResponse({ stdout: "ok", stderr: "", exit_code: 0 }),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    await new Commands(makeDeps()).run("sleep 1", {
+      timeoutMs: MAX_SYNC_EXEC_TIMEOUT_S * 1000,
+    })
+
+    const [url] = mock.mock.calls[0] as [string]
+    expect(url).toBe(`${dataPlaneUrl}/exec`)
+  })
+
+  it("runs over /exec/stream and collects the output", async () => {
+    const mock = vi.fn(async () =>
+      sseResponse([
+        ": keepalive\n\n",
+        `data: ${JSON.stringify({ stdout: "hi " })}\n\n`,
+        `data: ${JSON.stringify({ stderr: "warn" })}\n\n`,
+        `data: ${JSON.stringify({ stdout: "there" })}\n\n`,
+        finished(3),
+      ]),
+    )
+    vi.stubGlobal("fetch", mock)
+
+    const result = await new Commands(makeDeps()).run("long-job", {
+      timeoutMs: longTimeoutMs,
+    })
+
+    expect(result).toEqual({
+      stdout: "hi there",
+      stderr: "warn",
+      exitCode: 3,
+      truncated: false,
+    })
+    const [url, init] = mock.mock.calls[0] as unknown as [string, RequestInit]
+    expect(url).toBe(`${dataPlaneUrl}/exec/stream`)
+    expect(JSON.parse(init.body as string).timeout_s).toBe(
+      MAX_SYNC_EXEC_TIMEOUT_S + 1,
+    )
+  })
+
+  it("keeps the sandbox's sync output cap and marks the result truncated", async () => {
+    const half = SYNC_EXEC_OUTPUT_CAP_BYTES / 2
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse([
+          `data: ${JSON.stringify({ stdout: "a".repeat(half) })}\n\n`,
+          `data: ${JSON.stringify({ stderr: "b".repeat(half - 1) })}\n\n`,
+          `data: ${JSON.stringify({ stdout: "é" })}\n\n`,
+          `data: ${JSON.stringify({ stdout: "more" })}\n\n`,
+          finished(0),
+        ]),
+      ),
+    )
+
+    const result = await new Commands(makeDeps()).run("noisy", {
+      timeoutMs: longTimeoutMs,
+    })
+
+    // "é" is 2 bytes and only 1 byte is left, so none of it is kept.
+    expect(result.stdout).toBe("a".repeat(half))
+    expect(result.stderr.startsWith("b".repeat(half - 1))).toBe(true)
+    expect(result.stderr).toContain("output truncated")
+    expect(result.exitCode).toBe(0)
+    expect(result.truncated).toBe(true)
+  })
+
+  it("throws ValidationError once output passes a smaller maxOutputBytes", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse([
+          `data: ${JSON.stringify({ stdout: "x".repeat(10) })}\n\n`,
+          `data: ${JSON.stringify({ stdout: "y" })}\n\n`,
+          finished(0),
+        ]),
+      ),
+    )
+
+    await expect(
+      new Commands(makeDeps()).run("noisy", {
+        timeoutMs: longTimeoutMs,
+        maxOutputBytes: 10,
+      }),
+    ).rejects.toThrow(ValidationError)
+  })
+
+  it("stops the stream when output passes a smaller maxOutputBytes", async () => {
+    let signal: AbortSignal | undefined
+    const encoder = new TextEncoder()
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async (_url: string, init: RequestInit) => {
+        signal = init.signal ?? undefined
+        // Sends output past the cap, then never ends.
+        const body = new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(
+              encoder.encode(
+                `data: ${JSON.stringify({ stdout: "x".repeat(11) })}\n\n`,
+              ),
+            )
+            signal?.addEventListener("abort", () =>
+              controller.error(signal?.reason),
+            )
+          },
+        })
+        return new Response(body, {
+          headers: { "Content-Type": "text/event-stream" },
+        })
+      }),
+    )
+
+    await expect(
+      new Commands(makeDeps()).run("noisy", {
+        timeoutMs: longTimeoutMs,
+        maxOutputBytes: 10,
+      }),
+    ).rejects.toThrow("exceeds the maximum size of 10 bytes")
+    expect(signal?.aborted).toBe(true)
+  })
 })
