@@ -12,7 +12,9 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { settleActiveTeamAction } from "@/lib/api/teams-actions"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { isPlainDashboardPath } from "@/lib/auth/plain-dashboard-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   SIGNUP_OFFER_PARAM,
@@ -176,11 +178,18 @@ function SignInContent() {
       }
       posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
       // Discard routes prefetched before the session cookies were set.
-      window.location.replace(
+      const dest =
         nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
           ? signInOfferDestination(rawOffer)
-          : nextUrl,
-      )
+          : nextUrl
+      if (isPlainDashboardPath(dest)) {
+        try {
+          await settleActiveTeamAction()
+        } catch {
+          // Continue sign-in if the preference cannot be settled.
+        }
+      }
+      window.location.replace(dest)
       navigating = true
     } catch {
       setErrors({ form: "Error signing in. Please try again." })

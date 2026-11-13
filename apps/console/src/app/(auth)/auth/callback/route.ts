@@ -8,6 +8,7 @@ import {
   sendWelcomeEmail,
 } from "@/app/(auth)/auth/signup/action"
 import { publishOriginalSignupEvidence } from "@/lib/api/promotion-publication"
+import { settleTeamSelection } from "@/lib/api/settle-active-team"
 import { signupEntryDestination } from "@/lib/api/signup-checkout"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
@@ -30,6 +31,7 @@ import {
   revokeGoogleSignupAuthorization,
 } from "@/lib/auth/google-signup-proof"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { isPlainDashboardPath } from "@/lib/auth/plain-dashboard-path"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
@@ -151,6 +153,7 @@ export async function GET(request: Request) {
     | "email"
     | null
   let next = sanitizeNext(searchParams.get("next"))
+  const canSettleTeam = isPlainDashboardPath(next)
   // Set by the sign-in recovery options after a failed password sign-in.
   const rawSignInRecovery = searchParams.get("sign_in_recovery")
   const signInRecovery =
@@ -837,6 +840,9 @@ export async function GET(request: Request) {
         }
       }
 
+      if (user && !newSignup && canSettleTeam && isPlainDashboardPath(next)) {
+        await settleTeamSelection(user).catch(() => null)
+      }
       const response = NextResponse.redirect(
         next.startsWith("https://") ? next : buildRedirectUrl(origin, next),
       )

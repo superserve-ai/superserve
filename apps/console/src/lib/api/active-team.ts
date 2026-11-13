@@ -6,6 +6,8 @@ import {
 } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
 
+export const ACTIVE_TEAM_METADATA_KEY = "active_team"
+
 // The user's selected team, stored as "<region>:<teamId>". The cookie is a
 // preference, never an authorization: every read validates it against the
 // user's live memberships and silently falls back when it no longer matches
@@ -51,8 +53,8 @@ export async function readTeamSelection(): Promise<TeamSelection | null> {
 }
 
 /**
- * The membership the console operates on. The selection wins when it matches
- * a live membership. The fallback must be deterministic across surfaces and
+ * The cookie is settled at sign-in and wins when it matches a live membership.
+ * The fallback must be deterministic across surfaces and
  * server instances (they resolve the team independently): regions keep their
  * incoming (cell) order via a first-appearance rank, and within a region the
  * team id pins the order. Ranking rather than a conditional comparator keeps
@@ -95,4 +97,30 @@ export async function resolveActiveTeam(
     degradedRegions: [],
   })
   return pickActiveTeam(memberships, selection)
+}
+
+// The team the user last switched to, saved on the account so a new browser
+// can open it too. Like the cookie, it is only a preference.
+export function savedTeamSelection(user: {
+  user_metadata?: Record<string, unknown>
+}): TeamSelection | null {
+  const value = user.user_metadata?.[ACTIVE_TEAM_METADATA_KEY]
+  return parseTeamSelection(typeof value === "string" ? value : undefined)
+}
+
+// Oldest team first. Teams with an unknown creation date go last.
+export function orderTeamsOldestFirst(
+  memberships: TeamMembership[],
+  createdAt: ReadonlyMap<string, string>,
+): TeamMembership[] {
+  const timestamp = (team: TeamMembership) => {
+    const value = Date.parse(createdAt.get(serializeTeamSelection(team)) ?? "")
+    return Number.isFinite(value) ? value : Infinity
+  }
+  return memberships.toSorted(
+    (a, b) =>
+      timestamp(a) - timestamp(b) ||
+      a.region.localeCompare(b.region) ||
+      a.teamId.localeCompare(b.teamId),
+  )
 }

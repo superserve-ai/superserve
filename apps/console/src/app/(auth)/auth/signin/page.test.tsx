@@ -1,3 +1,7 @@
+const mockSettle = vi.fn().mockResolvedValue(null)
+vi.mock("@/lib/api/teams-actions", () => ({
+  settleActiveTeamAction: (...args: unknown[]) => mockSettle(...args),
+}))
 import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
@@ -175,6 +179,7 @@ describe("SignInPage", () => {
   })
 
   beforeEach(() => {
+    mockSettle.mockReset().mockResolvedValue(null)
     mockReplace = vi
       .spyOn(window.location, "replace")
       .mockImplementation(() => {})
@@ -212,6 +217,9 @@ describe("SignInPage", () => {
     await user.type(screen.getByPlaceholderText("Password"), "example-password")
     await user.click(screen.getByRole("button", { name: "Sign In" }))
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(destination))
+    expect(mockSettle).toHaveBeenCalledTimes(
+      destination === "/sandboxes" ? 1 : 0,
+    )
   })
 
   it("keeps selected intent for an already signed-in customer", async () => {
@@ -309,6 +317,7 @@ describe("SignInPage", () => {
   })
 
   it("redirects to next URL after successful login", async () => {
+    mockSettle.mockRejectedValueOnce(Error("unavailable"))
     searchParamsMap = { next: "/sandboxes?view=active#list" }
     mockSignInWithPassword.mockResolvedValue({ error: null })
     render(<SignInPage />)

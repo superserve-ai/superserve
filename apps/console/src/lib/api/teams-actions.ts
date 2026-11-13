@@ -1,11 +1,14 @@
 "use server"
 
 import {
+  ACTIVE_TEAM_METADATA_KEY,
+  serializeTeamSelection,
   pickActiveTeam,
   readTeamSelection,
   writeTeamSelection,
 } from "@/lib/api/active-team"
 import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
+import { settleTeamSelection } from "@/lib/api/settle-active-team"
 import { isPersonalTeam, ownsTeam, renameTeam } from "@/lib/api/team-conversion"
 import {
   invalidateMembershipDirectory,
@@ -120,6 +123,17 @@ export async function setActiveTeamAction(
   }
 
   await writeTeamSelection({ region, teamId })
+  const value = serializeTeamSelection({ region, teamId })
+  if (user.user_metadata?.[ACTIVE_TEAM_METADATA_KEY] !== value) {
+    try {
+      const { error } = await supabase.auth.updateUser({
+        data: { [ACTIVE_TEAM_METADATA_KEY]: value },
+      })
+      if (error) console.error("Could not save active team preference")
+    } catch {
+      console.error("Could not save active team preference")
+    }
+  }
 }
 
 export async function createTeamAction(
@@ -251,5 +265,17 @@ function teamConversionUnavailable() {
     code: "team_conversion_unavailable" as const,
     message:
       "Your account can no longer be converted. Reload the page and try again.",
+  }
+}
+
+export async function settleActiveTeamAction(): Promise<void> {
+  try {
+    const supabase = await createServerClient()
+    const {
+      data: { user },
+    } = await supabase.auth.getUser()
+    if (user) await settleTeamSelection(user)
+  } catch {
+    // Sign-in can continue without a preference.
   }
 }
