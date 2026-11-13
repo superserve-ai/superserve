@@ -123,6 +123,89 @@ Set a timeout on any `run()` that can take longer than 30 seconds. For a process
 TypeScript rounds `timeoutMs` up to whole seconds. `run()` treats `timeoutMs: 0` the same as leaving it out, and throws `ValidationError` for a value that is negative, not finite, or out of range.
 </Note>
 
+### Long-running commands
+
+A `run()` without callbacks gets no response until the command ends. If a command runs for more than a few minutes, the connection can close before the result arrives:
+
+- **TypeScript on Node.js:** Node's built-in `fetch` waits at most 300 seconds for a response. A `run()` without callbacks that runs longer fails at 300 seconds with `SandboxError: Network error: fetch failed` (the error's `cause` has code `UND_ERR_HEADERS_TIMEOUT`), even when `timeoutMs` is longer.
+- **Python:** some networks close a connection that has no traffic for a few minutes. Then `run()` raises `SandboxTimeoutError` at `timeout_seconds` plus 5 seconds, although the command finished.
+
+In both cases, the command keeps running in the sandbox, but your code doesn't get its result. For a command that can run longer than 4 minutes, pass output callbacks. A streamed `run()` receives keepalive messages while the command runs, also when the command prints nothing, so the connection stays open:
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run("sleep 360 && echo done", {
+  timeoutMs: 400_000,
+  onStdout: (data) => process.stdout.write(data),
+  onStderr: (data) => process.stderr.write(data),
+})
+console.log(result.exitCode) // 0
+```
+
+```python Python
+import sys
+
+result = sandbox.commands.run(
+    "sleep 360 && echo done",
+    timeout_seconds=400,
+    on_stdout=lambda data: sys.stdout.write(data),
+    on_stderr=lambda data: sys.stderr.write(data),
+)
+print(result.exit_code)  # 0
+```
+</CodeGroup>
+
+If your process stops or loses its connection during a streamed `run()`, the sandbox stops the command. For a job that has to continue when your process goes away, start it in the background and check for an exit-code file:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  "nohup sh -c 'sleep 360 && echo done; echo $? > /home/user/job.exit' > /home/user/job.log 2>&1 &",
+)
+
+let exitCode = ""
+while (!exitCode) {
+  await new Promise((resolve) => setTimeout(resolve, 10_000))
+  const check = await sandbox.commands.run("cat /home/user/job.exit 2>/dev/null || true")
+  exitCode = check.stdout.trim()
+}
+console.log(exitCode, await sandbox.files.readText("/home/user/job.log")) // 0 done
+```
+
+```python Python
+import time
+
+sandbox.commands.run(
+    "nohup sh -c 'sleep 360 && echo done; echo $? > /home/user/job.exit'"
+    " > /home/user/job.log 2>&1 &"
+)
+
+exit_code = ""
+while not exit_code:
+    time.sleep(10)
+    check = sandbox.commands.run("cat /home/user/job.exit 2>/dev/null || true")
+    exit_code = check.stdout.strip()
+print(exit_code, sandbox.files.read_text("/home/user/job.log"))  # 0 done
+```
+</CodeGroup>
+
+The background job doesn't stop at a command timeout. It doesn't count as activity for the [idle timeout](/sandbox/lifecycle#idle-timeout), but each check is a command and does count. If you set an [auto-pause](/sandbox/lifecycle#auto-pause) timeout, make it longer than the job.
+
+In TypeScript on Node.js, you can also keep a `run()` without callbacks. Install the [`undici`](https://www.npmjs.com/package/undici) package (`npm install undici`) and raise the `fetch` limits for the whole process:
+
+```typescript TypeScript
+import { Agent, setGlobalDispatcher } from "undici"
+
+// Applies to every fetch call in this process.
+setGlobalDispatcher(new Agent({ headersTimeout: 0, bodyTimeout: 0 }))
+
+const result = await sandbox.commands.run("sleep 360 && echo done", {
+  timeoutMs: 400_000,
+})
+```
+
+`0` turns off these two `fetch` limits; the SDK still stops waiting 5 seconds after `timeoutMs`.
+
 ## Large output
 
 Without callbacks, `run()` returns stdout and stderr in one JSON response, capped at 8 MiB of JSON-encoded output for both streams together. Characters that JSON escapes count for more than one byte (a `<` counts as six), so output with many of them is cut below 8 MiB of raw text. When the cap is reached, the sandbox drops the rest, sets `truncated` to `true` on the result, and appends a notice to `stderr`. The command itself still runs to the end.

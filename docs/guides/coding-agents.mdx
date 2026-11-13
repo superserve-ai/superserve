@@ -62,9 +62,14 @@ try {
   const task = "Add a Python file hello.py that prints Hello, World. Don't change the README."
   const agent = await sandbox.commands.run(
     'claude -p "$TASK" --permission-mode acceptEdits',
-    { cwd: "/home/user/repo", env: { TASK: task }, timeoutMs: 600_000 },
+    {
+      cwd: "/home/user/repo",
+      env: { TASK: task },
+      timeoutMs: 600_000,
+      onStdout: (data) => process.stdout.write(data),
+      onStderr: (data) => process.stderr.write(data),
+    },
   )
-  console.log(agent.stdout)
   if (agent.exitCode !== 0) {
     throw new Error(`Claude Code exited with ${agent.exitCode}`)
   }
@@ -79,6 +84,8 @@ try {
 ```
 
 ```python Python
+import sys
+
 from superserve import Sandbox
 
 sandbox = Sandbox.create(
@@ -101,8 +108,9 @@ try:
         cwd="/home/user/repo",
         env={"TASK": task},
         timeout_seconds=600,
+        on_stdout=lambda data: sys.stdout.write(data),
+        on_stderr=lambda data: sys.stderr.write(data),
     )
-    print(agent.stdout)
     if agent.exit_code != 0:
         raise RuntimeError(f"Claude Code exited with {agent.exit_code}")
 
@@ -117,7 +125,8 @@ finally:
 - `--permission-mode acceptEdits` lets Claude Code edit files without a prompt. Give more permissions only for commands that the task needs.
 - `git diff` alone doesn't show files that the agent created. `git add -N .` marks new files as intent-to-add, so `git diff` shows their full content next to the changes to existing files. It doesn't stage the content.
 - `try` / `finally` kills the sandbox also when a command throws or the agent fails, so a failed run doesn't leave the sandbox running.
-- Agents can work for many minutes. Give `commands.run` a timeout that is longer than the task: `timeoutMs` in TypeScript, `timeout_seconds` in Python. A command that runs past it stops with exit code `124`. See [Timeouts](/commands/overview#timeouts). You can also [stream the output](/commands/streaming) to watch the agent work.
+- Agents can work for many minutes. Give `commands.run` a timeout that is longer than the task: `timeoutMs` in TypeScript, `timeout_seconds` in Python. A command that runs past it stops with exit code `124`. See [Timeouts](/commands/overview#timeouts).
+- The agent's output is [streamed](/commands/streaming) with `onStdout` / `on_stdout`, so you see the agent work. Streaming also keeps the connection open: a `run()` without callbacks that runs longer than a few minutes can fail before the agent finishes. See [Long-running commands](/commands/overview#long-running-commands). The returned `agent.stdout` still has the full output.
 - To keep the agent's work, push a branch from the sandbox, or take a [snapshot](/sandbox/snapshots) to continue later. Take the snapshot before the `finally` block kills the sandbox.
 
 ## Integrations
