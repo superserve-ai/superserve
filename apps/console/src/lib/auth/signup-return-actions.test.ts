@@ -13,7 +13,9 @@ vi.mock("next/headers", () => ({
 }))
 const pricing = vi.hoisted(() => vi.fn())
 vi.mock("@/lib/billing/plans-actions", () => ({
-  getPricingVersionAction: () => pricing(),
+  getPublicBillingPlansAction: async () => ({
+    pricing_version: await pricing(),
+  }),
 }))
 // The real signupEntryDestination runs, so the backend answer decides the
 // step just as it does for the confirmation link.
@@ -101,6 +103,32 @@ describe("confirmedSignupDestinationAction", () => {
     await expect(
       confirmedSignupDestinationAction("pro_monthly", "/"),
     ).resolves.toBe("/billing/pro/")
+  })
+
+  it("takes the dashboard entry when pricing cannot be read for an offer", async () => {
+    // The callback's own pricing read may have worked and sent a trial to
+    // the console, so this tab must not guess the upgrade page.
+    pricing.mockRejectedValue(new Error("Plans are unavailable"))
+    await expect(
+      confirmedSignupDestinationAction("pro_monthly", "/"),
+    ).resolves.toBe("/")
+    await expect(
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+    ).resolves.toBe("/")
+    await expect(
+      confirmedSignupDestinationAction("enterprise", "/yc/claim"),
+    ).resolves.toBe("/")
+  })
+
+  it("keeps a step every pricing version takes when pricing cannot be read", async () => {
+    pricing.mockRejectedValue(new Error("Plans are unavailable"))
+    await expect(
+      confirmedSignupDestinationAction(undefined, "/yc/claim"),
+    ).resolves.toBe("/yc/claim")
+    await expect(
+      confirmedSignupDestinationAction("pro_monthly", "/yc/claim"),
+    ).resolves.toBe("/yc/claim")
+    expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("uses the offer's landing page under legacy pricing", async () => {

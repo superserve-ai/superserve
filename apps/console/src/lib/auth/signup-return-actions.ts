@@ -3,7 +3,8 @@
 import { cookies } from "next/headers"
 
 import { signupEntryDestination } from "@/lib/api/signup-checkout"
-import { getPricingVersionAction } from "@/lib/billing/plans-actions"
+import type { PricingVersion } from "@/lib/billing/plans"
+import { getPublicBillingPlansAction } from "@/lib/billing/plans-actions"
 import { isSignupCheckoutOffer } from "@/lib/billing/signup-checkout-paths"
 import { createServerClient } from "@/lib/supabase/server"
 import { YC_COOKIE } from "@/lib/yc-claims"
@@ -35,20 +36,41 @@ export async function confirmedSignupDestinationAction(
     data: { user },
   } = await supabase.auth.getUser()
   if (!user) return requested
-  const pricing = await getPricingVersionAction()
-  const signupOffer =
-    rawOffer && (isSelfServeSignupOffer(rawOffer) || pricing === "v2")
-      ? parseSignupOffer(rawOffer)
-      : undefined
+  const ycClaimPending = !!(await cookies()).get(YC_COOKIE)
+  const stepFor = (pricing: PricingVersion) => {
+    const signupOffer =
+      rawOffer && (isSelfServeSignupOffer(rawOffer) || pricing === "v2")
+        ? parseSignupOffer(rawOffer)
+        : undefined
+    const step = signupReturnStep(requested, {
+      signupOffer,
+      nextRequested: requested !== "/",
+      newSignup: true,
+      ycClaimPending,
+    })
+    return { signupOffer, step }
+  }
+  // The callback falls back to legacy pricing when it cannot read it, but
+  // its read may have worked. When this one fails, keep only a step both
+  // pricing versions agree on and the team state cannot change; otherwise
+  // take the dashboard entry rather than guess.
+  const pricing = await getPublicBillingPlansAction().then(
+    (plans) => plans.pricing_version,
+    () => null,
+  )
+  if (!pricing) {
+    const legacy = stepFor("legacy")
+    const v2 = stepFor("v2")
+    return v2.signupOffer !== "enterprise" &&
+      legacy.step === v2.step &&
+      !signupStepUsesEntryState(v2.step, v2.signupOffer)
+      ? confirmedSignupReturnPath(v2.step)
+      : "/"
+  }
+  const { signupOffer, step } = stepFor(pricing)
   // The callback alone puts a new Enterprise account on hold. This tab only
   // follows it, and the dashboard routes whatever state that left.
   if (signupOffer === "enterprise") return "/"
-  const step = signupReturnStep(requested, {
-    signupOffer,
-    nextRequested: requested !== "/",
-    newSignup: true,
-    ycClaimPending: !!(await cookies()).get(YC_COOKIE),
-  })
   if (pricing !== "v2" || !signupStepUsesEntryState(step, signupOffer))
     return confirmedSignupReturnPath(step)
   const checkoutOffer = isSignupCheckoutOffer(signupOffer)
