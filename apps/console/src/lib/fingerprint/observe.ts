@@ -18,6 +18,8 @@ export type FingerprintSignupObservation = {
   userId?: string | null
   getObservationUserId?: () => string | null
   signupMethod: "email" | "google"
+  // Which page ran the check. Only labels events; unset for other callers.
+  entryPoint?: "signin" | "signup"
   signupAttemptId?: string
   capture?: SignupFingerprintCapture
   onAttested?: () => void
@@ -193,12 +195,14 @@ export async function observeFingerprintSignup({
   eventId,
   userId = null,
   signupMethod,
+  entryPoint,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<void> {
   await resolveFingerprintSignup({
     eventId,
     userId,
     signupMethod,
+    entryPoint,
     signupAttemptId,
   })
 }
@@ -256,6 +260,7 @@ export async function resolveFingerprintSignup({
   onAttested,
   onAttestationFailed,
   signupMethod,
+  entryPoint,
   signupAttemptId,
 }: FingerprintSignupObservation): Promise<string | null> {
   const diagnostic = fingerprintDiagnostics({
@@ -264,6 +269,7 @@ export async function resolveFingerprintSignup({
     eventId,
     userId,
     signupMethod,
+    entryPoint,
   })
   const startedAt = Date.now()
   const secretApiKey = process.env.FINGERPRINT_SECRET_API_KEY
@@ -368,6 +374,7 @@ export async function resolveFingerprintSignup({
               smart_signals: event.smartSignals,
               superserve_user_id: observationUserId,
               signup_method: signupMethod,
+              entry_point: entryPoint,
               observed_at: new Date().toISOString(),
             },
           )
