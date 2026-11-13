@@ -34,6 +34,7 @@ import {
   GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
   cancelGoogleSignupCheck,
   googleSignupAttemptForSignIn,
+  prefetchGoogleSignupCheck,
 } from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
 
@@ -249,6 +250,7 @@ function SignInContent() {
   const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
+    prefetchGoogleSignupCheck()
     return () => {
       mounted.current = false
       cancelGoogleSignupCheck()
@@ -263,13 +265,20 @@ function SignInContent() {
       const supabase = createBrowserClient()
       // Run the sign-up check now, so a Google account that is new to
       // Superserve finishes sign-up in this one trip to Google. The check is
-      // optional and stops by its own deadline, so it cannot hold back an
-      // existing account; a cancelled check starts no further step. The
-      // origin action is optional too (see below) and gets the same limit:
-      // Next.js runs server actions one at a time, so after a stalled check it
-      // would queue behind that check's request on a retry.
-      const [intent, signupAttempt] = await Promise.allSettled([
-        withinDeadline(beginGoogleSignIn(), GOOGLE_SIGNUP_CHECK_DEADLINE_MS),
+      // optional and stops by its own deadlines, so it cannot hold back an
+      // existing account for long; a cancelled check starts no further step.
+      // Next.js runs server actions one at a time. The origin action is
+      // short and goes first, so a stalled capture or proof call cannot
+      // hold it back: the callback then keeps the sign-up origin. It is
+      // optional too and gets the browser deadline of the check, because
+      // after a stalled check it would queue behind that check's request on
+      // a retry.
+      const intentResult = withinDeadline(
+        beginGoogleSignIn(),
+        GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
+      )
+      const [intent, signupAttemptResult] = await Promise.allSettled([
+        intentResult,
         googleSignupAttemptForSignIn(),
       ])
       // The user left this page during the wait (for example to "Create an
@@ -278,7 +287,9 @@ function SignInContent() {
       if (intent.status === "rejected") throw intent.reason
       const intentId = intent.value
       const signupAttemptId =
-        signupAttempt.status === "fulfilled" ? signupAttempt.value : undefined
+        signupAttemptResult.status === "fulfilled"
+          ? signupAttemptResult.value
+          : undefined
       const callbackUrl = new URL("/auth/callback", window.location.origin)
       if (signupAttemptId)
         callbackUrl.searchParams.set("signup_attempt_id", signupAttemptId)

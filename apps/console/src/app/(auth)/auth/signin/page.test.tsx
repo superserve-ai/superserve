@@ -121,10 +121,12 @@ vi.mock("./google-action", () => ({
   beginGoogleSignIn: () => mockBeginGoogleSignIn(),
 }))
 const mockGoogleSignupAttempt = vi.fn()
+const mockPrefetchGoogleSignupCheck = vi.fn()
 vi.mock("./google-signup-check", () => ({
   GOOGLE_SIGNUP_CHECK_DEADLINE_MS: 4000,
   cancelGoogleSignupCheck: () => {},
   googleSignupAttemptForSignIn: () => mockGoogleSignupAttempt(),
+  prefetchGoogleSignupCheck: () => mockPrefetchGoogleSignupCheck(),
 }))
 const mockClearFingerprintCapture = vi.fn()
 vi.mock("@/lib/fingerprint/client", () => ({
@@ -181,6 +183,7 @@ describe("SignInPage", () => {
     mockSignOut.mockReset()
     mockBeginGoogleSignIn.mockReset().mockResolvedValue("signin-origin")
     mockGoogleSignupAttempt.mockReset().mockResolvedValue(undefined)
+    mockPrefetchGoogleSignupCheck.mockReset()
     mockClearFingerprintCapture.mockReset()
     mockCapture.mockReset()
     mockSendSignInLink.mockReset().mockResolvedValue({ success: true })
@@ -484,6 +487,11 @@ describe("SignInPage", () => {
     )
     await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
     expect(mockGoogleSignupAttempt).toHaveBeenCalledTimes(1)
+    // Next.js runs server actions one at a time: the short origin action
+    // goes first, so a stalled check cannot hold it back.
+    expect(mockBeginGoogleSignIn.mock.invocationCallOrder[0]).toBeLessThan(
+      mockGoogleSignupAttempt.mock.invocationCallOrder[0],
+    )
     const { options } = mockSignInWithOAuth.mock.calls[0][0]
     const callback = new URL(options.redirectTo)
     expect(callback.searchParams.get("signup_attempt_id")).toBe("attempt-123")
@@ -493,6 +501,13 @@ describe("SignInPage", () => {
     // Sign-in still lets the user pick an account on the first trip.
     expect(options.queryParams).toEqual({ prompt: "select_account" })
     expect(mockClearFingerprintCapture).toHaveBeenCalledTimes(1)
+  })
+
+  it("prepares the sign-up check when the page loads, before any click", async () => {
+    render(<SignInPage />)
+    await screen.findByRole("button", { name: /Continue with Google/ })
+    expect(mockPrefetchGoogleSignupCheck).toHaveBeenCalled()
+    expect(mockGoogleSignupAttempt).not.toHaveBeenCalled()
   })
 
   it("continues Google sign-in without a sign-up attempt when the check fails", async () => {
