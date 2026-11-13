@@ -812,4 +812,38 @@ describe("Commands.run without callbacks and a long timeout", () => {
     ).rejects.toThrow("exceeds the maximum size of 10 bytes")
     expect(signal?.aborted).toBe(true)
   })
+
+  it("throws ValidationError on one event longer than a smaller maxOutputBytes allows", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        // No newline: the event never completes.
+        sseResponse([`data: ${JSON.stringify({ stdout: "x".repeat(2_000) })}`]),
+      ),
+    )
+
+    await expect(
+      new Commands(makeDeps()).run("noisy", {
+        timeoutMs: longTimeoutMs,
+        maxOutputBytes: 10,
+      }),
+    ).rejects.toThrow(ValidationError)
+  })
+
+  it("caps the finished event's error text", async () => {
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () =>
+        sseResponse([
+          `data: ${JSON.stringify({ finished: true, exit_code: 1, error: "e".repeat(10_000) })}\n\n`,
+        ]),
+      ),
+    )
+
+    const result = await new Commands(makeDeps()).run("fails", {
+      timeoutMs: longTimeoutMs,
+    })
+    expect(result.exitCode).toBe(1)
+    expect(result.stderr).toBe("e".repeat(4096))
+  })
 })

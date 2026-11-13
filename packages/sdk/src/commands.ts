@@ -301,6 +301,7 @@ export class Commands {
         body,
         timeoutMs: clientDeadlineMs(timeoutS),
         signal: composed ? composed.signal : options.signal,
+        maxLineLength: collect ? maxEventLength(collect.capBytes) : undefined,
         onEvent: (event: ApiExecStreamEvent) => {
           if (event.stdout) {
             stdout += keep(event.stdout)
@@ -318,7 +319,13 @@ export class Commands {
         },
       })
     } catch (err) {
-      if (!overCap) throw err
+      if (overCap) {
+        // Reported below.
+      } else if (collect?.throwOverCap && isOversizedEvent(err)) {
+        overCap = true
+      } else {
+        throw err
+      }
     } finally {
       composed?.release()
     }
@@ -336,7 +343,7 @@ export class Commands {
     }
 
     if (error) {
-      stderr += error
+      stderr += collect ? error.slice(0, MAX_COLLECTED_ERROR_LENGTH) : error
     }
 
     if (truncated) {
@@ -344,6 +351,25 @@ export class Commands {
     }
     return { stdout, stderr, exitCode, truncated }
   }
+}
+
+/** Most characters of a finished event's `error` a capped run keeps. */
+const MAX_COLLECTED_ERROR_LENGTH = 4096
+
+/**
+ * Longest SSE line a capped run buffers. JSON escaping makes one byte at most
+ * 6 characters (`\u0000`), so a longer line holds more than `capBytes` of
+ * output; the margin covers the event's keys.
+ */
+function maxEventLength(capBytes: number) {
+  return capBytes * 6 + 1024
+}
+
+function isOversizedEvent(err: unknown) {
+  return (
+    err instanceof SandboxError &&
+    err.message.startsWith("Stream event exceeds the maximum length")
+  )
 }
 
 interface OutputCap {

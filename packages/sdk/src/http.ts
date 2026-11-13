@@ -627,6 +627,11 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
   timeoutMs?: number
   signal?: AbortSignal
   onEvent: (event: TEvent) => void
+  /**
+   * Longest line, in UTF-16 code units, to buffer. A longer line throws
+   * `SandboxError` and stops the stream. No limit when omitted.
+   */
+  maxLineLength?: number
 }): Promise<void> {
   const {
     url,
@@ -636,6 +641,7 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
     timeoutMs = 300_000,
     signal: userSignal,
     onEvent,
+    maxLineLength,
   } = opts
   const controller = new AbortController()
   let timedOut = false
@@ -691,6 +697,18 @@ export async function streamSSE<TEvent = ApiExecStreamEvent>(opts: {
       buffer += decoder.decode(value, { stream: true })
       const lines = buffer.split("\n")
       buffer = lines.pop() ?? ""
+      if (
+        maxLineLength !== undefined &&
+        (buffer.length > maxLineLength ||
+          lines.some((line) => line.length > maxLineLength))
+      ) {
+        // Close the connection; the throw alone leaves it open.
+        reader.cancel().catch(() => {})
+        controller.abort()
+        throw new SandboxError(
+          `Stream event exceeds the maximum length of ${maxLineLength} characters`,
+        )
+      }
 
       for (const line of lines) {
         // SSE spec: `data:` with optional leading space on the value.

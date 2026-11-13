@@ -308,8 +308,10 @@ export interface CommandOptions {
    * 10 MiB (`MAX_EXEC_RESPONSE_BYTES`). Exceeding it throws `ValidationError`
    * rather than buffering unbounded output from an untrusted sandbox. For
    * genuinely large output, stream via `onStdout`/`onStderr`. A run with a
-   * timeout over 240 s keeps at most 8 MiB of output and sets `truncated`;
-   * a smaller `maxOutputBytes` throws `ValidationError` once exceeded.
+   * timeout over 240 s and no callbacks runs over the stream: it keeps at
+   * most 8 MiB of output and sets `truncated`, and there `maxOutputBytes`
+   * counts the UTF-8 bytes of stdout plus stderr rather than the encoded
+   * response body. A smaller value throws `ValidationError` once exceeded.
    */
   maxOutputBytes?: number
 }

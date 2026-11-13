@@ -415,6 +415,63 @@ describe("streamSSE with GET", () => {
   })
 })
 
+describe("streamSSE maxLineLength", () => {
+  afterEach(() => {
+    vi.unstubAllGlobals()
+  })
+
+  it("stops on an unfinished line longer than the limit", async () => {
+    let cancelled = false
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        // A data line that never ends, sent in chunks.
+        controller.enqueue(new TextEncoder().encode(`data: "${"x".repeat(60)}`))
+        controller.enqueue(new TextEncoder().encode("x".repeat(60)))
+      },
+      cancel() {
+        cancelled = true
+      },
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(stream, { status: 200 })),
+    )
+
+    await expect(
+      streamSSE({
+        url: "https://api.example.com/exec/stream",
+        headers: {},
+        maxLineLength: 100,
+        onEvent: () => {},
+      }),
+    ).rejects.toThrow("Stream event exceeds the maximum length of 100")
+    expect(cancelled).toBe(true)
+  })
+
+  it("accepts lines up to the limit", async () => {
+    const line = `data: ${JSON.stringify({ stdout: "x".repeat(80) })}`
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        controller.enqueue(new TextEncoder().encode(`${line}\n\n`))
+        controller.close()
+      },
+    })
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(stream, { status: 200 })),
+    )
+
+    const events: unknown[] = []
+    await streamSSE({
+      url: "https://api.example.com/exec/stream",
+      headers: {},
+      maxLineLength: line.length,
+      onEvent: (ev) => events.push(ev),
+    })
+    expect(events).toHaveLength(1)
+  })
+})
+
 describe("composeSignals", () => {
   const anySignal = AbortSignal.any
 
