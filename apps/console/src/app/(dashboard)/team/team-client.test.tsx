@@ -918,6 +918,14 @@ describe("TeamClient", () => {
     render(<TeamClient />)
     expect(screen.getByRole("button", { name: "Leave team" })).toBeDisabled()
     expect(
+      screen.getByRole("button", { name: "Leave team" }),
+    ).not.toHaveAttribute("title")
+    expect(
+      screen.getByRole("button", { name: "Leave team" }),
+    ).toHaveAccessibleDescription(
+      "Make another member an owner before leaving.",
+    )
+    expect(
       screen.getByText("Make another member an owner before leaving."),
     ).toBeInTheDocument()
   })
@@ -937,6 +945,9 @@ describe("TeamClient", () => {
     })
     render(<TeamClient />)
     expect(screen.getByRole("button", { name: "Leave team" })).toBeEnabled()
+    expect(
+      screen.getByRole("button", { name: "Leave team" }),
+    ).not.toHaveAttribute("aria-describedby")
     expect(
       screen.queryByText("Make another member an owner before leaving."),
     ).not.toBeInTheDocument()

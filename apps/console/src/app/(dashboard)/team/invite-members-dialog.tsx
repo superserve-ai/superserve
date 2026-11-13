@@ -14,6 +14,7 @@ import {
   SelectPopup,
   SelectTrigger,
   SelectValue,
+  cn,
 } from "@superserve/ui"
 import { useEffect, useId, useRef, useState } from "react"
 
@@ -278,9 +279,12 @@ export function InviteMembersDialog({
               ? "20-person limit reached. Remove a row to add someone else."
               : "Paste a list or press Enter to add an address. Up to 20 people."}
           </p>
-          {note && (
-            <output className="mt-2 block text-xs text-muted">{note}</output>
-          )}
+          <output
+            aria-live="polite"
+            className={`block text-xs text-muted ${note ? "mt-2" : ""}`}
+          >
+            {note}
+          </output>
           {rolesSupported && roles.length === 0 && (
             <p className="mt-2 text-xs text-muted">
               No invitation roles are available.
@@ -309,10 +313,15 @@ export function InviteMembersDialog({
                       {invalid || row.status === "error" || row.editing ? (
                         <Input
                           aria-label={`Email for ${row.email}`}
+                          aria-invalid={invalid || undefined}
                           aria-describedby={message ? messageId : undefined}
                           value={row.email}
                           disabled={sending}
-                          className="border-dashed"
+                          className={cn(
+                            "border-dashed",
+                            invalid &&
+                              "border-destructive focus:border-destructive",
+                          )}
                           onChange={(event) =>
                             update(row.id, {
                               email: event.target.value.trim(),
