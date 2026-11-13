@@ -1,10 +1,16 @@
 "use server"
 
-import { headers } from "next/headers"
+import { after } from "next/server"
 import * as z from "zod"
 
+import { readClientIp } from "@/lib/auth/client-ip"
+import { findAuthUserByEmail } from "@/lib/auth/find-auth-user"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
+import {
+  reserveRecoveryEmail,
+  takeRecoveryNetworkLimit,
+} from "@/lib/auth/recovery-email-limits"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
@@ -28,19 +34,66 @@ const RESET_EMAIL_LIMIT: AuthRateLimit = {
   windowSeconds: 15 * 60,
 }
 
-// Vercel overwrites x-real-ip and x-forwarded-for with the connecting client's
-// IP. Other client IP headers, such as cf-connecting-ip, pass through as sent,
-// so a caller could rotate them to get a fresh bucket.
-async function readClientIp() {
+// Runs after the response is sent, so the response and its timing are the
+// same whether or not the address has an account.
+async function deliverPasswordReset(
+  email: string,
+  clientIp: string | undefined,
+  invite: string | null,
+) {
   try {
-    const requestHeaders = await headers()
-    return (
-      requestHeaders.get("x-real-ip")?.trim() ||
-      requestHeaders.get("x-forwarded-for")?.split(",")[0]?.trim() ||
-      undefined
-    )
-  } catch {
-    return undefined
+    // Before the lookup, so the caller's own limit is used the same way
+    // whether or not the address has an account.
+    if (!(await takeRecoveryNetworkLimit(clientIp))) return
+
+    // Using a recovery link confirms the address, so accounts awaiting signup
+    // review get nothing; accounts that predate review keep recovery.
+    const user = await findAuthUserByEmail(email)
+    if (!user || isSignupReviewBlocked(user)) return
+
+    // A new token replaces the one in any email already sent, so take from
+    // the email limits before creating the token, never after.
+    if (
+      (await reserveRecoveryEmail({
+        userId: user.id,
+        email,
+        addressLimit: RESET_EMAIL_LIMIT,
+      })) !== "reserved"
+    ) {
+      return
+    }
+
+    const appUrl =
+      process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
+    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password${invite ? `&${new URLSearchParams({ invite })}` : ""}`
+
+    const { data, error } = await createAdminClient().auth.admin.generateLink({
+      type: "recovery",
+      email,
+      options: { redirectTo },
+    })
+
+    if (error || !data?.properties?.hashed_token) {
+      console.error("Error generating reset link:", error?.message)
+      return
+    }
+
+    const resetUrlObj = new URL(redirectTo)
+    resetUrlObj.searchParams.set("token_hash", data.properties.hashed_token)
+    resetUrlObj.searchParams.set("type", "recovery")
+    resetUrlObj.searchParams.set("utm_source", "email")
+    resetUrlObj.searchParams.set("utm_medium", "password_reset")
+
+    await sendEmail({
+      to: email,
+      subject: "Reset your Superserve password",
+      react: PasswordResetEmail({
+        email,
+        resetUrl: resetUrlObj.toString(),
+      }),
+    })
+  } catch (error) {
+    console.error("Error sending password reset email:", error)
   }
 }
 
@@ -88,60 +141,10 @@ export const sendPasswordResetEmail = async (
       errorCode: "rate_limited",
     }
   }
-  // Silent, so the answer is the same whether or not the address has an
-  // account.
-  if (
-    !(await consumeAuthRateLimit(
-      RESET_EMAIL_LIMIT,
-      parsed.data.email.toLowerCase(),
-    ))
-  ) {
-    return { success: true }
-  }
+  const address = parsed.data.email
+  const invite = inviteReturnPath(typeof next === "string" ? next : undefined)
+  after(() => deliverPasswordReset(address, clientIp, invite))
 
-  try {
-    const supabase = createAdminClient()
-
-    const appUrl =
-      process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
-    const invite = inviteReturnPath(typeof next === "string" ? next : undefined)
-    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password${invite ? `&${new URLSearchParams({ invite })}` : ""}`
-
-    const { data, error } = await supabase.auth.admin.generateLink({
-      type: "recovery",
-      email: parsed.data.email,
-      options: { redirectTo },
-    })
-
-    if (error || !data?.properties?.hashed_token) {
-      console.error("Error generating reset link:", error?.message)
-      return { success: true } // Always return success to prevent email enumeration
-    }
-
-    // Using a recovery link confirms the address, so accounts awaiting signup
-    // review silently get nothing; accounts that predate review keep recovery.
-    if (isSignupReviewBlocked(data.user)) {
-      return { success: true } // Always return success to prevent email enumeration
-    }
-
-    const resetUrlObj = new URL(redirectTo)
-    resetUrlObj.searchParams.set("token_hash", data.properties.hashed_token)
-    resetUrlObj.searchParams.set("type", "recovery")
-    resetUrlObj.searchParams.set("utm_source", "email")
-    resetUrlObj.searchParams.set("utm_medium", "password_reset")
-
-    await sendEmail({
-      to: parsed.data.email,
-      subject: "Reset your Superserve password",
-      react: PasswordResetEmail({
-        email: parsed.data.email,
-        resetUrl: resetUrlObj.toString(),
-      }),
-    })
-
-    return { success: true }
-  } catch (error) {
-    console.error("Error sending password reset email:", error)
-    return { success: true } // Always return success to prevent email enumeration
-  }
+  // Always the same result, to prevent email enumeration.
+  return { success: true }
 }
