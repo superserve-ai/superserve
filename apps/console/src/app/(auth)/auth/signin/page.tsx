@@ -14,6 +14,7 @@ import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import {
   SIGNUP_OFFER_PARAM,
   signInOfferDestination,
@@ -169,8 +170,16 @@ function SignInContent() {
           }
         } else if (error.message.includes("Email not confirmed")) {
           setErrors({ form: "Please verify your email before signing in." })
-        } else {
+        } else if (
+          error.code === "user_banned" ||
+          error.message.includes("User is banned")
+        ) {
+          // Text intentionally unchanged until an owner decides whether to reveal a ban.
           setErrors({ form: "Error signing in. Please try again." })
+        } else if (isNetworkAuthError(error)) {
+          setErrors({ form: AUTH_MESSAGES.networkError })
+        } else {
+          setErrors({ form: AUTH_MESSAGES.signInFailed })
         }
         return
       }
@@ -182,8 +191,12 @@ function SignInContent() {
           : nextUrl,
       )
       navigating = true
-    } catch {
-      setErrors({ form: "Error signing in. Please try again." })
+    } catch (err) {
+      setErrors({
+        form: isNetworkAuthError(err)
+          ? AUTH_MESSAGES.networkError
+          : AUTH_MESSAGES.signInFailed,
+      })
     } finally {
       if (!navigating) setIsEmailLoading(false)
     }
@@ -208,7 +221,7 @@ function SignInContent() {
           method: "email_link",
           reason: "captcha_unavailable",
         })
-        setLinkError("We couldn't verify you're human. Please try again.")
+        setLinkError(AUTH_MESSAGES.botCheckBlocked)
         return
       }
       const result = await sendSignInLink(
@@ -225,8 +238,8 @@ function SignInContent() {
         })
         setLinkError(
           result.errorCode === "captcha_failed"
-            ? "We couldn't verify you're human. Please try again."
-            : "Could not send the link. Please try again.",
+            ? AUTH_MESSAGES.botCheckFailed
+            : AUTH_MESSAGES.signInLinkFailed,
         )
         return
       }
@@ -239,7 +252,7 @@ function SignInContent() {
         method: "email_link",
         reason: "request_error",
       })
-      setLinkError("Could not send the link. Please try again.")
+      setLinkError(AUTH_MESSAGES.signInLinkFailed)
     } finally {
       setIsLinkSending(false)
     }
@@ -314,10 +327,10 @@ function SignInContent() {
       // proof. A failed start keeps it for the next try.
       if (!error) clearFingerprintSignupCapture()
       if (error) {
-        setErrors({ form: "Error signing in. Please try again." })
+        setErrors({ form: AUTH_MESSAGES.googleSignInFailed })
       }
     } catch {
-      setErrors({ form: "Error signing in. Please try again." })
+      setErrors({ form: AUTH_MESSAGES.googleSignInFailed })
     } finally {
       setIsLoading(false)
     }
@@ -403,7 +416,7 @@ function SignInContent() {
                 onClick={() => setShowPassword(!showPassword)}
                 aria-label={showPassword ? "Hide password" : "Show password"}
                 aria-pressed={showPassword}
-                className="text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                className="-m-1 p-1 text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
               >
                 {showPassword ? (
                   <EyeSlashIcon className="size-4" weight="light" />

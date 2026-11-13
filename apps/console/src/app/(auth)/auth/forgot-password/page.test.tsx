@@ -78,7 +78,7 @@ function submit(email = "user@example.com") {
   fireEvent.change(screen.getByPlaceholderText("Email"), {
     target: { value: email },
   })
-  fireEvent.click(screen.getByRole("button", { name: "Send Reset Link" }))
+  fireEvent.click(screen.getByRole("button", { name: "Send reset link" }))
 }
 
 describe("ForgotPasswordPage", () => {
@@ -112,10 +112,36 @@ describe("ForgotPasswordPage", () => {
     submit()
 
     expect(
-      await screen.findByText(/We couldn't load our bot-check/),
+      await screen.findByText(
+        "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
+      ),
     ).toBeTruthy()
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
   })
+
+  it.each([
+    {
+      error: new TypeError("Failed to fetch"),
+      copy: "We couldn't send the reset email. Check your connection and try again.",
+    },
+    {
+      error: new Error("An unexpected response was received from the server."),
+      copy: "We couldn't send the reset email. Try again in a minute.",
+    },
+  ])(
+    "shows the expected reset email error for $error",
+    async ({ error, copy }) => {
+      mockSendPasswordResetEmail.mockRejectedValue(error)
+
+      submit()
+
+      expect(await screen.findByText(copy)).toBeTruthy()
+      expect(screen.queryByText("Check Your Email")).toBeNull()
+      expect(
+        screen.getByRole("button", { name: "Send reset link" }),
+      ).toBeEnabled()
+    },
+  )
 
   it("shows the server error and stays on the form", async () => {
     mockSendPasswordResetEmail.mockResolvedValue({
@@ -135,7 +161,7 @@ describe("ForgotPasswordPage", () => {
     expect(mockCapture).not.toHaveBeenCalled()
     await waitFor(() =>
       expect(
-        screen.getByRole("button", { name: "Send Reset Link" }),
+        screen.getByRole("button", { name: "Send reset link" }),
       ).toHaveProperty("disabled", false),
     )
   })

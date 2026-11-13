@@ -112,6 +112,17 @@ vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({ capture: mockCapture }),
 }))
 
+const recaptcha = vi.hoisted(() => ({
+  siteKey: undefined as string | undefined,
+  getToken: vi.fn(),
+}))
+vi.mock("@/lib/recaptcha/client", () => ({
+  get RECAPTCHA_SITE_KEY() {
+    return recaptcha.siteKey
+  },
+  getRecaptchaToken: (...args: unknown[]) => recaptcha.getToken(...args),
+}))
+
 const mockSignInWithPassword = vi.fn()
 const mockSignInWithOAuth = vi.fn()
 const mockGetUser = vi.fn()
@@ -187,6 +198,8 @@ describe("SignInPage", () => {
     mockClearFingerprintCapture.mockReset()
     mockCapture.mockReset()
     mockSendSignInLink.mockReset().mockResolvedValue({ success: true })
+    recaptcha.siteKey = undefined
+    recaptcha.getToken.mockReset().mockResolvedValue(undefined)
     searchParamsMap = {}
     // Default: no existing session
     mockGetUser.mockResolvedValue({
@@ -263,6 +276,28 @@ describe("SignInPage", () => {
     expect(
       screen.getByRole("button", { name: /Continue with Google/ }),
     ).toBeInTheDocument()
+  })
+
+  it("toggles password visibility with a larger hit area", async () => {
+    render(<SignInPage />)
+
+    const password = await screen.findByPlaceholderText("Password")
+    const toggle = screen.getByRole("button", { name: "Show password" })
+    expect(toggle).toHaveClass("-m-1", "p-1")
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+    expect(password).toHaveAttribute("type", "password")
+
+    await user.click(toggle)
+
+    expect(screen.getByRole("button", { name: "Hide password" })).toBe(toggle)
+    expect(toggle).toHaveAttribute("aria-pressed", "true")
+    expect(password).toHaveAttribute("type", "text")
+
+    await user.click(toggle)
+
+    expect(screen.getByRole("button", { name: "Show password" })).toBe(toggle)
+    expect(toggle).toHaveAttribute("aria-pressed", "false")
+    expect(password).toHaveAttribute("type", "password")
   })
 
   it("shows inline errors when submitting with empty fields", async () => {
@@ -382,7 +417,9 @@ describe("SignInPage", () => {
   })
 
   it("shows generic error on unexpected failure", async () => {
-    mockSignInWithPassword.mockRejectedValue(new Error("network failure"))
+    mockSignInWithPassword.mockResolvedValue({
+      error: { message: "Unexpected auth error" },
+    })
     render(<SignInPage />)
 
     await user.type(
@@ -393,9 +430,138 @@ describe("SignInPage", () => {
     await user.click(screen.getByRole("button", { name: "Sign In" }))
 
     expect(
-      await screen.findByText("Error signing in. Please try again."),
+      await screen.findByText(
+        "We couldn't sign you in. Try again, or continue with Google.",
+      ),
     ).toBeInTheDocument()
   })
+
+  it("offers Google after a generic error without showing recovery on a fresh page", async () => {
+    mockSignInWithPassword.mockResolvedValue({
+      error: {
+        name: "AuthRetryableFetchError",
+        status: 503,
+        message: "Service Unavailable",
+      },
+    })
+    render(<SignInPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+    await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+    expect(
+      await screen.findByText(
+        "We couldn't sign you in. Try again, or continue with Google.",
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Continue with Google/ }),
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole("region", { name: "Other ways to sign in" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    {
+      cause: "a rejected fetch returned by Supabase",
+      error: {
+        name: "AuthRetryableFetchError",
+        status: 0,
+        message: "Failed to fetch",
+      },
+      copy: "We couldn't reach Superserve. Check your connection and try again.",
+    },
+    {
+      cause: "a banned user",
+      error: { message: "User is banned", code: "user_banned", status: 400 },
+      copy: "Error signing in. Please try again.",
+    },
+    {
+      cause: "a ban code before a network message",
+      error: { message: "Failed to fetch", code: "user_banned", status: 400 },
+      copy: "Error signing in. Please try again.",
+    },
+    {
+      cause: "a ban message without a code",
+      error: { message: "User is banned", status: 400 },
+      copy: "Error signing in. Please try again.",
+    },
+    {
+      cause: "a retryable gateway error",
+      error: {
+        name: "AuthRetryableFetchError",
+        status: 503,
+        message: "Service Unavailable",
+      },
+      copy: "We couldn't sign you in. Try again, or continue with Google.",
+    },
+    {
+      cause: "an unparseable response",
+      error: {
+        name: "AuthRetryableFetchError",
+        status: 0,
+        message: "Unexpected token '<', \"<html>\" is not valid JSON",
+      },
+      copy: "We couldn't sign you in. Try again, or continue with Google.",
+    },
+  ])(
+    "shows the expected copy for $cause and tracks the reason",
+    async ({ error, copy }) => {
+      mockSignInWithPassword.mockResolvedValue({ error })
+      render(<SignInPage />)
+
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "test@test.com",
+      )
+      await user.type(screen.getByPlaceholderText("Password"), "password123")
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+      expect(await screen.findByText(copy)).toBeInTheDocument()
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_failed", {
+        method: "email",
+        reason: error.message,
+      })
+      if (error.status === 503) {
+        expect(
+          screen.queryByText(
+            "We couldn't reach Superserve. Check your connection and try again.",
+          ),
+        ).not.toBeInTheDocument()
+      }
+    },
+  )
+
+  it.each([
+    {
+      error: new TypeError("Failed to fetch"),
+      copy: "We couldn't reach Superserve. Check your connection and try again.",
+    },
+    {
+      error: new Error("boom"),
+      copy: "We couldn't sign you in. Try again, or continue with Google.",
+    },
+  ])(
+    "shows the expected copy when password sign-in throws $error",
+    async ({ error, copy }) => {
+      mockSignInWithPassword.mockRejectedValue(error)
+      render(<SignInPage />)
+
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "test@test.com",
+      )
+      await user.type(screen.getByPlaceholderText("Password"), "password123")
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+      expect(await screen.findByText(copy)).toBeInTheDocument()
+    },
+  )
 
   it("preserves the claim destination when switching to signup", async () => {
     searchParamsMap = { offer: "yc_2026", next: "/yc/claim" }
@@ -461,6 +627,45 @@ describe("SignInPage", () => {
       })
     })
   })
+
+  it("shows a Google sign-in error when OAuth returns an error", async () => {
+    mockSignInWithOAuth.mockResolvedValue({
+      error: { message: "OAuth provider unavailable" },
+    })
+    render(<SignInPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+
+    expect(
+      await screen.findByText(
+        "We couldn't start Google sign-in. Try again, or sign in with email.",
+      ),
+    ).toBeInTheDocument()
+  })
+
+  it.each(["beginGoogleSignIn", "signInWithOAuth"])(
+    "shows a Google sign-in error when %s throws",
+    async (source) => {
+      const mock =
+        source === "beginGoogleSignIn"
+          ? mockBeginGoogleSignIn
+          : mockSignInWithOAuth
+      mock.mockRejectedValue(new Error("Failed to fetch"))
+      render(<SignInPage />)
+
+      await user.click(
+        await screen.findByRole("button", { name: /Continue with Google/ }),
+      )
+
+      expect(
+        await screen.findByText(
+          "We couldn't start Google sign-in. Try again, or sign in with email.",
+        ),
+      ).toBeInTheDocument()
+    },
+  )
 
   it("forwards the retained staff review claim into the normal Google callback", async () => {
     const next = "/admin/yc?claim=11111111-1111-4111-8111-111111111111"
@@ -752,6 +957,27 @@ describe("SignInPage", () => {
       )
     })
 
+    it("explains how to unblock the bot check when no token is available", async () => {
+      recaptcha.siteKey = "site-key"
+      const region = await failPasswordSignIn()
+
+      await user.click(
+        within(region).getByRole("button", { name: "Email me a sign-in link" }),
+      )
+
+      expect(
+        await within(region).findByText(
+          "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
+        ),
+      ).toBeInTheDocument()
+      expect(recaptcha.getToken).toHaveBeenCalledWith("signin_link")
+      expect(mockSendSignInLink).not.toHaveBeenCalled()
+      expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
+        method: "email_link",
+        reason: "captcha_unavailable",
+      })
+    })
+
     it("shows an error and tracks the failure when the captcha check fails", async () => {
       mockSendSignInLink.mockResolvedValue({
         success: false,
@@ -765,7 +991,7 @@ describe("SignInPage", () => {
 
       expect(
         await within(region).findByText(
-          "We couldn't verify you're human. Please try again.",
+          "We couldn't verify you're human. Refresh the page and try again.",
         ),
       ).toBeInTheDocument()
       expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
@@ -790,7 +1016,7 @@ describe("SignInPage", () => {
 
       expect(
         await within(region).findByText(
-          "Could not send the link. Please try again.",
+          "We couldn't send the sign-in link. Try again in a minute, or continue with Google.",
         ),
       ).toBeInTheDocument()
       expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
@@ -835,7 +1061,7 @@ describe("SignInPage", () => {
 
       expect(
         await within(region).findByText(
-          "Could not send the link. Please try again.",
+          "We couldn't send the sign-in link. Try again in a minute, or continue with Google.",
         ),
       ).toBeInTheDocument()
       expect(mockCapture).toHaveBeenCalledWith("auth_sign_in_link_failed", {
