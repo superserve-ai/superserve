@@ -159,8 +159,10 @@ If your process stops or loses its connection during a streamed `run()`, the san
 
 <CodeGroup>
 ```typescript TypeScript
+// Remove the exit file of an earlier job first.
 await sandbox.commands.run(
-  "nohup sh -c 'sleep 360 && echo done; echo $? > /home/user/job.exit' > /home/user/job.log 2>&1 &",
+  "rm -f /home/user/job.exit; " +
+    "nohup sh -c 'sleep 360 && echo done; echo $? > /home/user/job.exit' > /home/user/job.log 2>&1 &",
 )
 
 let exitCode = ""
@@ -175,7 +177,9 @@ console.log(exitCode, await sandbox.files.readText("/home/user/job.log")) // 0 d
 ```python Python
 import time
 
+# Remove the exit file of an earlier job first.
 sandbox.commands.run(
+    "rm -f /home/user/job.exit; "
     "nohup sh -c 'sleep 360 && echo done; echo $? > /home/user/job.exit'"
     " > /home/user/job.log 2>&1 &"
 )
