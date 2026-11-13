@@ -2,9 +2,11 @@ import { sanitizeDiagnostic } from "./diagnostics"
 
 /**
  * The one capture failure that withholds the sign-up trial: the browser
- * reported that the device script did not load (blocked in the browser).
- * Provider-side failures (sdk_error, incomplete_capture, HTTP errors,
- * timeouts) do not count, so a provider outage does not withhold trials.
+ * reported that the device script did not load. The SDK reports this for a
+ * blocked script and also for a failed script delivery; the browser cannot
+ * tell them apart. Other browser capture failures (sdk_error,
+ * incomplete_capture, provider HTTP errors, timeouts) do not count, so they
+ * keep the trial.
  */
 export type SignupCaptureFailure = "script_load_fail"
 

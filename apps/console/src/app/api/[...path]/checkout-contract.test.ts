@@ -223,15 +223,18 @@ describe("trusted Checkout publication contract", () => {
       expect(mocks.rpc).toHaveBeenCalledTimes(1)
     },
   )
-  it("keeps the standard decision when only the signup device is unverified", async () => {
-    // A failed signup device capture withholds the sign-up trial only.
+  it("keeps the standard decision when only the signup device script was blocked", async () => {
+    // A blocked signup device script withholds the sign-up trial only.
     const { PromotionEvidenceError } =
       await import("@/lib/api/promotion-device-evidence")
     mocks.evidence.mockRejectedValue(
       new PromotionEvidenceError("evidence_missing"),
     )
     Object.assign(actor, {
-      app_metadata: { promotion_routine_absence: true },
+      app_metadata: {
+        promotion_routine_absence: true,
+        promotion_capture_failure: "script_load_fail",
+      },
     })
     try {
       const { receipt: retained } = await (await checkout(prepareBody)).json()
