@@ -878,7 +878,7 @@ describe("provisionTeam", () => {
     expect(clients.usw.writes.team).toBeUndefined()
   })
 
-  it("creates the team without the trial and counts it when the signup device is unverified", async () => {
+  it("creates the team without the trial and counts it when the signup device script was blocked", async () => {
     mockTrialWithheld = "device_unverified"
     await expect(
       provisionTeam("usw", "u1", "ignored@example.com", "west pilot"),
@@ -905,6 +905,7 @@ describe("provisionTeam", () => {
       "u1",
       {
         reason: "device_unverified",
+        capture_reason: "script_load_fail",
         region: "usw",
         team_id: "team-new",
         signup_method: "email",
@@ -1686,7 +1687,13 @@ vi.mock("@/lib/api/promotion-publication", () => ({
     try {
       await mockPublishPromotionIdentity(region, user.id, user, observedAt)
       return mockTrialWithheld
-        ? { authorityUnavailable: false, trialWithheld: mockTrialWithheld }
+        ? {
+            authorityUnavailable: false,
+            trialWithheld: {
+              reason: mockTrialWithheld,
+              captureReason: "script_load_fail",
+            },
+          }
         : { authorityUnavailable: false }
     } catch {
       return { authorityUnavailable: true }

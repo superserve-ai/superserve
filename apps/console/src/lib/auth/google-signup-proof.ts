@@ -2,6 +2,7 @@ import crypto from "node:crypto"
 
 import { cookies } from "next/headers"
 
+import type { SignupCaptureFailure } from "@/lib/fingerprint/capture-failure"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
@@ -33,6 +34,8 @@ export interface GooglePromotionEvidence {
   eventId?: string
   visitor?: string
   routineMissing: boolean
+  // The browser reported a blocked device script; withholds the sign-up trial.
+  captureFailure?: SignupCaptureFailure
 }
 
 interface ProofPayload {

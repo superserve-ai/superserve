@@ -563,6 +563,7 @@ export async function GET(request: Request) {
                       original.attemptId,
                       original.routineMissing,
                       signupAttemptId,
+                      original.captureFailure,
                     )
                 } catch {
                   // Publication is best effort; callback auth and notification

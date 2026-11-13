@@ -82,9 +82,19 @@ it.each([
     ).toEqual({ authorityUnavailable: true })
   },
 )
-it("withholds the trial when a new signup's device capture failed", async () => {
+const blocked = {
+  promotion_routine_absence: true,
+  promotion_capture_failure: "script_load_fail",
+}
+it("withholds the trial when the browser reported a blocked device script", async () => {
   await expect(
-    publishOriginalSignupEvidence(user, undefined, true),
+    publishOriginalSignupEvidence(
+      user,
+      undefined,
+      true,
+      "signup-attempt",
+      "script_load_fail",
+    ),
   ).resolves.toEqual({
     ownership: "owner",
     deviceDecision: "eligible",
@@ -92,6 +102,26 @@ it("withholds the trial when a new signup's device capture failed", async () => 
     reason: "team_checks_pending",
   })
   expect(mocks.snapshot).toHaveBeenCalledWith(user.id)
+  expect(mocks.update).toHaveBeenCalledWith(user.id, { app_metadata: blocked })
+  expect(
+    await publishAccountPromotion(
+      "use",
+      { ...user, app_metadata: blocked },
+      "now",
+    ),
+  ).toEqual({
+    authorityUnavailable: false,
+    trialWithheld: {
+      reason: "device_unverified",
+      captureReason: "script_load_fail",
+    },
+  })
+  expect(mocks.bind).not.toHaveBeenCalled()
+})
+it("keeps the trial for a missing capture with a provider-side failure", async () => {
+  // sdk_error, provider 4xx/5xx, timeouts and incomplete captures report no
+  // blocked script, so only routine absence is stored.
+  await publishOriginalSignupEvidence(user, undefined, true, "signup-attempt")
   expect(mocks.update).toHaveBeenCalledWith(user.id, {
     app_metadata: { promotion_routine_absence: true },
   })
@@ -101,15 +131,56 @@ it("withholds the trial when a new signup's device capture failed", async () => 
       { ...user, app_metadata: { promotion_routine_absence: true } },
       "now",
     ),
-  ).toEqual({ authorityUnavailable: false, trialWithheld: "device_unverified" })
-  expect(mocks.bind).not.toHaveBeenCalled()
+  ).toEqual({ authorityUnavailable: false })
+})
+it.each(["sdk_error", "incomplete_capture", true])(
+  "keeps the trial for any other stored capture value: %j",
+  async (value) => {
+    expect(
+      await publishAccountPromotion(
+        "use",
+        {
+          ...user,
+          app_metadata: {
+            promotion_routine_absence: true,
+            promotion_capture_failure: value,
+          },
+        },
+        "now",
+      ),
+    ).toEqual({ authorityUnavailable: false })
+  },
+)
+it("stores a blocked script only for a missing capture", async () => {
+  // A verified device or a failed attestation is not a missing capture.
+  await publishOriginalSignupEvidence(
+    user,
+    "original-attempt",
+    false,
+    "signup-attempt",
+    "script_load_fail",
+  )
+  expect(mocks.update).toHaveBeenCalledWith(user.id, {
+    app_metadata: { promotion_authority_failed: true },
+  })
+  mocks.update.mockClear()
+  await publishOriginalSignupEvidence(
+    user,
+    undefined,
+    true,
+    "signup-attempt",
+    "sdk_error" as never,
+  )
+  expect(mocks.update).toHaveBeenCalledWith(user.id, {
+    app_metadata: { promotion_routine_absence: true },
+  })
 })
 it("keeps the trial path for a signup whose device evidence exists", async () => {
   mocks.evidence.mockResolvedValue({ attemptId: "original" })
   expect(
     await publishAccountPromotion(
       "use",
-      { ...user, app_metadata: { promotion_routine_absence: true } },
+      { ...user, app_metadata: blocked },
       "now",
     ),
   ).toEqual({ authorityUnavailable: false })
@@ -119,7 +190,7 @@ it("does not report the device as the reason when publication also failed", asyn
   mocks.identity.mockRejectedValue(new Error("identity backend unavailable"))
   const result = await publishAccountPromotion(
     "use",
-    { ...user, app_metadata: { promotion_routine_absence: true } },
+    { ...user, app_metadata: blocked },
     "now",
   )
   expect(result).toEqual({ authorityUnavailable: true })
@@ -132,7 +203,7 @@ it("leaves staff-approved Enterprise applicants to the backend device policy", a
   expect(
     await publishEnterpriseAccountPromotion(
       "use",
-      { ...user, app_metadata: { promotion_routine_absence: true } },
+      { ...user, app_metadata: blocked },
       "now",
       {} as never,
     ),

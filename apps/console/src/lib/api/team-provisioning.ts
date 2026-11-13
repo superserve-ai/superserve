@@ -17,7 +17,7 @@ import {
 import {
   publishAccountPromotion,
   publishEnterpriseAccountPromotion,
-  type TrialWithheldReason,
+  type AccountPromotionPublication,
 } from "@/lib/api/promotion-publication"
 import {
   listTeamMembershipsForUserDetailed,
@@ -392,7 +392,7 @@ async function provisionTeamFor(
   if (!operationId && region !== DEFAULT_REGION)
     throw new Error("Team creation requires its original operation identifier")
   const locator = { userId, region, operationId: operationId ?? userId }
-  let trialWithheld: TrialWithheldReason | undefined
+  let trialWithheld: AccountPromotionPublication["trialWithheld"]
   let prepared = enterpriseAuthority
     ? await recoverPromotionTeamForEnterprise(locator, enterpriseAuthority)
     : await recoverPromotionTeam(locator)
@@ -411,8 +411,8 @@ async function provisionTeamFor(
     const preparation = {
       ...locator,
       name,
-      // An unverified sign-up device stores the same no-credit decision as a
-      // failed publication: the team is created, and the trial is withheld.
+      // A blocked sign-up device script stores the same no-credit decision as
+      // a failed publication: the team is created, and the trial is withheld.
       authorityUnavailable:
         publication.authorityUnavailable || trialWithheld !== undefined,
       additionalTeam:
@@ -450,7 +450,8 @@ async function provisionTeamFor(
     completed.reason === "authority_unavailable"
   )
     recordTrialWithheld(userId, {
-      reason: trialWithheld,
+      reason: trialWithheld.reason,
+      capture_reason: trialWithheld.captureReason,
       region,
       team_id: completed.teamId,
       signup_method: isGoogleUser(user) ? "google" : "email",

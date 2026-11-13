@@ -1,4 +1,9 @@
-/** Diagnostic data never participates in capture, proof, or credit decisions. */
+/**
+ * Diagnostic data never participates in capture or proof decisions, and never
+ * grants credit. The one exception is signupCaptureFailure (capture-failure.ts):
+ * a browser report of a blocked device script withholds that account's
+ * sign-up trial.
+ */
 export const diagnosticStages = [
   "capture_attempt",
   "storage_read",

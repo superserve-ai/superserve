@@ -1799,6 +1799,7 @@ describe("original signup promotion evidence", () => {
       "original-attempt",
       false,
       expect.any(String),
+      undefined,
     )
     expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
       mockSendEmail.mock.invocationCallOrder[0],
@@ -1929,6 +1930,7 @@ describe("original signup promotion evidence", () => {
         "original-attempt",
         false,
         expect.any(String),
+        undefined,
       )
       expect(mockOriginalPublication.mock.invocationCallOrder[0]).toBeLessThan(
         mockSlack.mock.invocationCallOrder[0],
@@ -2023,6 +2025,7 @@ describe("original signup promotion evidence", () => {
       undefined,
       false,
       expect.any(String),
+      undefined,
     )
     mockIssueGoogleSignupProof.mockClear()
     expect(
@@ -2051,6 +2054,7 @@ describe("original signup promotion evidence", () => {
       undefined,
       true,
       expect.any(String),
+      undefined,
     )
     mockOriginalPublication.mockClear()
     expect(
@@ -2061,6 +2065,7 @@ describe("original signup promotion evidence", () => {
       undefined,
       true,
       expect.any(String),
+      undefined,
     )
   })
 })
@@ -2091,6 +2096,92 @@ it("leaves an interrupted capture to the missing-evidence policy after refresh",
     undefined,
     true,
     expect.any(String),
+    undefined,
+  )
+})
+
+function captureReport(reason: string, http_status?: number) {
+  return {
+    schema_version: 1 as const,
+    events: [
+      {
+        stage: "capture" as const,
+        outcome: "unknown" as const,
+        reason: reason as "script_load_fail",
+        occurred_at: new Date().toISOString(),
+        ...(http_status ? { http_status } : {}),
+      },
+    ],
+  }
+}
+
+describe("blocked device script at signup", () => {
+  it.each([
+    ["script_load_fail", undefined, "script_load_fail"],
+    ["sdk_error", 403, undefined],
+    ["sdk_error", undefined, undefined],
+    ["incomplete_capture", undefined, undefined],
+    ["client_timeout", undefined, undefined],
+  ] as const)(
+    "email signup stores %s (HTTP %s) as %s",
+    async (reason, status, stored) => {
+      mockOriginalPublication.mockReset().mockResolvedValue(undefined)
+      mockVerifyRecaptcha.mockResolvedValue({ verified: true })
+      fingerprintSignupEventId = undefined
+      mockGenerateLink.mockImplementation(async () => ({
+        data: {
+          user: { id: "new-user", created_at: new Date().toISOString() },
+          properties: { hashed_token: "token" },
+        },
+        error: null,
+      }))
+      expect(
+        await signUpWithEmail(
+          "user@example.com",
+          "password123",
+          "Name",
+          undefined,
+          undefined,
+          { unavailable: true },
+          undefined,
+          captureReport(reason, status),
+        ),
+      ).toEqual({ success: true })
+      expect(mockOriginalPublication).toHaveBeenCalledWith(
+        expect.anything(),
+        undefined,
+        true,
+        expect.any(String),
+        stored,
+      )
+    },
+  )
+
+  it.each([
+    ["script_load_fail", undefined, "script_load_fail"],
+    ["sdk_error", 403, undefined],
+    ["sdk_error", undefined, undefined],
+    ["incomplete_capture", undefined, undefined],
+    ["client_timeout", undefined, undefined],
+  ] as const)(
+    "Google signup proof carries %s (HTTP %s) as %s",
+    async (reason, status, stored) => {
+      mockVerifyRecaptcha.mockResolvedValue({ verified: true })
+      fingerprintSignupEventId = undefined
+      mockIssueGoogleSignupProof.mockClear()
+      expect(
+        await beginGoogleSignup(
+          "google-token",
+          undefined,
+          { unavailable: true },
+          captureReport(reason, status),
+        ),
+      ).toMatchObject({ success: true })
+      const promotion = mockIssueGoogleSignupProof.mock.calls[0][1]
+      expect(promotion).toMatchObject({ routineMissing: true })
+      if (stored) expect(promotion.captureFailure).toBe(stored)
+      else expect(promotion).not.toHaveProperty("captureFailure")
+    },
   )
 })
 

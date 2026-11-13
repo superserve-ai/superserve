@@ -6,6 +6,7 @@ import {
   type EnterpriseProvisioningAuthority,
 } from "@/lib/admin/enterprise-provisioning-authority"
 import { DEFAULT_REGION } from "@/lib/cells"
+import type { SignupCaptureFailure } from "@/lib/fingerprint/capture-failure"
 import type { DiagnosticStage } from "@/lib/fingerprint/diagnostics"
 import {
   fingerprintDiagnostics,
@@ -38,17 +39,17 @@ function routineAbsence(user: User): boolean {
 }
 
 /**
- * A sign-up whose device capture failed or never ran (an ad blocker, a script
- * load failure or a scripted client) records routine absence at sign-up. Such
- * an account has no device evidence, so the trial would be keyed to the
- * account alone and a script could claim one per throwaway account. Accounts
- * from before signup evidence carry no marker and keep their old behavior.
+ * A sign-up whose device script was blocked in the browser has no device
+ * evidence, so the trial would be keyed to the account alone and a script
+ * could claim one per throwaway account. Other missing-capture sign-ups, and
+ * accounts from before this marker, keep the existing behavior.
  */
-function unverifiedSignupDevice(user: User): boolean {
-  return (
-    user.app_metadata?.promotion_routine_absence === true &&
-    user.app_metadata?.promotion_authority_failed !== true
-  )
+function blockedSignupCapture(user: User): SignupCaptureFailure | undefined {
+  return user.app_metadata?.promotion_routine_absence === true &&
+    user.app_metadata?.promotion_authority_failed !== true &&
+    user.app_metadata?.promotion_capture_failure === "script_load_fail"
+    ? "script_load_fail"
+    : undefined
 }
 
 /** Only the original signup flow calls this; normal login never writes provenance. */
@@ -57,6 +58,7 @@ export async function publishOriginalSignupEvidence(
   attemptId: string | undefined,
   routineMissing: boolean,
   signupAttemptId?: string,
+  captureFailure?: SignupCaptureFailure,
 ): Promise<PromotionSignupEligibility | undefined> {
   const diagnostic = fingerprintDiagnostics({
     userId: user.id,
@@ -72,7 +74,12 @@ export async function publishOriginalSignupEvidence(
     const { error } = await createAdminClient().auth.admin.updateUserById(
       user.id,
       {
-        app_metadata: { [field]: true },
+        app_metadata: {
+          [field]: true,
+          ...(routineMissing && captureFailure === "script_load_fail"
+            ? { promotion_capture_failure: captureFailure }
+            : {}),
+        },
       },
     )
     if (error) throw error
@@ -123,7 +130,7 @@ export async function publishOriginalSignupEvidence(
 
 /**
  * Why a sign-up trial that the backend could otherwise grant is withheld.
- * "device_unverified": the sign-up device capture failed or never ran, so the
+ * "device_unverified": the browser blocked the sign-up device script, so the
  * account has no device evidence.
  */
 export type TrialWithheldReason = "device_unverified"
@@ -132,7 +139,10 @@ export interface AccountPromotionPublication {
   authorityUnavailable: boolean
   // Set only when this reason alone withholds the sign-up trial. It does not
   // set authorityUnavailable, so Checkout keeps its publication decision.
-  trialWithheld?: TrialWithheldReason
+  trialWithheld?: {
+    reason: TrialWithheldReason
+    captureReason: SignupCaptureFailure
+  }
 }
 
 /** Publication failure affects credit only. Accepted original evidence can recover an uncertain bind. */
@@ -161,7 +171,7 @@ async function publishAccountPromotionFor(
   authority?: EnterpriseProvisioningAuthority,
 ): Promise<AccountPromotionPublication> {
   let authorityUnavailable = false
-  let deviceUnverified = false
+  let captureReason: SignupCaptureFailure | undefined
   try {
     await publishPromotionIdentity(region, user.id, user, observedAt)
   } catch {
@@ -188,7 +198,7 @@ async function publishAccountPromotionFor(
       )
     )
       authorityUnavailable = true
-    else deviceUnverified = !authority && unverifiedSignupDevice(user)
+    else if (!authority) captureReason = blockedSignupCapture(user)
   }
   if (authorityUnavailable) {
     console.warn(
@@ -197,13 +207,16 @@ async function publishAccountPromotionFor(
     )
     return { authorityUnavailable }
   }
-  if (deviceUnverified) {
+  if (captureReason) {
     // Fail closed for the sign-up trial only. Team preparation turns this into
     // the no-credit decision; Checkout ignores it.
-    console.warn("Signup device unverified; sign-up trial withheld", {
+    console.warn("Signup device script blocked; sign-up trial withheld", {
       region,
     })
-    return { authorityUnavailable: false, trialWithheld: "device_unverified" }
+    return {
+      authorityUnavailable: false,
+      trialWithheld: { reason: "device_unverified", captureReason },
+    }
   }
   return { authorityUnavailable }
 }
