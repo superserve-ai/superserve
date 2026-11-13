@@ -54,11 +54,15 @@ const CURATED_IMAGES = [
 const DEFAULT_IMAGE = CURATED_IMAGES[0]
 
 // API bounds from the create-template request schema; a team's plan caps
-// narrow them, and a plan that reports no cap keeps the API maximum.
+// narrow them.
 const API_MAX_VCPU = 32
 const API_MIN_MEMORY_MIB = 256
 const API_MIN_DISK_MIB = 1024
 const API_MAX_MIB = 131072
+// The backend always enforces a team limit, even when the plan reports none
+// (for example a team with no plan, which falls back to the legacy base
+// limits). With no reported cap, offer only these conservative defaults.
+const DEFAULT_CAPS = { vcpu: 2, memoryMib: 4096, diskMib: 8192 } as const
 // Live growth must stay a multiple of this above the boot size.
 const MEMORY_GROWTH_STEP_MIB = 128
 
@@ -70,8 +74,12 @@ const LIVE_MEMORY_DOCS_URL =
 const focusRing =
   "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
 
-function limitOf(cap: number | null | undefined, apiMax: number): number {
-  return Math.min(cap ?? apiMax, apiMax)
+function limitOf(
+  cap: number | null | undefined,
+  fallback: number,
+  apiMax: number,
+): number {
+  return Math.min(cap ?? fallback, apiMax)
 }
 
 // Doubling steps from the API minimum that end exactly at the limit, so a
@@ -237,7 +245,7 @@ function PlanMax({
       {unreported && (
         <>
           <span aria-hidden>*</span>
-          <span className="sr-only"> (API maximum)</span>
+          <span className="sr-only"> (default limit)</span>
         </>
       )}
     </span>
@@ -341,7 +349,8 @@ function GrowthChoice({ growing, canGrow, upTo, onChange }: GrowthChoiceProps) {
       </div>
       {!canGrow && (
         <p id={hintId} className="mt-1.5 pl-3 text-xs text-muted">
-          Boot memory is at your plan&apos;s limit, so there is no room to grow.
+          Growth needs at least 128 MB of room between boot memory and your
+          limit. Lower boot memory to turn it on.
         </p>
       )}
     </>
@@ -488,9 +497,17 @@ export function CreateTemplateDialog({
   const entitlement = useTemplateEntitlement()
   const templatesUnavailable = entitlement.status === "unavailable"
   const caps = entitlement.limits
-  const vcpuLimit = limitOf(caps?.max_vcpu, API_MAX_VCPU)
-  const memoryLimit = limitOf(caps?.max_memory_mib, API_MAX_MIB)
-  const diskLimit = limitOf(caps?.max_disk_mib, API_MAX_MIB)
+  const vcpuLimit = limitOf(caps?.max_vcpu, DEFAULT_CAPS.vcpu, API_MAX_VCPU)
+  const memoryLimit = limitOf(
+    caps?.max_memory_mib,
+    DEFAULT_CAPS.memoryMib,
+    API_MAX_MIB,
+  )
+  const diskLimit = limitOf(
+    caps?.max_disk_mib,
+    DEFAULT_CAPS.diskMib,
+    API_MAX_MIB,
+  )
   const vcpuSteps = Array.from(
     { length: Math.max(1, vcpuLimit) },
     (_, i) => i + 1,
@@ -841,7 +858,7 @@ export function CreateTemplateDialog({
                 <>
                   {" "}
                   <span aria-hidden>*</span>No plan limit reported, so this is
-                  the API maximum.
+                  the default limit. Contact support for more.
                 </>
               )}
             </p>

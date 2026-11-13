@@ -235,13 +235,30 @@ describe("resource ranges follow the team's plan caps", () => {
     })
   })
 
-  it("falls back to the API maximum and says so when the plan reports no cap", () => {
+  it("falls back to the default limits and says so when the plan reports no cap", () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    expect(spin("vCPU")).toHaveAttribute("aria-valuemax", "32")
-    expect(spin("Memory")).toHaveAttribute("aria-valuemax", "131072")
+    expect(spin("vCPU")).toHaveAttribute("aria-valuemax", "2")
+    expect(spin("Memory")).toHaveAttribute("aria-valuemax", "4096")
+    expect(spin("Disk")).toHaveAttribute("aria-valuemax", "8192")
     expect(
-      screen.getByText(/No plan limit reported, so this is the API maximum/),
+      screen.getByText(/No plan limit reported, so this is the default limit/),
     ).toBeInTheDocument()
+  })
+
+  it("keeps a team with no plan inside the default limits", async () => {
+    // A team with no plan still has limits the backend enforces.
+    mocks.planState = "legacy"
+    render(<CreateTemplateDialog open hideTrigger />)
+    press("Increase vCPU", 2)
+    expect(spin("vCPU")).toHaveAttribute("aria-valuenow", "2")
+    expect(screen.getByRole("button", { name: "Increase vCPU" })).toBeDisabled()
+    fireEvent.keyDown(spin("Memory"), { key: "End" })
+    fireEvent.keyDown(spin("Disk"), { key: "End" })
+    expect(await submit()).toMatchObject({
+      vcpu: 2,
+      memory_mib: 4096,
+      disk_mib: 8192,
+    })
   })
 
   it("keeps a selection that a raised cap still allows", async () => {
@@ -269,6 +286,7 @@ const radio = (name: string | RegExp) => screen.getByRole("radio", { name })
 describe("memory growth", () => {
   beforeEach(() => {
     mocks.cap = 10
+    mocks.memoryCap = 32768
     mocks.create.mockResolvedValue({ id: "created-template" })
   })
 
@@ -334,7 +352,7 @@ describe("memory growth", () => {
     expect(radio("Fixed")).toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
     expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
-      "Boot memory is at your plan's limit, so there is no room to grow.",
+      "Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on.",
     )
     // Room to grow again doesn't re-enable it without the user.
     press("Decrease Memory")
@@ -377,7 +395,7 @@ describe("memory growth", () => {
     expect(radio("Fixed")).toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
     expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
-      "Boot memory is at your plan's limit, so there is no room to grow.",
+      "Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on.",
     )
     // A raised limit doesn't turn growth back on without the user.
     mocks.memoryCap = 8192
