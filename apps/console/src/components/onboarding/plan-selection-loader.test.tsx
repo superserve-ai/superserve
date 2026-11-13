@@ -136,3 +136,10 @@ it("keeps recovery visible while a slow retry checks the account", async () => {
   )
   expect(await screen.findByText("Plan choices")).toBeVisible()
 })
+
+it("offers a support contact when setup cannot be confirmed", () => {
+  render(<PlanSelectionLoader initialContext={null} />)
+  expect(
+    screen.getByRole("link", { name: "support@superserve.ai" }),
+  ).toHaveAttribute("href", "mailto:support@superserve.ai")
+})
