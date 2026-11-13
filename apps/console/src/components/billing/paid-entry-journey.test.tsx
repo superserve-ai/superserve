@@ -179,6 +179,7 @@ async function preparedDestination(next: string, team?: string) {
     "actor",
     undefined,
     target.pathname + target.search,
+    false,
   )
   state.query = target.searchParams.toString()
   return target

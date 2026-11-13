@@ -70,3 +70,9 @@ it("completes nothing while pending, for a free plan, without a success return o
   await getSignupPlanAction("use:team", "owner", "success")
   expect(m.completed).not.toHaveBeenCalled()
 })
+
+it("leaves the completion to the onboarding page when called by the preparation route", async () => {
+  m.read.mockResolvedValue(plan("committed", "pro_monthly"))
+  await getSignupPlanAction("use:team", "owner", "success", undefined, false)
+  expect(m.completed).not.toHaveBeenCalled()
+})

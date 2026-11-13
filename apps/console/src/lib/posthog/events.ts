@@ -70,14 +70,14 @@ export const PLAN_PICKER_EVENTS = {
 // billing_pro or onboarding_plan), `offer`, `plan`, `billing_interval`,
 // `checkout_session_id`, `team_id`, `region` and the PostHog `team` group.
 // A value that is not known is null. Count distinct `checkout_session_id`
-// values: a reload of a return page can send an event again.
+// values: a reload of a return page can send an event again. Each event
+// carries the time it happened as the PostHog timestamp, so a return is not
+// ordered after its completion.
 //   checkout_opened: Checkout session created or resumed. Adds `price_cents`
 //     (catalog list price), `reason` (the team's entry state on the plan
 //     picker, for example trial_ended) and `explicit_choice` (true when the
 //     customer submitted a plan on the plan picker, including a first
 //     purchase; false when a link resumed Checkout or on other surfaces).
-//   All three events carry the time they happened as the PostHog timestamp,
-//   so a return is never ordered after its completion.
 //   checkout_returned: the customer came back from Checkout. Adds `outcome`
 //     (success or cancel).
 //   checkout_completed: the backend confirmed the paid plan after a return.

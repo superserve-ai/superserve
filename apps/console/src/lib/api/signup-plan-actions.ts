@@ -22,6 +22,9 @@ export async function getSignupPlanAction(
   expectedUser?: string,
   billingReturn?: string,
   paidContinuation?: string,
+  // False on /api/onboarding/prepare: it redirects to /onboarding/plan, which
+  // records the return and the completion itself, in that order.
+  recordCompletion = true,
 ): Promise<SignupPlanContext> {
   const paidNext =
     proAuthReturnPath(paidContinuation ?? null) ??
@@ -69,6 +72,7 @@ export async function getSignupPlanAction(
   // The onboarding page's refresh is where a successful Checkout return first
   // sees the paid plan committed; it is the one completion for that page.
   if (
+    recordCompletion &&
     billingReturn === "success" &&
     context.state === "committed" &&
     context.offer &&
