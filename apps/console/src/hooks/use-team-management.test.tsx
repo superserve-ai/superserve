@@ -373,22 +373,67 @@ describe("replace team role", () => {
     expect(mocks.management).toHaveBeenCalledOnce()
   })
 
-  it("shows the assignment error, revokes nothing and refetches", async () => {
+  it("shows a curated assignment error without logging, revokes nothing and refetches", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
     mocks.assign.mockRejectedValue(
-      new ApiError(400, "invalid_role", "Role not allowed"),
+      new ApiError(403, "forbidden", "Raw permission error"),
     )
     const { result } = setup()
     await act(async () => {
       await expect(
         result.current.mutateAsync({ team, data, assignments: [old] }),
-      ).rejects.toThrow("Role not allowed")
+      ).rejects.toThrow("Raw permission error")
     })
     expect(mocks.revokeRole).not.toHaveBeenCalled()
-    expect(screen.getByText("Role not allowed")).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "You do not have permission to perform this team-management action.",
+      ),
+    ).toBeInTheDocument()
+    expect(screen.queryByText("Raw permission error")).not.toBeInTheDocument()
+    expect(log).not.toHaveBeenCalled()
     expect(mocks.management).toHaveBeenCalledOnce()
   })
 
+  it("shows a server team-change error without logging", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    const message = "Your active team changed. Reload the page and try again."
+    mocks.assign.mockRejectedValue(new ApiError(409, "team_changed", message))
+    const { result } = setup()
+    await act(async () => {
+      await expect(
+        result.current.mutateAsync({ team, data, assignments: [old] }),
+      ).rejects.toThrow(message)
+    })
+    expect(screen.getByText(message)).toBeInTheDocument()
+    expect(log).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    new ApiError(400, "invalid_role", "Role not allowed"),
+    new ApiError(500, "internal_error", "Database connection failed"),
+    new Error("Failed to fetch"),
+  ])(
+    "logs an unexpected assignment error and shows the fallback: %s",
+    async (error) => {
+      const log = vi.spyOn(console, "error").mockImplementation(() => {})
+      mocks.assign.mockRejectedValue(error)
+      const { result } = setup()
+      await act(async () => {
+        await expect(
+          result.current.mutateAsync({ team, data, assignments: [old] }),
+        ).rejects.toBe(error)
+      })
+      expect(mocks.revokeRole).not.toHaveBeenCalled()
+      expect(screen.getByText("Failed to change role.")).toBeInTheDocument()
+      expect(screen.queryByText(error.message)).not.toBeInTheDocument()
+      expect(log).toHaveBeenCalledWith("Team-management action failed:", error)
+      expect(mocks.management).toHaveBeenCalledOnce()
+    },
+  )
+
   it("reports partial failure clearly and refetches members and assignments", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
     mocks.revokeRole.mockRejectedValue(new Error("revoke failed"))
     const { result } = setup()
     const message =
@@ -400,10 +445,13 @@ describe("replace team role", () => {
     })
     expect(mocks.assign).toHaveBeenCalledWith(team, data)
     expect(screen.getByText(message)).toBeInTheDocument()
+    expect(screen.queryByText("revoke failed")).not.toBeInTheDocument()
+    expect(log).not.toHaveBeenCalled()
     expect(mocks.management).toHaveBeenCalledOnce()
   })
 
   it("rejects a changed team before assignment", async () => {
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
     const { result } = setup()
     await act(async () => {
       await expect(
@@ -416,6 +464,12 @@ describe("replace team role", () => {
         "Your active team changed. Reload the page and try again.",
       )
     })
+    expect(
+      screen.getByText(
+        "Your active team changed. Reload the page and try again.",
+      ),
+    ).toBeInTheDocument()
+    expect(log).not.toHaveBeenCalled()
     expect(mocks.assign).not.toHaveBeenCalled()
     expect(mocks.revokeRole).not.toHaveBeenCalled()
     expect(mocks.management).toHaveBeenCalledOnce()
