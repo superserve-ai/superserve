@@ -26,9 +26,13 @@ print(result.exit_code)  # 0
 ```
 </CodeGroup>
 
+<Warning>
+A `run()` without callbacks gets no response until the command ends. In TypeScript on Node.js, it fails at 300 seconds with `SandboxError: Network error: fetch failed`, even when `timeoutMs` is longer. In Python, some networks close the idle connection after a few minutes. For a command that can run longer than 4 minutes, use the streaming form below. See [Long-running commands](/commands/overview#long-running-commands).
+</Warning>
+
 ## `run` (streaming)
 
-Pass `onStdout` / `on_stdout` and/or `onStderr` / `on_stderr` callbacks. Output is delivered over Server-Sent Events and flushed to your callback as it arrives. The final `result` still contains the full concatenated output.
+Pass `onStdout` / `on_stdout` and/or `onStderr` / `on_stderr` callbacks. Output is delivered over Server-Sent Events and flushed to your callback as it arrives. The final `result` still contains the full concatenated output. The stream also carries keepalive messages, so the connection stays open for a long command that prints nothing.
 
 <CodeGroup>
 ```typescript TypeScript
