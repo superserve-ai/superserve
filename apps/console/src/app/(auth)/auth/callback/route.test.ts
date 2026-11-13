@@ -84,8 +84,8 @@ let googleMembershipState:
   kind: "existing",
   membership: { teamId: "team-1", region: "use" },
 }
-let authExchangeError: { message: string } | null = null
-let authVerifyOtpError: { message: string } | null = null
+let authExchangeError: { message: string; code?: string } | null = null
+let authVerifyOtpError: { message: string; code?: string } | null = null
 
 const mockGetSignupPlanAction = vi.fn()
 const mockPrepareTeam = vi.fn()
@@ -310,6 +310,15 @@ vi.mock("@/lib/auth/signup-review-server", async (importOriginal) => ({
     mockUpdateSignupReview(...args),
 }))
 
+// Run `after()` work at once but never wait for it, as Next does once the
+// response is out. Tests can then assert the scheduled events directly.
+vi.mock("next/server", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("next/server")>()),
+  after: (fn: () => unknown) => {
+    void fn()
+  },
+}))
+
 const mockTrackEvent = vi.fn()
 vi.mock("@/lib/posthog/actions", () => ({
   trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
@@ -321,6 +330,7 @@ vi.mock("@/lib/posthog/events", () => ({
     SIGN_IN_FAILED: "sign_in_failed",
     SIGN_UP_COMPLETED: "sign_up_completed",
     SIGN_IN_COMPLETED: "sign_in_completed",
+    CALLBACK_FAILED: "auth_callback_failed",
   },
 }))
 
@@ -601,6 +611,17 @@ describe("auth callback", () => {
       },
       undefined,
     )
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_callback_failed",
+      expect.any(String),
+      {
+        method: "token_hash",
+        type: "signup",
+        error_code: null,
+        reason: "signup_blocked",
+        $process_person_profile: false,
+      },
+    )
   })
 
   it("returns an expired signup confirmation to signup with its offer and destination", async () => {
@@ -641,11 +662,28 @@ describe("auth callback", () => {
     })
   })
 
-  it.each(["token_hash=token&type=magiclink", "code=abc&type=signup"])(
-    "keeps the generic error for a failed %s callback",
-    async (auth) => {
-      authVerifyOtpError = { message: "Email link is invalid or has expired" }
-      authExchangeError = { message: "invalid flow state" }
+  it.each([
+    [
+      "token_hash=token&type=magiclink",
+      "otp_failed",
+      { method: "token_hash", type: "magiclink", error_code: "otp_expired" },
+    ],
+    [
+      "code=abc&type=signup",
+      "exchange_failed",
+      { method: "code", type: "signup", error_code: "flow_state_not_found" },
+    ],
+  ])(
+    "keeps the generic error for a failed %s callback and records why",
+    async (auth, reason, props) => {
+      authVerifyOtpError = {
+        message: "Email link is invalid or has expired",
+        code: "otp_expired",
+      }
+      authExchangeError = {
+        message: "invalid flow state",
+        code: "flow_state_not_found",
+      }
 
       const response = await GET(
         new Request(`https://console.superserve.ai/auth/callback?${auth}`),
@@ -653,10 +691,124 @@ describe("auth callback", () => {
 
       const destination = new URL(response.headers.get("location")!)
       expect(destination.pathname + destination.search).toBe(
-        "/auth/auth-code-error",
+        `/auth/auth-code-error?reason=${reason}`,
+      )
+      const failures = mockTrackEvent.mock.calls.filter(
+        ([event]) => event === "auth_callback_failed",
+      )
+      expect(failures).toHaveLength(1)
+      expect(failures[0][1]).toEqual(expect.any(String))
+      expect(failures[0][2]).toEqual({
+        ...props,
+        reason,
+        $process_person_profile: false,
+      })
+      expect(JSON.stringify(failures[0])).not.toMatch(/abc|token\b|@/)
+    },
+  )
+
+  it.each([
+    ["", "missing_code", { method: "none", type: null, error_code: null }],
+    [
+      "?error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid",
+      "provider_error",
+      { method: "none", type: null, error_code: "otp_expired" },
+    ],
+    [
+      "?error=access_denied&error_description=User+cancelled",
+      "provider_error",
+      { method: "none", type: null, error_code: "access_denied" },
+    ],
+    [
+      "?error_code=Bad%20Code%20with%20spaces",
+      "provider_error",
+      { method: "none", type: null, error_code: null },
+    ],
+  ])(
+    "records a callback without a credential (%s) as %s",
+    async (query, reason, props) => {
+      const response = await GET(
+        new Request(`https://console.superserve.ai/auth/callback${query}`),
+      )
+
+      const destination = new URL(response.headers.get("location")!)
+      expect(destination.pathname).toBe("/auth/auth-code-error")
+      expect(destination.searchParams.get("reason")).toBe(reason)
+      expect(mockTrackEvent).toHaveBeenCalledTimes(1)
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_callback_failed",
+        expect.any(String),
+        { ...props, reason, $process_person_profile: false },
       )
     },
   )
+
+  it("keeps the redirect when the failure event cannot be sent", async () => {
+    authExchangeError = { message: "invalid flow state" }
+    mockTrackEvent.mockRejectedValueOnce(new Error("posthog down"))
+
+    const response = await GET(
+      new Request("https://console.superserve.ai/auth/callback?code=abc"),
+    )
+
+    expect(new URL(response.headers.get("location")!).search).toBe(
+      "?reason=exchange_failed",
+    )
+  })
+
+  it.each([
+    ["missing_code", "https://console.superserve.ai/auth/callback"],
+    [
+      "signup_link_failed",
+      "https://console.superserve.ai/auth/callback?token_hash=used&type=signup",
+    ],
+  ])(
+    "returns the %s redirect while PostHog never answers",
+    async (reason, url) => {
+      authVerifyOtpError = { message: "expired", code: "otp_expired" }
+      mockTrackEvent.mockImplementation(() => new Promise(() => {}))
+
+      const outcome = await Promise.race([
+        GET(new Request(url)).then((response) => response.status),
+        new Promise((resolve) => setTimeout(() => resolve("pending"), 200)),
+      ])
+
+      expect(outcome).toBe(307)
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_callback_failed",
+        expect.any(String),
+        expect.objectContaining({ reason }),
+      )
+    },
+  )
+
+  it("records one failure, not a sign-up, for a used signup confirmation link", async () => {
+    currentUser!.app_metadata = { provider: "email" }
+    currentUser!.created_at = new Date(Date.now() - 3600000).toISOString()
+    authVerifyOtpError = {
+      message: "Email link is invalid or has expired",
+      code: "otp_expired",
+    }
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=used&type=signup",
+      ),
+    )
+
+    expect(new URL(response.headers.get("location")!).pathname).toBe(
+      "/auth/signup",
+    )
+    expect(mockTrackEvent.mock.calls.map(([event]) => event)).toEqual([
+      "auth_callback_failed",
+    ])
+    expect(mockTrackEvent.mock.calls[0][2]).toMatchObject({
+      method: "token_hash",
+      type: "signup",
+      error_code: "otp_expired",
+      reason: "signup_link_failed",
+    })
+  })
 
   it("uses unavailable for a pre-identity Google trigger rejection", async () => {
     authExchangeError = { message: "DATABASE ERROR SAVING NEW USER" }
@@ -931,6 +1083,126 @@ describe("auth callback", () => {
       )
     },
   )
+
+  describe("sign-up versus sign-in event", () => {
+    const completion = () =>
+      mockTrackEvent.mock.calls.filter(
+        ([event]) =>
+          event === "sign_up_completed" || event === "sign_in_completed",
+      )
+
+    it.each([
+      ["30 seconds", 30_000],
+      ["one hour", 3_600_000],
+      ["three days", 3 * 86_400_000],
+    ])(
+      "counts an email confirmation %s after signup as a sign-up",
+      async (_label, age) => {
+        currentUser!.app_metadata = { provider: "email" }
+        currentUser!.created_at = new Date(Date.now() - age).toISOString()
+
+        await GET(
+          new Request(
+            "https://console.superserve.ai/auth/callback?token_hash=token&type=signup&offer=pro_monthly",
+          ),
+        )
+
+        expect(completion()).toEqual([
+          [
+            "sign_up_completed",
+            "u1",
+            {
+              provider: "email",
+              email: "user@example.com",
+              is_new_user: true,
+              requested_offer: "pro_monthly",
+            },
+          ],
+        ])
+      },
+    )
+
+    it("still counts a quick email confirmation as a sign-up", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=token&type=signup",
+        ),
+      )
+
+      expect(completion()).toEqual([
+        [
+          "sign_up_completed",
+          "u1",
+          { provider: "email", email: "user@example.com", is_new_user: true },
+        ],
+      ])
+    })
+
+    it.each(["magiclink", "email"])(
+      "counts a later %s sign-in of an existing email account as a sign-in",
+      async (type) => {
+        currentUser!.app_metadata = { provider: "email" }
+        currentUser!.created_at = new Date(Date.now() - 3_600_000).toISOString()
+
+        await GET(
+          new Request(
+            `https://console.superserve.ai/auth/callback?token_hash=token&type=${type}&offer=pro_monthly`,
+          ),
+        )
+
+        expect(completion()).toEqual([
+          [
+            "sign_in_completed",
+            "u1",
+            {
+              provider: "email",
+              email: "user@example.com",
+              is_new_user: false,
+            },
+          ],
+        ])
+      },
+    )
+
+    it("counts an invite acceptance as a sign-in", async () => {
+      currentUser!.app_metadata = { provider: "email" }
+
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?token_hash=token&type=invite",
+        ),
+      )
+
+      expect(completion()).toEqual([
+        [
+          "sign_in_completed",
+          "u1",
+          { provider: "email", email: "user@example.com", is_new_user: false },
+        ],
+      ])
+    })
+
+    it("counts an existing Google account as a sign-in even when just created", async () => {
+      googleMembershipState = {
+        kind: "existing",
+        membership: { teamId: "team-1", region: "use" },
+      }
+
+      await GET(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+
+      expect(completion()).toEqual([
+        [
+          "sign_in_completed",
+          "u1",
+          { provider: "google", email: "user@example.com", is_new_user: false },
+        ],
+      ])
+    })
+  })
 
   it("preserves an email signup offer after a delayed confirmation", async () => {
     currentUser!.app_metadata = { provider: "email" }
@@ -1316,8 +1588,23 @@ describe("auth callback", () => {
       )
       expect(mockSignOut).toHaveBeenCalled()
       expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
-      expect(new URL(response.headers.get("location")!).pathname).toBe(
-        "/auth/auth-code-error",
+      const failure = new URL(response.headers.get("location")!)
+      expect(failure.pathname).toBe("/auth/auth-code-error")
+      expect(failure.searchParams.get("reason")).toBe("enterprise_hold_failed")
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_callback_failed",
+        "u1",
+        {
+          method: "code",
+          type: null,
+          error_code: null,
+          reason: "enterprise_hold_failed",
+        },
+      )
+      expect(mockTrackEvent).not.toHaveBeenCalledWith(
+        "sign_up_completed",
+        expect.anything(),
+        expect.anything(),
       )
     })
 
@@ -2033,7 +2320,7 @@ describe("auth callback", () => {
       const plain = new URL(
         (await GET(new Request(url))).headers.get("location")!,
       )
-      expect(plain.search).toBe("")
+      expect(plain.search).toBe("?reason=otp_failed")
     })
 
     it.each(["https://evil.test", "//evil.test", "/billing/pro?approved=true"])(

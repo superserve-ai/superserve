@@ -37,11 +37,12 @@ export function CreateKeyDialog({
   const [copied, setCopied] = useState(false)
   const { addToast } = useToast()
   const posthog = usePostHog()
-  const createMutation = useCreateApiKey()
+  const createMutation = useCreateApiKey("create_dialog")
 
   const handleCreate = () => {
     if (!name.trim()) return
-    posthog.capture(API_KEY_EVENTS.CREATED, { name: name.trim() })
+    // Click only; the server sends api_key_created once the key is stored.
+    posthog.capture(API_KEY_EVENTS.CREATE_CLICKED, { name: name.trim() })
     createMutation.mutate(name.trim(), {
       onSuccess: (data) => {
         setCreatedKey({ full: data.key })

@@ -1,3 +1,4 @@
+import type { ConsoleApiKeySource } from "./api-key-mint"
 import {
   createApiKeyAction,
   listApiKeysAction,
@@ -14,8 +15,9 @@ export async function listApiKeys(): Promise<ApiKeyResponse[]> {
 
 export async function createApiKey(data: {
   name: string
+  source?: ConsoleApiKeySource
 }): Promise<CreateApiKeyResponse> {
-  const result = await createApiKeyAction(data.name)
+  const result = await createApiKeyAction(data.name, data.source)
   if ("code" in result) throw new ApiError(403, result.code, result.message)
   return result
 }

@@ -2,6 +2,7 @@ import "server-only"
 import crypto from "node:crypto"
 
 import type { User } from "@supabase/supabase-js"
+import { after } from "next/server"
 
 import { pickActiveTeam, readTeamSelection } from "@/lib/api/active-team"
 import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
@@ -15,6 +16,8 @@ import {
   provisionTeam,
 } from "@/lib/api/team-provisioning"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
+import { trackEvent } from "@/lib/posthog/actions"
+import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
 // Region codes embedded in new API keys (ss_live_<region>_...). Must stay in
 // sync with the team_home_region_valid CHECK constraint in the control-plane
@@ -97,11 +100,31 @@ export async function getOrCreateTeamForUser(
   return { teamId: team.id, region: DEFAULT_REGION }
 }
 
+/**
+ * Where a key was created, sent as the `source` property of the server-side
+ * `api_key_created` event. The console values come from the browser, so the
+ * server action checks them against this list.
+ */
+export const CONSOLE_API_KEY_SOURCES = [
+  "create_dialog",
+  "connect_dialog_sdk_key",
+  "get_started",
+] as const
+export type ConsoleApiKeySource = (typeof CONSOLE_API_KEY_SOURCES)[number]
+export type ApiKeySource = ConsoleApiKeySource | "console" | "cli_device_login"
+
+export function consoleApiKeySource(value: unknown): ApiKeySource {
+  return CONSOLE_API_KEY_SOURCES.includes(value as ConsoleApiKeySource)
+    ? (value as ConsoleApiKeySource)
+    : "console"
+}
+
 export async function mintTeamApiKey(
   user: User,
   team: TeamMembership,
   name: string,
   observedAt: string,
+  source: ApiKeySource,
 ) {
   const region = await getTeamHomeRegion(team)
   const rawKey = generateRawKey(region)
@@ -139,6 +162,26 @@ export async function mintTeamApiKey(
     .single()
 
   if (error) throw new Error(error.message)
+
+  // Analytics only, sent after the response: a slow or failing PostHog must
+  // never delay or fail the key handoff (CLI device login has already used
+  // its code by now). Never send the key or its hash.
+  try {
+    after(async () => {
+      try {
+        await trackEvent(API_KEY_EVENTS.CREATED, user.id, {
+          source,
+          api_key_id: data.id,
+          team_id: team.teamId,
+          team_region: team.region,
+        })
+      } catch {
+        /* Delivery is best effort. */
+      }
+    })
+  } catch {
+    /* No request scope (for example a script): skip the event. */
+  }
 
   return {
     id: data.id as string,
