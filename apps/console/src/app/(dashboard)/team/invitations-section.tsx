@@ -3,7 +3,7 @@
 import { EnvelopeSimpleIcon, SignOutIcon } from "@phosphor-icons/react"
 import { Button, ConfirmDialog, useToast } from "@superserve/ui"
 import { useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useId, useState } from "react"
 
 import {
   sameTeam,
@@ -98,7 +98,6 @@ export function InviteMemberCard({
           type="button"
           size="sm"
           disabled={blocked}
-          title={blocked ? UPGRADE_REASON : undefined}
           onClick={() => {
             if (team) setInviting(team)
           }}
@@ -285,6 +284,7 @@ export function LeaveTeamSection({
   const leave = useLeaveTeam()
   const { addToast } = useToast()
   const [confirming, setConfirming] = useState<TeamScope | null>(null)
+  const reasonId = useId()
 
   useEffect(() => {
     if (confirming && !sameTeam(confirming, team)) setConfirming(null)
@@ -306,7 +306,7 @@ export function LeaveTeamSection({
       <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <p className="text-lg font-medium text-foreground">Leave team</p>
-          <p className="mt-1 text-sm text-muted">
+          <p id={reasonId} className="mt-1 text-sm text-muted">
             {blockedReason ??
               "You will lose access to this team and switch to another one."}
           </p>
@@ -315,7 +315,7 @@ export function LeaveTeamSection({
           size="sm"
           variant="outline"
           disabled={onlyTeam || ownerBlocked || leave.isPending}
-          title={blockedReason}
+          aria-describedby={blockedReason ? reasonId : undefined}
           onClick={() => {
             if (team) setConfirming(team)
           }}
