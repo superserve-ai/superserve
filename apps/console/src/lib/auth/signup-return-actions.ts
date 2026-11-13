@@ -8,6 +8,7 @@ import { isSignupCheckoutOffer } from "@/lib/billing/signup-checkout-paths"
 import { createServerClient } from "@/lib/supabase/server"
 import { YC_COOKIE } from "@/lib/yc-claims"
 
+import { signupEmailNextPath } from "./signup-email-next"
 import { isSelfServeSignupOffer, parseSignupOffer } from "./signup-offer"
 import { confirmedSignupReturnPath } from "./signup-return-path"
 import {
@@ -25,7 +26,10 @@ export async function confirmedSignupDestinationAction(
   rawOffer: string | undefined,
   rawNext: string,
 ): Promise<string> {
-  const requested = confirmedSignupReturnPath(rawNext)
+  // The next path the confirmation email carried, which the callback used.
+  const requested = confirmedSignupReturnPath(
+    signupEmailNextPath(rawNext) ?? "/",
+  )
   const supabase = await createServerClient()
   const {
     data: { user },

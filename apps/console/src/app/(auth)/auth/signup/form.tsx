@@ -15,6 +15,7 @@ import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { signupEmailNextPath } from "@/lib/auth/signup-email-next"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import { confirmedSignupDestinationAction } from "@/lib/auth/signup-return-actions"
 import { confirmedSignupReturnPath } from "@/lib/auth/signup-return-path"
@@ -410,7 +411,10 @@ export default function SignUpContent() {
     setResendNotice(null)
   }
 
-  const confirmedNext = confirmedSignupReturnPath(nextUrl)
+  // The next path the confirmation email carries (the email drops others).
+  const confirmedNext = confirmedSignupReturnPath(
+    signupEmailNextPath(nextUrl) ?? "/",
+  )
 
   // A confirmation link opened in another tab of this browser signs that tab
   // in and leaves the session cookies here too. Follow them on to the next

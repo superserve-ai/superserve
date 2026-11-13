@@ -146,14 +146,27 @@ describe("confirmedSignupDestinationAction", () => {
     )
   })
 
-  it("keeps an explicit step the callback keeps", async () => {
+  it("keeps an explicit step the confirmation email carries", async () => {
     await expect(
       confirmedSignupDestinationAction("pro_monthly", "/yc/claim"),
     ).resolves.toBe("/yc/claim")
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("drops a next path the confirmation email drops, as the callback sees it", async () => {
+    // The email keeps only billing, YC, device and invite steps, so the
+    // callback picks its default step for anything else.
+    pricing.mockResolvedValue("legacy")
+    await expect(
+      confirmedSignupDestinationAction("pro_monthly", "/templates"),
+    ).resolves.toBe("/billing/pro/")
+    pricing.mockResolvedValue("v2")
+    plan = { ok: true, body: { entry_state: "trial_ended" } }
     await expect(
       confirmedSignupDestinationAction(undefined, "/onboarding/plan/?team=t"),
-    ).resolves.toBe("/onboarding/plan/?team=t")
-    expect(fetchMock).not.toHaveBeenCalled()
+    ).resolves.toBe(
+      "/auth/choose-plan/?reason=trial_ended&account=u1&team=use%3Ateam-1",
+    )
   })
 
   it("treats a next path that leaves the site as none", async () => {

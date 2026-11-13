@@ -1238,6 +1238,19 @@ describe("SignUpPage", () => {
       expect(mockReplace).toHaveBeenCalledTimes(1)
     })
 
+    it("uses only the next path the confirmation email carries", async () => {
+      // The email drops /templates, so the callback picks its default step.
+      mockSearchParams = new URLSearchParams({ next: "/templates" })
+      mockConfirmedDestination.mockRejectedValue(new Error("offline"))
+      render(<SignUpPage />)
+      await signUp()
+
+      confirmInOtherTab()
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(undefined, "/")
+    })
+
     it("takes the requested path when the server is slow", async () => {
       vi.useFakeTimers({ shouldAdvanceTime: true })
       mockSearchParams = new URLSearchParams({ next: "/yc/claim" })
