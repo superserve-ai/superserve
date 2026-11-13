@@ -50,7 +50,7 @@ template = Template.create(
 
 ## Stream build logs
 
-`waitUntilReady` accepts an `onLog` callback that receives each SSE event as the build runs.
+`waitUntilReady` accepts an `onLog` callback that receives each log event while the build runs. Each event's `text` holds one line of output, without a trailing newline.
 
 <CodeGroup>
 
@@ -58,7 +58,7 @@ template = Template.create(
 await template.waitUntilReady({
   onLog: (event) => {
     if (event.stream === "system") return  // skip system messages
-    process.stdout.write(event.text)
+    console.log(event.text)
   },
 })
 ```
@@ -66,7 +66,7 @@ await template.waitUntilReady({
 ```python Python
 def print_log(ev):
     if ev.stream.value != "system":
-        print(ev.text, end="")
+        print(ev.text)
 
 template.wait_until_ready(on_log=print_log)
 ```
@@ -74,6 +74,8 @@ template.wait_until_ready(on_log=print_log)
 </CodeGroup>
 
 On success, `waitUntilReady` returns the refreshed `TemplateInfo` with `status = "ready"`. On failure, it raises `BuildError` with a machine-readable `code` (e.g. `step_failed`, `image_pull_failed`).
+
+Logs stream only while the build runs. If the build already finished, `onLog` / `on_log` is never called, and `waitUntilReady` returns or raises from the build's final status as usual. The SDK can't replay the logs of a finished build, so save the events in your callback if you need them later.
 
 ## Create a sandbox from the template
 

@@ -11,11 +11,12 @@ An OCI image reference. Resolved to a digest at build time for reproducibility.
 
 ```typescript
 from: "python:3.11" // Docker Hub
-from: "ghcr.io/myorg/foo:v1" // any OCI registry
+from: "ghcr.io/myorg/foo:v1" // any public OCI registry
 ```
 
 **Constraints:**
 
+- Must be a **public** image. The builder pulls it without credentials, and the API has no option for registry credentials. A private image fails the build with `image_pull_failed`.
 - Must be a **linux/amd64** image
 - Must include a shell at `/bin/sh` and the `mkdir`, `mount`, `chmod`, and `sync` commands, which every template boots and builds with. Debian, Ubuntu, Alpine, and BusyBox images all qualify; distroless and `scratch`-based images don't.
 
@@ -89,7 +90,7 @@ Templates specify the VM shape; sandboxes inherit these and cannot override them
 | Developer max | 4 vCPU         | 16 GiB (16384 MiB) |
 | Pro max       | 16 vCPU        | 64 GiB (65536 MiB) |
 
-`memoryMib` takes a value in MiB (1 GiB = 1024 MiB). Limits depend on your team's plan. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
+`memoryMib` takes a value in MiB (1 GiB = 1024 MiB). `diskMib` takes at least 1024 MiB and defaults to 4096 MiB (4 GiB). Limits depend on your team's plan. For larger sandboxes, email [support@superserve.ai](mailto:support@superserve.ai).
 
 ### Growing memory
 
@@ -104,6 +105,23 @@ Only sandboxes from a template built with `memoryMaxMib` set can grow; leave it 
 
 For how sandboxes grow, shrink and are billed, see [Live memory resizing](/sandbox/live-memory-resizing).
 
+## Validation rules
+
+`Template.create` checks the request before it starts a build. A request that breaks a rule fails with `ValidationError` (HTTP `400`), and no template is created.
+
+| Field | Rule | Error message |
+| --- | --- | --- |
+| `name` | 1 to 128 characters | `name is required and must be 1-128 characters` |
+| `name` | Lowercase letters, digits, and `.` `_` `/` `-` only. Starts and ends with a letter or digit. | `name must be lowercase, start and end with a letter or digit, and contain only letters, digits, '.', '_', '/', '-'` |
+| `name` | Must not start with `superserve/` | `names starting with 'superserve/' are reserved` |
+| `from` | Required | `build_spec.from is required` |
+| `steps[i]` | Exactly one of `run` / `env` / `workdir` / `user` | `build_spec.steps[i] must set exactly one of run/env/workdir/user` |
+| `env.key` | Required | `build_spec.steps[i].env.key is required` |
+| `user.name` | Starts with a lowercase letter or `_`, then lowercase letters, digits, `_`, or `-`. At most 31 characters. | `build_spec.steps[i].user: name must start with a lowercase letter or underscore` |
+| `vcpu`, `memoryMib`, `diskMib` | Within the minimum and your plan's maximum. See [Resource limits](#resource-limits). | `vcpu must be 1-<max> (your team's limit); contact support@superserve.ai for higher` |
+
+Names are unique per team. A name that another of your templates uses fails with `ConflictError`. The `from` image is checked only when the build pulls it; see `bad_reference`, `image_pull_failed`, and `unsupported_platform` below.
+
 ## Build error codes
 
 When a build lands on `failed`, `BuildError.code` carries one of these stable identifiers (the SDK parses it from the `"<code>: <detail>"` prefix on `errorMessage`):
@@ -113,7 +131,7 @@ When a build lands on `failed`, `BuildError.code` carries one of these stable id
 | `bad_reference`         | The `from` image reference is malformed (expected `python:3.11` or `ghcr.io/org/image:tag`).                 |
 | `unsupported_platform`  | The base image isn't `linux/amd64`.                                                                          |
 | `unsupported_base`      | Base image lacks `/bin/sh` or a required command (the message says which), or its `USER` can't run commands. |
-| `image_pull_failed`     | Base image couldn't be pulled or resolved — bad reference, or the registry was unreachable.                  |
+| `image_pull_failed`     | Base image couldn't be pulled or resolved — bad reference, private image, or the registry was unreachable.   |
 | `image_unsafe`          | Image rejected for unsafe paths (tar / symlink / hardlink entries escaping the root).                        |
 | `image_too_large`       | Flattened image exceeds the requested `diskMib`; raise `diskMib`.                                            |
 | `step_failed`           | A build step exited non-zero. The message includes the failing step and its exit code.                       |
