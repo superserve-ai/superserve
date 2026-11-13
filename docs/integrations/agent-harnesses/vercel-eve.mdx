@@ -44,7 +44,7 @@ See [API keys](/api-key) to create a Superserve API key.
 The provider maps eve's sandbox lifecycle to the Superserve SDK:
 
 - `start()` creates a sandbox the first time a session uses one. It tags the sandbox with a hash of the eve session id, so a later call finds the same sandbox.
-- `resume()` reconnects to that sandbox in later steps and after a server restart. `Sandbox.connect` resumes it if it is paused.
+- `resume()` reconnects to that sandbox in later steps and after a server restart. `Sandbox.connect` resumes it if it is paused. If the platform is moving the sandbox (`migrating`), the provider waits up to a minute and tries again.
 - `onSessionEnd()` deletes the sandbox when the eve session ends.
 - The connection runs eve's commands with `sandbox.commands.spawn` and moves files with `sandbox.files`. `stop()` pauses the sandbox.
 - `prepare()` bakes workspace files and setup into a snapshot. See [Bake files and setup into a snapshot](#bake-files-and-setup-into-a-snapshot).
@@ -55,6 +55,7 @@ Save it as `agent/lib/superserve-sandbox.ts`:
 import { createHash } from "node:crypto"
 import { readFile, writeFile } from "node:fs/promises"
 import { join } from "node:path"
+import { setTimeout as sleep } from "node:timers/promises"
 
 import {
   ConflictError,
@@ -84,7 +85,14 @@ export interface SuperserveSandboxOptions {
 }
 
 const WORKSPACE = "/workspace"
-const LIVE = ["starting", "active", "pausing", "paused", "resuming"] as const
+const LIVE = [
+  "starting",
+  "active",
+  "pausing",
+  "paused",
+  "resuming",
+  "migrating",
+] as const
 
 // Quote a value for /bin/sh.
 const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
@@ -171,7 +179,7 @@ export const SuperserveSandbox = defineSandboxProvider({
           found = all[0] ?? created
           if (found.id !== created.id) await created.kill()
         }
-        const sandbox = await Sandbox.connect(found.id)
+        const sandbox = await connectTo(found.id)
         await sandbox.commands.run(`mkdir -p ${WORKSPACE}`)
         return {
           connection: connect(sandbox),
@@ -187,7 +195,7 @@ export const SuperserveSandbox = defineSandboxProvider({
           )
         }
         try {
-          return connect(await Sandbox.connect(state.sandboxId))
+          return connect(await connectTo(state.sandboxId))
         } catch (error) {
           if (error instanceof NotFoundError) {
             throw new SandboxSessionGoneError(
@@ -213,6 +221,18 @@ export const SuperserveSandbox = defineSandboxProvider({
   },
 })
 
+// Connect to a sandbox. Wait while the platform moves it (`migrating`).
+async function connectTo(sandboxId: string) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await Sandbox.connect(sandboxId)
+    } catch (error) {
+      if (!(error instanceof ConflictError) || attempt === 30) throw error
+      await sleep(2_000)
+    }
+  }
+}
+
 function connect(sandbox: Sandbox): SandboxConnection {
   return {
     workspaceRoot: WORKSPACE,
@@ -227,6 +247,8 @@ function connect(sandbox: Sandbox): SandboxConnection {
         onStdout: stdout.push,
         onStderr: stderr.push,
       })
+      // Send EOF at once unless eve writes to stdin.
+      if (!stdin) proc.stdin.close()
       // Abort kills the command and closes its connection.
       signal?.addEventListener("abort", () => void proc.close(), { once: true })
       const done = proc.wait().then(
@@ -292,16 +314,29 @@ function connect(sandbox: Sandbox): SandboxConnection {
 function pipe() {
   const encoder = new TextEncoder()
   let controller!: ReadableStreamDefaultController<Uint8Array>
+  let open = true
   const stream = new ReadableStream<Uint8Array>({
     start: (c) => {
       controller = c
     },
+    // The reader stopped early. Drop the rest of the output.
+    cancel: () => {
+      open = false
+    },
   })
+  const settle = (finish: () => void) => {
+    if (open) {
+      open = false
+      finish()
+    }
+  }
   return {
     stream,
-    push: (text: string) => controller.enqueue(encoder.encode(text)),
-    end: () => controller.close(),
-    fail: (error: unknown) => controller.error(error),
+    push: (text: string) => {
+      if (open) controller.enqueue(encoder.encode(text))
+    },
+    end: () => settle(() => controller.close()),
+    fail: (error: unknown) => settle(() => controller.error(error)),
   }
 }
 
@@ -317,6 +352,13 @@ function toNetwork(policy?: SandboxNetworkPolicy): NetworkConfig | undefined {
     throw new Error(
       "Superserve network rules can't transform or forward requests.",
     )
+  }
+  // eve's subnets.deny wins over its allow rules. In Superserve, allow rules
+  // win, so a deny can't narrow an allow list.
+  const allowsSome =
+    domains.length > 0 || (policy.subnets?.allow ?? []).length > 0
+  if (allowsSome && (policy.subnets?.deny ?? []).length > 0) {
+    throw new Error("Superserve can't deny subnets inside an allow list.")
   }
   return {
     allowOut: [
@@ -437,7 +479,7 @@ example.com 200
 github.com 000
 ```
 
-`"deny-all"` blocks all outbound traffic, and `"allow-all"` adds no rules. `subnets.allow` and `subnets.deny` become CIDR rules. Superserve rules can't change or forward requests, so the provider throws on a policy with `transform` or `forwardURL` rules.
+`"deny-all"` blocks all outbound traffic, and `"allow-all"` adds no rules. `subnets.allow` becomes CIDR allow rules. In eve, `subnets.deny` wins over allowed domains and subnets, but in Superserve an allow rule wins over a deny rule. So the provider throws on a policy that has both allow entries and `subnets.deny`. Superserve rules can't change or forward requests, so the provider also throws on a policy with `transform` or `forwardURL` rules.
 
 ## Bake files and setup into a snapshot
 
