@@ -98,6 +98,16 @@ async function runCheck(
 }
 
 /**
+ * Stops the running check, if any, so that it starts no further step. The
+ * sign-in page calls it when it unmounts.
+ */
+export function cancelGoogleSignupCheck(): void {
+  latestCheck++
+  latestAbort?.abort()
+  latestAbort = undefined
+}
+
+/**
  * Runs the Google sign-up check (fingerprint capture, the `signup_google`
  * reCAPTCHA, and the signed proof cookie) before the sign-in page sends the
  * browser to Google. The sign-in page cannot know if the Google account is

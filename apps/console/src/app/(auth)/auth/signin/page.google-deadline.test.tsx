@@ -199,6 +199,28 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
     expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
   })
 
+  it("does not go to Google after the user leaves the page during the check", async () => {
+    // For example, the user follows "Create an account" while the check runs.
+    let finishCapture: (value: typeof capture) => void = () => {}
+    mocks.ensureCapture.mockReturnValue(
+      new Promise((resolve) => {
+        finishCapture = resolve
+      }),
+    )
+    const { unmount } = render(<SignInPage />)
+    await clickGoogle()
+    await act(() => vi.advanceTimersByTimeAsync(1_000))
+    unmount()
+
+    await act(async () => {
+      finishCapture(capture)
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS)
+    })
+
+    expect(mocks.signInWithOAuth).not.toHaveBeenCalled()
+    expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
+  })
+
   it("goes to Google within the deadline when the origin action never answers", async () => {
     mocks.beginGoogleSignIn.mockReturnValue(new Promise(() => {}))
     render(<SignInPage />)

@@ -32,6 +32,7 @@ import { createBrowserClient } from "@/lib/supabase/client"
 import { beginGoogleSignIn } from "./google-action"
 import {
   GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
+  cancelGoogleSignupCheck,
   googleSignupAttemptForSignIn,
 } from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
@@ -243,6 +244,17 @@ function SignInContent() {
     }
   }
 
+  // False once the page unmounts, so a Google attempt still waiting on its
+  // checks does not navigate away from the page the user went to.
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    return () => {
+      mounted.current = false
+      cancelGoogleSignupCheck()
+    }
+  }, [])
+
   const handleGoogleSignIn = async (fromRecovery = false) => {
     if (fromRecovery) trackRecoveryOption("google")
     setIsLoading(true)
@@ -260,6 +272,9 @@ function SignInContent() {
         withinDeadline(beginGoogleSignIn(), GOOGLE_SIGNUP_CHECK_DEADLINE_MS),
         googleSignupAttemptForSignIn(),
       ])
+      // The user left this page during the wait (for example to "Create an
+      // account"), so this attempt must not take them to Google.
+      if (!mounted.current) return
       if (intent.status === "rejected") throw intent.reason
       const intentId = intent.value
       const signupAttemptId =
