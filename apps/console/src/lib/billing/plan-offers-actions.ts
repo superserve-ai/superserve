@@ -125,3 +125,22 @@ export async function getTrialOutcomeAction(
     return null
   }
 }
+
+export async function getLegacyPlanEntryAction(
+  teamKey: string,
+): Promise<boolean> {
+  try {
+    const {
+      data: { user },
+    } = await (await createServerClient()).auth.getUser()
+    if (!user) return false
+    const { team } = await getAuthApiKeyAndTeamForUser(user)
+    if (teamKey !== `${team.region}:${team.teamId}`) return false
+    return await hasLegacyPlanEntry(
+      cellFor(team.region).createAdminClient(),
+      team.teamId,
+    )
+  } catch {
+    return false
+  }
+}

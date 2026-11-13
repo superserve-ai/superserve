@@ -142,7 +142,9 @@ function TrialEntryBanner({
   const { teamKey } = useBillingContext()
   const scope = useQueryScope()
   const offers = useBillingCapabilities().data?.offers
-  const legacyTransition = useLegacyPlanTransition()
+  const legacyTransition = useLegacyPlanTransition(
+    entry === "trial_ended" || entry === "payment_failed",
+  )
   const signup = useQueryClient().getQueryData<SignupPlanContext>([
     "signup-plan",
     teamKey,
@@ -168,7 +170,9 @@ function TrialEntryBanner({
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
       label={
-        stage === "plan_required" || stage === "unknown"
+        (legacyTransition && stage !== "trial") ||
+        stage === "plan_required" ||
+        stage === "unknown"
           ? "No plan"
           : "Free trial"
       }
