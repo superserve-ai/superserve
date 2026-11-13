@@ -40,7 +40,7 @@ describe("signup capture retry boundary", () => {
     expect(overlapping).toEqual(first)
     expect(createAttempt).toHaveBeenCalledOnce()
     expect(getData).toHaveBeenCalledExactlyOnceWith({
-      tag: { signup_challenge: "challenge-original" },
+      tags: { signup_challenge: "challenge-original" },
     })
     expect(await client.ensureFingerprintSignupCapture()).toEqual(first)
     expect(getData).toHaveBeenCalledOnce()

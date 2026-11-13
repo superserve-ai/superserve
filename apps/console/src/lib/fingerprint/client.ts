@@ -21,7 +21,7 @@ export type SignupFingerprintResult =
   | { unavailable: true }
 
 type FingerprintGetData = (options?: {
-  tag: { signup_challenge: string }
+  tags: { signup_challenge: string }
 }) => Promise<{ event_id?: string }>
 let fingerprintGetData: FingerprintGetData | undefined
 let capturePromise: Promise<SignupFingerprintResult | undefined> | undefined
@@ -205,7 +205,7 @@ export function ensureFingerprintSignupCapture(): Promise<
     stage = "capture"
     captureStarted = true
     const result = await fingerprintGetData!({
-      tag: { signup_challenge: attempt.challenge },
+      tags: { signup_challenge: attempt.challenge },
     })
     if (!result.event_id) {
       recordDiagnostic({
