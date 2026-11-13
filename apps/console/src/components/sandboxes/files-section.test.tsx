@@ -7,14 +7,23 @@
  *   - Descending into a folder (re-lists the subpath)
  *   - Downloading a file (format=zip, success toast + posthog)
  *   - Drag-drop upload onto the current directory and onto a folder row
- *   - Surfacing the API error message when a listing request fails
+ *   - Showing API error copy or stable fallback copy and logging listing failures
  */
 
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  vi,
+  type MockInstance,
+} from "vitest"
 
+import { ApiError } from "@/lib/api/client"
 import type { SandboxResponse } from "@/lib/api/types"
 
 const mockAddToast = vi.fn()
@@ -59,6 +68,7 @@ URL.createObjectURL = vi.fn().mockReturnValue("blob:fake")
 URL.revokeObjectURL = vi.fn()
 
 import { FilesSection } from "./files-section"
+import { listingErrorMessage } from "./files/file-browser"
 
 const activeSandbox: SandboxResponse = {
   id: "sbx-1",
@@ -101,15 +111,21 @@ function defaultFetch(url: string, init?: RequestInit) {
   return Promise.resolve(new Response(null, { status: 404 }))
 }
 
-function renderSection(sandbox: SandboxResponse = activeSandbox) {
+function renderSection(
+  sandbox: SandboxResponse = activeSandbox,
+  { reactStrictMode = false } = {},
+) {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false } },
+    // useDirListing overrides `retry` (one retry for 5xx / network errors), so
+    // drop the backoff delay to keep failure tests fast.
+    defaultOptions: { queries: { retry: false, retryDelay: 0 } },
   })
-  return render(
-    <QueryClientProvider client={client}>
-      <FilesSection sandbox={sandbox} onStart={() => {}} />
-    </QueryClientProvider>,
-  )
+  return render(<FilesSection sandbox={sandbox} onStart={() => {}} />, {
+    wrapper: ({ children }) => (
+      <QueryClientProvider client={client}>{children}</QueryClientProvider>
+    ),
+    reactStrictMode,
+  })
 }
 
 function fileDataTransfer(file: File) {
@@ -246,6 +262,17 @@ describe("FileBrowser — drag-drop upload", () => {
 })
 
 describe("FileBrowser — listing errors", () => {
+  const fallbackMessage = "This folder couldn't be loaded. Please try again."
+  let consoleErrorSpy: MockInstance<typeof console.error>
+
+  beforeEach(() => {
+    consoleErrorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+  })
+
+  afterEach(() => {
+    consoleErrorSpy.mockRestore()
+  })
+
   it("surfaces the API error message when listing fails", async () => {
     fetchSpy.mockImplementation(() =>
       Promise.resolve(
@@ -259,5 +286,136 @@ describe("FileBrowser — listing errors", () => {
     )
     renderSection()
     expect(await screen.findByText(/Folder not found/i)).toBeInTheDocument()
+  })
+
+  it("shows stable copy and logs an aborted listing request", async () => {
+    const error = new DOMException(
+      "signal is aborted without reason",
+      "AbortError",
+    )
+    fetchSpy.mockRejectedValue(error)
+
+    renderSection()
+
+    expect(await screen.findByText(fallbackMessage)).toBeInTheDocument()
+    expect(screen.queryByText(error.message)).not.toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalledWith("Failed to list folder", {
+      error,
+      path: "/home/user",
+    })
+  })
+
+  it("shows stable copy and logs a primitive listing rejection once", async () => {
+    fetchSpy.mockRejectedValue("Failed to fetch")
+
+    const { rerender } = renderSection()
+
+    expect(await screen.findByText(fallbackMessage)).toBeInTheDocument()
+    expect(screen.queryByText("Failed to fetch")).not.toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+    expect(consoleErrorSpy).toHaveBeenCalledWith("Failed to list folder", {
+      error: "Failed to fetch",
+      path: "/home/user",
+    })
+
+    rerender(
+      <FilesSection
+        sandbox={{ ...activeSandbox, name: "renamed" }}
+        onStart={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(fallbackMessage)).toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+  })
+
+  it("shows stable copy when the API error message is blank", async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response(
+          JSON.stringify({ error: { code: "not_found", message: "" } }),
+          { status: 404, statusText: "Not Found" },
+        ),
+      ),
+    )
+
+    renderSection()
+
+    expect(await screen.findByText(fallbackMessage)).toBeInTheDocument()
+    expect(screen.queryByText("Not Found")).not.toBeInTheDocument()
+  })
+
+  it("shows stable copy for a non-JSON gateway response", async () => {
+    fetchSpy.mockImplementation(() =>
+      Promise.resolve(
+        new Response("<html>Bad Gateway</html>", {
+          status: 502,
+          statusText: "Bad Gateway",
+        }),
+      ),
+    )
+
+    renderSection()
+
+    expect(await screen.findByText(fallbackMessage)).toBeInTheDocument()
+    expect(screen.queryByText(/Bad Gateway/)).not.toBeInTheDocument()
+  })
+
+  it("logs the same error only once across StrictMode effects and a rerender", async () => {
+    const error = new TypeError("Failed to fetch")
+    fetchSpy.mockRejectedValue(error)
+    const { rerender } = renderSection(activeSandbox, {
+      reactStrictMode: true,
+    })
+
+    expect(await screen.findByText(fallbackMessage)).toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+
+    rerender(
+      <FilesSection
+        sandbox={{ ...activeSandbox, name: "renamed" }}
+        onStart={() => {}}
+      />,
+    )
+
+    expect(screen.getByText(fallbackMessage)).toBeInTheDocument()
+    expect(consoleErrorSpy).toHaveBeenCalledTimes(1)
+  })
+})
+
+describe("listingErrorMessage", () => {
+  it("returns the body message for an API error with a body code", () => {
+    expect(
+      listingErrorMessage(
+        new ApiError(404, "not_found", "Folder not found.", true),
+      ),
+    ).toBe("Folder not found.")
+  })
+
+  it("returns stable copy for a body message without a body code", () => {
+    expect(
+      listingErrorMessage(
+        new ApiError(502, "unknown_error", "signal is aborted", true),
+      ),
+    ).toBe("This folder couldn't be loaded. Please try again.")
+  })
+
+  it("returns stable copy for an API error without a body message", () => {
+    expect(
+      listingErrorMessage(new ApiError(404, "not_found", "Not Found", false)),
+    ).toBe("This folder couldn't be loaded. Please try again.")
+  })
+
+  it.each([
+    ["an unknown API error", new ApiError(502, "unknown_error", "Bad Gateway")],
+    ["a blank API message", new ApiError(404, "not_found", "")],
+    ["a whitespace API message", new ApiError(404, "not_found", " \t\n ")],
+    ["a plain Error", new Error("Failed to fetch")],
+    ["a non-Error value", "Failed to fetch"],
+    ["null", null],
+  ])("returns stable copy for %s", (_, error) => {
+    expect(listingErrorMessage(error)).toBe(
+      "This folder couldn't be loaded. Please try again.",
+    )
   })
 })

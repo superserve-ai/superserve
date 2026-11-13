@@ -12,6 +12,7 @@ import { usePostHog } from "posthog-js/react"
 import { useEffect, useRef, useState } from "react"
 
 import { useDirListing } from "@/hooks/use-dir-listing"
+import { ApiError } from "@/lib/api/client"
 import {
   DownloadError,
   downloadWithLimit,
@@ -30,6 +31,22 @@ import { FileBreadcrumb } from "./file-breadcrumb"
 import { FileRow } from "./file-row"
 
 const DEFAULT_PATH = "/home/user"
+const loggedErrors = new WeakSet<object>()
+
+/**
+ * Show copy from the API error body (both a code and a message), stable copy
+ * for other listing failures.
+ */
+export function listingErrorMessage(error: unknown): string {
+  if (
+    error instanceof ApiError &&
+    error.messageFromBody &&
+    error.code !== "unknown_error"
+  ) {
+    return error.message
+  }
+  return "This folder couldn't be loaded. Please try again."
+}
 
 /** Whether a drag carries OS files (vs. text / an in-page element). */
 function hasFiles(e: React.DragEvent): boolean {
@@ -294,6 +311,7 @@ export function FileBrowser({ sandbox }: FileBrowserProps) {
         ) : listing.error ? (
           <ListingError
             error={listing.error}
+            path={path}
             onRetry={() => listing.refetch()}
           />
         ) : entries.length === 0 ? (
@@ -358,16 +376,29 @@ function EmptyFolder() {
 
 function ListingError({
   error,
+  path,
   onRetry,
 }: {
-  error: Error
+  error: unknown
+  path: string
   onRetry: () => void
 }) {
+  useEffect(() => {
+    if (
+      (typeof error === "object" && error !== null) ||
+      typeof error === "function"
+    ) {
+      if (loggedErrors.has(error)) return
+      loggedErrors.add(error)
+    }
+    console.error("Failed to list folder", { error, path })
+  }, [error, path])
+
   return (
     <div className="flex min-h-[180px] flex-col items-center justify-center gap-3 px-6 py-12 text-center">
       <WarningCircleIcon className="size-8 text-destructive" weight="light" />
       <p className="max-w-sm font-mono text-xs text-foreground/70">
-        {error.message}
+        {listingErrorMessage(error)}
       </p>
       <Button variant="outline" size="sm" onClick={onRetry}>
         Retry
