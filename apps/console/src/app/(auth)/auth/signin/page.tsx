@@ -19,15 +19,49 @@ import {
   signInOfferDestination,
   isSelfServeSignupOffer,
 } from "@/lib/auth/signup-offer"
+import {
+  TURNSTILE_SCRIPT_SRC,
+  TURNSTILE_SITE_KEY,
+} from "@/lib/cloudflare/turnstile-client"
+import { clearFingerprintSignupCapture } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
+import {
+  GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
+  cancelGoogleSignupCheck,
+  googleSignupAttemptForSignIn,
+  prefetchGoogleSignupCheck,
+} from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
 
 type RecoveryOption = "magic_link" | "google" | "forgot_password"
+
+/**
+ * The promise's value, or undefined once `ms` have passed. A rejection before
+ * then is kept; a result or rejection after it is dropped.
+ */
+function withinDeadline<T>(
+  promise: Promise<T>,
+  ms: number,
+): Promise<T | undefined> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => resolve(undefined), ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
 
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
@@ -211,14 +245,54 @@ function SignInContent() {
     }
   }
 
+  // False once the page unmounts, so a Google attempt still waiting on its
+  // checks does not navigate away from the page the user went to.
+  const mounted = useRef(false)
+  useEffect(() => {
+    mounted.current = true
+    prefetchGoogleSignupCheck()
+    return () => {
+      mounted.current = false
+      cancelGoogleSignupCheck()
+    }
+  }, [])
+
   const handleGoogleSignIn = async (fromRecovery = false) => {
     if (fromRecovery) trackRecoveryOption("google")
     setIsLoading(true)
     setErrors({})
     try {
       const supabase = createBrowserClient()
-      const intentId = await beginGoogleSignIn()
+      // Run the sign-up check now, so a Google account that is new to
+      // Superserve finishes sign-up in this one trip to Google. The check is
+      // optional and stops by its own deadlines, so it cannot hold back an
+      // existing account for long; a cancelled check starts no further step.
+      // Next.js runs server actions one at a time. The origin action is
+      // short and goes first, so a stalled capture or proof call cannot
+      // hold it back: the callback then keeps the sign-up origin. It is
+      // optional too and gets the browser deadline of the check, because
+      // after a stalled check it would queue behind that check's request on
+      // a retry.
+      const intentResult = withinDeadline(
+        beginGoogleSignIn(),
+        GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
+      )
+      const [intent, signupAttemptResult] = await Promise.allSettled([
+        intentResult,
+        googleSignupAttemptForSignIn(),
+      ])
+      // The user left this page during the wait (for example to "Create an
+      // account"), so this attempt must not take them to Google.
+      if (!mounted.current) return
+      if (intent.status === "rejected") throw intent.reason
+      const intentId = intent.value
+      const signupAttemptId =
+        signupAttemptResult.status === "fulfilled"
+          ? signupAttemptResult.value
+          : undefined
       const callbackUrl = new URL("/auth/callback", window.location.origin)
+      if (signupAttemptId)
+        callbackUrl.searchParams.set("signup_attempt_id", signupAttemptId)
       if (requestedOffer) callbackUrl.searchParams.set("offer", requestedOffer)
       if (rawOffer && rawOffer !== requestedOffer)
         callbackUrl.searchParams.set(SIGNUP_OFFER_PARAM, rawOffer)
@@ -236,6 +310,9 @@ function SignInContent() {
           queryParams: { prompt: "select_account" },
         },
       })
+      // The capture is spent once the page goes to Google, with or without a
+      // proof. A failed start keeps it for the next try.
+      if (!error) clearFingerprintSignupCapture()
       if (error) {
         setErrors({ form: "Error signing in. Please try again." })
       }
@@ -248,11 +325,16 @@ function SignInContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      {showRecovery && RECAPTCHA_SITE_KEY && (
+      {/* Loaded up front: Continue with Google runs the sign-up check. */}
+      {RECAPTCHA_SITE_KEY && (
         <Script
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
           strategy="afterInteractive"
         />
+      )}
+      {/* Loaded up front too: the sign-up check sends its observation token. */}
+      {TURNSTILE_SITE_KEY && (
+        <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">

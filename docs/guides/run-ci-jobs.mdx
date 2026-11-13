@@ -7,7 +7,7 @@ icon: "gears"
 
 A CI job fits a sandbox well: create a sandbox, run the build and tests in it, then delete it. Each job gets a clean microVM, so jobs can't leave files, processes or credentials behind for the next job.
 
-This guide uses the [CLI](/cli). The same steps work from the SDK.
+This guide uses the [CLI](/cli). To run a job from your own code, see [Run a job with the SDK](#run-a-job-with-the-sdk).
 
 ## Why use a sandbox
 
@@ -50,6 +50,11 @@ superserve sandbox delete ci-1234 --yes
 - A single argument after `--` runs as a shell command, so `&&` and `cd` work.
 - Set `--timeout` on every `exec` that runs a build or tests. A command that runs longer stops, and `exec` exits with `124`.
 - `--timeout 30m --auto-delete 0` on `create` is a safety net. If the job dies before the delete step, the sandbox [auto-pauses](/sandbox/lifecycle#auto-pause) after 30 minutes and then [auto-deletes](/sandbox/lifecycle#auto-delete) at once. Make the `--timeout` longer than your slowest job.
+- To clean up sooner after a runner dies, also set `--idle-timeout` on `create`, for example `--idle-timeout 10m`. The sandbox then pauses after 10 minutes with no requests to it. A running `exec` counts as activity, so a long test run doesn't pause. A background process started with `nohup` doesn't count. See [Idle timeout](/sandbox/lifecycle#idle-timeout).
+
+<Warning>
+The `create` `--timeout` counts active time, and a running `exec` doesn't extend it. If a job still runs when that timeout ends, the sandbox pauses in the middle of the job. With `--auto-delete 0`, it is also deleted at once. `exec` doesn't exit with `124` in this case. It hangs until shortly after its own `--timeout` ends, then exits with `1` and `error: protocol error: incomplete envelope`. Set the `create` `--timeout` longer than all the job's steps together, including the setup and every `exec --timeout`.
+</Warning>
 
 <Note>
 Sandbox names are not unique. If two sandboxes have the same name, `exec` and `delete` fail with `2 sandboxes are named "..."; use an ID instead`. Give each job a name that includes a unique run ID, as the workflow below does.
@@ -82,6 +87,68 @@ superserve sandbox create --name ci-1234 --template superserve/node-22 -s NPM_TO
 ```
 
 See [Environment variables](/sandbox/environment-variables) for how env vars behave.
+
+## Run a job with the SDK
+
+To start CI jobs from your own code, such as a job queue or a custom runner, use the SDK. This example creates a sandbox, runs the job, passes on its exit code, and kills the sandbox in `finally`, also when the job fails or a call throws:
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "ci-1234",
+  fromTemplate: "superserve/node-22",
+  timeoutSeconds: 30 * 60, // safety net: longer than the whole job
+  idleTimeoutSeconds: 10 * 60, // pause sooner if this process dies
+  autoDeleteSeconds: 0, // delete at once when paused
+})
+
+try {
+  const job = await sandbox.commands.run(
+    "git clone --depth 1 https://github.com/your-org/your-repo /w && cd /w && npm ci && npm test",
+    { timeoutMs: 20 * 60_000 },
+  )
+  process.stdout.write(job.stdout)
+  process.stderr.write(job.stderr)
+  process.exitCode = job.exitCode // 124 if the job ran past timeoutMs
+} finally {
+  await sandbox.kill()
+}
+```
+
+```python Python
+import sys
+
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="ci-1234",
+    from_template="superserve/node-22",
+    timeout_seconds=30 * 60,  # safety net: longer than the whole job
+    idle_timeout_seconds=10 * 60,  # pause sooner if this process dies
+    auto_delete_seconds=0,  # delete at once when paused
+)
+
+try:
+    job = sandbox.commands.run(
+        "git clone --depth 1 https://github.com/your-org/your-repo /w"
+        " && cd /w && npm ci && npm test",
+        timeout_seconds=20 * 60,
+    )
+    sys.stdout.write(job.stdout)
+    sys.stderr.write(job.stderr)
+    exit_code = job.exit_code  # 124 if the job ran past timeout_seconds
+finally:
+    sandbox.kill()
+
+sys.exit(exit_code)
+```
+</CodeGroup>
+
+- `commands.run()` returns the command's exit code and doesn't throw when the command fails. Pass it on as the process exit code so the CI step fails when a test fails.
+- Set `timeoutMs` (TypeScript) or `timeout_seconds` (Python) on every `run()` for a build or tests. Without it, `run()` stops after 30 seconds. See [Timeouts](/commands/overview#timeouts).
+- `timeoutSeconds` / `timeout_seconds` on `create` is the same safety net as `--timeout` on the CLI, with the same [warning](#one-sandbox-per-job): make it longer than the whole job. `idleTimeoutSeconds` / `idle_timeout_seconds` is the `--idle-timeout` option.
 
 ## GitHub Actions
 
@@ -277,9 +344,9 @@ Keep the GitHub side safe too. Don't run untrusted pull requests with `pull_requ
 
 ## Limits and tips
 
-- **Timeouts in the SDK:** `commands.run()` stops a command after 30 seconds by default. Set `timeoutMs` (TypeScript) or `timeout_seconds` (Python) for builds and tests. See [Timeouts](/commands/overview#timeouts).
-- **Sandbox size:** a sandbox gets the vCPU and memory of its template. The Free plan allows up to 2 vCPU and 4 GiB per sandbox. See [resource limits](/templates/build-spec#resource-limits).
-- **Daily allowance:** on the Free plan, running sandboxes pause when the team uses its daily compute allowance, and `create` fails with [`free_allowance_exhausted`](/errors#billing-errors-402).
+- **Timeouts in the SDK:** without a timeout, `commands.run()` stops the command after 30 seconds. Without output callbacks, the SDK also stops waiting at 30 seconds and throws `TimeoutError` (`SandboxTimeoutError` in Python). With callbacks, the result has exit code `124`. Set `timeoutMs` (TypeScript) or `timeout_seconds` (Python) for builds and tests; a command that runs past it returns exit code `124`. See [Timeouts](/commands/overview#timeouts).
+- **Sandbox size:** a sandbox gets the vCPU and memory of its template, up to your plan's limit. See [resource limits](/templates/build-spec#resource-limits).
+- **Billing errors:** when the team's plan or trial doesn't allow a sandbox, `create` fails with a [`402` billing error](/errors#billing-errors-402) (`BillingError` in the SDKs). Its `code` says why, for example `trial_exhausted` or `sandbox_exceeds_plan_limits`.
 - **Exit codes:** the CLI's own errors use [exit codes](/cli#exit-codes) such as `4` for not found and `6` for rate limited. `exec` returns the command's exit code.
 
 ## Related guides
