@@ -40,6 +40,10 @@
         "type": "github",
         "label": "GitHub",
         "href": "https://github.com/superserve-ai/superserve"
+      },
+      {
+        "label": "Log in",
+        "href": "https://console.superserve.ai/auth/signin/?utm_source=docs&utm_medium=navbar"
       }
     ],
     "primary": {
