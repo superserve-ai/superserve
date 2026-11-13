@@ -151,6 +151,7 @@ export async function GET(request: Request) {
     | "email"
     | null
   let next = sanitizeNext(searchParams.get("next"))
+  let linkExpired = false
   // Set by the sign-in recovery options after a failed password sign-in.
   const rawSignInRecovery = searchParams.get("sign_in_recovery")
   const signInRecovery =
@@ -175,6 +176,7 @@ export async function GET(request: Request) {
     }
 
     if (error) {
+      linkExpired = error.code === "otp_expired"
       // Supabase's generic trigger error is not authoritative SS-499 policy
       // evidence. Preserve the existing rejected-auth redirect and report an
       // unavailable annotation rather than a definitive blocked outcome.
@@ -860,7 +862,20 @@ export async function GET(request: Request) {
   }
   // A failed exchange keeps the invitation, so its retry can still join it.
   const invite = inviteReturnPath(next)
+  const errorParams = new URLSearchParams()
+  if (invite) errorParams.set("next", invite)
+  if (
+    !code &&
+    tokenHash &&
+    linkExpired &&
+    (type === "recovery" || type === "magiclink")
+  ) {
+    errorParams.set("error_code", "otp_expired")
+    errorParams.set("type", type)
+  } else if (!code && !tokenHash && next === "/auth/reset-password") {
+    errorParams.set("type", "recovery")
+  }
   return NextResponse.redirect(
-    `${origin}/auth/auth-code-error${invite ? `?${new URLSearchParams({ next: invite })}` : ""}`,
+    `${origin}/auth/auth-code-error${errorParams.size ? `?${errorParams}` : ""}`,
   )
 }

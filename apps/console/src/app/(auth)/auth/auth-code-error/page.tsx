@@ -5,7 +5,7 @@ import { Button, cn } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import { Suspense, useState } from "react"
+import { Suspense, useState, useSyncExternalStore } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
@@ -19,10 +19,28 @@ import {
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+function subscribeToHashChange(onChange: () => void) {
+  window.addEventListener("hashchange", onChange)
+  return () => window.removeEventListener("hashchange", onChange)
+}
+
+function getHash() {
+  return window.location.hash
+}
+
+function getServerHash() {
+  return ""
+}
+
 function AuthCodeErrorContent() {
   const [switching, setSwitching] = useState(false)
   const [switchError, setSwitchError] = useState(false)
   const searchParams = useSearchParams()
+  const hash = useSyncExternalStore(
+    subscribeToHashChange,
+    getHash,
+    getServerHash,
+  )
   const isSignupContext = searchParams.get("reason") === "signup_blocked"
   const retryParams = new URLSearchParams()
   // Carry only the recognized retry preference; it cannot authorize admission.
@@ -35,6 +53,17 @@ function AuthCodeErrorContent() {
     starterAuthReturnPath(searchParams.get("next"))
   const account = searchParams.get("account")
   const setupReason = searchParams.get("reason")
+  const linkExpired =
+    setupReason === null &&
+    (searchParams.get("error_code") === "otp_expired" ||
+      new URLSearchParams(hash.slice(1)).get("error_code") === "otp_expired")
+  const recoveryLinkExpired =
+    linkExpired && searchParams.get("type") === "recovery"
+  const expiredMessage = recoveryLinkExpired
+    ? "This password reset link expired or was already used. Request a new link to reset your password."
+    : "This link expired or was already used. To reset your password, request a new reset link. To confirm a new account, sign up again with the same email and password to get a new confirmation link."
+  // Enterprise signup cannot resend confirmation for an existing unconfirmed account.
+  const confirmationHref = `/auth/signup?error=link_expired${invite ? `&${new URLSearchParams({ next: invite })}` : ""}`
   const setupRetry =
     [
       "account_setup",
@@ -78,7 +107,11 @@ function AuthCodeErrorContent() {
         <div className="flex flex-col items-center">
           <WarningIcon className="mb-3 size-8 text-muted" weight="light" />
           <h1 className="text-center text-sm font-medium text-foreground">
-            Authentication Error
+            {linkExpired
+              ? recoveryLinkExpired
+                ? "Reset link expired"
+                : "Link expired"
+              : "Authentication Error"}
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
             {wrongAccount
@@ -91,9 +124,41 @@ function AuthCodeErrorContent() {
                     ? "Saved checkout team details conflict. Return to the original checkout link, or contact support if it is unavailable."
                     : isSignupContext
                       ? SIGNUP_RESTRICTED_MESSAGE
-                      : "Something went wrong. Please try again."}
+                      : linkExpired
+                        ? expiredMessage
+                        : "Something went wrong. Please try again."}
           </p>
-          {wrongAccount ? (
+          {linkExpired ? (
+            <>
+              <Button
+                render={<Link href="/auth/forgot-password" />}
+                size="sm"
+                className="mt-5"
+              >
+                Request a new reset link
+              </Button>
+              {!recoveryLinkExpired && (
+                <Link
+                  href={confirmationHref}
+                  className={cn(
+                    "mt-5 underline",
+                    inviteLinkReplayClass(confirmationHref),
+                  )}
+                >
+                  Get a new confirmation link
+                </Link>
+              )}
+              <Link
+                href={retryHref}
+                className={cn(
+                  "mt-5 underline",
+                  inviteLinkReplayClass(retryHref),
+                )}
+              >
+                Back to sign in
+              </Link>
+            </>
+          ) : wrongAccount ? (
             <Button
               size="sm"
               className="mt-5"
