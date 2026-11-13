@@ -4,7 +4,7 @@ import { Badge, cn } from "@superserve/ui"
 import type { ReactNode } from "react"
 
 import {
-  billingCredits,
+  creditsRemaining,
   currencyCode,
   formatCurrency,
 } from "@/components/billing-summary"
@@ -74,7 +74,7 @@ export function CurrentPlan({
 }) {
   const plan = summary.plan
   const currency = currencyCode(summary)
-  const remaining = billingCredits(summary).remaining
+  const remaining = creditsRemaining(summary)
   return (
     <section
       aria-label="Plan and credits"

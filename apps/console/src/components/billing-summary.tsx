@@ -40,6 +40,24 @@ export function billingCredits(
   }
 }
 
+// The credit a team is shown as having left. A team still on its free trial
+// spends the trial balance, the figure the trial banner and sandbox access
+// use; the general credit fields can read $0 for it while the trial still has
+// credit. Only for display: estimates keep the general credit figures.
+export function creditsRemaining(
+  summary: BillingSummaryResponse,
+): number | null {
+  const trial = summary.trial
+  if (
+    summary.plan?.key === "trial" &&
+    trial?.state === "active" &&
+    typeof trial.remaining_usd === "number"
+  ) {
+    return trial.remaining_usd
+  }
+  return billingCredits(summary).remaining
+}
+
 export function formatCurrency(value: number, currency = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -257,7 +275,7 @@ export function BillingSummary({
           />
           <HeadlineFigure
             label="Credits left"
-            value={money(credits.remaining)}
+            value={money(creditsRemaining(summary))}
           />
         </dl>
       </div>

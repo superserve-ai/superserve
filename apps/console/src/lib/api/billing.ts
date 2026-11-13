@@ -82,6 +82,10 @@ export type BillingTrialBlock =
 export interface BillingSummaryResponse {
   trial?: BillingTrialBalance | null
   trial_block?: BillingTrialBlock | null
+  // True when the server read the trial reason, so a null trial_block is a
+  // reason it found empty rather than one it could not read. Absent from
+  // older servers.
+  trial_block_read?: boolean
   billing_mode: "shadow" | "live"
   checkout_available: boolean
   portal_available: boolean
