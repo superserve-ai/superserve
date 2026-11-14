@@ -5,17 +5,13 @@ description: Move your sandboxes, images and agent code from Modal Sandboxes to 
 icon: "arrow-right-arrow-left"
 ---
 
+import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
+
 Modal Sandboxes and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
 
 ## How Superserve compares
 
-| Benchmark | Superserve | Modal |
-| --- | --- | --- |
-| Snapshot and restore (score) | 95.4 / 100 | 87.1 / 100 |
-| Pause and resume (score) | 97 / 100 | 0 / 100 |
-| Clone, install, typecheck (time) | 57.4 s | 48.1 s |
-
-Results from November 13, 2026. See the [ComputeSDK benchmarks](https://www.computesdk.com/benchmarks/sandboxes/ratings).
+<BenchmarkComparison compare="modal" compareName="Modal" />
 
 ## Ready to switch
 
@@ -73,7 +69,6 @@ Python is the main Modal SDK. Modal's JavaScript SDK (`modal` on npm) also cover
 | Idle timeout | `idle_timeout=`. Terminates the sandbox. | `idle_timeout_seconds=`. Pauses. |
 | Env vars and secrets | `env={...}`, `secrets=[modal.Secret.from_name(...)]` | `env_vars={...}` on create, `env` per command, `secrets={"ENV_VAR": "secret-name"}` for API keys. See [Secrets](/secrets/overview). |
 | Public URL | `encrypted_ports=[port]` on create, then `sb.tunnels()[port].url` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
-| Volumes | `volumes={"/data": modal.Volume.from_name(...)}` | Mount [Archil](/storage/archil) or a [cloud bucket](/storage/cloud-buckets) |
 | List and terminate | `modal.Sandbox.list(app_id=)` / `sb.terminate()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -94,7 +89,6 @@ Python is the main Modal SDK. Modal's JavaScript SDK (`modal` on npm) also cover
 | Idle timeout | `idleTimeoutMs`. Terminates the sandbox. | `idleTimeoutSeconds`. Pauses. |
 | Env vars and secrets | `env`, `secrets: [await modal.secrets.fromName(...)]` | `envVars` on create, `env` per command, `secrets: { ENV_VAR: "secret-name" }` for API keys. See [Secrets](/secrets/overview). |
 | Public URL | `encryptedPorts: [port]` on create, then `(await sb.tunnels())[port].url` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
-| Volumes | `volumes: { "/data": await modal.volumes.fromName(...) }` | Mount [Archil](/storage/archil) or a [cloud bucket](/storage/cloud-buckets) |
 | List and terminate | `modal.sandboxes.list({ appId })` / `sb.terminate()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -338,7 +332,6 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
      secrets: {ENV_VAR: "secret-name"}.
    - encrypted_ports=[p] + tunnels()[p].url -> publishPreviewPort(p), then getPreviewUrl(p).
      New sandboxes route only published ports. Ports must be 1024 to 65535.
-   - volumes={path: modal.Volume} -> mount Archil or a cloud bucket (see the storage docs).
    - Sandbox.from_id(id) -> Sandbox.connect(id). Sandbox.list() / terminate() -> Sandbox.list() / kill().
    - Python: use snake_case (from_template, timeout_seconds, env_vars, from_snapshot).
 3. Run the test suite. Fix failures. Do not delete Modal code paths you cannot test; list them.
