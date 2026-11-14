@@ -104,8 +104,10 @@ export const BenchmarkComparison = ({
   const formatTick = (unit, value) =>
     unit === "score" ? String(value) : `${Number(seconds(value).toFixed(2))} s`
 
+  // A missing, null or non-finite value means "not scored": the chart is left
+  // out. Only a real published score, including 0, renders a bar.
   const hasValue = (key, provider) =>
-    typeof data.metrics[key]?.values?.[provider] === "number"
+    Number.isFinite(data.metrics[key]?.values?.[provider])
 
   const charts = CHARTS.filter(
     (chart) =>
