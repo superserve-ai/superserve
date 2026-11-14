@@ -23,6 +23,7 @@ export const AUTH_EVENTS = {
   SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
   SIGN_OUT: "auth_sign_out",
   PASSWORD_RESET_REQUESTED: "auth_password_reset_requested",
+  PASSWORD_RESET_FAILED: "auth_password_reset_failed",
   PASSWORD_RESET_COMPLETED: "auth_password_reset_completed",
   DEVICE_AUTHORIZED: "cli_device_authorized",
 } as const

@@ -734,6 +734,11 @@ describe("SignUpPage", () => {
       await screen.findByText(/Turn off any VPN or ad blocker for this site/),
     ).toBeInTheDocument()
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledWith("auth_sign_up_failed", {
+      method: "google",
+      reason: "captcha_failed",
+      complete_google: true,
+    })
     // The button stays so the user can retry the same step.
     expect(
       screen.getByRole("button", { name: /Complete signup with Google/ }),
@@ -1132,6 +1137,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     })
     mockEnsureFingerprintSignupEventId.mockReset()
     mockEnsureFingerprintSignupEventId.mockResolvedValue(undefined)
+    mockCapture.mockReset()
     mockSearchParams = new URLSearchParams()
     process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY = "test-site-key"
     vi.resetModules()
@@ -1170,6 +1176,38 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       await screen.findByText(/content or ad blocker/i),
     ).toBeInTheDocument()
     expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledExactlyOnceWith("auth_sign_up_failed", {
+      method: "email",
+      reason: "captcha_unavailable",
+    })
+  })
+
+  it("records a recovery Google click that the bot-check blocks", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute: () => Promise.reject(new Error("blocked by content blocker")),
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    expect(
+      await screen.findByText(/content or ad blocker/i),
+    ).toBeInTheDocument()
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledExactlyOnceWith("auth_sign_up_failed", {
+      method: "google",
+      reason: "captcha_unavailable",
+      complete_google: true,
+    })
   })
 
   it("does not start OAuth when server-side Google verification fails", async () => {
