@@ -27,6 +27,7 @@ import {
 } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { RecaptchaScript } from "@/lib/recaptcha/script"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import {
@@ -491,12 +492,7 @@ export default function SignUpContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      {RECAPTCHA_SITE_KEY && (
-        <Script
-          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
-        />
-      )}
+      <RecaptchaScript />
       {TURNSTILE_SITE_KEY && (
         <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
