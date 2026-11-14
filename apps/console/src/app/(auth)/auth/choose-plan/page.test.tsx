@@ -45,6 +45,15 @@ vi.mock("@/lib/billing/plan-offers-actions", () => ({
 }))
 const { capture } = vi.hoisted(() => ({ capture: vi.fn() }))
 vi.mock("posthog-js", () => ({ default: { capture } }))
+const checkoutTeam = vi.hoisted(() => ({ lookup: vi.fn() }))
+vi.mock("@/lib/billing/checkout-team-actions", () => ({
+  getCheckoutTeamAction: checkoutTeam.lookup,
+}))
+vi.mock("@/lib/api/teams-actions", () => ({
+  listTeamsAction: vi.fn(),
+  setActiveTeamAction: vi.fn(),
+}))
+vi.mock("@/hooks/use-sign-out", () => ({ useSignOut: () => vi.fn() }))
 
 import type { TrialOutcome } from "@/lib/billing/signup-checkout-paths"
 
@@ -55,6 +64,10 @@ describe("plan picker", () => {
     params = new URLSearchParams()
     replace.mockReset()
     capture.mockClear()
+    checkoutTeam.lookup.mockReset().mockResolvedValue({
+      kind: "switch",
+      team: { id: "team-1", region: "use", name: "Original team" },
+    })
     trial.outcome = null
     trial.perTeam = {}
   })
@@ -163,7 +176,7 @@ describe("plan picker", () => {
     },
   )
 
-  it("only re-checks the original checkout for checkout_elsewhere", () => {
+  it("offers team recovery instead of a looping re-check for checkout_elsewhere", async () => {
     params = new URLSearchParams({
       reason: "checkout_elsewhere",
       account: "u1",
@@ -172,9 +185,24 @@ describe("plan picker", () => {
     render(<ChoosePlanPage />)
     expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Pro" })).toBeNull()
+    expect(screen.queryByRole("link", { name: "Check again" })).toBeNull()
     expect(
-      screen.getByRole("link", { name: "Check again" }).getAttribute("href"),
-    ).toBe("/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1")
+      await screen.findByRole("button", { name: "Switch to Original team" }),
+    ).toBeVisible()
+    expect(
+      screen.getByRole("link", { name: "Back to console" }),
+    ).toHaveAttribute("href", "/sandboxes")
+    expect(checkoutTeam.lookup).toHaveBeenCalledExactlyOnceWith({
+      account: "u1",
+      team: "use:team-1",
+    })
+    expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
+    expect(screen.queryByRole("button", { name: "Pro" })).toBeNull()
+    expect(capture).toHaveBeenCalledExactlyOnceWith("plan_picker_viewed", {
+      reason: "checkout_elsewhere",
+      requested_offer: "not_specified",
+      plan_options_requested: false,
+    })
   })
 
   it("sends an old payment-confirming link to the payment wait, not the picker", () => {
@@ -241,6 +269,7 @@ describe("plan picker", () => {
         .getByRole("link", { name: "Back to console" })
         .getAttribute("href"),
     ).toBe("/sandboxes")
+    expect(checkoutTeam.lookup).not.toHaveBeenCalled()
   })
 
   it("records why the picker opened and which plan was asked for", async () => {

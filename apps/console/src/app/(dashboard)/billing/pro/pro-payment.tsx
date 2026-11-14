@@ -45,6 +45,7 @@ import {
   recoverStarterCheckout,
   type PendingStarterCheckout,
 } from "@/lib/api/starter-checkout-recovery"
+import { checkoutErrorMessage } from "@/lib/billing/checkout-error-copy"
 import {
   checkoutEntryPath,
   checkoutRecoveryPath,
@@ -254,10 +255,7 @@ function ProPaymentContext({
       if (!target.active) return
       if (cause instanceof ApiError && cause.code === "plan_conflict")
         setConflict(true)
-      else
-        setError(
-          cause instanceof Error ? cause.message : "Something went wrong.",
-        )
+      else setError(checkoutErrorMessage(cause))
     } finally {
       inFlight.current = false
       setBusy(false)

@@ -234,6 +234,29 @@ beforeEach(() => {
 })
 
 describe("Pro payment return recovery", () => {
+  it("shows friendly checkout failure copy instead of control-plane details", async () => {
+    state.plans = availablePlans
+    state.start.mockRejectedValueOnce(
+      new ApiError(
+        503,
+        "service_unavailable",
+        "Pro price configuration requires verification",
+      ),
+    )
+    render(<ProPayment returnTo="/sandboxes" />)
+    fireEvent.click(await readyContinue())
+    expect(
+      await screen.findByText(
+        "Something went wrong on our side. Try again in a few minutes. If it keeps happening, contact support@superserve.ai.",
+      ),
+    ).toBeVisible()
+    expect(
+      screen.queryByText("Pro price configuration requires verification"),
+    ).toBeNull()
+    expect(state.start).toHaveBeenCalledTimes(1)
+    expect(state.replace).not.toHaveBeenCalled()
+  })
+
   it("normalizes the annual website alias to the visible monthly v2 offer and submits that quote", async () => {
     expect(signInOfferDestination("pro_annual")).toBe("/billing/pro/")
     state.plans = availablePlans

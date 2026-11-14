@@ -18,7 +18,7 @@ export function clearAccountBrowserState(posthog: Pick<PostHog, "reset">) {
 export function useSignOut() {
   const router = useRouter()
   const posthog = usePostHog()
-  return async () => {
+  return async (next?: string) => {
     posthog.capture(AUTH_EVENTS.SIGN_OUT)
     markSigningOut()
     try {
@@ -27,6 +27,8 @@ export function useSignOut() {
       // Sign out failed, but redirect to sign-in anyway
     }
     clearAccountBrowserState(posthog)
-    router.push("/auth/signin")
+    router.push(
+      next ? `/auth/signin?next=${encodeURIComponent(next)}` : "/auth/signin",
+    )
   }
 }

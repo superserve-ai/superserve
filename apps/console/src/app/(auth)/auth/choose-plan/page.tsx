@@ -7,6 +7,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import posthog from "posthog-js"
 import { Suspense, useEffect, useRef, useState } from "react"
 
+import { CheckoutElsewhere } from "@/components/billing/checkout-elsewhere"
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { getTrialOutcomeAction } from "@/lib/billing/plan-offers-actions"
@@ -16,7 +17,6 @@ import {
   isSignupCheckoutOffer,
   paymentSettlingPath,
   type PlanPickerReason,
-  signupCheckoutReturnPath,
   type TrialOutcome,
 } from "@/lib/billing/signup-checkout-paths"
 import { PLAN_PICKER_EVENTS } from "@/lib/posthog/events"
@@ -32,7 +32,7 @@ const NEEDS_SUPPORT = new Set<PlanPickerReason>([
 const MESSAGES: Record<PlanPickerReason, string> = {
   upgrade: "Choose a plan to keep your sandboxes running.",
   checkout_elsewhere:
-    "This checkout belongs to a different account or team than the one you're signed in to now. Switch back to it, then try again.",
+    "This checkout belongs to a different account or team than the one open now.",
   // Neutral: claims nothing about the trial. The copy below says used up,
   // denied or unconfirmed only once the team's summary confirms which.
   trial_ended: "Choose a plan to run sandboxes.",
@@ -182,20 +182,7 @@ function ChoosePlanContent() {
           )}
           {reason === "checkout_elsewhere" ? (
             locator ? (
-              <Button
-                render={
-                  <Link
-                    href={signupCheckoutReturnPath(
-                      locator.account,
-                      locator.team,
-                    )}
-                  />
-                }
-                size="sm"
-                className="mt-5"
-              >
-                Check again
-              </Button>
+              <CheckoutElsewhere locator={locator} />
             ) : (
               <Button
                 render={<Link href="/sandboxes" />}
