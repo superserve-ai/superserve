@@ -4,7 +4,10 @@ import { useRouter } from "next/navigation"
 import type { PostHog } from "posthog-js"
 import { usePostHog } from "posthog-js/react"
 
-import { markSigningOut } from "@/components/layout/session-expiry-redirect"
+import {
+  clearSigningOut,
+  markSigningOut,
+} from "@/components/layout/session-expiry-redirect"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 import { clearTerminalTabsStorage } from "@/lib/terminal-tabs-storage"
@@ -25,7 +28,10 @@ export function useSignOut() {
       const { error } = await createBrowserClient().auth.signOut()
       if (next && error) throw error
     } catch {
-      if (next) throw new Error("Unable to sign out. Try again.")
+      if (next) {
+        clearSigningOut()
+        throw new Error("Unable to sign out. Try again.")
+      }
       // Sign out failed, but redirect to sign-in anyway
     }
     clearAccountBrowserState(posthog)

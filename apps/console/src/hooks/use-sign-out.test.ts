@@ -7,6 +7,7 @@ const mocks = vi.hoisted(() => ({
   reset: vi.fn(),
   signOut: vi.fn(),
   markSigningOut: vi.fn(),
+  clearSigningOut: vi.fn(),
   clearTerminalTabsStorage: vi.fn(),
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ push: mocks.push }) }))
@@ -16,6 +17,7 @@ vi.mock("@/lib/supabase/client", () => ({
 }))
 vi.mock("@/components/layout/session-expiry-redirect", () => ({
   markSigningOut: mocks.markSigningOut,
+  clearSigningOut: mocks.clearSigningOut,
 }))
 vi.mock("@/lib/terminal-tabs-storage", () => ({
   clearTerminalTabsStorage: mocks.clearTerminalTabsStorage,
@@ -41,6 +43,7 @@ describe("useSignOut", () => {
     )
     expect(mocks.capture).toHaveBeenCalledExactlyOnceWith("auth_sign_out")
     expect(mocks.markSigningOut).toHaveBeenCalledTimes(1)
+    expect(mocks.clearSigningOut).not.toHaveBeenCalled()
     expect(mocks.clearTerminalTabsStorage).toHaveBeenCalledTimes(1)
     expect(mocks.reset).toHaveBeenCalledTimes(1)
   })
@@ -58,6 +61,7 @@ describe("useSignOut", () => {
         ).rejects.toBeInstanceOf(Error)
       })
       expect(mocks.signOut).toHaveBeenCalledTimes(1)
+      expect(mocks.clearSigningOut).toHaveBeenCalledTimes(1)
       expect(mocks.push).not.toHaveBeenCalled()
       expect(mocks.clearTerminalTabsStorage).not.toHaveBeenCalled()
       expect(mocks.reset).not.toHaveBeenCalled()
@@ -74,6 +78,7 @@ describe("useSignOut", () => {
       await act(() => result.current())
       expect(mocks.signOut).toHaveBeenCalledTimes(1)
       expect(mocks.push).toHaveBeenCalledExactlyOnceWith("/auth/signin")
+      expect(mocks.clearSigningOut).not.toHaveBeenCalled()
       expect(mocks.clearTerminalTabsStorage).toHaveBeenCalledTimes(1)
       expect(mocks.reset).toHaveBeenCalledTimes(1)
     },

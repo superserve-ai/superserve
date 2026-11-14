@@ -59,6 +59,20 @@ describe("checkoutErrorMessage", () => {
     },
   )
 
+  it("gives billing-date guidance for billing_boundary", () => {
+    expect(
+      checkoutErrorMessage(
+        new ApiError(
+          409,
+          "billing_boundary",
+          "The remaining prorated payment is below the card minimum or the billing date is too close. Retry after the next billing date.",
+        ),
+      ),
+    ).toBe(
+      "This plan change can't start this close to your billing date. Try again after your next billing date.",
+    )
+  })
+
   it.each([
     [400, "bad_request", "invalid success URL"],
     [400, "invalid_request", "Invalid payment return URL"],
@@ -98,6 +112,21 @@ describe("checkoutErrorMessage", () => {
       ).toBe(generic)
     },
   )
+
+  it("hides raw text from Next.js errors with __NEXT_ERROR_CODE", () => {
+    const error = Object.defineProperty(
+      new Error("<raw text>"),
+      "__NEXT_ERROR_CODE",
+      {
+        value: "E394",
+        enumerable: false,
+        configurable: true,
+      },
+    )
+    const message = checkoutErrorMessage(error)
+    expect(message).toBe(generic)
+    expect(message).not.toContain(error.message)
+  })
 
   it.each([
     "Unable to open payment. Check your payment status before trying again.",
