@@ -40,6 +40,9 @@ function ForgotPasswordContent() {
     try {
       const recaptchaToken = await getRecaptchaToken("password_reset")
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        posthog.capture(AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+          reason: "captcha_unavailable",
+        })
         setErrors({
           form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
         })
@@ -51,12 +54,18 @@ function ForgotPasswordContent() {
         invite ?? undefined,
       )
       if (!result.success) {
+        posthog.capture(AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+          reason: result.errorCode,
+        })
         setErrors({ form: result.error })
         return
       }
       posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
     } catch {
+      posthog.capture(AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+        reason: "request_error",
+      })
       setErrors({ form: "Error sending reset email. Please try again." })
     } finally {
       setIsLoading(false)

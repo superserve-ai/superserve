@@ -115,6 +115,10 @@ describe("ForgotPasswordPage", () => {
       await screen.findByText(/We couldn't load our bot-check/),
     ).toBeTruthy()
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledExactlyOnceWith(
+      "auth_password_reset_failed",
+      { reason: "captcha_unavailable" },
+    )
   })
 
   it("shows the server error and stays on the form", async () => {
@@ -132,7 +136,10 @@ describe("ForgotPasswordPage", () => {
       ),
     ).toBeTruthy()
     expect(screen.queryByText("Check Your Email")).toBeNull()
-    expect(mockCapture).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledExactlyOnceWith(
+      "auth_password_reset_failed",
+      { reason: "rate_limited" },
+    )
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Send Reset Link" }),
