@@ -67,6 +67,14 @@ const COMPUTER_ACTIONS = [
 
 type ComputerAction = (typeof COMPUTER_ACTIONS)[number]
 
+/**
+ * An [x, y] pixel. A fixed-length array with one item schema, not
+ * `z.tuple`: a tuple converts to array-form `items`, which is invalid under
+ * JSON Schema 2020-12, and clients that validate tool schemas against
+ * 2020-12 reject the whole tool list.
+ */
+const pointSchema = () => z.array(z.number().int().min(0)).length(2)
+
 interface ComputerArgs {
   sandbox_id: string
   action: ComputerAction
@@ -291,12 +299,10 @@ export function registerComputerTool(
               "resize: set the display to `width` x `height`. " +
               "stream_url: get a live browser viewer URL for the desktop.",
           ),
-        coordinate: z
-          .tuple([z.number().int().min(0), z.number().int().min(0)])
+        coordinate: pointSchema()
           .optional()
           .describe("[x, y] target pixel for pointer actions."),
-        start_coordinate: z
-          .tuple([z.number().int().min(0), z.number().int().min(0)])
+        start_coordinate: pointSchema()
           .optional()
           .describe("[x, y] drag origin (left_click_drag only)."),
         text: z

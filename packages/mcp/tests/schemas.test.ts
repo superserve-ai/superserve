@@ -86,6 +86,37 @@ describe("tool registration", () => {
     }
   })
 
+  it("uses no array-form `items` (invalid under JSON Schema 2020-12)", () => {
+    // Clients that drop `$schema` validate tool schemas as 2020-12, where
+    // `items` must be one schema; an array there rejects the whole tool list.
+    const arrayItems: string[] = []
+    const walk = (node: unknown, path: string): void => {
+      if (Array.isArray(node)) {
+        node.forEach((n, i) => walk(n, `${path}[${i}]`))
+      } else if (node && typeof node === "object") {
+        for (const [k, v] of Object.entries(node)) {
+          if (k === "items" && Array.isArray(v))
+            arrayItems.push(`${path}.items`)
+          walk(v, `${path}.${k}`)
+        }
+      }
+    }
+    for (const t of tools) walk(t.inputSchema, t.name)
+    expect(arrayItems).toEqual([])
+  })
+
+  it("exposes sandbox_computer coordinates as fixed-length integer arrays", () => {
+    const props = byName("sandbox_computer")?.inputSchema?.properties
+    for (const key of ["coordinate", "start_coordinate"]) {
+      expect(props?.[key]).toMatchObject({
+        type: "array",
+        items: { type: "integer", minimum: 0 },
+        minItems: 2,
+        maxItems: 2,
+      })
+    }
+  })
+
   it("exposes sandbox_create metadata and env_vars as inline object schemas", () => {
     const props = byName("sandbox_create")?.inputSchema?.properties
     expect(props?.metadata?.type).toBe("object")
