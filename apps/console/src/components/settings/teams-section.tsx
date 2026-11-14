@@ -22,12 +22,9 @@ import {
 import { regionLabel } from "@/lib/format"
 
 /**
- * Team directory + create-team form. The directory renders whenever the
- * user has more than one team or more than one cell is configured — a
- * multi-team user needs the Active marker regardless of region count
- * (switching itself lives in the sidebar team dropdown). The new-team
- * form stays multi-cell-only: with a single configured cell there's no
- * region to choose.
+ * Team directory + create-team form. The directory marks the active team;
+ * switching lives in the sidebar dropdown.
+ * Users with at most one team can create another to leave their current team.
  *
  * While the active team is the user's own account team, creating a team
  * converts that account in its own region instead of adding another team.
@@ -46,19 +43,19 @@ export function TeamsSection() {
     data?.convertibleTeams?.find(
       (t) => t.id === data.activeTeamId && t.region === data.activeRegion,
     ) ?? null
-  if (
-    !data ||
-    (!conversion && data.regions.length <= 1 && data.teams.length <= 1)
-  ) {
-    return null
-  }
-  const canCreate = conversion !== null || data.regions.length > 1
+  if (!data) return null
+  const canCreate =
+    conversion !== null || data.regions.length > 1 || data.teams.length <= 1
 
   const handleCreate = () => {
     createTeam.mutate(
       conversion
         ? { name, region: conversion.region, convertTeamId: conversion.id }
-        : { name, region },
+        : {
+            name,
+            region:
+              data.regions.length > 1 ? region : (data.regions[0] ?? "use"),
+          },
       {
         onSuccess: ({ team, converted }) => {
           setName("")
@@ -135,7 +132,7 @@ export function TeamsSection() {
                   {regionLabel(conversion.region)}. Its sandboxes, API keys,
                   plan, and billing stay the same.
                 </p>
-              ) : (
+              ) : data.regions.length > 1 ? (
                 <Field label="Region">
                   <Select
                     value={region}
@@ -153,7 +150,7 @@ export function TeamsSection() {
                     </SelectPopup>
                   </Select>
                 </Field>
-              )}
+              ) : null}
               <div>
                 <Button
                   onClick={handleCreate}

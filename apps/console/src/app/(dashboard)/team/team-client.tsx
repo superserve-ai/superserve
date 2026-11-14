@@ -61,7 +61,7 @@ import {
   LeaveTeamSection,
 } from "./invitations-section"
 
-function RolePills({ roles }: { roles?: string[] }) {
+function RolePills({ roles }: { roles?: string[] | null }) {
   return (
     <div className="flex flex-wrap gap-1.5">
       {roles?.map((role) => (
@@ -277,10 +277,12 @@ function ChangeRoleForm({
 function MemberList({
   members,
   currentUserId,
+  canRemove,
   onRemove,
 }: {
   members: TeamMember[]
   currentUserId?: string
+  canRemove?: (member: TeamMember) => boolean
   onRemove?: (member: TeamMember) => void
 }) {
   return (
@@ -321,7 +323,8 @@ function MemberList({
           <RolePills roles={member.roles} />
           {onRemove &&
             member.status === "active" &&
-            member.user_id !== currentUserId && (
+            member.user_id !== currentUserId &&
+            canRemove?.(member) && (
               <Button
                 size="sm"
                 variant="ghost"
@@ -333,7 +336,8 @@ function MemberList({
             )}
           {onRemove &&
             (member.status !== "active" ||
-              member.user_id === currentUserId) && (
+              member.user_id === currentUserId ||
+              !canRemove?.(member)) && (
               <span className="w-20" aria-hidden="true" />
             )}
         </li>
@@ -520,22 +524,39 @@ export function TeamClient() {
     )
   }
 
+  if (error instanceof ApiError && error.status === 403) {
+    return (
+      <div className="flex h-full flex-col overflow-hidden">
+        <PageHeader title="Team" description={teamName} />
+        <div className="flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-3xl flex-col gap-10 px-6 py-10 sm:px-8">
+            <section className="space-y-4">
+              <h2 className="text-base font-medium tracking-tight">Members</h2>
+              <p className="text-sm text-muted">
+                Your role can't view team members. Ask a team Owner if you need
+                access.
+              </p>
+            </section>
+            {!impersonating && (
+              <section className="space-y-4">
+                <h2 className="text-base font-medium tracking-tight">
+                  Danger zone
+                </h2>
+                {/* Owners hold every management permission, so a 403 means the user is not an owner. */}
+                <LeaveTeamSection team={leaveScope} ownerBlocked={false} />
+              </section>
+            )}
+          </div>
+        </div>
+      </div>
+    )
+  }
+
   if (error) {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Team" description={teamName} />
         <ErrorState message={error.message} onRetry={() => refetch()} />
-        {/* Leaving needs no team-management permission. */}
-        {!impersonating &&
-          error instanceof ApiError &&
-          error.status === 403 && (
-            <div className="px-6 pb-8">
-              <div className="mx-auto w-full max-w-3xl">
-                {/* Owners hold every management permission, so a 403 means the user is not an owner. */}
-                <LeaveTeamSection team={leaveScope} ownerBlocked={false} />
-              </div>
-            </div>
-          )}
       </div>
     )
   }
@@ -573,6 +594,18 @@ export function TeamClient() {
   const removedMembers = data.members.filter(
     (member) => member.status === "inactive",
   )
+  const canRemoveMember = (member: TeamMember) =>
+    capabilities.can_deactivate_members &&
+    (capabilities.can_revoke_roles ||
+      (member.roles != null &&
+        !member.roles.some(
+          (role) => role === "team_owner" || role === "team_admin",
+        )))
+  const hasProtectedMembers =
+    capabilities.can_deactivate_members &&
+    activeMembers.some(
+      (member) => member.user_id !== user?.id && !canRemoveMember(member),
+    )
 
   return (
     <div className="flex h-full flex-col overflow-hidden">
@@ -599,6 +632,7 @@ export function TeamClient() {
             <MemberList
               members={members}
               currentUserId={user?.id}
+              canRemove={canRemoveMember}
               onRemove={
                 capabilities.can_deactivate_members
                   ? (member) => {
@@ -607,6 +641,11 @@ export function TeamClient() {
                   : undefined
               }
             />
+            {hasProtectedMembers && (
+              <p className="mt-4 text-sm text-muted">
+                Only Owners can remove Owners and Team admins.
+              </p>
+            )}
             {!capabilities.can_invite_members && (
               <p className="mt-4 text-sm text-muted">
                 You have read-only access to team membership.

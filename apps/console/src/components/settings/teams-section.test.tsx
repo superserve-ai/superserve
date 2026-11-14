@@ -162,6 +162,53 @@ describe("TeamsSection", () => {
     ).not.toBeInTheDocument()
   })
 
+  it.each(["use", "usw"])(
+    "creates in the only configured region (%s) for a single non-convertible team",
+    async (region) => {
+      teamsData = {
+        teams: [{ id: "team-a", name: "Example team", region }],
+        regions: [region],
+        activeTeamId: "team-a",
+        activeRegion: region,
+        convertibleTeams: [],
+      }
+      const user = userEvent.setup()
+      render(<TeamsSection />)
+
+      expect(screen.getByRole("heading", { name: "Teams" })).toBeInTheDocument()
+      expect(screen.queryByRole("combobox")).not.toBeInTheDocument()
+      expect(screen.getByLabelText("New Team Name")).toBeInTheDocument()
+
+      await user.type(screen.getByLabelText("New Team Name"), "Example project")
+      await user.click(screen.getByRole("button", { name: "Create Team" }))
+
+      expect(mutate).toHaveBeenCalledWith(
+        { name: "Example project", region },
+        expect.anything(),
+      )
+    },
+  )
+
+  it("shows no create form for two non-convertible teams in a single region", () => {
+    teamsData = {
+      teams: [
+        { id: "team-a", name: "Example team", region: "use" },
+        { id: "team-b", name: "Other team", region: "use" },
+      ],
+      regions: ["use"],
+      activeTeamId: "team-a",
+      activeRegion: "use",
+      convertibleTeams: [],
+    }
+    render(<TeamsSection />)
+
+    expect(screen.getByRole("heading", { name: "Teams" })).toBeInTheDocument()
+    expect(screen.queryByRole("textbox")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Create Team" }),
+    ).not.toBeInTheDocument()
+  })
+
   it("converts whichever account team is active", async () => {
     const east = { id: "team-me-e", name: "user@example.com", region: "use" }
     teamsData = {

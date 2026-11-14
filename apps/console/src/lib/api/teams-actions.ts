@@ -9,7 +9,7 @@ import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
 import { isPersonalTeam, ownsTeam, renameTeam } from "@/lib/api/team-conversion"
 import {
   invalidateMembershipDirectory,
-  listTeamsForUser,
+  listTeamsForUserDetailed,
   membershipExistsInCell,
 } from "@/lib/api/team-directory"
 import {
@@ -34,6 +34,8 @@ export interface TeamSummary {
 export interface TeamDirectoryResponse {
   teams: TeamSummary[]
   regions: string[]
+  // Regions whose teams could not be read and may be missing from the directory.
+  degradedRegions?: string[]
   activeTeamId: string | null
   activeRegion: string | null
   // The user's own account teams, which a team creation converts in place
@@ -42,13 +44,14 @@ export interface TeamDirectoryResponse {
 }
 
 async function readTeamDirectory(userId: string) {
-  const [teams, selection] = await Promise.all([
-    listTeamsForUser(userId),
+  const [directory, selection] = await Promise.all([
+    listTeamsForUserDetailed(userId),
     readTeamSelection(),
   ])
-  const { memberships } = await completedMemberships(userId, {
+  const { teams } = directory
+  const { memberships, degradedRegions } = await completedMemberships(userId, {
     memberships: teams.map((t) => ({ teamId: t.id, region: t.region })),
-    degradedRegions: [],
+    degradedRegions: directory.degradedRegions,
   })
   const selectable = new Set(memberships.map((m) => `${m.region}:${m.teamId}`))
   const completedTeams = teams.filter((t) =>
@@ -59,7 +62,7 @@ async function readTeamDirectory(userId: string) {
     completedTeams.find(
       (t) => t.id === active?.teamId && t.region === active.region,
     ) ?? null
-  return { teams: completedTeams, activeTeam }
+  return { teams: completedTeams, activeTeam, degradedRegions }
 }
 
 export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
@@ -69,7 +72,9 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   } = await supabase.auth.getUser()
   if (!user) throw new Error("Not authenticated")
 
-  const { teams, activeTeam } = await readTeamDirectory(user.id)
+  const { teams, activeTeam, degradedRegions } = await readTeamDirectory(
+    user.id,
+  )
   // Eligibility does not depend on the active team, so a cached directory
   // still offers the conversion after the user switches to an account team.
   const owned = await Promise.all(
@@ -90,6 +95,7 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   return {
     teams,
     regions: configuredRegions(),
+    degradedRegions,
     activeTeamId: activeTeam?.id ?? null,
     activeRegion: activeTeam?.region ?? null,
     convertibleTeams,
@@ -116,6 +122,7 @@ export async function setActiveTeamAction(
       })
     ).memberships.length
   ) {
+    invalidateMembershipDirectory(user.id)
     throw new Error("You are not a member of that team")
   }
 
