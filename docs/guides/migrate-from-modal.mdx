@@ -1,0 +1,372 @@
+---
+title: "Migrate from Modal"
+sidebarTitle: From Modal
+description: Move your sandboxes, images and agent code from Modal Sandboxes to Superserve. Includes an API mapping, before and after code, a migration script and a prompt for coding agents.
+icon: "arrow-right-arrow-left"
+---
+
+Modal Sandboxes and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
+
+## How Superserve compares
+
+| Benchmark | Superserve | Modal |
+| --- | --- | --- |
+| Snapshot and restore (score) | 95.4 / 100 | 87.1 / 100 |
+| Pause and resume (score) | 97 / 100 | 0 / 100 |
+| Clone, install, typecheck (time) | 57.4 s | 48.1 s |
+
+Results from November 13, 2026. See the [ComputeSDK benchmarks](https://www.computesdk.com/benchmarks/sandboxes/ratings).
+
+## Ready to switch
+
+Pick how you want to migrate. Do it yourself step by step, or give the prompt to a coding agent and let it change your code.
+
+<Tabs>
+<Tab title="Human">
+
+<Info>
+**Before you start**
+
+- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
+- **Keep Modal installed.** You remove it only after the cutover, in step 6.
+</Info>
+
+<Steps>
+<Step title="Install the SDK and set your API key">
+
+Install the Superserve SDK next to Modal. Set `SUPERSERVE_API_KEY` in your environment and CI secrets.
+
+<CodeGroup>
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+</Step>
+<Step title="Map the API">
+
+The main changes: you build your Modal image into a template once, every sandbox needs a `name` instead of an app, commands are shell strings instead of argument lists, and a timeout pauses the sandbox instead of terminating it.
+
+Python is the main Modal SDK. Modal's JavaScript SDK (`modal` on npm) also covers sandboxes, but some features are Python-only. The TypeScript table notes where.
+
+<Tabs>
+<Tab title="Python">
+
+| Task | Modal | Superserve |
+| --- | --- | --- |
+| Create | `modal.Sandbox.create(app=, image=, timeout=, env=, tags=)` | `Sandbox.create(name=, from_template=, timeout_seconds=, env_vars=, metadata=)`. `name` is required. |
+| Image | `modal.Image.debian_slim().pip_install(...)`, built when you create the sandbox | `Template.create(name=, from_=img, steps=[RunStep(run=...)])`, built once. Then `from_template=name`. |
+| Reconnect | `modal.Sandbox.from_id(id)` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `p = sb.exec("npm", "test", env=, workdir=, timeout=)`, then `p.wait()` | `sbx.commands.run("npm test", env=, cwd=, timeout_seconds=)`. Takes a shell string and waits. |
+| Background process | `sb.exec(...)` without `wait()` | `await sbx.commands.spawn(cmd)` on `AsyncSandbox` |
+| Files | `sb.filesystem.write_bytes(data, path)` / `read_bytes(path)` | `sbx.files.write(path, data)` / `read(path)`. The path comes first. |
+| Snapshot | `sb.snapshot_filesystem()` returns an image, then `Sandbox.create(image=img)`. Filesystem only. | `sbx.snapshot()`, then `Sandbox.create(name=, from_snapshot=)`. Saves memory and disk; forks keep running processes. |
+| Memory snapshot | `sb._experimental_snapshot()`, then `Sandbox._experimental_from_snapshot(snap)`. Needs `_experimental_enable_snapshot=True`. | `sbx.snapshot()`. Every snapshot includes memory. |
+| Pause and resume | `sb._experimental_pause()` / `_experimental_resume()`. Experimental; persistent sandboxes only. | `sbx.pause()` / `sbx.resume()` |
+| Timeout | `timeout=` on create. Default 5 minutes. Terminates the sandbox. | `timeout_seconds=` on create or `sbx.update(timeout_seconds=)`. Pauses. |
+| Idle timeout | `idle_timeout=`. Terminates the sandbox. | `idle_timeout_seconds=`. Pauses. |
+| Env vars and secrets | `env={...}`, `secrets=[modal.Secret.from_name(...)]` | `env_vars={...}` on create, `env` per command, `secrets={"ENV_VAR": "secret-name"}` for API keys. See [Secrets](/secrets/overview). |
+| Public URL | `encrypted_ports=[port]` on create, then `sb.tunnels()[port].url` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Volumes | `volumes={"/data": modal.Volume.from_name(...)}` | Mount [Archil](/storage/archil) or a [cloud bucket](/storage/cloud-buckets) |
+| List and terminate | `modal.Sandbox.list(app_id=)` / `sb.terminate()` | `Sandbox.list()` / `sbx.kill()` |
+
+</Tab>
+<Tab title="TypeScript">
+
+| Task | Modal | Superserve |
+| --- | --- | --- |
+| Create | `modal.sandboxes.create(app, image, { timeoutMs, env })` | `Sandbox.create({ name, fromTemplate, timeoutSeconds, envVars, metadata })`. `name` is required. |
+| Image | `modal.images.fromRegistry(img).dockerfileCommands([...])` | `Template.create({ name, from: img, steps: [{ run }] })`, built once. Then `fromTemplate: name`. |
+| Reconnect | `modal.sandboxes.fromId(id)` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `p = await sb.exec(["npm", "test"], { env, workdir, timeoutMs })`, then `await p.wait()` | `sbx.commands.run("npm test", { env, cwd, timeoutMs })`. Takes a shell string and waits. |
+| Background process | `sb.exec([...])` without `wait()` | `sbx.commands.spawn(cmd)` |
+| Files | `sb.filesystem.writeBytes(data, path)` / `readBytes(path)` | `sbx.files.write(path, data)` / `read(path)`. The path comes first. |
+| Snapshot | `sb.snapshotFilesystem()` returns an image, then `modal.sandboxes.create(app, img)`. Filesystem only. | `sbx.snapshot()`, then `Sandbox.create({ name, fromSnapshot })`. Saves memory and disk; forks keep running processes. |
+| Memory snapshot | `sb.experimentalSnapshot()`, then `modal.sandboxes.experimentalFromSnapshot(snap)` | `sbx.snapshot()`. Every snapshot includes memory. |
+| Pause and resume | Not in the JavaScript SDK | `sbx.pause()` / `sbx.resume()` |
+| Timeout | `timeoutMs` on create. Default 5 minutes. Terminates the sandbox. | `timeoutSeconds` on create or `sbx.update({ timeoutSeconds })`. Pauses. |
+| Idle timeout | `idleTimeoutMs`. Terminates the sandbox. | `idleTimeoutSeconds`. Pauses. |
+| Env vars and secrets | `env`, `secrets: [await modal.secrets.fromName(...)]` | `envVars` on create, `env` per command, `secrets: { ENV_VAR: "secret-name" }` for API keys. See [Secrets](/secrets/overview). |
+| Public URL | `encryptedPorts: [port]` on create, then `(await sb.tunnels())[port].url` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Volumes | `volumes: { "/data": await modal.volumes.fromName(...) }` | Mount [Archil](/storage/archil) or a [cloud bucket](/storage/cloud-buckets) |
+| List and terminate | `modal.sandboxes.list({ appId })` / `sb.terminate()` | `Sandbox.list()` / `sbx.kill()` |
+
+</Tab>
+</Tabs>
+
+To turn a Modal image into a template, see [Create a template](/templates/create).
+
+</Step>
+<Step title="Update your code">
+
+Build the template once. Then replace the app and image with a `name` and `from_template`, turn argument lists into shell strings, and convert timeouts to seconds.
+
+<CodeGroup>
+```python Before (Modal, Python)
+import modal
+
+app = modal.App.lookup("my-app", create_if_missing=True)
+image = modal.Image.debian_slim().pip_install("pytest")
+
+sb = modal.Sandbox.create(
+    app=app,
+    image=image,
+    timeout=600,
+    env={"MODE": "ci"},
+    encrypted_ports=[8000],
+)
+sb.exec("pytest").wait()
+url = sb.tunnels()[8000].url
+img = sb.snapshot_filesystem()
+fork = modal.Sandbox.create(app=app, image=img)
+```
+
+```python After (Superserve, Python)
+from superserve import RunStep, Sandbox, Template
+
+# Build once. Sandboxes then start from the template.
+tpl = Template.create(
+    name="my-tpl",
+    from_="python:3.11",
+    steps=[RunStep(run="pip install pytest")],
+)
+tpl.wait_until_ready()
+
+sbx = Sandbox.create(
+    name="ci-run",
+    from_template="my-tpl",
+    timeout_seconds=600,
+    env_vars={"MODE": "ci"},
+)
+sbx.commands.run("pytest")
+sbx.publish_preview_port(8000)
+url = sbx.get_preview_url(8000)
+snap = sbx.snapshot()
+fork = Sandbox.create(name="fork", from_snapshot=snap)
+```
+
+```ts Before (Modal)
+import { ModalClient } from "modal"
+
+const modal = new ModalClient()
+const app = await modal.apps.fromName("my-app", { createIfMissing: true })
+const image = modal.images
+  .fromRegistry("python:3.11")
+  .dockerfileCommands(["RUN pip install pytest"])
+
+const sb = await modal.sandboxes.create(app, image, {
+  timeoutMs: 600_000,
+  env: { MODE: "ci" },
+  encryptedPorts: [8000],
+})
+await (await sb.exec(["pytest"])).wait()
+const url = (await sb.tunnels())[8000].url
+const img = await sb.snapshotFilesystem()
+const fork = await modal.sandboxes.create(app, img)
+```
+
+```ts After (Superserve)
+import { Sandbox, Template } from "@superserve/sdk"
+
+// Build once. Sandboxes then start from the template.
+const tpl = await Template.create({
+  name: "my-tpl",
+  from: "python:3.11",
+  steps: [{ run: "pip install pytest" }],
+})
+await tpl.waitUntilReady()
+
+const sbx = await Sandbox.create({
+  name: "ci-run",
+  fromTemplate: "my-tpl",
+  timeoutSeconds: 600,
+  envVars: { MODE: "ci" },
+})
+await sbx.commands.run("pytest")
+await sbx.publishPreviewPort(8000)
+const url = sbx.getPreviewUrl(8000)
+const snap = await sbx.snapshot()
+const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
+```
+</CodeGroup>
+
+</Step>
+<Step title="Move existing sandboxes with the migration script">
+
+The script copies a directory from each running sandbox of a Modal app into a new Superserve sandbox. It does not change or terminate your Modal sandboxes. Run it with your Modal credentials and `SUPERSERVE_API_KEY` set. Set `SRC` to the directory your sandboxes write to.
+
+<CodeGroup>
+```python migrate_from_modal.py
+import sys
+
+import modal
+from superserve import Sandbox
+
+APP = "my-app"  # the Modal app that owns your sandboxes
+SRC = "/root"  # directory to copy from each Modal sandbox
+DST = "/home/user"  # directory to copy into in Superserve
+TEMPLATE = "superserve/base"  # or the template you built from your Modal image
+failed = False
+
+app = modal.App.lookup(APP)
+for src in modal.Sandbox.list(app_id=app.app_id):
+    sid = src.object_id
+    tar = src.exec("tar", "czf", "/tmp/state.tgz", "-C", SRC, ".")
+    if tar.wait() != 0:
+        print(f"{sid}: archive failed: {tar.stderr.read()}", file=sys.stderr)
+        failed = True
+        continue
+    tgz = src.filesystem.read_bytes("/tmp/state.tgz")
+
+    dst = Sandbox.create(
+        name=f"from-modal-{sid}",
+        from_template=TEMPLATE,
+        metadata={**src.get_tags(), "migrated_from": sid},
+    )
+    dst.files.write("/tmp/state.tgz", tgz)
+    out = dst.commands.run(f"tar xzf /tmp/state.tgz -C {DST}")
+    if out.exit_code != 0:
+        print(f"{sid}: copy failed: {out.stderr}", file=sys.stderr)
+        failed = True
+        continue
+    print(f"{sid} -> {dst.id}")
+
+sys.exit(1 if failed else 0)
+```
+
+```ts migrate-from-modal.ts
+import { ModalClient } from "modal"
+import { Sandbox } from "@superserve/sdk"
+
+const APP = "my-app" // the Modal app that owns your sandboxes
+const SRC = "/root" // directory to copy from each Modal sandbox
+const DST = "/home/user" // directory to copy into in Superserve
+const TEMPLATE = "superserve/base" // or the template you built from your Modal image
+
+const modal = new ModalClient()
+const app = await modal.apps.fromName(APP)
+for await (const src of modal.sandboxes.list({ appId: app.appId })) {
+  const sid = src.sandboxId
+  const tar = await src.exec(["tar", "czf", "/tmp/state.tgz", "-C", SRC, "."])
+  if ((await tar.wait()) !== 0) {
+    console.error(`${sid}: archive failed: ${await tar.stderr.readText()}`)
+    process.exitCode = 1
+    continue
+  }
+  const tgz = await src.filesystem.readBytes("/tmp/state.tgz")
+
+  const dst = await Sandbox.create({
+    name: `from-modal-${sid}`,
+    fromTemplate: TEMPLATE,
+    metadata: { ...(await src.getTags()), migrated_from: sid },
+  })
+  await dst.files.write("/tmp/state.tgz", tgz)
+  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`)
+  if (out.exitCode !== 0) {
+    console.error(`${sid}: copy failed: ${out.stderr}`)
+    process.exitCode = 1
+    continue
+  }
+  console.log(`${sid} -> ${dst.id}`)
+}
+```
+</CodeGroup>
+
+The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
+
+</Step>
+<Step title="Verify and cut over">
+
+Run your test suite against Superserve. Check the sandbox list in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link). When the results match, send production traffic to Superserve.
+
+</Step>
+<Step title="Uninstall Modal">
+
+After the cutover, remove the `modal` package. Delete your Modal token from your environment and CI secrets.
+
+<CodeGroup>
+```bash Python
+pip uninstall modal
+```
+
+```bash TypeScript
+npm uninstall modal
+```
+</CodeGroup>
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="Agent">
+
+Paste this prompt into Claude Code, Codex, Cursor or another coding agent at the root of your repo. The agent changes the code and runs your tests. You review the diff.
+
+```text Migration prompt
+Migrate this repository from Modal Sandboxes to the Superserve SDK.
+
+Reference: https://docs.superserve.ai/llms-full.txt (read it first).
+
+Before you start: ask me for a Superserve API key if SUPERSERVE_API_KEY is not set.
+I get it from the console (https://console.superserve.ai/api-keys/). Do not create a key yourself.
+
+1. Install superserve (pip) or @superserve/sdk (npm) next to modal. Do not remove modal.
+   Add SUPERSERVE_API_KEY to code, .env.example, and CI config.
+2. Find every use of modal.Sandbox (Python) or modal.sandboxes (TypeScript).
+   Change only sandbox code. Leave Modal Functions as they are and list them.
+   Apply this mapping:
+   - modal.Image definitions used by sandboxes -> Template.create({name, from, steps}), built once.
+     Python: Template.create(name=, from_=, steps=[RunStep(run=...)]).
+   - Sandbox.create(app=, image=, timeout=, env=) -> Sandbox.create({name, fromTemplate,
+     timeoutSeconds, envVars}). name is required: derive it from context. Drop the app.
+   - sb.exec("cmd", "arg") + wait() -> commands.run("cmd arg"). It takes one shell string:
+     quote arguments (Python: shlex.join). It waits and returns exitCode, stdout, stderr.
+     It does not throw on a nonzero exit code, so check exitCode where the code checked returncode.
+   - sb.exec(...) without wait() -> commands.spawn(cmd). Python: on AsyncSandbox.
+   - filesystem.write_bytes(data, path) / read_bytes(path) -> files.write(path, data) / files.read(path)
+   - snapshot_filesystem() + Sandbox.create(image=img) -> snapshot() + Sandbox.create({name, fromSnapshot})
+   - _experimental_snapshot() / _experimental_from_snapshot() -> snapshot() / fromSnapshot
+   - timeout and idle_timeout -> timeoutSeconds and idleTimeoutSeconds. Superserve pauses
+     on timeout, Modal terminates. If the code relies on the sandbox ending, call kill().
+   - secrets=[modal.Secret.from_name(x)] -> create the Superserve secret, then
+     secrets: {ENV_VAR: "secret-name"}.
+   - encrypted_ports=[p] + tunnels()[p].url -> publishPreviewPort(p), then getPreviewUrl(p).
+     New sandboxes route only published ports. Ports must be 1024 to 65535.
+   - volumes={path: modal.Volume} -> mount Archil or a cloud bucket (see the storage docs).
+   - Sandbox.from_id(id) -> Sandbox.connect(id). Sandbox.list() / terminate() -> Sandbox.list() / kill().
+   - Python: use snake_case (from_template, timeout_seconds, env_vars, from_snapshot).
+3. Run the test suite. Fix failures. Do not delete Modal code paths you cannot test; list them.
+4. Report: files changed, tests run and their result, and anything left for a human.
+5. Only after I confirm the cutover: uninstall modal and remove the Modal token.
+```
+
+### Give your agent the full reference
+
+| Resource | Use |
+| --- | --- |
+| [`docs.superserve.ai/llms-full.txt`](https://docs.superserve.ai/llms-full.txt) | The whole docs in one file for the agent context |
+| [`superserve` skill](https://github.com/superserve-ai/superserve/tree/main/skills/superserve) | Full SDK reference for Claude Code and other skill-aware agents |
+| [Superserve MCP server](/integrations/mcp) | Lets the agent create and test sandboxes while it migrates |
+
+The API mapping and the migration script are in the **Human** tab.
+
+</Tab>
+</Tabs>
+
+## Known differences
+
+| Area | What to do |
+| --- | --- |
+| Timeout behavior | Modal terminates a sandbox at its timeout or idle timeout. Superserve pauses it and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
+| Commands | Modal `exec` takes an argument list. Superserve `commands.run` takes one shell string, waits for it, and does not throw on a nonzero exit code. Quote arguments and check `exitCode` / `exit_code`. |
+| Images | Build your image into a template once with `Template.create`. Every sandbox then starts from the built template. Set `vcpu` and `memory_mib` on the template. |
+| Grouping | Group sandboxes with `metadata` and filter `Sandbox.list` by it. |
+| Secrets | A Modal secret puts the real value in the environment. A Superserve secret keeps the real value out of the sandbox: code sees a stand-in value, and Superserve attaches the real value to outbound requests. Use `envVars` for values that are not credentials. |
+| Preview ports | Modal opens tunnels for the ports you list at create time. Superserve publishes ports on a running sandbox. Call `publishPreviewPort` before you use a preview URL. Serve on a port from 1024 to 65535. |
+| Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
