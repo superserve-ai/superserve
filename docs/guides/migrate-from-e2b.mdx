@@ -25,7 +25,7 @@ Pick how you want to migrate. Do it yourself step by step, or give the prompt to
 <Info>
 **Before you start**
 
-- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](/api-key).
+- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
 - **Keep E2B installed.** You remove it only after the cutover, in step 6.
 </Info>
 
@@ -66,7 +66,7 @@ Most calls keep their names. The main changes: every sandbox needs a `name`, tim
 | Pause and resume | `sbx.pause()` / `sbx.connect()` | `sbx.pause()` / `sbx.resume()` |
 | Timeout | `sbx.setTimeout(ms)`. Kills by default. | `sbx.update({ timeoutSeconds })`. Pauses. Also `idleTimeoutSeconds`. |
 | Env vars | `envs` | `envVars` on create, `env` per command, `secrets` for API keys |
-| Public URL | `sbx.getHost(port)` | `sbx.getPreviewUrl(port)` |
+| Public URL | `sbx.getHost(port)` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
 | List and kill | `Sandbox.list()` / `sbx.kill()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -84,7 +84,7 @@ Most calls keep their names. The main changes: every sandbox needs a `name`, tim
 | Pause and resume | `sbx.pause()` / `sbx.connect()` | `sbx.pause()` / `sbx.resume()` |
 | Timeout | `sbx.set_timeout(seconds)`. Kills by default. | `sbx.update(timeout_seconds=)`. Pauses. Also `idle_timeout_seconds`. |
 | Env vars | `envs` | `env_vars` on create, `env` per command, `secrets` for API keys |
-| Public URL | `sbx.get_host(port)` | `sbx.get_preview_url(port)` |
+| Public URL | `sbx.get_host(port)` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
 | List and kill | `Sandbox.list()` / `sbx.kill()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -176,13 +176,20 @@ while (pages.hasNext) {
       metadata: { ...info.metadata, migrated_from: info.sandboxId },
     })
     await dst.files.write("/tmp/state.tgz", tgz)
-    await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DIR}`)
+    const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DIR}`)
+    if (out.exitCode !== 0) {
+      console.error(`${info.sandboxId}: copy failed: ${out.stderr}`)
+      process.exitCode = 1
+      continue
+    }
     console.log(`${info.sandboxId} -> ${dst.id}`)
   }
 }
 ```
 
 ```python migrate_from_e2b.py
+import sys
+
 from e2b import Sandbox as E2B
 from superserve import Sandbox
 
@@ -190,6 +197,7 @@ from superserve import Sandbox
 # Sandboxes from other templates start from superserve/base.
 TEMPLATES = {"my-e2b-template-id": "my-tpl"}
 DIR = "/home/user"
+failed = False
 
 pages = E2B.list()
 while pages.has_next:
@@ -204,8 +212,14 @@ while pages.has_next:
             metadata={**info.metadata, "migrated_from": info.sandbox_id},
         )
         dst.files.write("/tmp/state.tgz", bytes(tgz))
-        dst.commands.run(f"tar xzf /tmp/state.tgz -C {DIR}")
+        out = dst.commands.run(f"tar xzf /tmp/state.tgz -C {DIR}")
+        if out.exit_code != 0:
+            print(f"{info.sandbox_id}: copy failed: {out.stderr}", file=sys.stderr)
+            failed = True
+            continue
         print(f"{info.sandbox_id} -> {dst.id}")
+
+sys.exit(1 if failed else 0)
 ```
 </CodeGroup>
 
@@ -247,7 +261,7 @@ Migrate this repository from the E2B SDK to the Superserve SDK.
 Reference: https://docs.superserve.ai/llms-full.txt (read it first).
 
 Before you start: ask me for a Superserve API key if SUPERSERVE_API_KEY is not set.
-I get it from the console (https://docs.superserve.ai/api-key). Do not create a key yourself.
+I get it from the console (https://console.superserve.ai/api-keys/). Do not create a key yourself.
 
 1. Install @superserve/sdk (npm) or superserve (pip) next to e2b. Do not remove e2b.
    Add SUPERSERVE_API_KEY to code, .env.example, and CI config.
@@ -259,7 +273,8 @@ I get it from the console (https://docs.superserve.ai/api-key). Do not create a 
    - createSnapshot() + Sandbox.create(snapshotId) -> snapshot() + Sandbox.create({name, fromSnapshot})
    - setTimeout(ms) -> update({timeoutSeconds}). Note: Superserve pauses on timeout, E2B kills.
      If the code relies on the sandbox being killed, call kill() explicitly.
-   - getHost(port) -> getPreviewUrl(port). It returns a full URL, so remove any "https://" prefix.
+   - getHost(port) -> publishPreviewPort(port), then getPreviewUrl(port). New sandboxes route only
+     published ports. getPreviewUrl returns a full URL, so remove any "https://" prefix.
    - Python: use snake_case (from_template, timeout_seconds, env_vars, from_snapshot).
 3. Convert E2B templates to Template.create({name, from, steps}).
 4. Run the test suite. Fix failures. Do not delete E2B code paths you cannot test; list them.
@@ -287,7 +302,7 @@ The API mapping and the migration script are in the **Human** tab.
 | Timeout behavior | E2B kills a sandbox at its timeout by default. Superserve pauses it and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
 | Volumes | No built-in volume mounts. Mount [Archil](/storage/archil) or a [cloud bucket](/storage/cloud-buckets) for shared, persistent storage. |
 | Images | Build an image into a template with `Template.create` first, then create sandboxes from the template. |
-| Preview ports | `getPreviewUrl` serves ports 1024 to 65535 only. Move a server on port 80 or 443 to a higher port. |
+| Preview ports | New sandboxes route only published ports. Call `publishPreviewPort` before you use a preview URL. Ports 1024 to 65535 only: move a server on port 80 or 443 to a higher port. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
 
 ## Sources
