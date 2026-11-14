@@ -35,8 +35,8 @@ for e in page.events:
 
 Each event has a `kind`:
 
-- **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. This is every HTTP or HTTPS connection the sandbox opened to a public address on ports 80 and 443, whether or not a secret was involved. Attempts at private, link-local, or loopback addresses are dropped before they reach the log.
-- **`request`** — an HTTPS request handled by the Superserve credential proxy. When a sandbox has [secrets](/secrets/overview) bound, the proxy handles its HTTPS requests, including requests that carry no secret. Carries `method`, `path`, and `status`. `secretId` is present only when the proxy attached a secret to the request. `errorCode` is present when the proxy refused or failed the request itself.
+- **`connection`** — a raw outbound connection. Carries the host (or `dstIp`), a `verdict`, and byte counts. A sandbox with no secrets bound gets one for every HTTP or HTTPS connection it opened to a public address on ports 80 and 443. A sandbox with secrets bound gets them only for HTTP on port 80; its HTTPS traffic appears as `request` rows instead. Attempts at private, link-local, or loopback addresses are dropped before they reach the log.
+- **`request`** — an HTTPS request handled by the Superserve credential proxy. When a sandbox has [secrets](/secrets/overview) bound, the proxy handles its HTTPS requests, including requests that carry no secret. Carries `method`, `path`, and `status`. `secretId` is present only when the proxy attached a secret to the request. `errorCode` is present when the proxy refused or failed the request itself. These requests do not also get a `connection` row, so with secrets bound, look for HTTPS traffic in `request` rows.
 
 Fields that don't apply to a row's kind are omitted.
 
@@ -57,7 +57,7 @@ Fields that don't apply to a row's kind are omitted.
 | `upstreamStatus` / `upstream_status` | `request` | HTTP status from the upstream service. Absent when the proxy answered the request itself.                         |
 | `latencyMs` / `latency_ms` | `request`    | Time the proxy spent on the request, in milliseconds.                                                                        |
 | `secretId` / `secret_id`   | `request`    | The secret the proxy attached. Absent when no secret was used.                                                               |
-| `errorCode` / `error_code` | `request`    | Why the proxy refused or failed the request, for example `host_not_allowed` or `credential_revoked`.                        |
+| `errorCode` / `error_code` | `request`    | Why the proxy refused or failed the request, for example `host_denied`, `host_not_allowed`, or `credential_revoked`. See [Denied requests](#denied-requests). |
 
 ### Verdicts
 
@@ -70,6 +70,17 @@ Every `connection` row has a verdict:
 | `failed`  | Allowed by policy, but the connection couldn't be established                                          |
 
 `matchRule` names the rule behind a `blocked` connection — a useful signal for catching when a sandbox tried to reach somewhere you didn't expect.
+
+### Denied requests
+
+When a sandbox has secrets bound, the proxy refuses an HTTPS request to a host your [network rules](/sandbox/networking) don't allow. The sandbox gets status `403`, and the `request` row has no `upstreamStatus`. Its `errorCode` tells you which rule refused it:
+
+| `errorCode`        | Meaning                                                                                                                                       |
+| ------------------ | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| `host_denied`      | A `denyOut` rule covers the destination, for example `0.0.0.0/0` in a deny-all policy.                                                       |
+| `host_not_allowed` | The destination is not on the `allowOut` list and no `denyOut` rule covers it, for example under a policy that has only `allowOut` rules. |
+
+The same split shows on `blocked` HTTP `connection` rows: `matchRule` is `cidr` when a `denyOut` rule blocked the connection and `implicit-deny` when no `allowOut` rule matched.
 
 ## Filtering
 
@@ -102,7 +113,8 @@ window = sandbox.get_network_log(
   A `verdict` filter returns only `connection` rows — `request` rows have no
   verdict. When a sandbox has secrets bound, the proxy refuses an HTTPS request
   to a host your network rules don't allow with a `request` row (status `403`,
-  `errorCode` `host_not_allowed`). `verdict: "blocked"` does not return that row.
+  `errorCode` `host_denied` or `host_not_allowed`). `verdict: "blocked"` does not
+  return that row.
 </Note>
 
 To see everything that was denied, page through the unfiltered log and keep both kinds:
