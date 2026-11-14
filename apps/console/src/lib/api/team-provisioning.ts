@@ -439,6 +439,8 @@ async function provisionTeamFor(
     )
       throw error
     // The stored decision is authoritative on retry; do not republish it.
+    // The primary stays completable: the control plane cannot supersede it, so
+    // a concurrent request can still complete it if the name is freed meanwhile.
     prepared = await preparePromotionTeam({
       ...fallbackLocator,
       name: accountTeamFallbackName(user.email ?? userId, userId),
