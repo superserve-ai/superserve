@@ -14,6 +14,10 @@ import {
 import type { SignupPlanContext } from "@/lib/api/signup-plan"
 import { getSignupPlanAction } from "@/lib/api/signup-plan-actions"
 import { initialPlanSelection } from "@/lib/auth/plan-preselection"
+import {
+  CheckoutCopyError,
+  checkoutErrorMessage,
+} from "@/lib/billing/checkout-error-copy"
 import { getTeamOffersAction } from "@/lib/billing/plan-offers-actions"
 import type { BillingOffer } from "@/lib/billing/plans"
 
@@ -91,7 +95,7 @@ export function PlanSelection({
       billingReturn,
     )
     if (next.userId !== initial.userId || next.teamKey !== initial.teamKey)
-      throw new Error("Your account changed. Reload to continue.")
+      throw new CheckoutCopyError("Your account changed. Reload to continue.")
     if (mounted.current) {
       setContext(next)
       setUncertain(false)
@@ -109,11 +113,7 @@ export function PlanSelection({
         await operation()
       } catch (cause) {
         if (mounted.current) {
-          setError(
-            cause instanceof Error
-              ? cause.message
-              : "Unable to finish setup. Please retry.",
-          )
+          setError(checkoutErrorMessage(cause))
           // A lost response is not proof that a purchase or plan commitment failed.
           try {
             await refresh()
@@ -345,7 +345,7 @@ export function PlanSelection({
             cancelUrl: cancel.toString(),
           })
           if (!isStripeCheckoutUrl(session.url))
-            throw new Error(
+            throw new CheckoutCopyError(
               "Unable to open billing. Please try again or skip for now.",
             )
           navigate(session.url)

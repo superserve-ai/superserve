@@ -2,6 +2,8 @@ import { act, render } from "@testing-library/react"
 import { beforeEach, expect, it, vi } from "vitest"
 
 import {
+  clearSigningOut,
+  markSigningOut,
   retainSignOutReturnPath,
   SessionExpiryRedirect,
 } from "./session-expiry-redirect"
@@ -24,6 +26,7 @@ const first =
 const second =
   "/billing-usage/buy-credit/?team=use:22222222-2222-4222-8222-222222222222&purchase=success"
 beforeEach(() => {
+  clearSigningOut()
   state.assign.mockReset()
   vi.stubGlobal("location", {
     assign: state.assign,
@@ -54,6 +57,18 @@ it("rejects unsafe or malformed explicit navigation without changing normal expi
   render(<SessionExpiryRedirect />)
   await act(async () => state.event?.("SIGNED_OUT"))
   expect(state.assign).toHaveBeenCalledWith(
+    `/auth/signin?next=${encodeURIComponent("/sandboxes/")}`,
+  )
+})
+it("redirects on SIGNED_OUT again after clearing a deliberate sign-out", async () => {
+  render(<SessionExpiryRedirect />)
+  markSigningOut()
+  await act(async () => state.event?.("SIGNED_OUT"))
+  expect(state.assign).not.toHaveBeenCalled()
+
+  clearSigningOut()
+  await act(async () => state.event?.("SIGNED_OUT"))
+  expect(state.assign).toHaveBeenCalledExactlyOnceWith(
     `/auth/signin?next=${encodeURIComponent("/sandboxes/")}`,
   )
 })
