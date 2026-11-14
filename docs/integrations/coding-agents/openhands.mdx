@@ -123,7 +123,7 @@ sandbox.commands.run(
 </CodeGroup>
 
 <Warning>
-`openhands --headless` exits with code `0` even when the run fails, for example when the key is not valid. To detect failures, use JSON output and check for a `ConversationErrorEvent`, as shown below.
+`openhands --headless` exits with code `0` even when the run fails, for example when the key is not valid. To detect failures, check the exit code, then use JSON output and check for a `ConversationErrorEvent`, as shown below.
 </Warning>
 
 ## Get JSON output
@@ -135,7 +135,7 @@ Add `--json` to get one JSON event per line on stdout, mixed with a few plain-te
 - `MessageEvent`: a message. The last one with `source: "agent"` holds the final answer, as `text` blocks in `llm_message.content`.
 - `ConversationErrorEvent`: the run failed. `code` and `detail` say why.
 
-This run passes only a stderr callback, so the events aren't printed while they arrive. The callback still keeps the connection open, and `stdout` holds every event when the run ends. The `Conversation ID` line at the end of stdout identifies the conversation, so you can continue it later.
+This run passes only a stderr callback, so the events aren't printed while they arrive. The callback still keeps the connection open, and `stdout` holds every event when the run ends. The `Conversation ID` line at the end of stdout identifies the conversation, so you can continue it later. A nonzero exit code means the command failed, for example when it reached its timeout.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -159,6 +159,8 @@ const jsonResult = await sandbox.commands.run(
   'cd ~/app && openhands --headless --json --override-with-envs -t "Add a --count option to primes.py"',
   { timeoutMs: 600_000, onStderr: (data) => process.stderr.write(data) },
 )
+
+if (jsonResult.exitCode !== 0) throw new Error(jsonResult.stderr)
 
 const events = parseEvents(jsonResult.stdout)
 const failure = events.find((e) => e.kind === "ConversationErrorEvent")
@@ -188,6 +190,9 @@ result = sandbox.commands.run(
     timeout_seconds=600,
     on_stderr=lambda data: print(data, end="", file=sys.stderr),
 )
+
+if result.exit_code != 0:
+    raise RuntimeError(result.stderr)
 
 events = parse_events(result.stdout)
 for event in events:
@@ -254,6 +259,8 @@ const longResult = await sandbox.commands.run(
   },
 )
 
+if (longResult.exitCode !== 0) throw new Error(longResult.stderr)
+
 const longFailure = parseEvents(longResult.stdout).find((e) => e.kind === "ConversationErrorEvent")
 if (longFailure) throw new Error(`${longFailure.code}: ${longFailure.detail}`)
 ```
@@ -277,6 +284,9 @@ result = sandbox.commands.run(
     on_stdout=on_stdout,
     on_stderr=lambda data: print(data, end="", file=sys.stderr),
 )
+
+if result.exit_code != 0:
+    raise RuntimeError(result.stderr)
 
 for event in parse_events(result.stdout):
     if event["kind"] == "ConversationErrorEvent":
@@ -367,7 +377,7 @@ sandbox.commands.run(
 ```
 </CodeGroup>
 
-To use OpenAI, create a secret with the **OpenAI** provider, bind it to `LLM_API_KEY`, and set `LLM_MODEL` to an `openai/...` model. For an OpenAI-compatible endpoint, also set `LLM_BASE_URL`.
+To use OpenAI, create a secret with the **OpenAI** provider, bind it to `LLM_API_KEY`, and set `LLM_MODEL` to an `openai/...` model. For an OpenAI-compatible endpoint on another host, set `LLM_BASE_URL` to the endpoint, and bind `LLM_API_KEY` to a [custom secret](/secrets/create#custom-secrets) for that host. A provider secret sends the real key only to its provider's host.
 
 ## Restrict the network
 
