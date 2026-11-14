@@ -189,7 +189,7 @@
           },
           {
             "group": "Migrate",
-            "pages": ["guides/migrate-from-e2b"]
+            "pages": ["guides/migrate-from-daytona", "guides/migrate-from-e2b"]
           },
           {
             "group": "Integrations",
