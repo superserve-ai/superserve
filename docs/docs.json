@@ -56,7 +56,10 @@
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "redirects": [
-    { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
+    {
+      "source": "/sandbox/memory",
+      "destination": "/sandbox/live-memory-resizing"
+    },
     {
       "source": "/integrations/managed-agents/claude-managed-agents",
       "destination": "/integrations/agent-platforms/claude-managed-agents",
@@ -186,6 +189,10 @@
               "guides/evals-and-rl",
               "guides/headless-browser"
             ]
+          },
+          {
+            "group": "Migrate",
+            "pages": ["guides/migrate-from-e2b"]
           },
           {
             "group": "Integrations",
