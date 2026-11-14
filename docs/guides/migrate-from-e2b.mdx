@@ -13,8 +13,6 @@ Superserve and E2B both run Firecracker microVMs and have a similar SDK, so most
 
 <BenchmarkComparison compare="e2b" compareName="E2B" />
 
-The four benchmarks above matter most for agent workloads that start, snapshot and pause sandboxes often. For all benchmarks and providers, see the [ComputeSDK ratings](https://www.computesdk.com/benchmarks/sandboxes/ratings).
-
 ## Ready to switch
 
 Pick how you want to migrate. Do it yourself step by step, or give the prompt to a coding agent and let it change your code.
@@ -300,17 +298,6 @@ The API mapping and the migration script are in the **Human** tab.
 | Area | What to do |
 | --- | --- |
 | Timeout behavior | E2B kills a sandbox at its timeout by default. Superserve pauses it and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
-| Volumes | No built-in volume mounts. Mount [Archil](/storage/archil) or a [cloud bucket](/storage/cloud-buckets) for shared, persistent storage. |
 | Images | Build an image into a template with `Template.create` first, then create sandboxes from the template. |
 | Preview ports | New sandboxes route only published ports. Call `publishPreviewPort` before you use a preview URL. Ports 1024 to 65535 only: move a server on port 80 or 443 to a higher port. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
-
-## Sources
-
-The comparison loads live from ComputeSDK and refreshes every 12 hours. Each card shows its update date and links to its source.
-
-- [ComputeSDK Burst TTI benchmark](https://www.computesdk.com/benchmarks/sandboxes/burst-tti), latest run ([raw results](https://raw.githubusercontent.com/computesdk/benchmarks/master/results/burst_tti/latest.json))
-- [ComputeSDK DAX benchmark](https://www.computesdk.com/benchmarks/sandboxes/dax), latest run ([raw results](https://raw.githubusercontent.com/computesdk/benchmarks/master/results/sandbox-dax/latest.json))
-- [ComputeSDK Filesystem Snapshot and Restore](https://www.computesdk.com/benchmarks/sandboxes/filesystem-snapshot), 7-day score
-- [ComputeSDK Pause and Resume](https://www.computesdk.com/benchmarks/sandboxes/pause-resume), 7-day score
-- [E2B SDK reference](https://e2b.dev/docs)
