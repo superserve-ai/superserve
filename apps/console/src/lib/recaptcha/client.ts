@@ -7,8 +7,13 @@ type Grecaptcha = {
   }
 }
 
-const getGrecaptcha = () =>
-  (window as unknown as { grecaptcha?: Grecaptcha }).grecaptcha
+declare global {
+  interface Window {
+    grecaptcha?: Grecaptcha
+  }
+}
+
+const getGrecaptcha = () => window.grecaptcha
 
 const LOAD_TIMEOUT_MS = 8000
 const EXECUTE_TIMEOUT_MS = 8000
