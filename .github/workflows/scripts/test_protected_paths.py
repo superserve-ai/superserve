@@ -64,7 +64,9 @@ class RepositoryCodeownersTest(unittest.TestCase):
     MUST_BE_PROTECTED = [
         "apps/console/src/app/(dashboard)/admin/billing/teams/[team_id]/actions.ts",
         "apps/console/src/app/(public)/device/actions.ts",
+        "apps/console/src/app/(auth)/auth/signin/google-signup-check.ts",
         "apps/console/src/lib/cells.ts",
+        "apps/console/src/lib/cloudflare/turnstile-client.ts",
         "apps/console/src/lib/fingerprint/account-device-action.ts",
         "apps/console/src/lib/recaptcha/verify.ts",
     ]

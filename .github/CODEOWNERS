@@ -29,10 +29,12 @@
 /apps/console/src/app/**/route.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/*-actions.ts @awille-ai @meAmitPatil @pavitrabhalla
 
-# Sign-in, sign-up and their reCAPTCHA abuse check, and staff admin.
+# Sign-in, sign-up, their reCAPTCHA and Turnstile abuse checks, and staff admin.
 /apps/console/src/app/(auth)/auth/callback/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/auth/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/recaptcha/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/cloudflare/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/(auth)/auth/signin/google-signup-check.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/app/admin/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/app/(dashboard)/admin/ @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/admin/ @awille-ai @meAmitPatil @pavitrabhalla
