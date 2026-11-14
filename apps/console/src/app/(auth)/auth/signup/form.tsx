@@ -16,6 +16,11 @@ import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
+  TURNSTILE_SCRIPT_SRC,
+  TURNSTILE_SITE_KEY,
+  getTurnstileToken,
+} from "@/lib/cloudflare/turnstile-client"
+import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
@@ -36,7 +41,6 @@ import {
 const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY
 
 declare global {
   interface Window {
@@ -49,65 +53,7 @@ declare global {
         ) => Promise<string>
       }
     }
-    turnstile?: {
-      render: (element: HTMLElement, options: Record<string, unknown>) => string
-      remove: (widgetId: string) => void
-    }
   }
-}
-
-const TURNSTILE_LOAD_TIMEOUT_MS = 1500
-const TURNSTILE_TOKEN_TIMEOUT_MS = 3000
-
-const getTurnstileToken = async (): Promise<string | undefined> => {
-  if (!TURNSTILE_SITE_KEY) return undefined
-  const start = Date.now()
-  while (!window.turnstile && Date.now() - start < TURNSTILE_LOAD_TIMEOUT_MS)
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  if (!window.turnstile) return undefined
-  return new Promise((resolve) => {
-    const container = document.createElement("div")
-    container.style.position = "fixed"
-    container.style.bottom = "16px"
-    container.style.right = "16px"
-    container.style.zIndex = "50"
-    document.body.appendChild(container)
-    let widgetId = ""
-    const cleanup = () => {
-      if (widgetId) window.turnstile?.remove(widgetId)
-      container.remove()
-    }
-    const deadline = setTimeout(() => {
-      cleanup()
-      resolve(undefined)
-    }, TURNSTILE_TOKEN_TIMEOUT_MS)
-    try {
-      widgetId = window.turnstile!.render(container, {
-        sitekey: TURNSTILE_SITE_KEY,
-        size: "compact",
-        appearance: "interaction-only",
-        callback: (token: string) => {
-          clearTimeout(deadline)
-          cleanup()
-          resolve(token)
-        },
-        "error-callback": () => {
-          clearTimeout(deadline)
-          cleanup()
-          resolve(undefined)
-        },
-        "timeout-callback": () => {
-          clearTimeout(deadline)
-          cleanup()
-          resolve(undefined)
-        },
-      })
-    } catch {
-      clearTimeout(deadline)
-      cleanup()
-      resolve(undefined)
-    }
-  })
 }
 
 const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
@@ -552,10 +498,7 @@ export default function SignUpContent() {
         />
       )}
       {TURNSTILE_SITE_KEY && (
-        <Script
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-          strategy="afterInteractive"
-        />
+        <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">

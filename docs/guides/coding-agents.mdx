@@ -33,7 +33,15 @@ A coding agent reads a repository, edits files, and runs commands such as tests 
 
 ## Run Claude Code on a repository
 
-This example clones a repository, asks Claude Code to add a file, and prints the changes. Create the `anthropic-key` secret first, as shown in [Claude Code](/integrations/coding-agents/claude).
+This example clones a repository, asks Claude Code to add a file, and prints the changes.
+
+First store your Anthropic API key as a secret named `anthropic-key`. You do this once per team. The CLI reads the value from stdin, so the key doesn't appear in your shell history:
+
+```bash
+printf %s "$ANTHROPIC_API_KEY" | superserve secret create anthropic-key --provider anthropic
+```
+
+You can also create the secret in the console or with the SDK, as shown in [Claude Code](/integrations/coding-agents/claude).
 
 <CodeGroup>
 ```typescript TypeScript
@@ -45,25 +53,29 @@ const sandbox = await Sandbox.create({
   secrets: { ANTHROPIC_API_KEY: "anthropic-key" },
 })
 
-await sandbox.commands.run(
-  "git clone --depth 1 https://github.com/octocat/Hello-World repo",
-  { timeoutMs: 60_000 },
-)
+try {
+  await sandbox.commands.run(
+    "git clone --depth 1 https://github.com/octocat/Hello-World repo",
+    { timeoutMs: 60_000 },
+  )
 
-const task = "Add a Python file hello.py that prints Hello, World. Don't change the README."
-const agent = await sandbox.commands.run(
-  'claude -p "$TASK" --permission-mode acceptEdits',
-  { cwd: "/home/user/repo", env: { TASK: task }, timeoutMs: 600_000 },
-)
-console.log(agent.stdout)
+  const task = "Add a Python file hello.py that prints Hello, World. Don't change the README."
+  const agent = await sandbox.commands.run(
+    'claude -p "$TASK" --permission-mode acceptEdits',
+    { cwd: "/home/user/repo", env: { TASK: task }, timeoutMs: 600_000 },
+  )
+  console.log(agent.stdout)
+  if (agent.exitCode !== 0) {
+    throw new Error(`Claude Code exited with ${agent.exitCode}`)
+  }
 
-const changes = await sandbox.commands.run(
-  "git status --short && git diff",
-  { cwd: "/home/user/repo" },
-)
-console.log(changes.stdout) // ?? hello.py
-
-await sandbox.kill()
+  const changes = await sandbox.commands.run("git add -N . && git diff", {
+    cwd: "/home/user/repo",
+  })
+  console.log(changes.stdout) // diff --git a/hello.py b/hello.py ...
+} finally {
+  await sandbox.kill()
+}
 ```
 
 ```python Python
@@ -75,34 +87,38 @@ sandbox = Sandbox.create(
     secrets={"ANTHROPIC_API_KEY": "anthropic-key"},
 )
 
-sandbox.commands.run(
-    "git clone --depth 1 https://github.com/octocat/Hello-World repo",
-    timeout_seconds=60,
-)
+try:
+    sandbox.commands.run(
+        "git clone --depth 1 https://github.com/octocat/Hello-World repo",
+        timeout_seconds=60,
+    )
 
-task = "Add a Python file hello.py that prints Hello, World. Don't change the README."
-agent = sandbox.commands.run(
-    'claude -p "$TASK" --permission-mode acceptEdits',
-    cwd="/home/user/repo",
-    env={"TASK": task},
-    timeout_seconds=600,
-)
-print(agent.stdout)
+    task = (
+        "Add a Python file hello.py that prints Hello, World. Don't change the README."
+    )
+    agent = sandbox.commands.run(
+        'claude -p "$TASK" --permission-mode acceptEdits',
+        cwd="/home/user/repo",
+        env={"TASK": task},
+        timeout_seconds=600,
+    )
+    print(agent.stdout)
+    if agent.exit_code != 0:
+        raise RuntimeError(f"Claude Code exited with {agent.exit_code}")
 
-changes = sandbox.commands.run(
-    "git status --short && git diff",
-    cwd="/home/user/repo",
-)
-print(changes.stdout)  # ?? hello.py
-
-sandbox.kill()
+    changes = sandbox.commands.run("git add -N . && git diff", cwd="/home/user/repo")
+    print(changes.stdout)  # diff --git a/hello.py b/hello.py ...
+finally:
+    sandbox.kill()
 ```
 </CodeGroup>
 
 - The task goes in through the `TASK` environment variable, so quotes and other shell characters in it reach the agent unchanged.
 - `--permission-mode acceptEdits` lets Claude Code edit files without a prompt. Give more permissions only for commands that the task needs.
-- Agents can work for many minutes. Give `commands.run` a `timeout` that is longer than the task, or [stream the output](/commands/streaming) to watch the agent work.
-- To keep the agent's work, push a branch from the sandbox, or take a [snapshot](/sandbox/snapshots) to continue later.
+- `git diff` alone doesn't show files that the agent created. `git add -N .` marks new files as intent-to-add, so `git diff` shows their full content next to the changes to existing files. It doesn't stage the content.
+- `try` / `finally` kills the sandbox also when a command throws or the agent fails, so a failed run doesn't leave the sandbox running.
+- Agents can work for many minutes. Give `commands.run` a timeout that is longer than the task: `timeoutMs` in TypeScript, `timeout_seconds` in Python. A command that runs past it stops with exit code `124`. See [Timeouts](/commands/overview#timeouts). You can also [stream the output](/commands/streaming) to watch the agent work.
+- To keep the agent's work, push a branch from the sandbox, or take a [snapshot](/sandbox/snapshots) to continue later. Take the snapshot before the `finally` block kills the sandbox.
 
 ## Integrations
 
