@@ -26,7 +26,11 @@ import {
 import { clearFingerprintSignupCapture } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
-import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
+import {
+  RECAPTCHA_SITE_KEY,
+  getRecaptchaToken,
+  markRecaptchaScriptFailed,
+} from "@/lib/recaptcha/client"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
@@ -330,6 +334,7 @@ function SignInContent() {
         <Script
           src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
           strategy="afterInteractive"
+          onError={markRecaptchaScriptFailed}
         />
       )}
       {/* Loaded up front too: the sign-up check sends its observation token. */}

@@ -13,10 +13,23 @@ const getGrecaptcha = () =>
 const LOAD_TIMEOUT_MS = 8000
 const EXECUTE_TIMEOUT_MS = 8000
 
+let scriptFailed = false
+
+/**
+ * Records that the reCAPTCHA script did not load, for example because the
+ * browser blocked it. A page calls this from the script's `onError`, so that
+ * `getRecaptchaToken` answers at once instead of waiting for a script that
+ * will not arrive.
+ */
+export const markRecaptchaScriptFailed = (): void => {
+  scriptFailed = true
+}
+
 /**
  * Returns a reCAPTCHA Enterprise token for `action`, or undefined when no site
  * key is configured or the script did not load or answer in time. The page
- * must load `enterprise.js?render=<site key>`.
+ * must load `enterprise.js?render=<site key>`, and should report a script that
+ * fails to load with `markRecaptchaScriptFailed`.
  */
 export const getRecaptchaToken = async (
   action: string,
@@ -25,7 +38,7 @@ export const getRecaptchaToken = async (
   if (!siteKey) return undefined
   const start = Date.now()
   while (!getGrecaptcha()) {
-    if (Date.now() - start >= LOAD_TIMEOUT_MS) return undefined
+    if (scriptFailed || Date.now() - start >= LOAD_TIMEOUT_MS) return undefined
     await new Promise((resolve) => setTimeout(resolve, 100))
   }
   const grecaptcha = getGrecaptcha()!
