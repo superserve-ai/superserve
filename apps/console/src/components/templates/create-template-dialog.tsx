@@ -670,7 +670,7 @@ export function CreateTemplateDialog({
       {!hideTrigger && (
         <DialogTrigger render={<Button />}>New template</DialogTrigger>
       )}
-      <DialogPopup className="max-w-xl [&>.absolute]:hidden">
+      <DialogPopup className="flex max-h-[calc(100dvh-2rem)] max-w-xl flex-col [&>.absolute]:hidden">
         <DialogHeader className="pb-3">
           <DialogTitle>New template</DialogTitle>
           <DialogDescription>
@@ -679,7 +679,7 @@ export function CreateTemplateDialog({
           </DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[70vh] space-y-4 overflow-y-auto px-6 pb-2">
+        <div className="min-h-0 flex-1 space-y-4 overflow-y-auto px-6 pb-2">
           <Field
             label="Name"
             required
