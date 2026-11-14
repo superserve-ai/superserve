@@ -197,6 +197,31 @@ describe("CheckoutElsewhere", () => {
     expect(mocks.assign).not.toHaveBeenCalled()
   })
 
+  it("shows a sign-out failure and re-enables the button without navigating", async () => {
+    const signingOut = deferred<void>()
+    mocks.lookup.mockResolvedValue({ kind: "other_account" })
+    mocks.signOut.mockReturnValue(signingOut.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    const button = await screen.findByRole("button", {
+      name: "Sign out and switch account",
+    })
+    fireEvent.click(button)
+    expect(button).toBeDisabled()
+    await act(async () => signingOut.reject(new Error("Unavailable")))
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "We couldn't sign you out. Try again.",
+    )
+    expect(button).toBeEnabled()
+    expect(mocks.signOut).toHaveBeenCalledExactlyOnceWith(returnPath)
+    expect(mocks.assign).not.toHaveBeenCalled()
+    mocks.signOut.mockReturnValue(new Promise(() => {}))
+    fireEvent.click(button)
+    expect(screen.queryByRole("alert")).toBeNull()
+    expect(button).toBeDisabled()
+    expect(mocks.signOut).toHaveBeenCalledTimes(2)
+    expect(mocks.assign).not.toHaveBeenCalled()
+  })
+
   it("re-queries after a lookup error", async () => {
     mocks.lookup
       .mockRejectedValueOnce(new Error("Unavailable"))

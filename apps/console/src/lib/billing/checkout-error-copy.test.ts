@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest"
+import { z } from "zod"
 
 import { ApiError } from "@/lib/api/client"
 
@@ -103,6 +104,25 @@ describe("checkoutErrorMessage", () => {
     "Your account changed. Reload to continue.",
   ])("preserves console-authored Error copy (%s)", (message) => {
     expect(checkoutErrorMessage(new Error(message))).toBe(message)
+  })
+
+  it("hides Zod response validation details", () => {
+    const result = z.object({ checkout_url: z.string() }).safeParse({
+      checkout_url: 42,
+    })
+    expect(result.success).toBe(false)
+    if (result.success) throw new Error("Expected validation to fail")
+    const message = checkoutErrorMessage(result.error)
+    expect(message).toBe(generic)
+    expect(message).not.toContain(result.error.message)
+    expect(message).not.toContain("checkout_url")
+  })
+
+  it("hides custom Error subclass details", () => {
+    class X extends Error {}
+    const error = new X("Library detail")
+    expect(checkoutErrorMessage(error)).toBe(generic)
+    expect(checkoutErrorMessage(error)).not.toContain(error.message)
   })
 
   it.each([

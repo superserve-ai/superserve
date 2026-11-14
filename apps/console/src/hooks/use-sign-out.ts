@@ -22,8 +22,10 @@ export function useSignOut() {
     posthog.capture(AUTH_EVENTS.SIGN_OUT)
     markSigningOut()
     try {
-      await createBrowserClient().auth.signOut()
+      const { error } = await createBrowserClient().auth.signOut()
+      if (next && error) throw error
     } catch {
+      if (next) throw new Error("Unable to sign out. Try again.")
       // Sign out failed, but redirect to sign-in anyway
     }
     clearAccountBrowserState(posthog)

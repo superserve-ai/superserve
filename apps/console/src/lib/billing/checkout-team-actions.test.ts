@@ -1,13 +1,16 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
-const { getUser, listTeamsAction } = vi.hoisted(() => ({
+const { getUser, listTeamsAction, membershipExistsInCell } = vi.hoisted(() => ({
   getUser: vi.fn(),
   listTeamsAction: vi.fn(),
+  membershipExistsInCell: vi.fn(),
 }))
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({ auth: { getUser } }),
 }))
 vi.mock("@/lib/api/teams-actions", () => ({ listTeamsAction }))
+vi.mock("@/lib/api/team-directory", () => ({ membershipExistsInCell }))
+vi.mock("@/lib/cells", () => ({ configuredRegions: () => ["use", "usw"] }))
 
 import { getCheckoutTeamAction } from "./checkout-team-actions"
 
@@ -21,6 +24,7 @@ const team = {
 
 beforeEach(() => {
   getUser.mockReset().mockResolvedValue({ data: { user: { id: "user" } } })
+  membershipExistsInCell.mockReset().mockResolvedValue(false)
   listTeamsAction.mockReset().mockResolvedValue({
     teams: [team],
     activeTeamId: "other-team",
@@ -71,6 +75,53 @@ describe("getCheckoutTeamAction", () => {
     },
   )
 
+  it("lets cell lookup errors from a partial directory reach the client retry", async () => {
+    const error = new Error("Cell unavailable")
+    listTeamsAction.mockResolvedValue({ teams: [{ ...team, region: "usw" }] })
+    membershipExistsInCell.mockRejectedValue(error)
+    await expect(getCheckoutTeamAction(locator)).rejects.toBe(error)
+    expect(membershipExistsInCell).toHaveBeenCalledExactlyOnceWith(
+      "use",
+      "user",
+      "team",
+    )
+  })
+
+  it("retries when membership exists but the team is missing from a partial directory", async () => {
+    listTeamsAction.mockResolvedValue({ teams: [{ ...team, region: "usw" }] })
+    membershipExistsInCell.mockResolvedValue(true)
+    await expect(getCheckoutTeamAction(locator)).rejects.toBeInstanceOf(Error)
+    expect(membershipExistsInCell).toHaveBeenCalledExactlyOnceWith(
+      "use",
+      "user",
+      "team",
+    )
+  })
+
+  it.each(["unknown:team", "use:"])(
+    "rejects an unconfigured region or invalid team key without a cell lookup (%s)",
+    async (team) => {
+      listTeamsAction.mockResolvedValue({ teams: [] })
+      membershipExistsInCell.mockResolvedValue(true)
+      expect(await getCheckoutTeamAction({ ...locator, team })).toEqual({
+        kind: "not_member",
+      })
+      expect(membershipExistsInCell).not.toHaveBeenCalled()
+    },
+  )
+
+  it("splits a missing team's key on the first colon", async () => {
+    listTeamsAction.mockResolvedValue({ teams: [] })
+    expect(
+      await getCheckoutTeamAction({ ...locator, team: "use:team:part" }),
+    ).toEqual({ kind: "not_member" })
+    expect(membershipExistsInCell).toHaveBeenCalledExactlyOnceWith(
+      "use",
+      "user",
+      "team:part",
+    )
+  })
+
   it.each([{ teams: [] }, { teams: [{ ...team, region: "usw" }] }])(
     "requires membership in the exact checkout region and team ($teams)",
     async ({ teams }) => {
@@ -79,6 +130,11 @@ describe("getCheckoutTeamAction", () => {
         kind: "not_member",
       })
       expect(listTeamsAction).toHaveBeenCalledTimes(1)
+      expect(membershipExistsInCell).toHaveBeenCalledExactlyOnceWith(
+        "use",
+        "user",
+        "team",
+      )
     },
   )
 

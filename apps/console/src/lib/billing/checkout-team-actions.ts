@@ -1,7 +1,9 @@
 "use server"
 
+import { membershipExistsInCell } from "@/lib/api/team-directory"
 import { listTeamsAction } from "@/lib/api/teams-actions"
 import type { CheckoutLocator } from "@/lib/billing/signup-checkout-paths"
+import { configuredRegions } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
 
 export type CheckoutTeam =
@@ -24,7 +26,19 @@ export async function getCheckoutTeamAction(
   const team = teams.find(
     (team) => `${team.region}:${team.id}` === locator.team,
   )
-  if (!team) return { kind: "not_member" }
+  if (!team) {
+    const separator = locator.team.indexOf(":")
+    const region = locator.team.slice(0, separator)
+    const teamId = locator.team.slice(separator + 1)
+    if (
+      separator < 0 ||
+      !configuredRegions().includes(region) ||
+      !teamId ||
+      !(await membershipExistsInCell(region, user.id, teamId))
+    )
+      return { kind: "not_member" }
+    throw new Error("Checkout team is not available yet. Try again.")
+  }
   if (team.id === activeTeamId && team.region === activeRegion)
     return { kind: "open" }
   return {

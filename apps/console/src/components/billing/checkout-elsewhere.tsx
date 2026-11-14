@@ -26,7 +26,7 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
     result: CheckoutTeam | { kind: "error" }
   }>()
   const [busy, setBusy] = useState(false)
-  const [failed, setFailed] = useState(false)
+  const [failed, setFailed] = useState<string>()
   const target = useRef({ live: false, busy: false })
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
     target.current = current
     setRead(undefined)
     setBusy(false)
-    setFailed(false)
+    setFailed(undefined)
     getCheckoutTeamAction({ account, team }).then(
       (result) => current.live && setRead({ path: returnPath, result }),
       () =>
@@ -57,7 +57,7 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
     if (current.busy) return
     current.busy = true
     setBusy(true)
-    setFailed(false)
+    setFailed(undefined)
     try {
       await setActiveTeamAction(team.id, team.region)
       if (current.live) window.location.assign(returnPath)
@@ -65,7 +65,7 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
       if (current.live) {
         current.busy = false
         setBusy(false)
-        setFailed(true)
+        setFailed("We couldn't switch teams. Try again.")
       }
     }
   }
@@ -74,12 +74,14 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
     if (current.busy) return
     current.busy = true
     setBusy(true)
+    setFailed(undefined)
     try {
       await signOut(returnPath)
     } catch {
       if (current.live) {
         current.busy = false
         setBusy(false)
+        setFailed("We couldn't sign you out. Try again.")
       }
     }
   }
@@ -146,7 +148,7 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
       </div>
       {failed && (
         <p role="alert" className="mt-3 text-center text-xs text-destructive">
-          We couldn&apos;t switch teams. Try again.
+          {failed}
         </p>
       )}
     </div>

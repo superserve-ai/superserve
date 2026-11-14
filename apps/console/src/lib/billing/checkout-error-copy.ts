@@ -37,7 +37,9 @@ export function checkoutErrorMessage(cause: unknown): string {
       cause.name === "TimeoutError"
     )
       return "We couldn't reach Superserve. Check your connection, then try again."
-    return cause.message || GENERIC
+    return Object.getPrototypeOf(cause) === Error.prototype && cause.message
+      ? cause.message
+      : GENERIC
   }
   return GENERIC
 }

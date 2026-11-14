@@ -25,7 +25,7 @@ import { useSignOut } from "./use-sign-out"
 
 beforeEach(() => {
   vi.clearAllMocks()
-  mocks.signOut.mockReset().mockResolvedValue(undefined)
+  mocks.signOut.mockReset().mockResolvedValue({ error: null })
 })
 
 describe("useSignOut", () => {
@@ -45,13 +45,37 @@ describe("useSignOut", () => {
     expect(mocks.reset).toHaveBeenCalledTimes(1)
   })
 
-  it("keeps the return path when sign-out fails", async () => {
-    mocks.signOut.mockRejectedValue(new Error("Unavailable"))
-    const { result } = renderHook(() => useSignOut())
-    await act(() => result.current("/checkout?team=use:team"))
-    expect(mocks.signOut).toHaveBeenCalledTimes(1)
-    expect(mocks.push).toHaveBeenCalledExactlyOnceWith(
-      "/auth/signin?next=%2Fcheckout%3Fteam%3Duse%3Ateam",
-    )
-  })
+  it.each(["throws", "resolves with an error"])(
+    "rejects without clearing browser state or navigating with a return path when sign-out %s",
+    async (failure) => {
+      const error = new Error("Unavailable")
+      if (failure === "throws") mocks.signOut.mockRejectedValue(error)
+      else mocks.signOut.mockResolvedValue({ error })
+      const { result } = renderHook(() => useSignOut())
+      await act(async () => {
+        await expect(
+          result.current("/checkout?team=use:team"),
+        ).rejects.toBeInstanceOf(Error)
+      })
+      expect(mocks.signOut).toHaveBeenCalledTimes(1)
+      expect(mocks.push).not.toHaveBeenCalled()
+      expect(mocks.clearTerminalTabsStorage).not.toHaveBeenCalled()
+      expect(mocks.reset).not.toHaveBeenCalled()
+    },
+  )
+
+  it.each(["throws", "resolves with an error"])(
+    "still clears browser state and navigates without a return path when sign-out %s",
+    async (failure) => {
+      const error = new Error("Unavailable")
+      if (failure === "throws") mocks.signOut.mockRejectedValue(error)
+      else mocks.signOut.mockResolvedValue({ error })
+      const { result } = renderHook(() => useSignOut())
+      await act(() => result.current())
+      expect(mocks.signOut).toHaveBeenCalledTimes(1)
+      expect(mocks.push).toHaveBeenCalledExactlyOnceWith("/auth/signin")
+      expect(mocks.clearTerminalTabsStorage).toHaveBeenCalledTimes(1)
+      expect(mocks.reset).toHaveBeenCalledTimes(1)
+    },
+  )
 })
