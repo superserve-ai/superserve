@@ -89,6 +89,35 @@ describe("getRecaptchaToken", () => {
     expect(result).toEqual({ settled: true, value: undefined })
   })
 
+  it("returns undefined soon after the page reports that the script failed", async () => {
+    const { getRecaptchaToken, markRecaptchaScriptFailed } =
+      await loadClient("site-key")
+
+    const result = track(getRecaptchaToken("signup_google"))
+    await vi.advanceTimersByTimeAsync(500)
+    expect(result.settled).toBe(false)
+
+    markRecaptchaScriptFailed()
+    await vi.advanceTimersByTimeAsync(100)
+    expect(result).toEqual({ settled: true, value: undefined })
+
+    const later = track(getRecaptchaToken("signup_google"))
+    await vi.advanceTimersByTimeAsync(0)
+    expect(later).toEqual({ settled: true, value: undefined })
+  })
+
+  it("still uses a script that is on the page after a reported failure", async () => {
+    const { getRecaptchaToken, markRecaptchaScriptFailed } =
+      await loadClient("site-key")
+    markRecaptchaScriptFailed()
+    installGrecaptcha({
+      ready: (callback) => callback(),
+      execute: vi.fn().mockResolvedValue("token-123"),
+    })
+
+    await expect(getRecaptchaToken("signup_google")).resolves.toBe("token-123")
+  })
+
   it("times out when ready never calls back", async () => {
     const { getRecaptchaToken } = await loadClient("site-key")
     const execute = vi.fn()
