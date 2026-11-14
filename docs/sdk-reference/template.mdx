@@ -77,6 +77,7 @@ template = Template.create(
 | `vcpu` | `number` | Number of vCPUs. Minimum 1 vCPU. Maximum 2 vCPU on Free, 4 vCPU on Developer, 16 vCPU on Pro. Default `1` (1 vCPU). See [Resource limits](/templates/build-spec#resource-limits). |
 | `memoryMib` / `memory_mib` | `number` | Memory in MiB. Minimum 256 MiB. Maximum 4096 MiB (4 GiB) on Free, 16384 MiB (16 GiB) on Developer, 65536 MiB (64 GiB) on Pro. Default `1024` (1 GiB). |
 | `memoryMaxMib` / `memory_max_mib` | `number` | Optional ceiling sandboxes can grow memory to while running; `memoryMib` stays the boot size. Must be greater than `memoryMib`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128. Omit for a fixed memory size. See [Growing memory](/templates/build-spec#growing-memory). |
+| `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` | `number` | Optional. How long, in seconds, a sandbox's memory must stay low after growing before it shrinks back toward `memoryMib` (60 to 1800). Requires `memoryMaxMib`. Sandboxes created from the template inherit it. When unset, the platform default applies. See [Shrink timing](/sandbox/live-memory-resizing#shrink-timing). |
 | `diskMib` / `disk_mib` | `number` | Disk in MiB. Minimum 1024 MiB (1 GiB). The maximum depends on your team's plan. Default `4096` (4 GiB). |
 | `steps` | [`BuildStep[]`](#buildstep) | Ordered build steps. |
 | `startCmd` / `start_cmd` | `string` | Long-running process captured in the snapshot. |
@@ -326,6 +327,7 @@ All properties are read-only snapshots taken at construction. Call `getInfo()` /
 | `vcpu` | `number` | vCPU count the template boots with. |
 | `memoryMib` / `memory_mib` | `number` | Memory the template boots with. |
 | `memoryMaxMib?` / `memory_max_mib?` | `number` | Ceiling memory can grow to while running; absent when memory is fixed. |
+| `memoryShrinkAfterSeconds?` / `memory_shrink_after_seconds?` | `number` | How long, in seconds, memory must stay low after growing before it shrinks back. Absent when the platform default applies. |
 | `diskMib` / `disk_mib` | `number` | Disk the template boots with. |
 | `sizeBytes?` / `size_bytes?` | `number` | Snapshot size in bytes, once built. |
 | `errorMessage?` / `error_message?` | `string` | Last build's error message, if any. |
@@ -396,6 +398,7 @@ interface TemplateInfo {
   vcpu: number
   memoryMib: number
   memoryMaxMib?: number // absent when memory is fixed
+  memoryShrinkAfterSeconds?: number // absent when the platform default applies
   diskMib: number
   sizeBytes?: number
   errorMessage?: string
@@ -417,6 +420,7 @@ class TemplateInfo(BaseModel):
     vcpu: int
     memory_mib: int
     memory_max_mib: int | None = None  # None when memory is fixed
+    memory_shrink_after_seconds: int | None = None  # None when the platform default applies
     disk_mib: int
     size_bytes: int | None = None
     error_message: str | None = None

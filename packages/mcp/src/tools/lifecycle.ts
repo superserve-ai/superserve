@@ -12,8 +12,10 @@ import {
   DEFAULT_NETWORK_LOG_LIMIT,
   MAX_AUTO_DELETE_SECONDS,
   MAX_NETWORK_LOG_LIMIT,
+  MAX_MEMORY_SHRINK_AFTER_SECONDS,
   MAX_TIMEOUT_SECONDS,
   MIN_IDLE_TIMEOUT_SECONDS,
+  MIN_MEMORY_SHRINK_AFTER_SECONDS,
 } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { RESERVED_PREVIEW_PORT } from "../lib/previewUrl.js"
@@ -66,6 +68,7 @@ interface TemplateCreateArgs {
   vcpu?: number
   memory_mib?: number
   memory_max_mib?: number
+  memory_shrink_after_seconds?: number
   disk_mib?: number
   run_steps?: string[]
   start_cmd?: string
@@ -346,6 +349,17 @@ export function registerLifecycleTools(
               "memory_mib stays the boot size. Must exceed memory_mib, be at most 4 times it, and differ " +
               "from it by a multiple of 128. Omit for a fixed memory size.",
           ),
+        memory_shrink_after_seconds: z
+          .number()
+          .int()
+          .min(MIN_MEMORY_SHRINK_AFTER_SECONDS)
+          .max(MAX_MEMORY_SHRINK_AFTER_SECONDS)
+          .optional()
+          .describe(
+            "Optional. How long, in seconds, a sandbox's memory must stay low after growing before " +
+              "it shrinks back toward memory_mib (60 to 1800). Requires memory_max_mib. Sandboxes " +
+              "created from the template inherit it. Omit for the platform default.",
+          ),
         disk_mib: z
           .number()
           .int()
@@ -384,6 +398,7 @@ export function registerLifecycleTools(
       vcpu,
       memory_mib,
       memory_max_mib,
+      memory_shrink_after_seconds,
       disk_mib,
       run_steps,
       start_cmd,
@@ -399,6 +414,7 @@ export function registerLifecycleTools(
           vcpu,
           memoryMib: memory_mib,
           memoryMaxMib: memory_max_mib,
+          memoryShrinkAfterSeconds: memory_shrink_after_seconds,
           diskMib: disk_mib,
           steps,
           startCmd: start_cmd,
@@ -482,6 +498,9 @@ export function registerLifecycleTools(
         }
         if (i.memoryMaxMib !== undefined) {
           structured.memory_max_mib = i.memoryMaxMib
+        }
+        if (i.memoryShrinkAfterSeconds !== undefined) {
+          structured.memory_shrink_after_seconds = i.memoryShrinkAfterSeconds
         }
         if (i.timeoutSeconds !== undefined) {
           structured.timeout_seconds = i.timeoutSeconds

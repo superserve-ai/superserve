@@ -141,7 +141,7 @@ sandbox3 = Sandbox.create(
 
 </CodeGroup>
 
-The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape). To let sandboxes grow memory while running, build the template with `memoryMaxMib`; see [Growing memory](/templates/build-spec#growing-memory).
+The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape). To let sandboxes grow memory while running, build the template with `memoryMaxMib`; see [Growing memory](/templates/build-spec#growing-memory). A growable template can also set `memoryShrinkAfterSeconds`, which sandboxes created from the template, or from a snapshot of one of its sandboxes, inherit; see [Shrink timing](/sandbox/live-memory-resizing#shrink-timing).
 
 ## Related
 
