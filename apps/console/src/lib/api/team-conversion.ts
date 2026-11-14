@@ -1,15 +1,21 @@
+import { accountTeamFallbackName } from "@/lib/api/account-team-name"
 import { cellFor } from "@/lib/cells"
 
 const TEAM_OWNER_ROLE = "team_owner"
 
 // First login provisions the account's own team and names it after the
-// user's email (see proxy-auth). Creating a team from that account renames
-// this team in place, so its sandboxes, keys, plan, and billing carry over.
+// user's email, with an account suffix on name conflict. Creating a team from
+// that account renames it in place, keeping its sandboxes, keys, plan, and billing.
 export function isPersonalTeam(
   team: { name: string },
-  email: string | undefined,
+  user: { id: string; email?: string },
 ): boolean {
-  return !!email && team.name.toLowerCase() === email.toLowerCase()
+  const name = team.name.toLowerCase()
+  return (
+    !!user.email &&
+    (name === user.email.toLowerCase() ||
+      name === accountTeamFallbackName(user.email, user.id).toLowerCase())
+  )
 }
 
 // The control plane authorizes by RBAC: once the user has an RBAC membership
