@@ -16,6 +16,7 @@ const fixed: TemplateShape = {
   vcpu: 2,
   memoryMib: 2048,
   memoryMaxMib: null,
+  memoryShrinkAfterSeconds: null,
   diskMib: 8192,
 }
 const growing: TemplateShape = { ...fixed, memoryMaxMib: 8192 }

@@ -103,6 +103,7 @@ superserve sandbox create --name analysis --template py-data
 | `--vcpu <n>` | vCPUs. Default `1`. |
 | `--memory <size>` | Memory a sandbox boots with. Default `1G`. |
 | `--memory-max <size>` | Let sandboxes grow memory while running, up to this size. See [Live memory resizing](/sandbox/live-memory-resizing). |
+| `--memory-shrink-after <duration>` | How long memory must stay low after growing before it shrinks back, for example `10m`. 1 to 30 minutes; requires `--memory-max`. When unset, the platform default applies. See [Shrink timing](/sandbox/live-memory-resizing#shrink-timing). |
 | `--disk <size>` | Disk size. Default `4G`. |
 | `-f, --file <path>` | JSON build spec (`-` for stdin). |
 | `--no-wait` | Return once the build is queued. |
@@ -111,14 +112,16 @@ Build steps (`--run`, `--env`, `--workdir`, `--user`) run in command-line order.
 
 `--memory-max` must be greater than `--memory`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128 MiB. If neither `--memory` nor the file's `memory_mib` is set, it is compared with the default of `1G`. Leave it out for a fixed memory size. See [Growing memory](/templates/build-spec#growing-memory).
 
-`--file` takes the [build spec](/templates/build-spec) fields in snake_case (`from`, `steps`, `start_cmd`, `ready_cmd`) plus `vcpu`, `memory_mib`, `memory_max_mib` and `disk_mib`. YAML is not supported. Flags override the file's fields, and flag build steps run after the file's steps.
+Sandboxes created from the template, or from a snapshot of one of its sandboxes, inherit `--memory-shrink-after`.
+
+`--file` takes the [build spec](/templates/build-spec) fields in snake_case (`from`, `steps`, `start_cmd`, `ready_cmd`) plus `vcpu`, `memory_mib`, `memory_max_mib`, `memory_shrink_after_seconds` and `disk_mib`. YAML is not supported. Flags override the file's fields, and flag build steps run after the file's steps.
 
 ```bash
 echo '{"from": "python:3.11", "steps": [{"run": "pip install numpy"}], "memory_mib": 2048, "memory_max_mib": 8192}' > template.json
 superserve template create growable -f template.json
 ```
 
-`superserve template get <name>` shows the memory range of a growable template, for example `Memory: 2G-8G`; `--json` returns `memory_mib` and `memory_max_mib`. `superserve sandbox get` shows the same range for a sandbox.
+`superserve template get <name>` shows the memory range of a growable template, for example `Memory: 2G-8G`; `--json` returns `memory_mib` and `memory_max_mib`. `superserve sandbox get` shows the same range for a sandbox. Both show `Memory shrink after` when the value is set.
 
 ## Scripting
 

@@ -509,6 +509,7 @@ interface SandboxInfo {
   memoryMib: number // boot size
   memoryMaxMib?: number // growth ceiling; absent when memory is fixed
   memoryCurrentMib?: number // memory last held; absent when memory is fixed
+  memoryShrinkAfterSeconds?: number // absent when the platform default applies
   createdAt: Date
   timeoutSeconds?: number
   idleTimeoutSeconds?: number
@@ -534,6 +535,7 @@ class SandboxInfo(BaseModel):
     memory_mib: int  # boot size
     memory_max_mib: int | None = None  # growth ceiling; None when memory is fixed
     memory_current_mib: int | None = None  # memory last held; None when memory is fixed
+    memory_shrink_after_seconds: int | None = None  # None when the platform default applies
     created_at: datetime
     timeout_seconds: int | None = None
     idle_timeout_seconds: int | None = None
