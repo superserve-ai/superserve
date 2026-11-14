@@ -1,0 +1,303 @@
+---
+title: "Migrate from E2B"
+sidebarTitle: From E2B
+description: Move your sandboxes, templates and agent code from E2B to Superserve. Includes an API mapping, before and after code, a migration script and a prompt for coding agents.
+icon: "arrow-right-arrow-left"
+---
+
+import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
+
+Superserve and E2B both run Firecracker microVMs and have a similar SDK, so most code moves with a find-and-replace.
+
+## How Superserve compares
+
+<BenchmarkComparison compare="e2b" compareName="E2B" />
+
+## Ready to switch
+
+Pick how you want to migrate. Do it yourself step by step, or give the prompt to a coding agent and let it change your code.
+
+<Tabs>
+<Tab title="Human">
+
+<Info>
+**Before you start**
+
+- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
+- **Keep E2B installed.** You remove it only after the cutover, in step 6.
+</Info>
+
+<Steps>
+<Step title="Install the SDK and set your API key">
+
+Install the Superserve SDK next to E2B. Set `SUPERSERVE_API_KEY` in your environment and CI secrets.
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+</Step>
+<Step title="Map the API">
+
+Most calls keep their names. The main changes: every sandbox needs a `name`, timeouts are in seconds, and a timeout pauses the sandbox instead of killing it.
+
+<Tabs>
+<Tab title="TypeScript">
+
+| Task | E2B | Superserve |
+| --- | --- | --- |
+| Create | `Sandbox.create("tpl", { timeoutMs, envs, metadata })` | `Sandbox.create({ name, fromTemplate, timeoutSeconds, envVars, metadata })`. `name` is required. |
+| Reconnect | `Sandbox.connect(id)` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `sbx.commands.run(cmd, { envs, cwd, timeoutMs })` | `sbx.commands.run(cmd, { env, cwd, timeoutMs })` |
+| Background process | `sbx.commands.run(cmd, { background: true })` | `sbx.commands.spawn(cmd)` |
+| Files | `sbx.files.write(path, data)` / `read(path)` | `sbx.files.write(path, data)` / `read(path)` |
+| Templates | `Template().fromImage(img)` and `Template.build()` | `Template.create({ name, from: img, steps })` |
+| Snapshot | `sbx.createSnapshot()`, then `Sandbox.create(snapshotId)` | `sbx.snapshot()`, then `Sandbox.create({ name, fromSnapshot })`. Saves memory and disk; forks keep running processes. |
+| Pause and resume | `sbx.pause()` / `sbx.connect()` | `sbx.pause()` / `sbx.resume()` |
+| Timeout | `sbx.setTimeout(ms)`. Kills by default. | `sbx.update({ timeoutSeconds })`. Pauses. Also `idleTimeoutSeconds`. |
+| Env vars | `envs` | `envVars` on create, `env` per command, `secrets` for API keys |
+| Public URL | `sbx.getHost(port)` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| List and kill | `Sandbox.list()` / `sbx.kill()` | `Sandbox.list()` / `sbx.kill()` |
+
+</Tab>
+<Tab title="Python">
+
+| Task | E2B | Superserve |
+| --- | --- | --- |
+| Create | `Sandbox.create("tpl", timeout=, envs=, metadata=)` | `Sandbox.create(name=, from_template=, timeout_seconds=, env_vars=, metadata=)`. `name` is required. |
+| Reconnect | `Sandbox.connect(id)` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `sbx.commands.run(cmd, envs=, cwd=, timeout=)` | `sbx.commands.run(cmd, env=, cwd=, timeout_seconds=)` |
+| Background process | `sbx.commands.run(cmd, background=True)` | `await sbx.commands.spawn(cmd)` on `AsyncSandbox` |
+| Files | `sbx.files.write(path, data)` / `read(path)` | `sbx.files.write(path, data)` / `read(path)` |
+| Templates | `Template().from_image(img)` and `Template.build()` | `Template.create(name=, from_=img, steps=)` |
+| Snapshot | `sbx.create_snapshot()`, then `Sandbox.create(snapshot_id)` | `sbx.snapshot()`, then `Sandbox.create(name=, from_snapshot=)`. Saves memory and disk; forks keep running processes. |
+| Pause and resume | `sbx.pause()` / `sbx.connect()` | `sbx.pause()` / `sbx.resume()` |
+| Timeout | `sbx.set_timeout(seconds)`. Kills by default. | `sbx.update(timeout_seconds=)`. Pauses. Also `idle_timeout_seconds`. |
+| Env vars | `envs` | `env_vars` on create, `env` per command, `secrets` for API keys |
+| Public URL | `sbx.get_host(port)` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| List and kill | `Sandbox.list()` / `sbx.kill()` | `Sandbox.list()` / `sbx.kill()` |
+
+</Tab>
+</Tabs>
+
+To rebuild an E2B template, see [Create a template](/templates/create).
+
+</Step>
+<Step title="Update your code">
+
+Change the import, add a `name`, and convert timeouts to seconds.
+
+<CodeGroup>
+```ts Before (E2B)
+import { Sandbox } from "e2b"
+
+const sbx = await Sandbox.create("my-tpl", {
+  timeoutMs: 600_000,
+  envs: { MODE: "ci" },
+})
+await sbx.commands.run("npm test")
+const snap = await sbx.createSnapshot()
+const fork = await Sandbox.create(snap.snapshotId)
+```
+
+```ts After (Superserve)
+import { Sandbox } from "@superserve/sdk"
+
+const sbx = await Sandbox.create({
+  name: "ci-run",
+  fromTemplate: "my-tpl",
+  timeoutSeconds: 600,
+  envVars: { MODE: "ci" },
+})
+await sbx.commands.run("npm test")
+const snap = await sbx.snapshot()
+const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
+```
+
+```python Before (E2B, Python)
+from e2b import Sandbox
+
+sbx = Sandbox.create("my-tpl", timeout=600, envs={"MODE": "ci"})
+sbx.commands.run("pytest")
+snap = sbx.create_snapshot()
+fork = Sandbox.create(snap.snapshot_id)
+```
+
+```python After (Superserve, Python)
+from superserve import Sandbox
+
+sbx = Sandbox.create(
+    name="ci-run",
+    from_template="my-tpl",
+    timeout_seconds=600,
+    env_vars={"MODE": "ci"},
+)
+sbx.commands.run("pytest")
+snap = sbx.snapshot()
+fork = Sandbox.create(name="fork", from_snapshot=snap)
+```
+</CodeGroup>
+
+</Step>
+<Step title="Move existing sandboxes with the migration script">
+
+The script copies `/home/user` from each E2B sandbox into a new Superserve sandbox. It does not change or delete your E2B sandboxes. Run it with both `E2B_API_KEY` and `SUPERSERVE_API_KEY` set.
+
+<CodeGroup>
+```ts migrate-from-e2b.ts
+import { Sandbox as E2B } from "e2b"
+import { Sandbox } from "@superserve/sdk"
+
+// Map each E2B template ID to the Superserve template that replaces it.
+// Sandboxes from other templates start from superserve/base.
+const TEMPLATES: Record<string, string> = { "my-e2b-template-id": "my-tpl" }
+const DIR = "/home/user"
+
+const pages = E2B.list()
+while (pages.hasNext) {
+  for (const info of await pages.nextItems()) {
+    const src = await E2B.connect(info.sandboxId)
+    await src.commands.run(`tar czf /tmp/state.tgz -C ${DIR} .`)
+    const tgz = await src.files.read("/tmp/state.tgz", { format: "bytes" })
+
+    const dst = await Sandbox.create({
+      name: `from-e2b-${info.sandboxId}`,
+      fromTemplate: TEMPLATES[info.templateId] ?? "superserve/base",
+      metadata: { ...info.metadata, migrated_from: info.sandboxId },
+    })
+    await dst.files.write("/tmp/state.tgz", tgz)
+    const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DIR}`)
+    if (out.exitCode !== 0) {
+      console.error(`${info.sandboxId}: copy failed: ${out.stderr}`)
+      process.exitCode = 1
+      continue
+    }
+    console.log(`${info.sandboxId} -> ${dst.id}`)
+  }
+}
+```
+
+```python migrate_from_e2b.py
+import sys
+
+from e2b import Sandbox as E2B
+from superserve import Sandbox
+
+# Map each E2B template ID to the Superserve template that replaces it.
+# Sandboxes from other templates start from superserve/base.
+TEMPLATES = {"my-e2b-template-id": "my-tpl"}
+DIR = "/home/user"
+failed = False
+
+pages = E2B.list()
+while pages.has_next:
+    for info in pages.next_items():
+        src = E2B.connect(info.sandbox_id)
+        src.commands.run(f"tar czf /tmp/state.tgz -C {DIR} .")
+        tgz = src.files.read("/tmp/state.tgz", format="bytes")
+
+        dst = Sandbox.create(
+            name=f"from-e2b-{info.sandbox_id}",
+            from_template=TEMPLATES.get(info.template_id, "superserve/base"),
+            metadata={**info.metadata, "migrated_from": info.sandbox_id},
+        )
+        dst.files.write("/tmp/state.tgz", bytes(tgz))
+        out = dst.commands.run(f"tar xzf /tmp/state.tgz -C {DIR}")
+        if out.exit_code != 0:
+            print(f"{info.sandbox_id}: copy failed: {out.stderr}", file=sys.stderr)
+            failed = True
+            continue
+        print(f"{info.sandbox_id} -> {dst.id}")
+
+sys.exit(1 if failed else 0)
+```
+</CodeGroup>
+
+<Warning>
+The script copies files only. Running processes and memory do not move. Start your services again in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to keep that state.
+</Warning>
+
+</Step>
+<Step title="Verify and cut over">
+
+Run your test suite against Superserve. Check the sandbox list in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link). When the results match, send production traffic to Superserve.
+
+</Step>
+<Step title="Uninstall E2B">
+
+After the cutover, remove the `e2b` package and delete `E2B_API_KEY` from your environment and CI secrets.
+
+<CodeGroup>
+```bash TypeScript
+npm uninstall e2b
+```
+
+```bash Python
+pip uninstall e2b
+```
+</CodeGroup>
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="Agent">
+
+Paste this prompt into Claude Code, Codex, Cursor or another coding agent at the root of your repo. The agent changes the code and runs your tests. You review the diff.
+
+```text Migration prompt
+Migrate this repository from the E2B SDK to the Superserve SDK.
+
+Reference: https://docs.superserve.ai/llms-full.txt (read it first).
+
+Before you start: ask me for a Superserve API key if SUPERSERVE_API_KEY is not set.
+I get it from the console (https://console.superserve.ai/api-keys/). Do not create a key yourself.
+
+1. Install @superserve/sdk (npm) or superserve (pip) next to e2b. Do not remove e2b.
+   Add SUPERSERVE_API_KEY to code, .env.example, and CI config.
+2. Find every import of "e2b" (TypeScript) or "from e2b" (Python). Apply this mapping:
+   - Sandbox.create(tpl, {timeoutMs, envs}) -> Sandbox.create({name, fromTemplate: tpl,
+     timeoutSeconds: timeoutMs/1000, envVars: envs}). name is required: derive it from context.
+   - commands.run(cmd, {envs}) -> commands.run(cmd, {env})
+   - commands.run(cmd, {background: true}) -> commands.spawn(cmd)
+   - createSnapshot() + Sandbox.create(snapshotId) -> snapshot() + Sandbox.create({name, fromSnapshot})
+   - setTimeout(ms) -> update({timeoutSeconds}). Note: Superserve pauses on timeout, E2B kills.
+     If the code relies on the sandbox being killed, call kill() explicitly.
+   - getHost(port) -> publishPreviewPort(port), then getPreviewUrl(port). New sandboxes route only
+     published ports. getPreviewUrl returns a full URL, so remove any "https://" prefix.
+   - Python: use snake_case (from_template, timeout_seconds, env_vars, from_snapshot).
+3. Convert E2B templates to Template.create({name, from, steps}).
+4. Run the test suite. Fix failures. Do not delete E2B code paths you cannot test; list them.
+5. Report: files changed, tests run and their result, and anything left for a human.
+6. Only after I confirm the cutover: uninstall e2b and remove E2B_API_KEY.
+```
+
+### Give your agent the full reference
+
+| Resource | Use |
+| --- | --- |
+| [`docs.superserve.ai/llms-full.txt`](https://docs.superserve.ai/llms-full.txt) | The whole docs in one file for the agent context |
+| [`superserve` skill](https://github.com/superserve-ai/superserve/tree/main/skills/superserve) | Full SDK reference for Claude Code and other skill-aware agents |
+| [Superserve MCP server](/integrations/mcp) | Lets the agent create and test sandboxes while it migrates |
+
+The API mapping and the migration script are in the **Human** tab.
+
+</Tab>
+</Tabs>
+
+## Known differences
+
+| Area | What to do |
+| --- | --- |
+| Timeout behavior | E2B kills a sandbox at its timeout by default. Superserve pauses it and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
+| Images | Build an image into a template with `Template.create` first, then create sandboxes from the template. |
+| Preview ports | New sandboxes route only published ports. Call `publishPreviewPort` before you use a preview URL. Ports 1024 to 65535 only: move a server on port 80 or 443 to a higher port. |
+| Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
