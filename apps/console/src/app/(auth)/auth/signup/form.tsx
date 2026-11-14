@@ -182,9 +182,11 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "email",
+          reason: "captcha_unavailable",
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
       const result = await signUpWithEmail(
@@ -355,9 +357,12 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: "captcha_unavailable",
+          complete_google: isCompleteGoogleSignup,
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
 
@@ -368,6 +373,11 @@ export default function SignUpContent() {
         fingerprintDiagnostics,
       )
       if (!proof.success) {
+        posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: proof.errorCode,
+          complete_google: isCompleteGoogleSignup,
+        })
         setErrors({
           form:
             proof.errorCode === "captcha_failed"

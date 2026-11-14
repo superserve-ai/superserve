@@ -118,6 +118,10 @@ describe("ForgotPasswordPage", () => {
       ),
     ).toBeTruthy()
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledExactlyOnceWith(
+      "auth_password_reset_failed",
+      { reason: "captcha_unavailable" },
+    )
   })
 
   it.each([
@@ -159,7 +163,10 @@ describe("ForgotPasswordPage", () => {
       ),
     ).toBeTruthy()
     expect(screen.queryByText("Check Your Email")).toBeNull()
-    expect(mockCapture).not.toHaveBeenCalled()
+    expect(mockCapture).toHaveBeenCalledExactlyOnceWith(
+      "auth_password_reset_failed",
+      { reason: "rate_limited" },
+    )
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Send reset link" }),
