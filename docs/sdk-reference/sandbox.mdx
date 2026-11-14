@@ -294,7 +294,11 @@ newly published preview ports on a sandbox.
 ```typescript TypeScript
 await sandbox.update({
   metadata: { env: "staging" },
-  network: { allowOut: ["api.openai.com"] },
+  // Replaces every egress rule, so send the full allow and deny lists.
+  network: {
+    allowOut: ["1.1.1.1/32", "8.8.8.8/32", "api.openai.com"],
+    denyOut: ["0.0.0.0/0"],
+  },
 })
 
 // Auto-delete: a number arms the window, null disarms it.
@@ -316,7 +320,11 @@ await sandbox.update({ previewAccess: "private" })
 ```python Python
 sandbox.update(
     metadata={"env": "staging"},
-    network=NetworkConfig(allow_out=["api.openai.com"]),
+    # Replaces every egress rule, so send the full allow and deny lists.
+    network=NetworkConfig(
+        allow_out=["1.1.1.1/32", "8.8.8.8/32", "api.openai.com"],
+        deny_out=["0.0.0.0/0"],
+    ),
 )
 
 # Auto-delete: a number arms the window, None disarms it.
@@ -335,6 +343,8 @@ sandbox.update(preview_access="private")
 ````
 
 </CodeGroup>
+
+`network` replaces the sandbox's egress rules as a whole. A list you leave out is cleared, and `network: {}` / `NetworkConfig()` removes every rule. See [Network rules](/sandbox/networking#update-rules-on-a-running-sandbox).
 
 On an already-paused sandbox, arming `autoDeleteSeconds` starts the countdown from the moment of the call — never retroactively from when the sandbox paused. See [Lifecycle](/sandbox/lifecycle#auto-delete).
 
