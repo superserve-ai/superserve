@@ -58,7 +58,8 @@ const sandbox = await Sandbox.create({
 
 await sandbox.commands.run(
   "curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh" +
-    " && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install openhands --python 3.12",
+    " && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install openhands --python 3.12" +
+    " && git config --global http.proxyAuthMethod basic",
   { timeoutMs: 300_000 },
 )
 ```
@@ -83,13 +84,20 @@ sandbox = Sandbox.create(
 
 sandbox.commands.run(
     "curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh"
-    " && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install openhands --python 3.12",
+    " && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install openhands --python 3.12"
+    " && git config --global http.proxyAuthMethod basic",
     timeout_seconds=300,
 )
 ```
 </CodeGroup>
 
 The install puts `uv` and `openhands` in `/usr/local/bin`, so every command finds them on `PATH`. OpenHands reads the model from `LLM_MODEL` and the key from `LLM_API_KEY`, but only when you pass `--override-with-envs`. The value of `LLM_API_KEY` is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent. `OPENHANDS_SUPPRESS_BANNER` hides the start-up banner that OpenHands prints on stderr.
+
+The last command sets git to send the sandbox's proxy credentials on the first request. OpenHands clones its public skills repository from GitHub at start-up, and the agent can run `git clone` too.
+
+<Note>
+In a Superserve sandbox with secrets, images with libcurl 8.13 to 8.17, for example `python:3.12` and other Debian 13 images, need `git config --global http.proxyAuthMethod basic` for git over HTTPS. Without it, `git clone` hangs. The environment variable `GIT_HTTP_PROXY_AUTHMETHOD=basic` also works. The `superserve/base` image doesn't need this setting.
+</Note>
 
 Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `openhands --override-with-envs` for the interactive terminal UI.
 
@@ -467,6 +475,10 @@ print(f"Template {template.name} is ready")
 </CodeGroup>
 
 Then create sandboxes with `fromTemplate: "openhands"` (TypeScript) or `from_template="openhands"` (Python), and leave out the install command.
+
+<Note>
+If you build from an image with libcurl 8.13 to 8.17, for example `python:3.12` or another Debian 13 image, add the step `{ env: { key: "GIT_HTTP_PROXY_AUTHMETHOD", value: "basic" } }` (TypeScript) or `EnvStep(env=EnvStepValue(key="GIT_HTTP_PROXY_AUTHMETHOD", value="basic"))` (Python). Without it, `git clone` over HTTPS hangs in sandboxes with secrets. The `ubuntu:24.04` image doesn't need it.
+</Note>
 
 ## Persist sessions
 
