@@ -275,10 +275,32 @@ describe("Commands.spawn", () => {
     const session = await commands.spawn("run", { signal: fakeSignal })
     last()._emit(`{"finished":true,"exit_code":0}`)
     await session.wait()
-    await Promise.resolve() // let the .finally() microtask run
+    await Promise.resolve() // let the cleanup microtask run
 
     expect(added).toBeGreaterThan(0)
     expect(removed).toBe(added)
+  })
+
+  it("aborting a running spawn rejects wait() with no unhandled rejection", async () => {
+    vi.stubGlobal("WebSocket", FakeWebSocket)
+    const unhandled: unknown[] = []
+    const onUnhandled = (reason: unknown) => unhandled.push(reason)
+    process.on("unhandledRejection", onUnhandled)
+    try {
+      const controller = new AbortController()
+      const session = await new Commands(makeDeps()).spawn("sleep 30", {
+        signal: controller.signal,
+      })
+      controller.abort()
+
+      await expect(session.wait()).rejects.toBeInstanceOf(SandboxError)
+      expect(last().readyState).toBe(FakeWebSocket.CLOSED)
+      // Node reports unhandled rejections after the microtask queue drains.
+      await new Promise((resolve) => setTimeout(resolve, 20))
+      expect(unhandled).toEqual([])
+    } finally {
+      process.off("unhandledRejection", onUnhandled)
+    }
   })
 
   it("an abort during the dial closes the pending socket and sends no start frame", async () => {
