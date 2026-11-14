@@ -1,5 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { accountTeamFallbackName } from "./account-team-name"
+
 const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let currentUser: {
   id: string
@@ -596,6 +598,23 @@ describe("createTeamAction", () => {
       expect(await convertAccount("acme")).toMatchObject({ id: "team-me" })
     })
 
+    it("converts a fallback-named account in place", async () => {
+      directoryTeams[0].name = accountTeamFallbackName(
+        currentUser!.email,
+        currentUser!.id,
+      )
+
+      expect(await convertAccount("acme")).toEqual({
+        id: "team-me",
+        name: "acme",
+        region: "use",
+      })
+      expect(cellClients.use.writes.team).toEqual([
+        { name: "acme", updated_at: expect.any(String) },
+      ])
+      expect(mockPublishPromotionIdentity).not.toHaveBeenCalled()
+    })
+
     it("converts an account owned through an RBAC owner assignment", async () => {
       legacyOwnerTeamIds = []
       rbacOwnerTeamIds = ["team-me"]
@@ -826,6 +845,20 @@ describe("active team", () => {
     ]
     cookieValue = "use:team-me"
     legacyOwnerTeamIds = ["team-me", "team-mw"]
+
+    expect((await listTeamsAction()).convertibleTeams).toEqual(directoryTeams)
+  })
+
+  it("directory offers to convert a fallback-named account", async () => {
+    currentUser = { id: "u1", email: "user@example.com" }
+    directoryTeams = [
+      {
+        id: "team-me",
+        name: accountTeamFallbackName(currentUser.email, currentUser.id),
+        region: "use",
+      },
+    ]
+    legacyOwnerTeamIds = ["team-me"]
 
     expect((await listTeamsAction()).convertibleTeams).toEqual(directoryTeams)
   })
