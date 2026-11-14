@@ -1,0 +1,491 @@
+---
+title: "OpenHands"
+sidebarTitle: OpenHands
+description: Run the OpenHands coding agent headless in a Superserve sandbox.
+icon: "/logos/integrations/openhands.svg"
+---
+
+[OpenHands](https://github.com/OpenHands/OpenHands) is an open-source AI coding agent. Its CLI has a headless mode for scripts and CI. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+## Via the console
+
+1. On the [Secrets page](https://console.superserve.ai/secrets?utm_source=docs&utm_medium=link), create a secret with the **Anthropic** provider and paste your API key — you only do this once, and the key never enters the sandbox.
+2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+3. Pick the **`superserve/base`** template.
+4. Under **Advanced Options → Secrets**, bind that secret to `LLM_API_KEY`.
+5. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh
+   UV_TOOL_BIN_DIR=/usr/local/bin uv tool install openhands --python 3.12
+   LLM_MODEL=anthropic/claude-sonnet-4-6 openhands --override-with-envs
+   ```
+
+## Via the SDK
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({
+  name: "anthropic-key",
+  value: "sk-ant-...",
+  provider: "anthropic",
+})
+
+const sandbox = await Sandbox.create({
+  name: "openhands",
+  fromTemplate: "superserve/base",
+  secrets: { LLM_API_KEY: "anthropic-key" },
+  envVars: {
+    LLM_MODEL: "anthropic/claude-sonnet-4-6",
+    OPENHANDS_SUPPRESS_BANNER: "1",
+  },
+})
+
+await sandbox.commands.run(
+  "curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh" +
+    " && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install openhands --python 3.12",
+  { timeoutMs: 300_000 },
+)
+```
+
+```python Python
+import sys
+
+from superserve import Sandbox, Secret
+
+# One-time: store your key as a secret. It never enters the sandbox.
+Secret.create(name="anthropic-key", value="sk-ant-...", provider="anthropic")
+
+sandbox = Sandbox.create(
+    name="openhands",
+    from_template="superserve/base",
+    secrets={"LLM_API_KEY": "anthropic-key"},
+    env_vars={
+        "LLM_MODEL": "anthropic/claude-sonnet-4-6",
+        "OPENHANDS_SUPPRESS_BANNER": "1",
+    },
+)
+
+sandbox.commands.run(
+    "curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh"
+    " && UV_TOOL_BIN_DIR=/usr/local/bin uv tool install openhands --python 3.12",
+    timeout_seconds=300,
+)
+```
+</CodeGroup>
+
+The install puts `uv` and `openhands` in `/usr/local/bin`, so every command finds them on `PATH`. OpenHands reads the model from `LLM_MODEL` and the key from `LLM_API_KEY`, but only when you pass `--override-with-envs`. The value of `LLM_API_KEY` is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent. `OPENHANDS_SUPPRESS_BANNER` hides the start-up banner that OpenHands prints on stderr.
+
+Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `openhands --override-with-envs` for the interactive terminal UI.
+
+## Run headless
+
+Pass a task with `-t` and add `--headless`. OpenHands runs the task in the current directory, prints a summary with the agent's last message, and exits. Headless mode always approves the agent's actions, so the agent runs shell commands and edits files without stopping.
+
+An agent run can take several minutes. Pass output callbacks to each `run()` that starts the agent: a streamed `run()` gets keepalive messages while the agent works, so the connection stays open. A `run()` without callbacks gets no response until the command ends, and in TypeScript on Node.js it fails after 300 seconds, even with a longer `timeoutMs`. See [Streaming output](/commands/streaming).
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  'mkdir -p ~/app && cd ~/app && openhands --headless --override-with-envs -t "Create primes.py, a script that prints the first 10 prime numbers, and run it"',
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    "mkdir -p ~/app && cd ~/app && openhands --headless --override-with-envs "
+    '-t "Create primes.py, a script that prints the first 10 prime numbers, and run it"',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+```
+</CodeGroup>
+
+<Warning>
+`openhands --headless` exits with code `0` even when the run fails, for example when the key is not valid. To detect failures, use JSON output and check for a `ConversationErrorEvent`, as shown below.
+</Warning>
+
+## Get JSON output
+
+Add `--json` to get one JSON event per line on stdout, mixed with a few plain-text status lines. Keep the lines that start with `{`. Each event has a `kind`:
+
+- `ActionEvent`: a tool call by the agent, with a short `summary`.
+- `ObservationEvent`: the result of a tool call.
+- `MessageEvent`: a message. The last one with `source: "agent"` holds the final answer, as `text` blocks in `llm_message.content`.
+- `ConversationErrorEvent`: the run failed. `code` and `detail` say why.
+
+This run passes only a stderr callback, so the events aren't printed while they arrive. The callback still keeps the connection open, and `stdout` holds every event when the run ends. The `Conversation ID` line at the end of stdout identifies the conversation, so you can continue it later.
+
+<CodeGroup>
+```typescript TypeScript
+type OpenHandsEvent = {
+  kind: string
+  source?: string
+  summary?: string
+  code?: string
+  detail?: string
+  llm_message?: { content: { type: string; text?: string }[] }
+}
+
+function parseEvents(stdout: string): OpenHandsEvent[] {
+  return stdout
+    .split("\n")
+    .filter((line) => line.startsWith("{"))
+    .map((line) => JSON.parse(line) as OpenHandsEvent)
+}
+
+const jsonResult = await sandbox.commands.run(
+  'cd ~/app && openhands --headless --json --override-with-envs -t "Add a --count option to primes.py"',
+  { timeoutMs: 600_000, onStderr: (data) => process.stderr.write(data) },
+)
+
+const events = parseEvents(jsonResult.stdout)
+const failure = events.find((e) => e.kind === "ConversationErrorEvent")
+if (failure) throw new Error(`${failure.code}: ${failure.detail}`)
+
+const answer = events.filter((e) => e.kind === "MessageEvent" && e.source === "agent").pop()
+for (const block of answer?.llm_message?.content ?? []) {
+  if (block.type === "text") console.log(block.text)
+}
+
+const conversationId = jsonResult.stdout.match(/Conversation ID: ([0-9a-f]+)/)?.[1]
+```
+
+```python Python
+import json
+import re
+from typing import Any
+
+
+def parse_events(stdout: str) -> list[dict[str, Any]]:
+    return [json.loads(line) for line in stdout.splitlines() if line.startswith("{")]
+
+
+result = sandbox.commands.run(
+    "cd ~/app && openhands --headless --json --override-with-envs "
+    '-t "Add a --count option to primes.py"',
+    timeout_seconds=600,
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+
+events = parse_events(result.stdout)
+for event in events:
+    if event["kind"] == "ConversationErrorEvent":
+        raise RuntimeError(f"{event['code']}: {event['detail']}")
+
+answers = [e for e in events if e["kind"] == "MessageEvent" and e["source"] == "agent"]
+for block in answers[-1]["llm_message"]["content"] if answers else []:
+    if block["type"] == "text":
+        print(block["text"])
+
+match = re.search(r"Conversation ID: ([0-9a-f]+)", result.stdout)
+conversation_id = match.group(1) if match else None
+```
+</CodeGroup>
+
+## Continue a conversation
+
+OpenHands saves each conversation in `~/.openhands/conversations`. Pass the conversation ID to `--resume` together with a new task to send a follow-up with the earlier context.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  `cd ~/app && openhands --headless --override-with-envs --resume ${conversationId} -t "Now add a test for the --count option and run it"`,
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    "cd ~/app && openhands --headless --override-with-envs "
+    f'--resume {conversation_id} -t "Now add a test for the --count option and run it"',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+```
+</CodeGroup>
+
+## Watch long runs
+
+In plain headless mode, OpenHands prints nothing between `Agent is working` and the final summary. To see progress on a long task, stream the JSON events and print each action's `summary` as it arrives. Output can arrive in chunks that split a line, so keep the incomplete last line until the rest arrives. Set the timeout above your longest expected run.
+
+<CodeGroup>
+```typescript TypeScript
+let pending = ""
+
+const longResult = await sandbox.commands.run(
+  'cd ~/app && openhands --headless --json --override-with-envs -t "Refactor primes.py into a primes package with a main module, then run the tests"',
+  {
+    timeoutMs: 3_600_000,
+    onStdout: (data) => {
+      const lines = (pending + data).split("\n")
+      pending = lines.pop() ?? ""
+      for (const event of parseEvents(lines.join("\n"))) {
+        if (event.kind === "ActionEvent") console.log(`> ${event.summary}`)
+      }
+    },
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+
+const longFailure = parseEvents(longResult.stdout).find((e) => e.kind === "ConversationErrorEvent")
+if (longFailure) throw new Error(`${longFailure.code}: ${longFailure.detail}`)
+```
+
+```python Python
+pending = ""
+
+
+def on_stdout(data: str) -> None:
+    global pending
+    *lines, pending = (pending + data).split("\n")
+    for event in parse_events("\n".join(lines)):
+        if event["kind"] == "ActionEvent":
+            print(f"> {event['summary']}")
+
+
+result = sandbox.commands.run(
+    "cd ~/app && openhands --headless --json --override-with-envs "
+    '-t "Refactor primes.py into a primes package with a main module, then run the tests"',
+    timeout_seconds=3600,
+    on_stdout=on_stdout,
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+
+for event in parse_events(result.stdout):
+    if event["kind"] == "ConversationErrorEvent":
+        raise RuntimeError(f"{event['code']}: {event['detail']}")
+```
+</CodeGroup>
+
+A streamed run stops when the connection drops. For a task that must outlive your process, start OpenHands in the background with its output in a file, and read the file later. See [If the connection drops](/commands/streaming#if-the-connection-drops).
+
+## Work on a repository
+
+Clone a repository into the sandbox and write the task to a file, so a long task needs no shell quoting. Pass the file to `-f`, stream OpenHands' output while it works, then read the diff.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+  { timeoutMs: 120_000 },
+)
+
+await sandbox.files.write(
+  "/home/user/task.md",
+  "Add a Usage section to the README. Keep the rest of the file as it is.",
+)
+
+await sandbox.commands.run(
+  "cd ~/repo && openhands --headless --override-with-envs -f ~/task.md",
+  {
+    timeoutMs: 1_800_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+
+const diff = await sandbox.commands.run("cd ~/repo && git diff")
+console.log(diff.stdout)
+```
+
+```python Python
+sandbox.commands.run(
+    "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+    timeout_seconds=120,
+)
+
+sandbox.files.write(
+    "/home/user/task.md",
+    "Add a Usage section to the README. Keep the rest of the file as it is.",
+)
+
+sandbox.commands.run(
+    "cd ~/repo && openhands --headless --override-with-envs -f ~/task.md",
+    timeout_seconds=1800,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+
+diff = sandbox.commands.run("cd ~/repo && git diff")
+print(diff.stdout)
+```
+</CodeGroup>
+
+## Choose a model
+
+OpenHands calls models through [LiteLLM](https://docs.litellm.ai/docs/providers), so `LLM_MODEL` takes a `provider/model` ID such as `anthropic/claude-sonnet-4-6` or `openai/gpt-5.5`. To use a model for one run only, pass `LLM_MODEL` in the command's `env`:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  'cd ~/app && openhands --headless --override-with-envs -t "Summarize this project in two sentences"',
+  {
+    env: { LLM_MODEL: "anthropic/claude-haiku-4-5" },
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    "cd ~/app && openhands --headless --override-with-envs "
+    '-t "Summarize this project in two sentences"',
+    env={"LLM_MODEL": "anthropic/claude-haiku-4-5"},
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+```
+</CodeGroup>
+
+To use OpenAI, create a secret with the **OpenAI** provider, bind it to `LLM_API_KEY`, and set `LLM_MODEL` to an `openai/...` model. For an OpenAI-compatible endpoint, also set `LLM_BASE_URL`.
+
+## Restrict the network
+
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect. Install OpenHands first, because the install needs `astral.sh`, `github.com`, and PyPI. With Anthropic, OpenHands then needs only `api.anthropic.com` to run. If you deny all other traffic, also allow the sandbox's DNS resolvers, `1.1.1.1/32` and `8.8.8.8/32`, so the name resolves.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.update({
+  network: {
+    allowOut: ["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com"],
+    denyOut: ["0.0.0.0/0"],
+  },
+})
+```
+
+```python Python
+from superserve import NetworkConfig
+
+sandbox.update(
+    network=NetworkConfig(
+        allow_out=["1.1.1.1/32", "8.8.8.8/32", "api.anthropic.com"],
+        deny_out=["0.0.0.0/0"],
+    ),
+)
+```
+</CodeGroup>
+
+With these rules, OpenHands still tries to reach `github.com` and `raw.githubusercontent.com` at start-up. The sandbox blocks these requests, and the run continues without them. Commands that need other hosts, such as `git clone` or `pip install`, fail until you allow those hosts too.
+
+## Start from a template
+
+To skip the install in every new sandbox, build a [template](/templates/create) with OpenHands installed once:
+
+<CodeGroup>
+```typescript build-template.ts
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "openhands",
+  from: "ubuntu:24.04",
+  vcpu: 2,
+  memoryMib: 4096,
+  steps: [
+    { env: { key: "OPENHANDS_SUPPRESS_BANNER", value: "1" } },
+    {
+      run:
+        "apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y" +
+        " --no-install-recommends ca-certificates curl git python3",
+    },
+    {
+      run:
+        "curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh" +
+        " && UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin" +
+        " uv tool install openhands --python 3.12",
+    },
+  ],
+})
+await template.waitUntilReady()
+console.log(`Template ${template.name} is ready`)
+```
+
+```python build_template.py
+from superserve import EnvStep, EnvStepValue, RunStep, Template
+
+template = Template.create(
+    name="openhands",
+    from_="ubuntu:24.04",
+    vcpu=2,
+    memory_mib=4096,
+    steps=[
+        EnvStep(env=EnvStepValue(key="OPENHANDS_SUPPRESS_BANNER", value="1")),
+        RunStep(
+            run="apt-get update && DEBIAN_FRONTEND=noninteractive apt-get install -y"
+            " --no-install-recommends ca-certificates curl git python3"
+        ),
+        RunStep(
+            run="curl -LsSf https://astral.sh/uv/install.sh"
+            " | env UV_INSTALL_DIR=/usr/local/bin sh"
+            " && UV_TOOL_DIR=/opt/uv-tools UV_TOOL_BIN_DIR=/usr/local/bin"
+            " uv tool install openhands --python 3.12"
+        ),
+    ],
+)
+template.wait_until_ready()
+print(f"Template {template.name} is ready")
+```
+</CodeGroup>
+
+Then create sandboxes with `fromTemplate: "openhands"` (TypeScript) or `from_template="openhands"` (Python), and leave out the install command.
+
+## Persist sessions
+
+Pause the sandbox to keep its files, the conversations in `~/.openhands`, and its memory. Resume it to continue.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.pause()
+await sandbox.resume()
+```
+
+```python Python
+sandbox.pause()
+sandbox.resume()
+```
+</CodeGroup>
+
+## Delete when finished
+
+A paused sandbox is kept until you delete it. When you no longer need the sandbox, delete it. This also deletes its files and saved state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).
