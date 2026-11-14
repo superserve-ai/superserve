@@ -50,7 +50,7 @@ See [Growing memory](/templates/build-spec#growing-memory) for the values `memor
 It's automatic: no API calls, no restarts, and no changes to your code.
 
 - **Growing:** when a sandbox runs low on memory, it grows automatically, up to its limit. A program can even ask for a large block of memory at once, more than the sandbox started with, and the sandbox grows as the program uses it.
-- **Shrinking:** once the burst is over and memory use has stayed low for a few minutes, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`.
+- **Shrinking:** once the burst is over and memory use has stayed low for about one minute, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`.
 - **Pause, resume and snapshots:** a sandbox resumes at the size it was paused at, and a sandbox created from a snapshot starts at its source's size.
 - **Above the limit:** if a program needs more than `memoryMaxMib`, Linux stops that program, as on any machine that runs out of memory. The sandbox keeps running.
 
