@@ -242,11 +242,16 @@ vi.mock("@/lib/cells", () => ({
 }))
 
 let directoryTeams: Array<{ id: string; name: string; region: string }> = []
+let directoryDegradedRegions: string[] = []
 // Teams in a cell that the directory could not read and omitted.
 let omittedTeams: Array<{ id: string; region: string }> = []
 let cellLookupFails = false
 vi.mock("@/lib/api/team-directory", () => ({
   listTeamsForUser: async () => directoryTeams,
+  listTeamsForUserDetailed: async () => ({
+    teams: directoryTeams,
+    degradedRegions: directoryDegradedRegions,
+  }),
   listTeamMembershipsForUserDetailed: (
     ...args: [string, { maxAgeMs?: number }?]
   ) => mockListTeamMembershipsForUserDetailed(...args),
@@ -342,6 +347,7 @@ describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
     directoryTeams = []
+    directoryDegradedRegions = []
     omittedTeams = []
     cellLookupFails = false
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
@@ -764,6 +770,7 @@ function expectUnavailable(
 
 describe("active team", () => {
   beforeEach(() => {
+    directoryDegradedRegions = []
     mockInvalidateMembershipDirectory.mockClear()
     regions = ["use", "usw"]
     existingRbacAssignment = true
@@ -786,6 +793,16 @@ describe("active team", () => {
     const { activeTeamId, activeRegion } = await listTeamsAction()
     expect(activeTeamId).toBe("team-w")
     expect(activeRegion).toBe("usw")
+  })
+
+  it("directory reports regions whose teams could not be read", async () => {
+    directoryTeams = [directoryTeams[0]!]
+    directoryDegradedRegions = ["usw"]
+
+    expect(await listTeamsAction()).toMatchObject({
+      teams: directoryTeams,
+      degradedRegions: ["usw"],
+    })
   })
 
   it("directory offers to convert the user's own account", async () => {

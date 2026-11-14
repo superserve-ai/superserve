@@ -250,7 +250,14 @@ export async function listTeamMembershipsForUser(
 export async function listTeamsForUser(
   userId: string,
 ): Promise<TeamDirectoryEntry[]> {
-  const { items } = await acrossCells(async (region) => {
+  const { teams } = await listTeamsForUserDetailed(userId)
+  return teams
+}
+
+export async function listTeamsForUserDetailed(
+  userId: string,
+): Promise<{ teams: TeamDirectoryEntry[]; degradedRegions: string[] }> {
+  const { items, degradedRegions } = await acrossCells(async (region) => {
     const admin = cellFor(region).createAdminClient()
     // Same authorization boundary as the membership lookup — a deactivated
     // member must not see the team in the directory either.
@@ -270,7 +277,7 @@ export async function listTeamsForUser(
       region,
     }))
   })
-  return items
+  return { teams: items, degradedRegions }
 }
 
 /**

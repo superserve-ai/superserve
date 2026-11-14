@@ -105,6 +105,7 @@ import {
   listTeamMembershipsForUser,
   listTeamMembershipsForUserDetailed,
   listTeamsForUser,
+  listTeamsForUserDetailed,
   membershipExistsInCell,
 } from "./team-directory"
 
@@ -250,6 +251,10 @@ describe("cell failure isolation", () => {
     const teams = await listTeamsForUser("u1")
 
     expect(teams).toEqual([{ id: "team-1", name: "Alpha", region: "use" }])
+    expect(await listTeamsForUserDetailed("u1")).toEqual({
+      teams,
+      degradedRegions: ["usw"],
+    })
     errSpy.mockRestore()
   })
 })

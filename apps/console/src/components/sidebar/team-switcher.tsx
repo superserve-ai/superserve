@@ -66,6 +66,7 @@ export function TeamSwitcher() {
           )
           const removed =
             directory &&
+            !directory.degradedRegions?.includes(team.region) &&
             !directory.teams.some(
               (item) => item.id === team.id && item.region === team.region,
             )

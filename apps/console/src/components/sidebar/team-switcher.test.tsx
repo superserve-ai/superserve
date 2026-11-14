@@ -160,6 +160,31 @@ describe("TeamSwitcher", () => {
     expect(screen.queryByText("Server action failed")).not.toBeInTheDocument()
   })
 
+  it("shows a retry message when the refreshed directory cannot read the team's region", async () => {
+    teamsData = twoRegions
+    mocks.setActive.mockRejectedValue(new Error("Server action failed"))
+    mocks.directory.mockResolvedValue({
+      ...twoRegions,
+      teams: [twoRegions.teams[0]!],
+      degradedRegions: ["usw"],
+    })
+    const user = userEvent.setup()
+    render(<TeamSwitcher />)
+
+    await user.click(screen.getByRole("combobox", { name: "Active team" }))
+    await user.click(
+      await screen.findByRole("option", { name: "westside · US West" }),
+    )
+
+    expect(
+      await screen.findByText("Could not switch to westside. Try again."),
+    ).toBeInTheDocument()
+    expect(mocks.directory).toHaveBeenCalledTimes(1)
+    expect(
+      screen.queryByText("You are no longer a member of westside."),
+    ).not.toBeInTheDocument()
+  })
+
   it("shows a retry message when the refreshed directory still lists the team", async () => {
     teamsData = twoRegions
     mocks.setActive.mockRejectedValue(new Error("Server action failed"))
