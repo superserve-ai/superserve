@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { CheckoutCopyError } from "@/lib/billing/checkout-error-copy"
+
 import { apiClient } from "./client"
 import { isStripeCheckoutUrl } from "./plan-checkout"
 
@@ -53,7 +55,7 @@ export async function recoverStarterCheckout(
       "payment_confirmation_pending",
     ].includes(response.outcome)
   )
-    throw new Error(
+    throw new CheckoutCopyError(
       "Unable to identify your original credit purchase. Check its status again.",
     )
   if (
@@ -64,14 +66,16 @@ export async function recoverStarterCheckout(
       (response.outcome === "recovered" &&
         (cancel || response.amount_cents !== operation.amount_cents)))
   )
-    throw new Error("The credit purchase changed. Check its status again.")
+    throw new CheckoutCopyError(
+      "The credit purchase changed. Check its status again.",
+    )
   if (
     operation &&
     response.outcome !== "recovered" &&
     response.outcome !== "retryable" &&
     response.outcome !== "payment_confirmation_pending"
   )
-    throw new Error(
+    throw new CheckoutCopyError(
       "Unable to confirm the original credit purchase. Check its status again.",
     )
   return response

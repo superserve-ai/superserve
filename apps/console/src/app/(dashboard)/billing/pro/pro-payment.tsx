@@ -45,7 +45,10 @@ import {
   recoverStarterCheckout,
   type PendingStarterCheckout,
 } from "@/lib/api/starter-checkout-recovery"
-import { checkoutErrorMessage } from "@/lib/billing/checkout-error-copy"
+import {
+  CheckoutCopyError,
+  checkoutErrorMessage,
+} from "@/lib/billing/checkout-error-copy"
 import {
   checkoutEntryPath,
   checkoutRecoveryPath,
@@ -272,7 +275,7 @@ function ProPaymentContext({
       const results = await Promise.all([refetchSummary(), refetchPlans()])
       if (!target.active) return
       if (results.some((result) => result.isError))
-        throw new Error(
+        throw new CheckoutCopyError(
           "Unable to refresh your plan. Check payment status again before continuing.",
         )
     },
@@ -293,7 +296,7 @@ function ProPaymentContext({
         )
       } catch {
         if (target.active)
-          throw new Error(
+          throw new CheckoutCopyError(
             "Payment is confirmed, but your plan could not be refreshed. Try again to open the console.",
           )
         return
@@ -382,7 +385,7 @@ function ProPaymentContext({
               settling = existing.outcome === "payment_confirmation_pending"
               if (!settling) {
                 if (existing.outcome !== "no_pending_starter_checkout")
-                  throw new Error(
+                  throw new CheckoutCopyError(
                     "Payment status is unavailable. Please try again.",
                   )
                 await refreshEntry(target)
@@ -492,7 +495,7 @@ function ProPaymentContext({
           }
         }
       }
-      throw new Error(
+      throw new CheckoutCopyError(
         "Payment is not confirmed yet. Your original purchase is retained; check its status before switching plans.",
       )
     })

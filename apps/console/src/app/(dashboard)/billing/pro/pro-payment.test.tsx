@@ -350,7 +350,9 @@ describe("Pro payment return recovery", () => {
       .mockImplementation(() => {})
     render(<ProPayment returnTo="/original" />)
     fireEvent.click(await readyContinue())
-    await screen.findByText("lost response")
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong on our side. Try again in a few minutes. If it keeps happening, contact support@superserve.ai.",
+    )
     expect(state.start.mock.calls[0]![1]).toBe("developer_monthly")
     fireEvent.click(
       screen.getByRole("button", { name: "Check payment status" }),
@@ -416,7 +418,9 @@ describe("Pro payment return recovery", () => {
       .mockImplementation(() => {})
     const { rerender } = render(<ProPayment returnTo="/original" />)
     fireEvent.click(await readyContinue())
-    await screen.findByText("lost response")
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong on our side. Try again in a few minutes. If it keeps happening, contact support@superserve.ai.",
+    )
     state.plans = { ...availablePlans, pricing_version: "legacy" }
     rerender(<ProPayment returnTo="/different-return" />)
     fireEvent.click(

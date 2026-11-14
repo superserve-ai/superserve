@@ -1,5 +1,9 @@
 import { ApiError } from "@/lib/api/client"
 
+export class CheckoutCopyError extends Error {
+  name = "CheckoutCopyError"
+}
+
 const GENERIC =
   "Something went wrong on our side. Try again in a few minutes. If it keeps happening, contact support@superserve.ai."
 
@@ -33,16 +37,14 @@ export function checkoutErrorMessage(cause: unknown): string {
   if (cause instanceof Error) {
     if ("digest" in cause || Object.hasOwn(cause, "__NEXT_ERROR_CODE"))
       return GENERIC
+    if (cause instanceof CheckoutCopyError) return cause.message || GENERIC
     if (
       cause instanceof TypeError ||
-      cause instanceof SyntaxError ||
       cause.name === "AbortError" ||
-      cause.name === "TimeoutError"
+      cause.name === "TimeoutError" ||
+      cause.message === "Connection closed."
     )
       return "We couldn't reach Superserve. Check your connection, then try again."
-    return Object.getPrototypeOf(cause) === Error.prototype && cause.message
-      ? cause.message
-      : GENERIC
   }
   return GENERIC
 }

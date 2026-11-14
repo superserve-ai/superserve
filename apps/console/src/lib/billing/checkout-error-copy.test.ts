@@ -3,7 +3,7 @@ import { z } from "zod"
 
 import { ApiError } from "@/lib/api/client"
 
-import { checkoutErrorMessage } from "./checkout-error-copy"
+import { CheckoutCopyError, checkoutErrorMessage } from "./checkout-error-copy"
 
 const generic =
   "Something went wrong on our side. Try again in a few minutes. If it keeps happening, contact support@superserve.ai."
@@ -93,13 +93,22 @@ describe("checkoutErrorMessage", () => {
 
   it.each([
     new TypeError("Failed to fetch"),
-    new SyntaxError("Unexpected token"),
     new DOMException("Aborted", "AbortError"),
     new DOMException("Timed out", "TimeoutError"),
     Object.assign(new Error("Aborted"), { name: "AbortError" }),
     Object.assign(new Error("Timed out"), { name: "TimeoutError" }),
   ])("gives connection guidance for $name", (cause) => {
     expect(checkoutErrorMessage(cause)).toBe(connection)
+  })
+
+  it("gives connection guidance for Connection closed.", () => {
+    expect(checkoutErrorMessage(new Error("Connection closed."))).toBe(
+      connection,
+    )
+  })
+
+  it("hides raw text from a plain Error", () => {
+    expect(checkoutErrorMessage(new Error("Internal detail"))).toBe(generic)
   })
 
   it.each(["redacted", undefined])(
@@ -131,8 +140,10 @@ describe("checkoutErrorMessage", () => {
   it.each([
     "Unable to open payment. Check your payment status before trying again.",
     "Your account changed. Reload to continue.",
-  ])("preserves console-authored Error copy (%s)", (message) => {
-    expect(checkoutErrorMessage(new Error(message))).toBe(message)
+  ])("preserves console-authored CheckoutCopyError copy (%s)", (message) => {
+    const error = new CheckoutCopyError(message)
+    expect(error.name).toBe("CheckoutCopyError")
+    expect(checkoutErrorMessage(error)).toBe(message)
   })
 
   it("hides Zod response validation details", () => {
@@ -156,6 +167,8 @@ describe("checkoutErrorMessage", () => {
 
   it.each([
     new Error(""),
+    new CheckoutCopyError(""),
+    new SyntaxError("Unexpected token"),
     null,
     undefined,
     "Raw failure",
