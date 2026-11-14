@@ -1,0 +1,45 @@
+name: Protected Paths
+
+# Fails a PR that changes a path in .github/CODEOWNERS until a human code owner
+# other than the author approves it, so a bot whose merge rule is "CI green"
+# stops there too. GitHub's required code-owner review is the binding gate:
+# this run uses the PR's own copy of the workflow, so a PR could weaken it.
+on:
+  # edited covers a change of base branch, which changes the diff and the rules.
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  # A new or dismissed approval changes the result without a new commit.
+  pull_request_review:
+    types: [submitted, dismissed]
+  # The queue only admits PRs that already met the review rules, so the check
+  # reports success there to keep the same name available as a required check.
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+# No concurrency group: a cancelled run shows as a failed check, and a review
+# event and a push often arrive together. Each run is short and reads only.
+jobs:
+  protected-paths:
+    name: Protected Paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name != 'merge_group'
+
+      # Also fails on a CODEOWNERS pattern that matches no file.
+      - name: Test the check
+        if: github.event_name != 'merge_group'
+        run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_protected_paths.py'
+
+      - name: Require a human code owner approval for protected paths
+        if: github.event_name != 'merge_group'
+        run: python3 .github/workflows/scripts/protected_paths.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_AUTHOR: ${{ github.event.pull_request.user.login }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
