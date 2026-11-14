@@ -22,9 +22,9 @@ export const BenchmarkComparison = ({
     fetchedAt: "2026-11-14T00:04:36.863Z",
     metrics: {
       tti: { values: { superserve: 446, e2b: 1068 } },
-      dax: { values: { superserve: 57422, e2b: 64219 } },
-      snapshot: { values: { superserve: 95.4, e2b: 84.2 } },
-      pause: { values: { superserve: 97, e2b: 90.9 } },
+      dax: { values: { superserve: 57422, e2b: 64219, modal: 48147 } },
+      snapshot: { values: { superserve: 95.4, e2b: 84.2, modal: 87.1 } },
+      pause: { values: { superserve: 97, e2b: 90.9, modal: 0 } },
     },
   }
 
