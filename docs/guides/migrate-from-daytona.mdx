@@ -1,0 +1,366 @@
+---
+title: "Migrate from Daytona"
+sidebarTitle: From Daytona
+description: Move your sandboxes, snapshots and agent code from Daytona to Superserve. Includes an API mapping, before and after code, a migration script and a prompt for coding agents.
+icon: "arrow-right-arrow-left"
+---
+
+import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
+
+Daytona and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
+
+## How Superserve compares
+
+<BenchmarkComparison compare="daytona" compareName="Daytona" />
+
+## Ready to switch
+
+Pick how you want to migrate. Do it yourself step by step, or give the prompt to a coding agent and let it change your code.
+
+<Tabs>
+<Tab title="Human">
+
+<Info>
+**Before you start**
+
+- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
+- **Keep Daytona installed.** You remove it only after the cutover, in step 6.
+</Info>
+
+<Steps>
+<Step title="Install the SDK and set your API key">
+
+Install the Superserve SDK next to Daytona. Set `SUPERSERVE_API_KEY` in your environment and CI secrets.
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+</Step>
+<Step title="Map the API">
+
+The main changes: a Daytona snapshot becomes a Superserve template, every sandbox needs a `name`, commands move from `process` to `commands`, and an idle sandbox pauses instead of stopping.
+
+<Tabs>
+<Tab title="TypeScript">
+
+| Task | Daytona | Superserve |
+| --- | --- | --- |
+| Create | `daytona.create({ snapshot, envVars, labels, autoStopInterval })` | `Sandbox.create({ name, fromTemplate, envVars, metadata, idleTimeoutSeconds })`. `name` is required. |
+| Image | `daytona.snapshot.create({ name, image: Image.debianSlim().pipInstall([...]) })` | `Template.create({ name, from: img, steps: [{ run }] })`, built once. Then `fromTemplate: name`. |
+| Reconnect | `daytona.get(idOrName)`, then `sandbox.start()` if it is stopped | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `sandbox.process.executeCommand(cmd, cwd, env, timeout)` returns `exitCode` and `result` | `sbx.commands.run(cmd, { cwd, env, timeoutMs })` returns `exitCode`, `stdout` and `stderr` |
+| Run code | `sandbox.process.codeRun(code)` | `sbx.files.write("/home/user/main.py", code)`, then `sbx.commands.run("python3 /home/user/main.py")` |
+| Background process | `sandbox.process.createSession(id)`, then `executeSessionCommand(id, { command, runAsync: true })` | `sbx.commands.spawn(cmd)` |
+| Files | `sandbox.fs.uploadFile(Buffer.from(data), path)` / `downloadFile(path)` | `sbx.files.write(path, data)` / `read(path)`. The path comes first. |
+| Save state | `sandbox.createSnapshot(name)` or `sandbox.fork()`. Disk only. | `sbx.snapshot()`, then `Sandbox.create({ name, fromSnapshot })`. Saves memory and disk; forks keep running processes. |
+| Stop and start | `sandbox.stop()` / `sandbox.start()`. Stop ends running processes. | `sbx.pause()` / `sbx.resume()`. Pause keeps memory and running processes. |
+| Idle timeout | `autoStopInterval` in minutes. Default 15. Stops the sandbox. | `idleTimeoutSeconds`. Off by default. Pauses the sandbox. |
+| Auto-delete | `autoDeleteInterval` in minutes after stop, or `ephemeral: true` | `autoDeleteSeconds` after pause. `0` deletes the sandbox when it pauses. |
+| Env vars and secrets | `envVars`, `secrets: { ENV_VAR: "secret-name" }` | `envVars` on create, `env` per command, `secrets: { ENV_VAR: "secret-name" }`. See [Secrets](/secrets/overview). |
+| Public URL | `sandbox.getPreviewLink(port)` returns `url` and `token` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| List and delete | `daytona.list({ labels })` / `sandbox.delete()` | `Sandbox.list({ metadata })` / `sbx.kill()` |
+
+</Tab>
+<Tab title="Python">
+
+| Task | Daytona | Superserve |
+| --- | --- | --- |
+| Create | `daytona.create(CreateSandboxFromSnapshotParams(snapshot=, env_vars=, labels=, auto_stop_interval=))` | `Sandbox.create(name=, from_template=, env_vars=, metadata=, idle_timeout_seconds=)`. `name` is required. |
+| Image | `daytona.snapshot.create(CreateSnapshotParams(name=, image=Image.debian_slim().pip_install(...)))` | `Template.create(name=, from_=img, steps=[RunStep(run=...)])`, built once. Then `from_template=name`. |
+| Reconnect | `daytona.get(id_or_name)`, then `sandbox.start()` if it is stopped | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `sandbox.process.exec(cmd, cwd=, env=, timeout=)` returns `exit_code` and `result` | `sbx.commands.run(cmd, cwd=, env=, timeout_seconds=)` returns `exit_code`, `stdout` and `stderr` |
+| Run code | `sandbox.process.code_run(code)` | `sbx.files.write("/home/user/main.py", code)`, then `sbx.commands.run("python3 /home/user/main.py")` |
+| Background process | `sandbox.process.create_session(id)`, then `execute_session_command(id, SessionExecuteRequest(command=, run_async=True))` | `await sbx.commands.spawn(cmd)` on `AsyncSandbox` |
+| Files | `sandbox.fs.upload_file(data, path)` / `download_file(path)` | `sbx.files.write(path, data)` / `read(path)`. The path comes first. |
+| Save state | `sandbox.create_snapshot(name)` or `sandbox.fork()`. Disk only. | `sbx.snapshot()`, then `Sandbox.create(name=, from_snapshot=)`. Saves memory and disk; forks keep running processes. |
+| Stop and start | `sandbox.stop()` / `sandbox.start()`. Stop ends running processes. | `sbx.pause()` / `sbx.resume()`. Pause keeps memory and running processes. |
+| Idle timeout | `auto_stop_interval` in minutes. Default 15. Stops the sandbox. | `idle_timeout_seconds`. Off by default. Pauses the sandbox. |
+| Auto-delete | `auto_delete_interval` in minutes after stop, or `ephemeral=True` | `auto_delete_seconds` after pause. `0` deletes the sandbox when it pauses. |
+| Env vars and secrets | `env_vars`, `secrets={"ENV_VAR": "secret-name"}` | `env_vars` on create, `env` per command, `secrets={"ENV_VAR": "secret-name"}`. See [Secrets](/secrets/overview). |
+| Public URL | `sandbox.get_preview_link(port)` returns `url` and `token` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| List and delete | `daytona.list(ListSandboxesQuery(labels=))` / `sandbox.delete()` | `Sandbox.list(metadata=)` / `sbx.kill()` |
+
+</Tab>
+</Tabs>
+
+To turn a Daytona snapshot or image into a template, see [Create a template](/templates/create).
+
+</Step>
+<Step title="Update your code">
+
+Build the template once. Then replace the Daytona client with `Sandbox`, add a `name`, and convert intervals from minutes to seconds.
+
+<CodeGroup>
+```ts Before (Daytona)
+import { Daytona, Image } from "@daytona/sdk"
+
+const daytona = new Daytona()
+await daytona.snapshot.create({
+  name: "my-snapshot",
+  image: Image.debianSlim("3.12").pipInstall(["pytest"]),
+})
+
+const sandbox = await daytona.create({
+  snapshot: "my-snapshot",
+  envVars: { MODE: "ci" },
+  autoStopInterval: 10,
+})
+await sandbox.process.executeCommand("pytest")
+const { url } = await sandbox.getPreviewLink(8000)
+const fork = await sandbox.fork({ name: "fork" })
+```
+
+```ts After (Superserve)
+import { Sandbox, Template } from "@superserve/sdk"
+
+// Build once. Sandboxes then start from the template.
+const tpl = await Template.create({
+  name: "my-tpl",
+  from: "python:3.12",
+  steps: [{ run: "pip install pytest" }],
+})
+await tpl.waitUntilReady()
+
+const sbx = await Sandbox.create({
+  name: "ci-run",
+  fromTemplate: "my-tpl",
+  envVars: { MODE: "ci" },
+  idleTimeoutSeconds: 600,
+})
+await sbx.commands.run("pytest")
+await sbx.publishPreviewPort(8000)
+const url = sbx.getPreviewUrl(8000)
+const snap = await sbx.snapshot()
+const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
+```
+
+```python Before (Daytona, Python)
+from daytona import (
+    CreateSandboxFromSnapshotParams,
+    CreateSnapshotParams,
+    Daytona,
+    Image,
+)
+
+daytona = Daytona()
+daytona.snapshot.create(
+    CreateSnapshotParams(
+        name="my-snapshot",
+        image=Image.debian_slim("3.12").pip_install("pytest"),
+    )
+)
+
+sandbox = daytona.create(
+    CreateSandboxFromSnapshotParams(
+        snapshot="my-snapshot",
+        env_vars={"MODE": "ci"},
+        auto_stop_interval=10,
+    )
+)
+sandbox.process.exec("pytest")
+url = sandbox.get_preview_link(8000).url
+fork = sandbox.fork(name="fork")
+```
+
+```python After (Superserve, Python)
+from superserve import RunStep, Sandbox, Template
+
+# Build once. Sandboxes then start from the template.
+tpl = Template.create(
+    name="my-tpl",
+    from_="python:3.12",
+    steps=[RunStep(run="pip install pytest")],
+)
+tpl.wait_until_ready()
+
+sbx = Sandbox.create(
+    name="ci-run",
+    from_template="my-tpl",
+    env_vars={"MODE": "ci"},
+    idle_timeout_seconds=600,
+)
+sbx.commands.run("pytest")
+sbx.publish_preview_port(8000)
+url = sbx.get_preview_url(8000)
+snap = sbx.snapshot()
+fork = Sandbox.create(name="fork", from_snapshot=snap)
+```
+</CodeGroup>
+
+</Step>
+<Step title="Move existing sandboxes with the migration script">
+
+The script copies a directory from each started Daytona sandbox into a new Superserve sandbox. It does not change or delete your Daytona sandboxes. Run it with both `DAYTONA_API_KEY` and `SUPERSERVE_API_KEY` set. Start a stopped Daytona sandbox first to include it.
+
+<CodeGroup>
+```ts migrate-from-daytona.ts
+import { Daytona, SandboxState } from "@daytona/sdk"
+import { Sandbox } from "@superserve/sdk"
+
+const SRC = "/home/daytona" // directory to copy from each Daytona sandbox
+const DST = "/home/user" // directory to copy into in Superserve
+const TEMPLATE = "superserve/base" // or the template you built from your Daytona snapshot
+
+const daytona = new Daytona()
+for await (const src of daytona.list({ states: [SandboxState.STARTED] })) {
+  const tar = await src.process.executeCommand(
+    `tar czf /tmp/state.tgz -C ${SRC} . 2>&1`,
+  )
+  if (tar.exitCode !== 0) {
+    console.error(`${src.id}: archive failed: ${tar.result}`)
+    process.exitCode = 1
+    continue
+  }
+  const tgz = await src.fs.downloadFile("/tmp/state.tgz")
+
+  const dst = await Sandbox.create({
+    name: `from-daytona-${src.id}`,
+    fromTemplate: TEMPLATE,
+    metadata: { ...src.labels, migrated_from: src.id },
+  })
+  await dst.files.write("/tmp/state.tgz", tgz)
+  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`)
+  if (out.exitCode !== 0) {
+    console.error(`${src.id}: copy failed: ${out.stderr}`)
+    process.exitCode = 1
+    continue
+  }
+  console.log(`${src.id} -> ${dst.id}`)
+}
+```
+
+```python migrate_from_daytona.py
+import sys
+
+from daytona import Daytona, ListSandboxesQuery, SandboxState
+from superserve import Sandbox
+
+SRC = "/home/daytona"  # directory to copy from each Daytona sandbox
+DST = "/home/user"  # directory to copy into in Superserve
+TEMPLATE = "superserve/base"  # or the template you built from your Daytona snapshot
+failed = False
+
+daytona = Daytona()
+for src in daytona.list(ListSandboxesQuery(states=[SandboxState.STARTED])):
+    tar = src.process.exec(f"tar czf /tmp/state.tgz -C {SRC} . 2>&1")
+    if tar.exit_code != 0:
+        print(f"{src.id}: archive failed: {tar.result}", file=sys.stderr)
+        failed = True
+        continue
+    tgz = src.fs.download_file("/tmp/state.tgz")
+
+    dst = Sandbox.create(
+        name=f"from-daytona-{src.id}",
+        from_template=TEMPLATE,
+        metadata={**src.labels, "migrated_from": src.id},
+    )
+    dst.files.write("/tmp/state.tgz", tgz)
+    out = dst.commands.run(f"tar xzf /tmp/state.tgz -C {DST}")
+    if out.exit_code != 0:
+        print(f"{src.id}: copy failed: {out.stderr}", file=sys.stderr)
+        failed = True
+        continue
+    print(f"{src.id} -> {dst.id}")
+
+sys.exit(1 if failed else 0)
+```
+</CodeGroup>
+
+The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
+
+</Step>
+<Step title="Verify and cut over">
+
+Run your test suite against Superserve. Check the sandbox list in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link). When the results match, send production traffic to Superserve.
+
+</Step>
+<Step title="Uninstall Daytona">
+
+After the cutover, remove the Daytona package and delete `DAYTONA_API_KEY` from your environment and CI secrets. Older projects use the `@daytonaio/sdk` (npm) or `daytona-sdk` (pip) package name.
+
+<CodeGroup>
+```bash TypeScript
+npm uninstall @daytona/sdk
+```
+
+```bash Python
+pip uninstall daytona
+```
+</CodeGroup>
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="Agent">
+
+Paste this prompt into Claude Code, Codex, Cursor or another coding agent at the root of your repo. The agent changes the code and runs your tests. You review the diff.
+
+```text Migration prompt
+Migrate this repository from the Daytona SDK to the Superserve SDK.
+
+Reference: https://docs.superserve.ai/llms-full.txt (read it first).
+
+Before you start: ask me for a Superserve API key if SUPERSERVE_API_KEY is not set.
+I get it from the console (https://console.superserve.ai/api-keys/). Do not create a key yourself.
+
+1. Install @superserve/sdk (npm) or superserve (pip) next to the Daytona SDK. Do not remove it.
+   Add SUPERSERVE_API_KEY to code, .env.example, and CI config.
+2. Find every import of "@daytona/sdk" or "@daytonaio/sdk" (TypeScript) and "daytona" or
+   "daytona_sdk" (Python). Apply this mapping:
+   - Daytona snapshots and Image definitions -> Template.create({name, from, steps}), built once.
+     Python: Template.create(name=, from_=, steps=[RunStep(run=...)]).
+   - daytona.create({snapshot, envVars, labels}) -> Sandbox.create({name, fromTemplate, envVars,
+     metadata}). name is required: derive it from context.
+   - autoStopInterval (minutes) -> idleTimeoutSeconds (seconds). Superserve pauses an idle sandbox,
+     Daytona stops it. autoDeleteInterval / ephemeral -> autoDeleteSeconds.
+   - process.executeCommand(cmd, cwd, env, timeout) -> commands.run(cmd, {cwd, env, timeoutMs}).
+     result -> stdout. It does not throw on a nonzero exit code, so keep the exitCode checks.
+   - process.codeRun(code) -> files.write the code to an absolute path, then commands.run it.
+   - Session commands with runAsync -> commands.spawn(cmd). Python: on AsyncSandbox.
+   - fs.uploadFile(data, path) / fs.downloadFile(path) -> files.write(path, data) / files.read(path)
+   - sandbox.createSnapshot(name) or sandbox.fork() -> snapshot() + Sandbox.create({name, fromSnapshot})
+   - stop() / start() -> pause() / resume(). daytona.get(id) -> Sandbox.connect(id).
+   - getPreviewLink(port) -> publishPreviewPort(port), then getPreviewUrl(port). New sandboxes route
+     only published ports. Ports must be 1024 to 65535. Remove the preview token header.
+   - Paths under /home/daytona -> /home/user.
+   - daytona.list({labels}) / delete() -> Sandbox.list({metadata}) / kill().
+   - Python: use snake_case (from_template, idle_timeout_seconds, env_vars, from_snapshot).
+3. Run the test suite. Fix failures. Do not delete Daytona code paths you cannot test; list them.
+4. Report: files changed, tests run and their result, and anything left for a human.
+5. Only after I confirm the cutover: uninstall the Daytona SDK and remove DAYTONA_API_KEY.
+```
+
+### Give your agent the full reference
+
+| Resource | Use |
+| --- | --- |
+| [`docs.superserve.ai/llms-full.txt`](https://docs.superserve.ai/llms-full.txt) | The whole docs in one file for the agent context |
+| [`superserve` skill](https://github.com/superserve-ai/superserve/tree/main/skills/superserve) | Full SDK reference for Claude Code and other skill-aware agents |
+| [Superserve MCP server](/integrations/mcp) | Lets the agent create and test sandboxes while it migrates |
+
+The API mapping and the migration script are in the **Human** tab.
+
+</Tab>
+</Tabs>
+
+## Known differences
+
+| Area | What to do |
+| --- | --- |
+| Snapshots | A Daytona snapshot is a base image for new sandboxes. In Superserve that is a template. A Superserve snapshot saves the memory and disk of one sandbox. |
+| Idle behavior | Daytona stops an idle sandbox after 15 minutes by default, which ends its processes. Superserve has no idle timeout by default. Set `idleTimeoutSeconds` to pause an idle sandbox and keep its processes. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
+| Commands | `commands.run` returns `stdout` and `stderr` separately and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. |
+| Resources | Set `vcpu` and `memoryMib` on the template, not on the sandbox. Memory is in MiB, not GiB. |
+| Home directory | Daytona sandboxes use `/home/daytona`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
+| Preview ports | New sandboxes route only published ports. Call `publishPreviewPort` before you use a preview URL. Serve on a port from 1024 to 65535. |
+| Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
