@@ -962,6 +962,7 @@ describe("TeamClient", () => {
         can_invite_members: true,
         can_deactivate_members: true,
         can_assign_roles: true,
+        can_revoke_roles: true,
         can_invite_owners: true,
         invite_blocked_reason: null,
       },

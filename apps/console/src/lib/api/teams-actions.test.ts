@@ -63,6 +63,7 @@ const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
 )
 const mockTrackEvent = vi.fn()
+const mockInvalidateMembershipDirectory = vi.fn()
 const mockEvaluateSignupRestriction = vi.fn()
 
 vi.mock("@/lib/auth/signup-restrictions", () => ({
@@ -259,7 +260,8 @@ vi.mock("@/lib/api/team-directory", () => ({
       (t) => t.id === teamId && t.region === region,
     )
   },
-  invalidateMembershipDirectory: () => {},
+  invalidateMembershipDirectory: (...args: unknown[]) =>
+    mockInvalidateMembershipDirectory(...args),
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
   GoogleSignupRecoveryRequiredError: class GoogleSignupRecoveryRequiredError extends Error {
@@ -762,6 +764,7 @@ function expectUnavailable(
 
 describe("active team", () => {
   beforeEach(() => {
+    mockInvalidateMembershipDirectory.mockClear()
     regions = ["use", "usw"]
     existingRbacAssignment = true
     unfinishedTeamId = null
@@ -858,11 +861,15 @@ describe("active team", () => {
     expect(cookieSets).toEqual([
       { name: "ss-active-team", value: "usw:team-w" },
     ])
+    expect(mockInvalidateMembershipDirectory).not.toHaveBeenCalled()
   })
 
   it("setActiveTeamAction rejects a team the user is not in", async () => {
     await expect(setActiveTeamAction("intruder", "usw")).rejects.toThrow(
       "not a member",
+    )
+    expect(mockInvalidateMembershipDirectory).toHaveBeenCalledExactlyOnceWith(
+      "u1",
     )
     expect(cookieSets).toEqual([])
   })

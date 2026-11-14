@@ -116,6 +116,7 @@ export async function setActiveTeamAction(
       })
     ).memberships.length
   ) {
+    invalidateMembershipDirectory(user.id)
     throw new Error("You are not a member of that team")
   }
 

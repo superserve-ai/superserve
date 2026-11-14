@@ -262,10 +262,11 @@ export function useSwitchTeam() {
       )
       return { previous }
     },
-    onError: (_error, _vars, context) => {
+    onError: async (_error, _vars, context) => {
       if (context?.previous) {
         queryClient.setQueryData(teamKeys.directory(), context.previous)
       }
+      await queryClient.invalidateQueries({ queryKey: teamKeys.directory() })
     },
     onSuccess: () => {
       // No router.refresh(): the dashboard shell is a pure client layout, so

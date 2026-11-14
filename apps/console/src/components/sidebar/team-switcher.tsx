@@ -8,8 +8,11 @@ import {
   SelectValue,
   useToast,
 } from "@superserve/ui"
+import { useQueryClient } from "@tanstack/react-query"
 
 import { useSwitchTeam, useTeams } from "@/hooks/use-teams"
+import { teamKeys } from "@/lib/api/query-keys"
+import type { TeamDirectoryResponse } from "@/lib/api/teams-actions"
 import { regionLabel } from "@/lib/format"
 
 // Option values pair region with id: during a cross-cell migration the same
@@ -26,6 +29,7 @@ function optionValue(team: { id: string; region: string }): string {
 export function TeamSwitcher() {
   const { data } = useTeams()
   const switchTeam = useSwitchTeam()
+  const queryClient = useQueryClient()
   const { addToast } = useToast()
 
   if (!data || data.teams.length < 2) return null
@@ -56,8 +60,21 @@ export function TeamSwitcher() {
     switchTeam.mutate(
       { teamId: team.id, region: team.region },
       {
-        onError: (error) => {
-          addToast(error.message || "Failed to switch team", "error")
+        onError: () => {
+          const directory = queryClient.getQueryData<TeamDirectoryResponse>(
+            teamKeys.directory(),
+          )
+          const removed =
+            directory &&
+            !directory.teams.some(
+              (item) => item.id === team.id && item.region === team.region,
+            )
+          addToast(
+            removed
+              ? `You are no longer a member of ${team.name}.`
+              : `Could not switch to ${team.name}. Try again.`,
+            "error",
+          )
         },
       },
     )
