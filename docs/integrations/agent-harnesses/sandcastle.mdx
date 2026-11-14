@@ -1,0 +1,410 @@
+---
+title: "Sandcastle"
+sidebarTitle: Sandcastle
+description: Run Claude Code and Codex in Superserve sandboxes with Sandcastle, and merge the agent's commits back into your repo.
+icon: "/logos/integrations/sandcastle.svg"
+---
+
+[Sandcastle](https://github.com/mattpocock/sandcastle) is a TypeScript library that runs coding agents, such as Claude Code and Codex, against your git repo in a sandbox. You pass `run()` an agent, a sandbox provider, and a prompt. Sandcastle copies the repo into the sandbox, runs the agent, and merges the agent's commits back into your current branch.
+
+This page adds a Superserve sandbox provider to your project, so each run gets its own isolated VM. The agent's API key stays in a [Superserve secret](/secrets/overview) and never enters the sandbox.
+
+## Prerequisites
+
+- Node.js 22.18 or later, so `node` runs the `.ts` files directly
+- A git repo with at least one commit
+- A Superserve API key. See [API keys](/api-key).
+- An Anthropic API key for Claude Code, or an OpenAI API key for Codex
+
+## Setup
+
+Sandcastle is a TypeScript library. Install it and the Superserve SDK in your repo:
+
+```bash
+npm install --save-dev @ai-hero/sandcastle @superserve/sdk
+```
+
+The scripts on this page use top-level `await`, so set `"type": "module"` in `package.json`. Then put your keys in `.env`:
+
+```bash .env
+SUPERSERVE_API_KEY=ss_live_...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+Keep `.env` and Sandcastle's run files out of git. Sandcastle copies only committed files into the sandbox:
+
+```text .gitignore
+node_modules
+.env
+.sandcastle/logs
+.sandcastle/worktrees
+```
+
+## Store the API key as a secret
+
+Store your Anthropic key as a team secret once. Superserve gives the sandbox a stand-in token and attaches the real key only on requests to Anthropic.
+
+<CodeGroup>
+```typescript .sandcastle/create-secret.ts
+import { Secret } from "@superserve/sdk"
+
+const value = process.env.ANTHROPIC_API_KEY
+if (!value) throw new Error("Set ANTHROPIC_API_KEY")
+
+// One-time: store the key as a team secret. It never enters a sandbox.
+await Secret.create({ name: "anthropic-key", value, provider: "anthropic" })
+```
+```python create_secret.py
+import os
+
+from superserve import Secret
+
+# One-time: store the key as a team secret. It never enters a sandbox.
+Secret.create(
+    name="anthropic-key",
+    value=os.environ["ANTHROPIC_API_KEY"],
+    provider="anthropic",
+)
+```
+</CodeGroup>
+
+```bash
+node --env-file=.env .sandcastle/create-secret.ts
+```
+
+For the Python version, run `pip install superserve` and export the keys from `.env` before you run `python create_secret.py`.
+
+## Add the sandbox provider
+
+Sandcastle's `createIsolatedSandboxProvider` turns a `create` function into a sandbox provider. This provider creates a Superserve sandbox for each run, and sends Sandcastle's commands and file copies to it. It tags each sandbox with the metadata `sandcastle: "true"`, and deletes the sandbox when the run ends. Save it as `.sandcastle/superserve.ts`:
+
+```typescript .sandcastle/superserve.ts expandable
+import { execFile } from "node:child_process"
+import { randomUUID } from "node:crypto"
+import { mkdir, readFile, stat, writeFile } from "node:fs/promises"
+import { dirname } from "node:path"
+import { promisify } from "node:util"
+
+import {
+  createIsolatedSandboxProvider,
+  type ExecResult,
+  type IsolatedSandboxHandle,
+  type IsolatedSandboxProvider,
+} from "@ai-hero/sandcastle"
+import { Sandbox, type SandboxCreateOptions } from "@superserve/sdk"
+
+export interface SuperserveOptions extends Partial<
+  Omit<SandboxCreateOptions, "envVars">
+> {
+  /** Environment variables to set in every sandbox. */
+  env?: Record<string, string>
+  /** Timeout for each command, including the agent run. Defaults to 1 hour. */
+  commandTimeoutMs?: number
+}
+
+const WORKTREE = "/home/user/workspace"
+
+// Quote a value for /bin/sh.
+const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
+
+const execFileAsync = promisify(execFile)
+
+/** A Sandcastle sandbox provider that runs each agent in a Superserve sandbox. */
+export const superserve = (
+  options: SuperserveOptions = {},
+): IsolatedSandboxProvider => {
+  const { env, commandTimeoutMs = 60 * 60_000, ...createOptions } = options
+
+  return createIsolatedSandboxProvider({
+    name: "superserve",
+    // Commands run as root. Claude Code accepts --dangerously-skip-permissions
+    // as root only when IS_SANDBOX is set.
+    env: { IS_SANDBOX: "1", ...env },
+
+    async create({ env: sandboxEnv }): Promise<IsolatedSandboxHandle> {
+      const sandbox = await Sandbox.create({
+        name: `sandcastle-${randomUUID().slice(0, 8)}`,
+        ...createOptions,
+        metadata: { sandcastle: "true", ...createOptions.metadata },
+        envVars: sandboxEnv,
+      })
+
+      // Run a setup command and throw its stderr when it fails.
+      const sh = async (command: string) => {
+        const { stderr, exitCode } = await sandbox.commands.run(command, {
+          timeoutMs: commandTimeoutMs,
+        })
+        if (exitCode !== 0) throw new Error(stderr.trim() || command)
+      }
+
+      try {
+        await sh(`mkdir -p ${WORKTREE}`)
+      } catch (error) {
+        await sandbox.kill()
+        throw error
+      }
+
+      return {
+        worktreePath: WORKTREE,
+        sandboxId: sandbox.id,
+
+        async exec(command, opts = {}): Promise<ExecResult> {
+          let script = command
+          if (opts.stdin !== undefined) {
+            // Write stdin to a file and redirect it into the command.
+            const path = `/tmp/sandcastle-stdin-${randomUUID()}`
+            await sandbox.files.write(path, opts.stdin)
+            script = `{ rm -f ${path}; ${command}\n} < ${path}`
+          }
+
+          // Stream every command. A streamed command stays connected while
+          // the agent works, and Sandcastle reads the agent's output by line.
+          let partial = ""
+          const { stdout, stderr, exitCode } = await sandbox.commands.run(
+            script,
+            {
+              cwd: opts.cwd ?? WORKTREE,
+              user: opts.sudo ? "root" : undefined,
+              timeoutMs: commandTimeoutMs,
+              onStdout: (data) => {
+                const lines = (partial + data).split("\n")
+                partial = lines.pop() ?? ""
+                for (const line of lines) opts.onLine?.(line)
+              },
+              onStderr: () => {},
+            },
+          )
+          if (partial) opts.onLine?.(partial)
+          return { stdout, stderr, exitCode }
+        },
+
+        async copyIn(hostPath, sandboxPath) {
+          if (!(await stat(hostPath)).isDirectory()) {
+            await sandbox.files.write(sandboxPath, await readFile(hostPath))
+            return
+          }
+          // Send a directory as a tar archive and unpack it in the sandbox.
+          const { stdout: archive } = await execFileAsync(
+            "tar",
+            ["-czf", "-", "-C", hostPath, "."],
+            { encoding: "buffer", maxBuffer: 1024 ** 3 },
+          )
+          const path = `/tmp/sandcastle-${randomUUID()}.tar.gz`
+          await sandbox.files.write(path, archive)
+          await sh(
+            `mkdir -p ${quote(sandboxPath)} && tar -xzf ${path} -C ${quote(sandboxPath)} && rm -f ${path}`,
+          )
+        },
+
+        async copyFileOut(sandboxPath, hostPath) {
+          await mkdir(dirname(hostPath), { recursive: true })
+          await writeFile(hostPath, await sandbox.files.read(sandboxPath))
+        },
+
+        async close() {
+          await sandbox.kill()
+        },
+      }
+    },
+  })
+}
+```
+
+`superserve()` takes the same options as [`Sandbox.create`](/sandbox/create), such as `fromTemplate`, `secrets`, `network`, and `metadata`, plus:
+
+| Option | Default | Description |
+| --- | --- | --- |
+| `env` | `{}` | Environment variables to set in every sandbox. |
+| `commandTimeoutMs` | 1 hour | Timeout for each command, including the agent run. |
+
+## Run Claude Code
+
+The `superserve/claude-code` template has Claude Code and `git` installed. Bind the secret to `ANTHROPIC_API_KEY`, and pass the agent and the prompt to `run()`:
+
+```typescript .sandcastle/main.ts
+import { claudeCode, run } from "@ai-hero/sandcastle"
+
+import { superserve } from "./superserve.ts"
+
+const result = await run({
+  agent: claudeCode("claude-sonnet-4-6"),
+  sandbox: superserve({
+    fromTemplate: "superserve/claude-code",
+    secrets: { ANTHROPIC_API_KEY: "anthropic-key" },
+  }),
+  prompt:
+    "Add fizzbuzz.py that prints FizzBuzz for 1 to 15. Run it with python3, then commit it.",
+})
+
+console.log(`Branch: ${result.branch}`)
+for (const { sha } of result.commits) console.log(`Commit: ${sha}`)
+```
+
+```bash
+node --env-file=.env .sandcastle/main.ts
+```
+
+```text
+[Agent] Started on branch sandcastle/20261114-171238-791749
+  tail -f .sandcastle/logs/main-sandcastle-20261114-171238-791749.log
+Branch: main
+Commit: 317b0e1fb331a7ca1f8df4356a8fab750e06216c
+```
+
+Sandcastle writes the agent's progress to the log file. Output from a run with `claude-sonnet-4-6` (trimmed):
+
+```text
+Sandcastle Run
+  Agent: claude-code
+  Sandbox: superserve
+  Max iterations: 1
+  Branch: sandcastle/20261114-171238-791749
+Iteration 1/1
+Setting up sandbox
+Setting up sandbox done (0.2s)
+Agent started
+Bash(python3 /home/user/workspace/fizzbuzz.py)
+Output looks correct. Now committing.
+Bash(git -C /home/user/workspace add fizzbuzz.py && git -C /home/user/workspace commit -m ...)
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.6s)
+Merging to main
+Merging to main done (0.0s)
+Reached max iterations (1).
+```
+
+The commit is now on your current branch, `main` in this run. Sandcastle sets the sandbox's git `user.name` and `user.email` from your repo, so the agent's commits have your identity.
+
+## Run Codex
+
+The `superserve/node-22` template has Node.js and `git`. Install Codex in a `sandbox.onSandboxReady` hook, which runs in the sandbox before the agent starts. Codex reads its key from `CODEX_API_KEY` when it runs in exec mode.
+
+First, add your OpenAI key to `.env` as `OPENAI_API_KEY`, and store it as a secret with the OpenAI provider:
+
+<CodeGroup>
+```typescript .sandcastle/create-openai-secret.ts
+import { Secret } from "@superserve/sdk"
+
+const value = process.env.OPENAI_API_KEY
+if (!value) throw new Error("Set OPENAI_API_KEY")
+
+await Secret.create({ name: "openai-key", value, provider: "openai" })
+```
+```python create_openai_secret.py
+import os
+
+from superserve import Secret
+
+Secret.create(name="openai-key", value=os.environ["OPENAI_API_KEY"], provider="openai")
+```
+</CodeGroup>
+
+Then bind the secret to `CODEX_API_KEY`:
+
+```typescript .sandcastle/codex.ts
+import { codex, run } from "@ai-hero/sandcastle"
+
+import { superserve } from "./superserve.ts"
+
+const result = await run({
+  agent: codex("gpt-5.5"),
+  sandbox: superserve({
+    fromTemplate: "superserve/node-22",
+    // Codex reads its API key from CODEX_API_KEY in exec mode.
+    secrets: { CODEX_API_KEY: "openai-key" },
+  }),
+  hooks: {
+    sandbox: {
+      onSandboxReady: [
+        { command: "npm install -g @openai/codex", timeoutMs: 300_000 },
+      ],
+    },
+  },
+  prompt:
+    "Add fizzbuzz.js, a Node.js version of fizzbuzz.py. Run it with node, then commit it.",
+})
+
+console.log(`Branch: ${result.branch}`)
+for (const { sha } of result.commits) console.log(`Commit: ${sha}`)
+```
+
+```bash
+node --env-file=.env .sandcastle/codex.ts
+```
+
+Output from a run with `gpt-5.5` (trimmed):
+
+```text
+Iteration 1/1
+Setting up sandbox
+  npm install -g @openai/codex
+Setting up sandbox done (5.8s)
+Agent started
+Bash(/bin/bash -lc "sed -n '1,200p' fizzbuzz.py")
+Bash(/bin/bash -lc 'node fizzbuzz.js')
+`node fizzbuzz.js` printed the expected 1-to-15 sequence ending in `FizzBuzz`. Since the file is new and untracked, I’m staging it directly and committing.
+Bash(/bin/bash -lc 'git add fizzbuzz.js && git commit -m "Add Node fizzbuzz implementation"')
+Agent stopped
+Syncing 1 commit to host
+Syncing 1 commit to host done (0.5s)
+Merging to main
+Merging to main done (0.0s)
+```
+
+To skip the install in every run, build a [template](/templates/overview) with Codex installed, and pass its name as `fromTemplate`.
+
+## Delete leftover sandboxes
+
+The provider deletes its sandbox when a run ends, also when the run fails. If the Node.js process stops before that, for example on `kill -9`, the sandbox stays. Find leftover sandboxes by their metadata tag and delete them:
+
+<CodeGroup>
+```typescript .sandcastle/cleanup.ts
+import { Sandbox } from "@superserve/sdk"
+
+// Delete sandboxes left behind by a run that did not finish.
+for (const { id } of await Sandbox.list({ metadata: { sandcastle: "true" } })) {
+  await Sandbox.killById(id)
+  console.log(`Deleted sandbox ${id}`)
+}
+```
+```python cleanup.py
+from superserve import Sandbox
+
+# Delete sandboxes left behind by a run that did not finish.
+for sandbox in Sandbox.list(metadata={"sandcastle": "true"}):
+    Sandbox.kill_by_id(sandbox.id)
+    print(f"Deleted sandbox {sandbox.id}")
+```
+</CodeGroup>
+
+```bash
+node --env-file=.env .sandcastle/cleanup.ts
+```
+
+```text
+Deleted sandbox 7e328006-0d3c-4727-9b7d-aec80252f7be
+```
+
+To clean up leftover sandboxes automatically, also pass `idleTimeoutSeconds` and `autoDeleteSeconds` to `superserve()`. A leftover sandbox then pauses when it goes idle, and Superserve deletes it after it stays paused for `autoDeleteSeconds`. See [Lifecycle](/sandbox/lifecycle) for these options, and [Metadata tags](/sandbox/metadata) for more about filters.
+
+## Good to know
+
+- Sandcastle is TypeScript only. The Python SDK can create the secrets and delete leftover sandboxes, but it can't run Sandcastle.
+- The provider supports `run()`. It does not support `interactive()`, because it does not implement `interactiveExec`.
+- Commands in the sandbox run as root. Claude Code refuses `--dangerously-skip-permissions` as root unless `IS_SANDBOX=1` is set, so the provider sets it in every sandbox.
+- Sandcastle copies the repo into the sandbox with `git bundle`, so the template must have `git`. Uncommitted changes and ignored files are not copied.
+- The agent's output reaches Sandcastle line by line while it runs. If the agent prints nothing for 10 minutes, Sandcastle stops the run. Change this with the `idleTimeoutSeconds` option of `run()`.
+- The provider writes the prompt and copied directories to temporary files in the sandbox's `/tmp`, and deletes them after use.
+- To limit what the agent can reach, pass [network rules](/sandbox/networking) as `network`. Allow the agent's API host, and any hosts that the `onSandboxReady` hooks need, such as the npm registry.
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Sandcastle" icon="github" href="https://github.com/mattpocock/sandcastle">
+    Agents, branch strategies, hooks, and the `run()` options.
+  </Card>
+  <Card title="Secrets" icon="key" href="/secrets/overview">
+    How secrets keep API keys out of the sandbox.
+  </Card>
+</CardGroup>
