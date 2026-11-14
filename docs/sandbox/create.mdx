@@ -33,6 +33,7 @@ const sandbox = await Sandbox.create({
   timeoutSeconds: 3600,
   metadata: { env: "prod", owner: "agent-7" },
   envVars: { LOG_LEVEL: "debug" },
+  // "openai-prod" must already exist, or create() fails with secret_not_found
   secrets: { OPENAI_API_KEY: "openai-prod" },
   network: {
     // the two IPs are the sandbox's DNS resolvers; deny-all blocks them too
@@ -50,6 +51,7 @@ sandbox = Sandbox.create(
     timeout_seconds=3600,
     metadata={"env": "prod", "owner": "agent-7"},
     env_vars={"LOG_LEVEL": "debug"},
+    # "openai-prod" must already exist, or create() fails with secret_not_found
     secrets={"OPENAI_API_KEY": "openai-prod"},
     network=NetworkConfig(
         # the two IPs are the sandbox's DNS resolvers; deny-all blocks them too
@@ -59,6 +61,8 @@ sandbox = Sandbox.create(
 )
 ```
 </CodeGroup>
+
+Each secret in `secrets` must already exist in your team. [Create the secret](/secrets/create) first: if it does not exist, `Sandbox.create()` raises a `ValidationError` with code `secret_not_found` (HTTP `400`) and no sandbox is created.
 
 <Note>
 Use **`secrets`** for credentials, not `envVars`. A secret binds an env var to a stored credential and attaches the real value to outbound requests — the real credential never enters the sandbox. See [Secrets](/secrets/overview).
