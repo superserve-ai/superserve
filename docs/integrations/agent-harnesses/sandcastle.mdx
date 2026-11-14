@@ -124,6 +124,9 @@ export const superserve = (
     async create({ env: sandboxEnv }): Promise<IsolatedSandboxHandle> {
       const sandbox = await Sandbox.create({
         name: `sandcastle-${randomUUID().slice(0, 8)}`,
+        // Pause after 10 minutes with no open command, for example when the
+        // host process stops. cleanup.ts deletes paused sandboxes.
+        idleTimeoutSeconds: 10 * 60,
         ...createOptions,
         metadata: { sandcastle: "true", ...createOptions.metadata },
         envVars: sandboxEnv,
@@ -216,6 +219,8 @@ export const superserve = (
 | --- | --- | --- |
 | `env` | `{}` | Environment variables to set in every sandbox. |
 | `commandTimeoutMs` | 1 hour | Timeout for each command, including the agent run. |
+
+The provider also sets [`idleTimeoutSeconds`](/sandbox/lifecycle#idle-timeout) to 10 minutes, unless you pass another value. A sandbox does not pause while a command runs in it, so the idle timeout pauses only a sandbox that no run uses.
 
 ## Run Claude Code
 
@@ -356,14 +361,19 @@ To skip the install in every run, build a [template](/templates/overview) with C
 
 ## Delete leftover sandboxes
 
-The provider deletes its sandbox when a run ends, also when the run fails. If the Node.js process stops before that, for example on `kill -9`, the sandbox stays. Find leftover sandboxes by their metadata tag and delete them:
+The provider deletes its sandbox when a run ends, also when the run fails. If the Node.js process stops before that, for example on `kill -9`, the sandbox stays. With no command running, the leftover sandbox pauses after the idle timeout. A sandbox that a run uses stays active, also when the run is in another process or on a teammate's machine. To delete only leftover sandboxes, delete the tagged sandboxes that are paused:
 
 <CodeGroup>
 ```typescript .sandcastle/cleanup.ts
 import { Sandbox } from "@superserve/sdk"
 
-// Delete sandboxes left behind by a run that did not finish.
-for (const { id } of await Sandbox.list({ metadata: { sandcastle: "true" } })) {
+// A run in progress keeps its sandbox active. A sandbox left behind by a
+// stopped run pauses after the idle timeout, so delete only paused ones.
+const leftovers = await Sandbox.list({
+  metadata: { sandcastle: "true" },
+  status: "paused",
+})
+for (const { id } of leftovers) {
   await Sandbox.killById(id)
   console.log(`Deleted sandbox ${id}`)
 }
@@ -371,8 +381,9 @@ for (const { id } of await Sandbox.list({ metadata: { sandcastle: "true" } })) {
 ```python cleanup.py
 from superserve import Sandbox
 
-# Delete sandboxes left behind by a run that did not finish.
-for sandbox in Sandbox.list(metadata={"sandcastle": "true"}):
+# A run in progress keeps its sandbox active. A sandbox left behind by a
+# stopped run pauses after the idle timeout, so delete only paused ones.
+for sandbox in Sandbox.list(metadata={"sandcastle": "true"}, status="paused"):
     Sandbox.kill_by_id(sandbox.id)
     print(f"Deleted sandbox {sandbox.id}")
 ```
@@ -386,7 +397,7 @@ node --env-file=.env .sandcastle/cleanup.ts
 Deleted sandbox 7e328006-0d3c-4727-9b7d-aec80252f7be
 ```
 
-To clean up leftover sandboxes automatically, also pass `idleTimeoutSeconds` and `autoDeleteSeconds` to `superserve()`. A leftover sandbox then pauses when it goes idle, and Superserve deletes it after it stays paused for `autoDeleteSeconds`. See [Lifecycle](/sandbox/lifecycle) for these options, and [Metadata tags](/sandbox/metadata) for more about filters.
+To delete leftover sandboxes automatically, also pass `autoDeleteSeconds` to `superserve()`. Superserve then deletes a sandbox after it stays paused for that long. See [Lifecycle](/sandbox/lifecycle) for these options, and [Metadata tags](/sandbox/metadata) for more about filters.
 
 ## Good to know
 
