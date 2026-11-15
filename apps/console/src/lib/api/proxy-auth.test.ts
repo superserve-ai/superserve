@@ -353,6 +353,85 @@ describe("proxy-auth cell targeting", () => {
     )
   })
 
+  it("refreshes a stale directory before caching the selected team", async () => {
+    const user = { id: "stale-directory-selected-team-user" }
+    activeTeamCookie = "use:team-new"
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({
+        memberships: [{ teamId: "team-old", region: "use" }],
+        degradedRegions: [],
+      })
+      .mockResolvedValueOnce({
+        memberships: [
+          { teamId: "team-old", region: "use" },
+          { teamId: "team-new", region: "use" },
+        ],
+        degradedRegions: [],
+      })
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-new"),
+      team: { teamId: "team-new", region: "use" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      1,
+      user.id,
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      2,
+      user.id,
+      { maxAgeMs: 0 },
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
+      memberships: [{ teamId: "team-old", region: "use" }],
+      degradedRegions: [],
+    })
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-new"),
+      team: { teamId: "team-new", region: "use" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+  })
+
+  it("uses the deterministic fallback when a fresh directory lacks the selected team", async () => {
+    const user = { id: "fresh-directory-removed-team-user" }
+    activeTeamCookie = "use:removed-team"
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
+      memberships: [
+        { teamId: "team-b", region: "use" },
+        { teamId: "team-a", region: "use" },
+      ],
+      degradedRegions: [],
+    })
+    vi.mocked(provisionTeam).mockClear()
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-a"),
+      team: { teamId: "team-a", region: "use" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      2,
+      user.id,
+      { maxAgeMs: 0 },
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("reads the directory once when no team is selected", async () => {
+    const user = { id: "no-selection-single-directory-read-user" }
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "usw" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledExactlyOnceWith(
+      user.id,
+    )
+  })
+
   it("resolves the proxy upstream to the team's home cell API", async () => {
     expect(await getApiBaseUrlForUser(user as never)).toBe(
       "https://api-usw.test",

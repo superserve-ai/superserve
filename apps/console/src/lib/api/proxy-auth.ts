@@ -104,6 +104,22 @@ async function getTeamForUser(
     userId,
     await listTeamMembershipsForUserDetailed(userId),
   )
+  // The route handler does not share server actions' module caches, so a team
+  // created or joined elsewhere may be missing from this cached directory.
+  // Re-read before falling back to a different team.
+  if (
+    selection &&
+    !directory.memberships.some(
+      (membership) =>
+        membership.teamId === selection.teamId &&
+        membership.region === selection.region,
+    )
+  ) {
+    directory = await completedMemberships(
+      userId,
+      await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+    )
+  }
   let memberships = directory.memberships
   if (googleUser && memberships.length === 0) {
     // A fresh, complete directory read is required before deciding this is a
