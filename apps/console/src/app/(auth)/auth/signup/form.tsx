@@ -26,6 +26,7 @@ import {
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
+import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
 import { RecaptchaScript } from "@/lib/recaptcha/script"
@@ -182,9 +183,9 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "email",
-          reason: "captcha_unavailable",
+          reason: "captcha_not_loaded",
         })
         setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
@@ -357,9 +358,9 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "google",
-          reason: "captcha_unavailable",
+          reason: "captcha_not_loaded",
           complete_google: isCompleteGoogleSignup,
         })
         setErrors({ form: BOT_CHECK_UNAVAILABLE })
@@ -373,7 +374,7 @@ export default function SignUpContent() {
         fingerprintDiagnostics,
       )
       if (!proof.success) {
-        posthog.capture(AUTH_EVENTS.SIGN_UP_FAILED, {
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
           method: "google",
           reason: proof.errorCode,
           complete_google: isCompleteGoogleSignup,

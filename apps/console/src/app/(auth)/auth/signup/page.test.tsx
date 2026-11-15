@@ -745,6 +745,35 @@ describe("SignUpPage", () => {
     ).toBeEnabled()
   })
 
+  it("keeps the proof error when recording the failure throws", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&reason=started_from_signin",
+    )
+    mockCapture.mockImplementation((event: string) => {
+      if (event === "auth_sign_up_failed") throw new Error("before_send failed")
+    })
+    mockBeginGoogleSignup.mockResolvedValue({
+      success: false,
+      error: "Signup verification failed.",
+      errorCode: "captcha_failed",
+    })
+    const { default: RecoverySignUpPage } = await import("./page")
+    render(<RecoverySignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    expect(
+      await screen.findByText(/Turn off any VPN or ad blocker for this site/),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Complete signup with Google/ }),
+    ).toBeEnabled()
+  })
+
   it("waits for a click when a link reports a reason the browser never hit", async () => {
     mockSearchParams = new URLSearchParams("complete_google=1&reason=expired")
     const { default: RecoverySignUpPage } = await import("./page")
@@ -1178,7 +1207,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     expect(mockSignUpWithEmail).not.toHaveBeenCalled()
     expect(mockCapture).toHaveBeenCalledExactlyOnceWith("auth_sign_up_failed", {
       method: "email",
-      reason: "captcha_unavailable",
+      reason: "captcha_not_loaded",
     })
   })
 
@@ -1205,9 +1234,69 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
     expect(mockCapture).toHaveBeenCalledExactlyOnceWith("auth_sign_up_failed", {
       method: "google",
-      reason: "captcha_unavailable",
+      reason: "captcha_not_loaded",
       complete_google: true,
     })
+  })
+
+  it("keeps the bot-check message when recording the failure throws", async () => {
+    mockCapture.mockImplementation((event: string) => {
+      if (event === "auth_sign_up_failed") throw new Error("before_send failed")
+    })
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute: () => Promise.reject(new Error("blocked by content blocker")),
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "Password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    expect(
+      await screen.findByText(/content or ad blocker/i),
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/Error creating account/)).toBeNull()
+    expect(screen.getByRole("button", { name: "Sign Up" })).toBeEnabled()
+  })
+
+  it("keeps the recovery bot-check message when recording the failure throws", async () => {
+    mockSearchParams = new URLSearchParams("complete_google=1")
+    mockCapture.mockImplementation((event: string) => {
+      if (event === "auth_sign_up_failed") throw new Error("before_send failed")
+    })
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute: () => Promise.reject(new Error("blocked by content blocker")),
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    expect(
+      await screen.findByText(/content or ad blocker/i),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("button", { name: /Complete signup with Google/ }),
+    ).toBeEnabled()
   })
 
   it("does not start OAuth when server-side Google verification fails", async () => {

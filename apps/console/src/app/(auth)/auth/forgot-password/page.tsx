@@ -13,6 +13,7 @@ import { Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
+import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { getRecaptchaToken, RECAPTCHA_SITE_KEY } from "@/lib/recaptcha/client"
 import { RecaptchaScript } from "@/lib/recaptcha/script"
@@ -41,8 +42,8 @@ function ForgotPasswordContent() {
     try {
       const recaptchaToken = await getRecaptchaToken("password_reset")
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        posthog.capture(AUTH_EVENTS.PASSWORD_RESET_FAILED, {
-          reason: "captcha_unavailable",
+        captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+          reason: "captcha_not_loaded",
         })
         setErrors({
           form: AUTH_MESSAGES.botCheckBlocked,
@@ -55,7 +56,7 @@ function ForgotPasswordContent() {
         invite ?? undefined,
       )
       if (!result.success) {
-        posthog.capture(AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+        captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_FAILED, {
           reason: result.errorCode,
         })
         setErrors({ form: result.error })
@@ -64,7 +65,7 @@ function ForgotPasswordContent() {
       posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
     } catch (err) {
-      posthog.capture(AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+      captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_FAILED, {
         reason: "request_error",
       })
       setErrors({

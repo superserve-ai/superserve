@@ -120,7 +120,7 @@ describe("ForgotPasswordPage", () => {
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
     expect(mockCapture).toHaveBeenCalledExactlyOnceWith(
       "auth_password_reset_failed",
-      { reason: "captcha_unavailable" },
+      { reason: "captcha_not_loaded" },
     )
   })
 
@@ -167,6 +167,58 @@ describe("ForgotPasswordPage", () => {
       "auth_password_reset_failed",
       { reason: "rate_limited" },
     )
+    await waitFor(() =>
+      expect(
+        screen.getByRole("button", { name: "Send reset link" }),
+      ).toHaveProperty("disabled", false),
+    )
+  })
+})
+
+describe("ForgotPasswordPage when recording a failure throws", () => {
+  beforeEach(() => {
+    recaptcha.siteKey = undefined
+    recaptcha.getToken.mockReset().mockResolvedValue(undefined)
+    mockSendPasswordResetEmail.mockReset()
+    mockCapture.mockReset().mockImplementation(() => {
+      throw new Error("before_send failed")
+    })
+    mockSearchParam.mockReset()
+  })
+
+  it.each([
+    {
+      path: "bot-check not loaded",
+      setup: () => {
+        recaptcha.siteKey = "site-key"
+      },
+      message: /Our bot check couldn't finish/,
+    },
+    {
+      path: "rate limited",
+      setup: () => {
+        mockSendPasswordResetEmail.mockResolvedValue({
+          success: false,
+          error: "Too many reset requests. Try again in a few minutes.",
+          errorCode: "rate_limited",
+        })
+      },
+      message: "Too many reset requests. Try again in a few minutes.",
+    },
+    {
+      path: "request error",
+      setup: () => {
+        mockSendPasswordResetEmail.mockRejectedValue(new Error("network"))
+      },
+      message: "We couldn't send the reset email. Try again in a minute.",
+    },
+  ])("still shows the $path message", async ({ setup, message }) => {
+    setup()
+
+    submit()
+
+    expect(await screen.findByText(message)).toBeTruthy()
+    expect(mockCapture).toHaveBeenCalledOnce()
     await waitFor(() =>
       expect(
         screen.getByRole("button", { name: "Send reset link" }),
