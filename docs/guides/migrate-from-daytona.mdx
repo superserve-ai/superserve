@@ -66,7 +66,7 @@ The main changes: a Daytona snapshot becomes a Superserve template, every sandbo
 | Idle timeout | `autoStopInterval` in minutes. Default 15. Stops the sandbox. | `idleTimeoutSeconds`. Off by default. Pauses the sandbox. |
 | Auto-delete | `autoDeleteInterval` in minutes after stop, or `ephemeral: true` | `autoDeleteSeconds` after pause. `0` deletes the sandbox when it pauses. |
 | Env vars and secrets | `envVars`, `secrets: { ENV_VAR: "secret-name" }` | `envVars` on create, `env` per command, `secrets: { ENV_VAR: "secret-name" }`. See [Secrets](/secrets/overview). |
-| Public URL | `sandbox.getPreviewLink(port)` returns `url` and `token` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Public URL | `sandbox.getPreviewLink(port)` returns `url` and `token` | `await sbx.publishPreviewPort(port, { access: "private" })`, then `sbx.getPreviewUrl(port)`. For the token, use `await sbx.getPreviewToken(port)` (send `token` in the returned `header`) or `await sbx.getSignedPreviewUrl(port)` for a browser. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
 | List and delete | `daytona.list({ labels })` / `sandbox.delete()` | `Sandbox.list({ metadata })` / `sbx.kill()` |
 
 </Tab>
@@ -86,7 +86,7 @@ The main changes: a Daytona snapshot becomes a Superserve template, every sandbo
 | Idle timeout | `auto_stop_interval` in minutes. Default 15. Stops the sandbox. | `idle_timeout_seconds`. Off by default. Pauses the sandbox. |
 | Auto-delete | `auto_delete_interval` in minutes after stop, or `ephemeral=True` | `auto_delete_seconds` after pause. `0` deletes the sandbox when it pauses. |
 | Env vars and secrets | `env_vars`, `secrets={"ENV_VAR": "secret-name"}` | `env_vars` on create, `env` per command, `secrets={"ENV_VAR": "secret-name"}`. See [Secrets](/secrets/overview). |
-| Public URL | `sandbox.get_preview_link(port)` returns `url` and `token` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Public URL | `sandbox.get_preview_link(port)` returns `url` and `token` | `sbx.publish_preview_port(port, access="private")`, then `sbx.get_preview_url(port)`. For the token, use `sbx.get_preview_token(port)` (send `token` in the returned `header`) or `sbx.get_signed_preview_url(port)` for a browser. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
 | List and delete | `daytona.list(ListSandboxesQuery(labels=))` / `sandbox.delete()` | `Sandbox.list(metadata=)` / `sbx.kill()` |
 
 </Tab>
@@ -115,7 +115,7 @@ const sandbox = await daytona.create({
   autoStopInterval: 10,
 })
 await sandbox.process.executeCommand("pytest")
-const { url } = await sandbox.getPreviewLink(8000)
+const { url, token } = await sandbox.getPreviewLink(8000)
 const fork = await sandbox.fork({ name: "fork" })
 ```
 
@@ -137,8 +137,9 @@ const sbx = await Sandbox.create({
   idleTimeoutSeconds: 600,
 })
 await sbx.commands.run("pytest")
-await sbx.publishPreviewPort(8000)
+await sbx.publishPreviewPort(8000, { access: "private" })
 const url = sbx.getPreviewUrl(8000)
+const { header, token } = await sbx.getPreviewToken(8000) // send as a header
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
@@ -167,7 +168,7 @@ sandbox = daytona.create(
     )
 )
 sandbox.process.exec("pytest")
-url = sandbox.get_preview_link(8000).url
+preview = sandbox.get_preview_link(8000)  # preview.url, preview.token
 fork = sandbox.fork(name="fork")
 ```
 
@@ -189,8 +190,9 @@ sbx = Sandbox.create(
     idle_timeout_seconds=600,
 )
 sbx.commands.run("pytest")
-sbx.publish_preview_port(8000)
+sbx.publish_preview_port(8000, access="private")
 url = sbx.get_preview_url(8000)
+credential = sbx.get_preview_token(8000)  # send credential.token in credential.header
 snap = sbx.snapshot()
 fork = Sandbox.create(name="fork", from_snapshot=snap)
 ```
@@ -209,6 +211,7 @@ import { Sandbox } from "@superserve/sdk"
 const SRC = "/home/daytona" // directory to copy from each Daytona sandbox
 const DST = "/home/user" // directory to copy into in Superserve
 const TEMPLATE = "superserve/base" // or the template you built from your Daytona snapshot
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
 
 const daytona = new Daytona()
 for await (const src of daytona.list({ states: [SandboxState.STARTED] })) {
@@ -227,8 +230,10 @@ for await (const src of daytona.list({ states: [SandboxState.STARTED] })) {
     fromTemplate: TEMPLATE,
     metadata: { ...src.labels, migrated_from: src.id },
   })
-  await dst.files.write("/tmp/state.tgz", tgz)
-  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`)
+  await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`, {
+    timeoutMs: TIMEOUT_MS,
+  })
   if (out.exitCode !== 0) {
     console.error(`${src.id}: copy failed: ${out.stderr}`)
     process.exitCode = 1
@@ -247,6 +252,7 @@ from superserve import Sandbox
 SRC = "/home/daytona"  # directory to copy from each Daytona sandbox
 DST = "/home/user"  # directory to copy into in Superserve
 TEMPLATE = "superserve/base"  # or the template you built from your Daytona snapshot
+TIMEOUT_SECONDS = 10 * 60  # limit for each upload and extract
 failed = False
 
 daytona = Daytona()
@@ -263,8 +269,10 @@ for src in daytona.list(ListSandboxesQuery(states=[SandboxState.STARTED])):
         from_template=TEMPLATE,
         metadata={**src.labels, "migrated_from": src.id},
     )
-    dst.files.write("/tmp/state.tgz", tgz)
-    out = dst.commands.run(f"tar xzf /tmp/state.tgz -C {DST}")
+    dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
+    out = dst.commands.run(
+        f"tar xzf /tmp/state.tgz -C {DST}", timeout_seconds=TIMEOUT_SECONDS
+    )
     if out.exit_code != 0:
         print(f"{src.id}: copy failed: {out.stderr}", file=sys.stderr)
         failed = True
@@ -274,6 +282,8 @@ for src in daytona.list(ListSandboxesQuery(states=[SandboxState.STARTED])):
 sys.exit(1 if failed else 0)
 ```
 </CodeGroup>
+
+Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS` / `TIMEOUT_SECONDS`.
 
 The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
 
@@ -330,8 +340,11 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
    - fs.uploadFile(data, path) / fs.downloadFile(path) -> files.write(path, data) / files.read(path)
    - sandbox.createSnapshot(name) or sandbox.fork() -> snapshot() + Sandbox.create({name, fromSnapshot})
    - stop() / start() -> pause() / resume(). daytona.get(id) -> Sandbox.connect(id).
-   - getPreviewLink(port) -> publishPreviewPort(port), then getPreviewUrl(port). New sandboxes route
-     only published ports. Ports must be 1024 to 65535. Remove the preview token header.
+   - getPreviewLink(port) -> publishPreviewPort(port, {access: "private"}), then getPreviewUrl(port).
+     Keep the port private and send the Superserve preview credential: getPreviewToken(port) returns
+     {header, token} for machine clients; getSignedPreviewUrl(port) returns a URL for browsers.
+     Use access "public" only if the Daytona preview was public on purpose. New sandboxes route
+     only published ports. Ports must be 1024 to 65535.
    - Paths under /home/daytona -> /home/user.
    - daytona.list({labels}) / delete() -> Sandbox.list({metadata}) / kill().
    - Python: use snake_case (from_template, idle_timeout_seconds, env_vars, from_snapshot).
@@ -362,5 +375,5 @@ The API mapping and the migration script are in the **Human** tab.
 | Commands | `commands.run` returns `stdout` and `stderr` separately and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. |
 | Resources | Set `vcpu` and `memoryMib` on the template, not on the sandbox. Memory is in MiB, not GiB. |
 | Home directory | Daytona sandboxes use `/home/daytona`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
-| Preview ports | New sandboxes route only published ports. Call `publishPreviewPort` before you use a preview URL. Serve on a port from 1024 to 65535. |
+| Preview ports | New sandboxes route only published ports, and a new port is public by default. Publish with `access: "private"` and send a preview token to keep a port protected. Serve on a port from 1024 to 65535. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
