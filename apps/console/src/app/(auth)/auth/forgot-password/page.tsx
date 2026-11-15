@@ -62,7 +62,7 @@ function ForgotPasswordContent() {
         setErrors({ form: result.error })
         return
       }
-      posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
+      captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
     } catch (err) {
       captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_FAILED, {

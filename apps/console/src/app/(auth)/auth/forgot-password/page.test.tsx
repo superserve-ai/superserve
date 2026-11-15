@@ -186,6 +186,16 @@ describe("ForgotPasswordPage when recording a failure throws", () => {
     mockSearchParam.mockReset()
   })
 
+  it("shows the sent state and records no failure after a successful reset", async () => {
+    mockSendPasswordResetEmail.mockResolvedValue({ success: true })
+
+    submit()
+
+    expect(await screen.findByText("Check Your Email")).toBeTruthy()
+    expect(mockCapture).toHaveBeenCalledOnce()
+    expect(mockCapture.mock.calls[0][0]).toBe("auth_password_reset_requested")
+  })
+
   it.each([
     {
       path: "bot-check not loaded",
