@@ -1,9 +1,10 @@
-// Sandbox benchmark results from ComputeSDK, as one bar chart per benchmark.
+// Sandbox benchmark results from ComputeSDK, one head-to-head card per
+// benchmark.
 //
 // Renders at once from the last good data (a browser cache, else the copy
 // bundled below), then fetches fresh values from the Superserve website
 // endpoint, which caches the ComputeSDK results for 12 hours. If the refresh
-// fails, the charts keep the last good data. A benchmark without a result
+// fails, the cards keep the last good data. A benchmark without a result
 // for both providers is left out. Styles are in docs/style.css (.ss-bench).
 //
 // Mintlify loads snippets as client components and supports named exports
@@ -30,10 +31,34 @@ export const BenchmarkComparison = ({
 
   // Times are in milliseconds; scores are out of 100.
   const CHARTS = [
-    { key: "tti", title: "Time to interactive", unit: "ms" },
-    { key: "dax", title: "Clone, install, typecheck", unit: "ms" },
-    { key: "snapshot", title: "Snapshot and restore", unit: "score" },
-    { key: "pause", title: "Pause and resume", unit: "score" },
+    {
+      key: "tti",
+      title: "Time to interactive",
+      description: "Sandbox start to first command",
+      unit: "ms",
+      better: "lower",
+    },
+    {
+      key: "dax",
+      title: "Clone, install, typecheck",
+      description: "Total workload time",
+      unit: "ms",
+      better: "lower",
+    },
+    {
+      key: "snapshot",
+      title: "Snapshot and restore",
+      description: "Score out of 100",
+      unit: "score",
+      better: "higher",
+    },
+    {
+      key: "pause",
+      title: "Pause and resume",
+      description: "Score out of 100",
+      unit: "score",
+      better: "higher",
+    },
   ]
 
   const isUsable = (data) =>
@@ -86,26 +111,38 @@ export const BenchmarkComparison = ({
     // oxlint-disable-next-line react-hooks/exhaustive-deps
   }, [])
 
-  // Rounds up to 1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8 times a power of ten.
-  const niceCeil = (value) => {
-    const power = 10 ** Math.floor(Math.log10(value))
-    const step = [1, 1.2, 1.5, 2, 2.5, 3, 4, 5, 6, 8, 10].find(
-      (s) => s * power >= value,
-    )
-    return step * power
-  }
-
-  const seconds = (ms) => ms / 1000
+  // Under 1 s in milliseconds (446ms), else seconds (1.07s). Scores: 95.4.
   const formatValue = (unit, value) => {
     if (unit === "score") return value.toFixed(1)
-    const s = seconds(value)
-    return `${s < 10 ? s.toFixed(2) : s.toFixed(1)} s`
+    if (value < 1000) return `${Math.round(value)}ms`
+    return `${(value / 1000).toFixed(2)}s`
   }
-  const formatTick = (unit, value) =>
-    unit === "score" ? String(value) : `${Number(seconds(value).toFixed(2))} s`
+
+  // Screen reader text, for example "1.07 seconds" or "95.4 out of 100".
+  const spokenValue = (unit, value) => {
+    if (unit === "score") return `${value.toFixed(1)} out of 100`
+    if (value < 1000) return `${Math.round(value)} milliseconds`
+    return `${(value / 1000).toFixed(2)} seconds`
+  }
+
+  // The badge shows only when Superserve is ahead. Times compare as a ratio
+  // (other / Superserve). Scores compare as a ratio, or as a point gap when
+  // the other score is 0 or the ratio rounds to 1.00x.
+  const badgeFor = (chart, own, peer) => {
+    if (chart.better === "lower") {
+      if (!(own > 0 && own < peer)) return null
+      const ratio = (peer / own).toFixed(2)
+      return ratio === "1.00" ? null : `Superserve faster ${ratio}x`
+    }
+    if (!(own > peer)) return null
+    const points = `Superserve +${(own - peer).toFixed(1)} points`
+    if (peer === 0) return points
+    const ratio = (own / peer).toFixed(2)
+    return ratio === "1.00" ? points : `Superserve higher ${ratio}x`
+  }
 
   const hasValue = (key, provider) =>
-    typeof data.metrics[key]?.values?.[provider] === "number"
+    Number.isFinite(data.metrics[key]?.values?.[provider])
 
   const charts = CHARTS.filter(
     (chart) =>
@@ -120,38 +157,52 @@ export const BenchmarkComparison = ({
   })
 
   const Row = ({ own, name, unit, value, max }) => (
-    <div className={own ? "ss-bench-row ss-bench-own" : "ss-bench-row"}>
-      <div className="ss-bench-name">
-        <i className={own ? "ss-bench-dot ss-bench-dot-own" : "ss-bench-dot"} />
+    <li className={own ? "ss-bench-row ss-bench-own" : "ss-bench-row"}>
+      <span className="ss-bench-sr">
+        {name}: {spokenValue(unit, value)}
+      </span>
+      <span className="ss-bench-name" aria-hidden="true">
+        <i className="ss-bench-dot" />
         {name}
-      </div>
-      <div className="ss-bench-track">
-        <div
-          className={own ? "ss-bench-bar ss-bench-bar-own" : "ss-bench-bar"}
-          style={{ width: `${Math.max((value / max) * 100, 0.5)}%` }}
+      </span>
+      <span className="ss-bench-track" aria-hidden="true">
+        <span
+          className="ss-bench-bar"
+          style={{ width: `${max > 0 ? (value / max) * 100 : 0}%` }}
         />
-      </div>
-      <div className="ss-bench-val">{formatValue(unit, value)}</div>
-    </div>
+      </span>
+      <span className="ss-bench-val" aria-hidden="true">
+        {formatValue(unit, value)}
+      </span>
+    </li>
   )
 
   return (
     <>
       <div className="ss-bench not-prose">
-        <div className="ss-bench-cards">
-          {charts.map((chart) => {
-            const own = data.metrics[chart.key].values.superserve
-            const peer = data.metrics[chart.key].values[compare]
-            const max =
-              chart.unit === "score"
-                ? 100
-                : niceCeil(seconds(Math.max(own, peer)) * 1.1) * 1000
-            return (
-              <div className="ss-bench-card" key={chart.key}>
-                <div className="ss-bench-title">
-                  <span className="ss-bench-chev">&gt;</span>
-                  {chart.title}
-                </div>
+        {charts.map((chart) => {
+          const own = data.metrics[chart.key].values.superserve
+          const peer = data.metrics[chart.key].values[compare]
+          const max = Math.max(own, peer)
+          const badge = badgeFor(chart, own, peer)
+          return (
+            <figure className="ss-bench-card" key={chart.key}>
+              <figcaption className="ss-bench-head">
+                <span className="ss-bench-heading">
+                  <strong className="ss-bench-title">{chart.title}</strong>
+                  <span className="ss-bench-desc">
+                    {chart.description} · {chart.better} is better
+                  </span>
+                </span>
+                {badge && <span className="ss-bench-badge">{badge}</span>}
+              </figcaption>
+              <ul className="ss-bench-rows">
+                <Row
+                  name={compareName}
+                  unit={chart.unit}
+                  value={peer}
+                  max={max}
+                />
                 <Row
                   own
                   name="Superserve"
@@ -159,29 +210,15 @@ export const BenchmarkComparison = ({
                   value={own}
                   max={max}
                 />
-                <Row
-                  name={compareName}
-                  unit={chart.unit}
-                  value={peer}
-                  max={max}
-                />
-                <div className="ss-bench-axis">
-                  <span />
-                  <div className="ss-bench-ticks">
-                    <span>{formatTick(chart.unit, 0)}</span>
-                    <span>{formatTick(chart.unit, max / 2)}</span>
-                    <span>{formatTick(chart.unit, max)}</span>
-                  </div>
-                  <span />
-                </div>
-              </div>
-            )
-          })}
-        </div>
+              </ul>
+            </figure>
+          )
+        })}
       </div>
       <p>
         Source: <a href={RATINGS_URL}>ComputeSDK benchmarks</a>, updated{" "}
-        {updated}.
+        {updated}. Times are from the latest run. Scores are out of 100 and
+        cover the last 7 days.
       </p>
     </>
   )
