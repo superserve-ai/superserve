@@ -1413,13 +1413,13 @@ describe("SignUpPage with reCAPTCHA configured", () => {
     render(<ConfiguredSignUpPage />)
 
     await user.type(
-      await screen.findByPlaceholderText("Full Name"),
+      await screen.findByPlaceholderText("Full name"),
       "Test User",
     )
     await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
     await user.type(screen.getByPlaceholderText("Password"), "Password123")
     await user.type(
-      screen.getByPlaceholderText("Confirm Password"),
+      screen.getByPlaceholderText("Confirm password"),
       "Password123",
     )
     await user.click(screen.getByRole("button", { name: "Sign Up" }))
