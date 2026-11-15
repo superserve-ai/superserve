@@ -126,8 +126,8 @@ export const BenchmarkComparison = ({
   }
 
   // The badge shows only when Superserve is ahead. Times compare as a ratio
-  // (other / Superserve). Scores compare as a ratio, or as a point gap when
-  // the other score is 0 or the ratio rounds to 1.00x.
+  // (other / Superserve); scores compare as a point gap. A ratio that rounds
+  // to 1.00x or a gap that rounds to 0.0 shows no badge.
   const badgeFor = (chart, own, peer) => {
     if (chart.better === "lower") {
       if (!(own > 0 && own < peer)) return null
@@ -135,10 +135,8 @@ export const BenchmarkComparison = ({
       return ratio === "1.00" ? null : `Superserve faster ${ratio}x`
     }
     if (!(own > peer)) return null
-    const points = `Superserve +${(own - peer).toFixed(1)} points`
-    if (peer === 0) return points
-    const ratio = (own / peer).toFixed(2)
-    return ratio === "1.00" ? points : `Superserve higher ${ratio}x`
+    const gap = (own - peer).toFixed(1)
+    return gap === "0.0" ? null : `Superserve +${gap} points`
   }
 
   const hasValue = (key, provider) =>
@@ -183,7 +181,8 @@ export const BenchmarkComparison = ({
         {charts.map((chart) => {
           const own = data.metrics[chart.key].values.superserve
           const peer = data.metrics[chart.key].values[compare]
-          const max = Math.max(own, peer)
+          // Scores use a fixed 0-100 scale; times scale to the larger value.
+          const max = chart.unit === "score" ? 100 : Math.max(own, peer)
           const badge = badgeFor(chart, own, peer)
           return (
             <figure className="ss-bench-card" key={chart.key}>
