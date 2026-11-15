@@ -11,6 +11,8 @@ Modal Sandboxes and Superserve sandboxes do the same job: run untrusted code in 
 
 ## How Superserve compares
 
+Clone, install, typecheck: **Lower is better.** Snapshot and restore: **Higher is better.** Pause and resume: **Higher is better.** Times are from the latest benchmark run; scores cover the last 7 days.
+
 <BenchmarkComparison compare="modal" compareName="Modal" />
 
 ## Ready to switch
@@ -24,7 +26,6 @@ Pick how you want to migrate. Do it yourself step by step, or give the prompt to
 **Before you start**
 
 - **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
-- **Keep Modal installed.** You remove it only after the cutover, in step 6.
 </Info>
 
 <Steps>
@@ -48,8 +49,6 @@ export SUPERSERVE_API_KEY=ss_live_...
 <Step title="Map the API">
 
 The main changes: you build your Modal image into a template once, every sandbox needs a `name` instead of an app, commands are shell strings instead of argument lists, and a timeout pauses the sandbox instead of terminating it.
-
-Python is the main Modal SDK. Modal's JavaScript SDK (`modal` on npm) also covers sandboxes, but some features are Python-only. The TypeScript table notes where.
 
 <Tabs>
 <Tab title="Python">
@@ -361,5 +360,5 @@ The API mapping and the migration script are in the **Human** tab.
 | Images | Build your image into a template once with `Template.create`. Every sandbox then starts from the built template. Set `vcpu` and `memory_mib` on the template. |
 | Grouping | Group sandboxes with `metadata` and filter `Sandbox.list` by it. |
 | Secrets | A Modal secret puts the real value in the environment. A Superserve secret keeps the real value out of the sandbox: code sees a stand-in value, and Superserve attaches the real value to outbound requests. Use `envVars` for values that are not credentials. |
-| Preview ports | Modal opens tunnels for the ports you list at create time. Superserve publishes ports on a running sandbox. Call `publishPreviewPort` before you use a preview URL. Serve on a port from 1024 to 65535. |
+| Preview ports | Modal opens tunnels for the ports you list at create time. Superserve publishes ports on a running sandbox. Call `publishPreviewPort` before you use a preview URL. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
