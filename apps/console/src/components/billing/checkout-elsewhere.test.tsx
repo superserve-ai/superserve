@@ -415,6 +415,34 @@ describe("CheckoutElsewhere", () => {
     expect(mocks.assign).not.toHaveBeenCalled()
   })
 
+  it("disables retrying a lookup error while another team is opening", async () => {
+    const switching = deferred<void>()
+    mocks.lookup.mockRejectedValue(new Error("Unavailable"))
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [{ id: "another-team", name: "Another team", region: "use" }],
+    })
+    mocks.setActiveTeam.mockReturnValue(switching.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    const retry = await screen.findByRole("button", { name: "Try again" })
+    const openTeam = await screen.findByRole("button", { name: "Open team" })
+    act(() => {
+      fireEvent.click(openTeam)
+      fireEvent.click(retry)
+    })
+    expect(retry).toBeDisabled()
+    fireEvent.click(retry)
+    expect(mocks.lookup).toHaveBeenCalledExactlyOnceWith(locator)
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith(
+      "another-team",
+      "use",
+    )
+    expect(mocks.assign).not.toHaveBeenCalled()
+    await act(async () => switching.resolve())
+    expect(mocks.assign).toHaveBeenCalledExactlyOnceWith("/sandboxes")
+  })
+
   it("re-queries after a lookup error", async () => {
     mocks.lookup
       .mockRejectedValueOnce(new Error("Unavailable"))

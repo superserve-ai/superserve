@@ -143,7 +143,14 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
           </Button>
         )}
         {result.kind === "error" && (
-          <Button size="sm" onClick={() => setAttempt((value) => value + 1)}>
+          <Button
+            size="sm"
+            disabled={busy}
+            onClick={() => {
+              if (target.current.busy) return
+              setAttempt((value) => value + 1)
+            }}
+          >
             Try again
           </Button>
         )}
