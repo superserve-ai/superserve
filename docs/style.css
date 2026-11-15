@@ -87,6 +87,10 @@ html.dark .ss-bench {
   color: var(--ss-bench-muted);
   font-size: 12px;
 }
+.ss-bench-desc strong {
+  color: var(--ss-bench-fg);
+  font-weight: 600;
+}
 .ss-bench-badge {
   padding: 2px 6px;
   border-radius: 6px;
