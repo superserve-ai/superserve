@@ -259,7 +259,9 @@ describe("return from Stripe's Back link", () => {
       screen.getByRole("heading", { name: "You left checkout" }),
     ).toBeVisible()
     expect(
-      screen.getByText(/To choose another plan, cancel checkout/),
+      screen.getByText(
+        /To pay for Pro or choose another plan, cancel checkout, then choose your plan again/,
+      ),
     ).toBeVisible()
     await settled(1)
     expect(
@@ -320,15 +322,19 @@ describe("return from Stripe's Back link", () => {
     await waitFor(() => expect(assign).toHaveBeenCalledWith(again))
   })
 
-  it("keeps the payment wait text once the customer checks", async () => {
+  it("keeps the left-checkout text when a check finds the payment open", async () => {
+    // The backend answers payment_confirmation_pending for an open, unpaid
+    // checkout and gives no URL, so the check cannot reopen it.
     render(<PlanSelection initial={pending} billingReturn="cancel" />)
     await settled(1)
     fireEvent.click(checkButton())
+    await settled(2)
+    expect(recoverProPayment).toHaveBeenLastCalledWith("use:team", false)
+    expect(assign).not.toHaveBeenCalled()
     expect(
-      await screen.findByRole("heading", {
-        name: "We’re checking your payment",
-      }),
+      screen.getByRole("heading", { name: "You left checkout" }),
     ).toBeVisible()
+    expect(screen.queryByText(/go back to checkout/)).not.toBeInTheDocument()
   })
 
   it("keeps today's wait for a return that is not a cancel", () => {

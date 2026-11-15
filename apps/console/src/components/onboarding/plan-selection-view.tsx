@@ -297,7 +297,7 @@ export function PlanSelectionView(props: PlanSelectionViewProps) {
           >
             <output className="text-muted-foreground text-sm leading-relaxed">
               {leftCheckout
-                ? "To choose another plan, cancel checkout. To pay for Pro, check your payment status to go back to checkout."
+                ? "To pay for Pro or choose another plan, cancel checkout, then choose your plan again. If you finished paying in another tab, check your payment status."
                 : "You won’t be asked to pay again while this payment is being checked. To change plans, we first need to confirm that your previous payment cannot complete."}
             </output>
             <div className="mt-6 flex flex-wrap gap-3">

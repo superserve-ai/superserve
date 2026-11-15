@@ -378,10 +378,10 @@ export function PlanSelection({
             )
         })
       }
-      onCheckPayment={() => {
-        setLeftCheckout(false)
-        void checkPayment(false, true)
-      }}
+      // The customer still left checkout while the payment is pending, so a
+      // check keeps that text. A check cannot reopen that checkout: recover
+      // returns no URL for an open, unpaid checkout.
+      onCheckPayment={() => void checkPayment(false, true)}
       onCancelPayment={() => {
         setLeftCheckout(false)
         void checkPayment(true, true)
