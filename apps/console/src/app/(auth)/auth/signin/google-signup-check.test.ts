@@ -35,6 +35,7 @@ vi.mock("@/lib/recaptcha/client", () => ({
 import {
   GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
   GOOGLE_SIGNUP_PROOF_DEADLINE_MS,
+  GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS,
   googleSignupAttemptForSignIn,
   prefetchGoogleSignupCheck,
 } from "./google-signup-check"
@@ -215,7 +216,7 @@ describe("googleSignupAttemptForSignIn", () => {
       )
       mocks.getRecaptchaToken.mockReturnValue(new Promise(() => {}))
       const result = googleSignupAttemptForSignIn()
-      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS)
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS)
       await expect(result).resolves.toBeUndefined()
       answer(true)
       await vi.advanceTimersByTimeAsync(0)
@@ -231,7 +232,11 @@ describe("googleSignupAttemptForSignIn", () => {
       })
       mocks.getRecaptchaToken.mockReturnValue(new Promise(() => {}))
       // Shorter than the Turnstile budget, so the check is what cancels it.
-      const result = googleSignupAttemptForSignIn(1_000)
+      const result = googleSignupAttemptForSignIn(
+        1_000,
+        GOOGLE_SIGNUP_PROOF_DEADLINE_MS,
+        1_000,
+      )
       await vi.advanceTimersByTimeAsync(999)
       expect(signal?.aborted).toBe(false)
       await vi.advanceTimersByTimeAsync(1)
@@ -292,7 +297,7 @@ describe("googleSignupAttemptForSignIn", () => {
       await expect(result).resolves.toBe("attempt-1")
     })
 
-    it("gives up on a stalled reCAPTCHA at the deadline and asks for no proof", async () => {
+    it("gives up on a stalled reCAPTCHA at the reCAPTCHA deadline and asks for no proof", async () => {
       vi.useFakeTimers()
       mocks.getRecaptchaToken.mockReturnValue(new Promise(() => {}))
       let settled = false
@@ -300,9 +305,92 @@ describe("googleSignupAttemptForSignIn", () => {
         settled = true
         return id
       })
-      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS - 1)
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS - 1)
       expect(settled).toBe(false)
       await vi.advanceTimersByTimeAsync(1)
+      await expect(result).resolves.toBeUndefined()
+      expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
+    })
+
+    it("waits past the browser deadline for a reCAPTCHA token that is still on its way", async () => {
+      // The production case: on a slow connection the reCAPTCHA script and
+      // frame were still loading at the click, the token came after four
+      // seconds, and a new account went to the "Complete signup" page.
+      vi.useFakeTimers()
+      const slowToken = stall("token")
+      mocks.getRecaptchaToken.mockReturnValue(slowToken.promise)
+      const result = googleSignupAttemptForSignIn()
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS + 2_000)
+      expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
+      slowToken.finish()
+      await expect(result).resolves.toBe("attempt-1")
+      expect(mocks.beginGoogleSignup).toHaveBeenCalledExactlyOnceWith(
+        "token",
+        undefined,
+        capture,
+        diagnostics,
+        "signin",
+      )
+    })
+
+    it("gives a server call sent after a late token the time of one sent at the browser deadline", async () => {
+      vi.useFakeTimers()
+      const slowToken = stall("token")
+      const slowProof = stall({ success: true, signupAttemptId: "late" })
+      mocks.getRecaptchaToken.mockReturnValue(slowToken.promise)
+      mocks.beginGoogleSignup.mockReturnValue(slowProof.promise)
+      let settled = false
+      const result = googleSignupAttemptForSignIn().then((id) => {
+        settled = true
+        return id
+      })
+      const sentAt = GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS - 1_000
+      await vi.advanceTimersByTimeAsync(sentAt)
+      slowToken.finish()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.beginGoogleSignup).toHaveBeenCalledTimes(1)
+      const serverTime =
+        GOOGLE_SIGNUP_PROOF_DEADLINE_MS - GOOGLE_SIGNUP_CHECK_DEADLINE_MS
+      await vi.advanceTimersByTimeAsync(serverTime - 1)
+      expect(settled).toBe(false)
+      slowProof.finish()
+      await expect(result).resolves.toBe("late")
+    })
+
+    it("gives up on a stalled proof sent after a late token", async () => {
+      vi.useFakeTimers()
+      const slowToken = stall("token")
+      mocks.getRecaptchaToken.mockReturnValue(slowToken.promise)
+      mocks.beginGoogleSignup.mockReturnValue(new Promise(() => {}))
+      let settled = false
+      const result = googleSignupAttemptForSignIn().then((id) => {
+        settled = true
+        return id
+      })
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS - 1)
+      slowToken.finish()
+      const serverTime =
+        GOOGLE_SIGNUP_PROOF_DEADLINE_MS - GOOGLE_SIGNUP_CHECK_DEADLINE_MS
+      await vi.advanceTimersByTimeAsync(serverTime - 1)
+      expect(settled).toBe(false)
+      await vi.advanceTimersByTimeAsync(1)
+      await expect(result).resolves.toBeUndefined()
+    })
+
+    it("does not wait past the browser deadline once reCAPTCHA has answered without a token", async () => {
+      vi.useFakeTimers()
+      const noToken = stall(undefined)
+      mocks.getRecaptchaToken.mockReturnValue(noToken.promise)
+      let settled = false
+      const result = googleSignupAttemptForSignIn().then((id) => {
+        settled = true
+        return id
+      })
+      await vi.advanceTimersByTimeAsync(1_000)
+      expect(settled).toBe(false)
+      noToken.finish()
+      await vi.advanceTimersByTimeAsync(0)
+      expect(settled).toBe(true)
       await expect(result).resolves.toBeUndefined()
       expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
     })
@@ -388,7 +476,7 @@ describe("googleSignupAttemptForSignIn", () => {
       mocks.ensureCapture.mockReturnValue(slowCapture.promise)
       mocks.getRecaptchaToken.mockReturnValue(slowToken.promise)
       const result = googleSignupAttemptForSignIn()
-      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS)
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS)
       await expect(result).resolves.toBeUndefined()
       slowCapture.finish()
       slowToken.finish()
@@ -425,7 +513,7 @@ describe("googleSignupAttemptForSignIn", () => {
       const first = stall("token")
       mocks.getRecaptchaToken.mockReturnValueOnce(first.promise)
       const expired = googleSignupAttemptForSignIn()
-      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS)
+      await vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS)
       await expired
       const next = googleSignupAttemptForSignIn()
       first.finish()
@@ -445,6 +533,15 @@ describe("googleSignupAttemptForSignIn", () => {
       const proof = googleSignupAttemptForSignIn(250, 500)
       await vi.advanceTimersByTimeAsync(500)
       await expect(proof).resolves.toBeUndefined()
+
+      mocks.beginGoogleSignup.mockResolvedValue({
+        success: true,
+        signupAttemptId: "attempt-1",
+      })
+      mocks.getRecaptchaToken.mockReturnValue(new Promise(() => {}))
+      const token = googleSignupAttemptForSignIn(250, 500, 300)
+      await vi.advanceTimersByTimeAsync(300)
+      await expect(token).resolves.toBeUndefined()
     })
   })
 })

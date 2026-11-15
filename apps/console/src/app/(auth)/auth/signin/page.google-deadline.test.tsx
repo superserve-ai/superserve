@@ -96,11 +96,13 @@ vi.mock("@/lib/fingerprint/client", () => ({
 vi.mock("@/lib/recaptcha/client", () => ({
   RECAPTCHA_SITE_KEY: "site-key",
   getRecaptchaToken: (action: string) => mocks.getRecaptchaToken(action),
+  markRecaptchaScriptFailed: () => {},
 }))
 
 import {
   GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
   GOOGLE_SIGNUP_PROOF_DEADLINE_MS,
+  GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS,
 } from "./google-signup-check"
 import SignInPage from "./page"
 
@@ -139,7 +141,7 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
   const stalled = {
     reCAPTCHA: [
       () => mocks.getRecaptchaToken.mockReturnValue(new Promise(() => {})),
-      GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
+      GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS,
     ],
     "proof issuance": [
       () => mocks.beginGoogleSignup.mockReturnValue(new Promise(() => {})),
@@ -267,6 +269,37 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
     )
   })
 
+  it("keeps the sign-up attempt when the reCAPTCHA token arrives after the browser deadline", async () => {
+    // On a slow connection the reCAPTCHA script and frame were still loading
+    // at the click. The token came after four seconds, the page went to
+    // Google without it, and a new account went to the "Complete signup" page.
+    let finishToken: (value: string) => void = () => {}
+    mocks.getRecaptchaToken.mockReturnValue(
+      new Promise((resolve) => {
+        finishToken = resolve
+      }),
+    )
+    render(<SignInPage />)
+    await clickGoogle()
+    await act(() =>
+      vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS + 2_000),
+    )
+    expect(mocks.signInWithOAuth).not.toHaveBeenCalled()
+
+    await act(async () => {
+      finishToken("token")
+      await vi.advanceTimersByTimeAsync(0)
+    })
+
+    expect(mocks.signInWithOAuth).toHaveBeenCalledTimes(1)
+    expect(callbackOf(0).searchParams.get("signup_attempt_id")).toBe(
+      "attempt-1",
+    )
+    expect(callbackOf(0).searchParams.get("google_signin_intent")).toBe(
+      "signin-origin",
+    )
+  })
+
   it("never sends a proof call from a stalled reCAPTCHA after Google OAuth has started", async () => {
     let finishToken: (value: string) => void = () => {}
     mocks.getRecaptchaToken.mockReturnValue(
@@ -277,7 +310,7 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
     render(<SignInPage />)
     await clickGoogle()
     await act(() =>
-      vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_CHECK_DEADLINE_MS),
+      vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS),
     )
     expect(mocks.signInWithOAuth).toHaveBeenCalledTimes(1)
 
