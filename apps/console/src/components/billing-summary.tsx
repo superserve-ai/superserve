@@ -67,6 +67,17 @@ export function formatCurrency(value: number, currency = "USD"): string {
   }).format(value)
 }
 
+// A trial balance has sub-cent precision. A positive balance under half a
+// cent would round to $0.00 while sandboxes still run, so show it as <$0.01.
+export function formatCreditsRemaining(
+  value: number,
+  currency = "USD",
+): string {
+  return value > 0 && value < 0.005
+    ? `<${formatCurrency(0.01, currency)}`
+    : formatCurrency(value, currency)
+}
+
 export function formatDateTime(value: string): string {
   return new Date(value).toLocaleString("en-US", {
     month: "short",
@@ -225,6 +236,7 @@ export function BillingSummary({
   )
   const credits = billingCredits(summary)
   const estimate = getProjectedPeriodEndEstimate(summary)
+  const remaining = creditsRemaining(summary)
   const money = (value: number | null) =>
     value == null ? "Unavailable" : formatCurrency(value, currency)
 
@@ -275,7 +287,11 @@ export function BillingSummary({
           />
           <HeadlineFigure
             label="Credits left"
-            value={money(creditsRemaining(summary))}
+            value={
+              remaining == null
+                ? "Unavailable"
+                : formatCreditsRemaining(remaining, currency)
+            }
           />
         </dl>
       </div>

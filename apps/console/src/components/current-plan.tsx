@@ -6,6 +6,7 @@ import type { ReactNode } from "react"
 import {
   creditsRemaining,
   currencyCode,
+  formatCreditsRemaining,
   formatCurrency,
 } from "@/components/billing-summary"
 import { CornerBrackets } from "@/components/corner-brackets"
@@ -119,7 +120,7 @@ export function CurrentPlan({
         >
           {remaining == null
             ? "Unavailable"
-            : formatCurrency(remaining, currency)}
+            : formatCreditsRemaining(remaining, currency)}
         </p>
         <p className="text-sm text-muted">
           {creditNote(plan, remaining, currency)}
