@@ -62,6 +62,15 @@ const deferred = <T,>() => {
   })
   return { promise, resolve, reject }
 }
+const pageShowEvent = (persisted: boolean) => {
+  const event =
+    typeof PageTransitionEvent === "function"
+      ? new PageTransitionEvent("pageshow", { persisted })
+      : new Event("pageshow")
+  if (!("persisted" in event))
+    Object.defineProperty(event, "persisted", { value: persisted })
+  return event
+}
 
 beforeEach(() => {
   mocks.lookup.mockReset()
@@ -243,6 +252,79 @@ describe("CheckoutElsewhere", () => {
     expect(mocks.assign).not.toHaveBeenCalled()
     await act(async () => switching.resolve())
     expect(mocks.assign).toHaveBeenCalledExactlyOnceWith("/sandboxes")
+  })
+
+  it.each([
+    ["Switch to Example team", "team", returnPath],
+    ["Open team", "another-team", "/sandboxes"],
+  ])(
+    "refreshes teams and resets actions on a bfcache restore after %s succeeds",
+    async (action, teamId, destination) => {
+      const switching = deferred<void>()
+      const refreshed = deferred<CheckoutTeam>()
+      mocks.lookup
+        .mockResolvedValueOnce({ kind: "switch", team })
+        .mockReturnValue(refreshed.promise)
+      mocks.listTeams.mockResolvedValue({
+        activeTeamId: "open-team",
+        activeRegion: "use",
+        teams: [{ id: "another-team", name: "Another team", region: "use" }],
+      })
+      mocks.setActiveTeam.mockReturnValueOnce(switching.promise)
+      render(<CheckoutElsewhere locator={locator} />)
+      await screen.findByRole("button", { name: "Open team" })
+      fireEvent.click(screen.getByRole("button", { name: action }))
+      expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith(teamId, "use")
+      expect(mocks.assign).not.toHaveBeenCalled()
+      await act(async () => switching.resolve())
+      expect(mocks.assign).toHaveBeenCalledExactlyOnceWith(destination)
+      expect(
+        screen.getByRole("button", { name: "Switch to Example team" }),
+      ).toBeDisabled()
+      expect(
+        screen.getByRole("combobox", { name: "Team to open" }),
+      ).toBeDisabled()
+      expect(screen.getByRole("button", { name: "Open team" })).toBeDisabled()
+
+      act(() => {
+        window.dispatchEvent(pageShowEvent(true))
+      })
+      expect(mocks.lookup).toHaveBeenCalledTimes(2)
+      expect(mocks.lookup).toHaveBeenNthCalledWith(2, locator)
+      expect(screen.queryByRole("button")).toBeNull()
+      expect(
+        screen.queryByRole("combobox", { name: "Team to open" }),
+      ).toBeNull()
+      await act(async () => refreshed.resolve({ kind: "switch", team }))
+      expect(
+        await screen.findByRole("button", { name: "Open team" }),
+      ).toBeEnabled()
+      expect(
+        screen.getByRole("combobox", { name: "Team to open" }),
+      ).toBeEnabled()
+      expect(
+        screen.getByRole("button", { name: "Switch to Example team" }),
+      ).toBeEnabled()
+      expect(mocks.listTeams).toHaveBeenCalledTimes(2)
+      fireEvent.click(screen.getByRole("button", { name: action }))
+      expect(mocks.setActiveTeam).toHaveBeenCalledTimes(2)
+      expect(mocks.setActiveTeam).toHaveBeenNthCalledWith(2, teamId, "use")
+      await waitFor(() => expect(mocks.assign).toHaveBeenCalledTimes(2))
+      expect(mocks.assign).toHaveBeenNthCalledWith(2, destination)
+    },
+  )
+
+  it("does not refresh teams on a normal pageshow", async () => {
+    mocks.lookup.mockResolvedValue({ kind: "switch", team })
+    render(<CheckoutElsewhere locator={locator} />)
+    const button = await screen.findByRole("button", {
+      name: "Switch to Example team",
+    })
+    await act(async () => {
+      window.dispatchEvent(pageShowEvent(false))
+    })
+    expect(mocks.lookup).toHaveBeenCalledExactlyOnceWith(locator)
+    expect(button).toBeEnabled()
   })
 
   it("releases the lock after opening another team fails", async () => {

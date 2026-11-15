@@ -47,6 +47,15 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
     }
   }, [account, team, returnPath, attempt])
 
+  useEffect(() => {
+    const onPageShow = (event: PageTransitionEvent) => {
+      // A bfcache restore keeps pending state, so refresh teams and reset actions.
+      if (event.persisted) setAttempt((value) => value + 1)
+    }
+    window.addEventListener("pageshow", onPageShow)
+    return () => window.removeEventListener("pageshow", onPageShow)
+  }, [])
+
   const result = read?.path === returnPath ? read.result : undefined
   if (!result)
     return (
