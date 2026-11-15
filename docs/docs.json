@@ -1,6 +1,6 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "luma",
+  "theme": "sequoia",
   "name": "Superserve",
   "colors": {
     "primary": "#B2FAB4",
@@ -40,6 +40,10 @@
         "type": "github",
         "label": "GitHub",
         "href": "https://github.com/superserve-ai/superserve"
+      },
+      {
+        "label": "Log in",
+        "href": "https://console.superserve.ai/auth/signin/?utm_source=docs&utm_medium=navbar"
       }
     ],
     "primary": {
@@ -97,9 +101,9 @@
     }
   ],
   "navigation": {
-    "anchors": [
+    "tabs": [
       {
-        "anchor": "Documentation",
+        "tab": "Documentation",
         "icon": "book-open",
         "groups": [
           {
@@ -168,7 +172,101 @@
         ]
       },
       {
-        "anchor": "SDK Reference",
+        "tab": "Guides",
+        "icon": "puzzle-piece",
+        "groups": [
+          {
+            "group": "Use cases",
+            "pages": [
+              "guides/run-ci-jobs",
+              "guides/code-interpreter",
+              "guides/coding-agents",
+              "sandbox/desktop",
+              "sandbox/docker",
+              "guides/evals-and-rl",
+              "guides/headless-browser"
+            ]
+          },
+          {
+            "group": "Integrations",
+            "pages": [
+              "integrations/overview",
+              {
+                "group": "Coding agents",
+                "expanded": true,
+                "pages": [
+                  "integrations/coding-agents/claude",
+                  "integrations/coding-agents/codex",
+                  "integrations/coding-agents/kilocode",
+                  "integrations/coding-agents/opencode",
+                  "integrations/coding-agents/pi"
+                ]
+              },
+              {
+                "group": "Agent platforms",
+                "expanded": true,
+                "pages": [
+                  "integrations/agent-platforms/claude-managed-agents",
+                  "integrations/agent-platforms/cursor-cloud-agents",
+                  "integrations/agent-platforms/omnara",
+                  "integrations/agent-platforms/qm"
+                ]
+              },
+              {
+                "group": "Agent frameworks",
+                "expanded": true,
+                "pages": [
+                  "integrations/agent-harnesses/agno",
+                  "integrations/agent-harnesses/claude-agent-sdk",
+                  "integrations/agent-harnesses/crewai",
+                  "integrations/agent-harnesses/dspy",
+                  "integrations/agent-harnesses/flue",
+                  "integrations/agent-harnesses/google-adk",
+                  "integrations/agent-harnesses/langchain",
+                  "integrations/agent-harnesses/letta",
+                  "integrations/agent-harnesses/mastra",
+                  "integrations/agent-harnesses/openai-agents-sdk",
+                  "integrations/agent-harnesses/pydantic-ai",
+                  "integrations/agent-harnesses/vercel-ai-sdk"
+                ]
+              },
+              {
+                "group": "Personal agents",
+                "expanded": true,
+                "pages": [
+                  "integrations/personal-agents/hermes",
+                  "integrations/personal-agents/openclaw"
+                ]
+              },
+              {
+                "group": "Computer use models",
+                "expanded": true,
+                "pages": [
+                  "integrations/computer-use/claude",
+                  "integrations/computer-use/openai"
+                ]
+              },
+              {
+                "group": "Evaluation and RL frameworks",
+                "expanded": true,
+                "pages": [
+                  "integrations/evaluations/harbor",
+                  "integrations/reinforcement-learning/trl",
+                  "integrations/reinforcement-learning/nemo-gym",
+                  "integrations/evaluations/openenv"
+                ]
+              },
+              {
+                "group": "Developer tools",
+                "expanded": true,
+                "pages": ["integrations/dev-tools/crabbox"]
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "SDK",
         "icon": "code",
         "groups": [
           {
@@ -185,7 +283,7 @@
         ]
       },
       {
-        "anchor": "REST API",
+        "tab": "REST API",
         "icon": "server",
         "groups": [
           {
@@ -282,100 +380,6 @@
           }
         ],
         "openapi": "https://api.superserve.ai/openapi.yaml"
-      },
-      {
-        "anchor": "Guides",
-        "icon": "puzzle-piece",
-        "groups": [
-          {
-            "group": "Use cases",
-            "pages": [
-              "guides/run-ci-jobs",
-              "guides/code-interpreter",
-              "guides/coding-agents",
-              "sandbox/desktop",
-              "sandbox/docker",
-              "guides/evals-and-rl",
-              "guides/headless-browser"
-            ]
-          },
-          {
-            "group": "Integrations",
-            "pages": [
-              "integrations/overview",
-              {
-                "group": "Coding agents",
-                "expanded": true,
-                "pages": [
-                  "integrations/coding-agents/claude",
-                  "integrations/coding-agents/codex",
-                  "integrations/coding-agents/kilocode",
-                  "integrations/coding-agents/opencode",
-                  "integrations/coding-agents/pi"
-                ]
-              },
-              {
-                "group": "Agent platforms",
-                "expanded": true,
-                "pages": [
-                  "integrations/agent-platforms/claude-managed-agents",
-                  "integrations/agent-platforms/cursor-cloud-agents",
-                  "integrations/agent-platforms/omnara",
-                  "integrations/agent-platforms/qm"
-                ]
-              },
-              {
-                "group": "Agent frameworks",
-                "expanded": true,
-                "pages": [
-                  "integrations/agent-harnesses/agno",
-                  "integrations/agent-harnesses/claude-agent-sdk",
-                  "integrations/agent-harnesses/crewai",
-                  "integrations/agent-harnesses/dspy",
-                  "integrations/agent-harnesses/flue",
-                  "integrations/agent-harnesses/google-adk",
-                  "integrations/agent-harnesses/langchain",
-                  "integrations/agent-harnesses/letta",
-                  "integrations/agent-harnesses/mastra",
-                  "integrations/agent-harnesses/openai-agents-sdk",
-                  "integrations/agent-harnesses/pydantic-ai",
-                  "integrations/agent-harnesses/vercel-ai-sdk"
-                ]
-              },
-              {
-                "group": "Personal agents",
-                "expanded": true,
-                "pages": [
-                  "integrations/personal-agents/hermes",
-                  "integrations/personal-agents/openclaw"
-                ]
-              },
-              {
-                "group": "Computer use models",
-                "expanded": true,
-                "pages": [
-                  "integrations/computer-use/claude",
-                  "integrations/computer-use/openai"
-                ]
-              },
-              {
-                "group": "Evaluation and RL frameworks",
-                "expanded": true,
-                "pages": [
-                  "integrations/evaluations/harbor",
-                  "integrations/reinforcement-learning/trl",
-                  "integrations/reinforcement-learning/nemo-gym",
-                  "integrations/evaluations/openenv"
-                ]
-              },
-              {
-                "group": "Developer tools",
-                "expanded": true,
-                "pages": ["integrations/dev-tools/crabbox"]
-              }
-            ]
-          }
-        ]
       }
     ]
   },

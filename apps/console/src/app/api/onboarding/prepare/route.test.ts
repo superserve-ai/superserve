@@ -41,7 +41,7 @@ it("returns to recovery after an error without accepting a redirect destination"
         "https://console.test/api/onboarding/prepare/?next=https://evil.test",
       ),
     ),
-  ).rejects.toThrow("/onboarding/plan/?&setup_error=1")
+  ).rejects.toThrow("/onboarding/plan/?setup_error=1")
 })
 it("preserves authentication and Google proof recovery redirects", async () => {
   m.prepare.mockRejectedValue(
@@ -101,7 +101,7 @@ it("requires the authenticated account binding for a paid continuation", async (
         "https://console.test/api/onboarding/prepare/?next=%2Fbilling%2Fpro%2F",
       ),
     ),
-  ).rejects.toThrow("/onboarding/plan/?&setup_attempted=1")
+  ).rejects.toThrow("/onboarding/plan/?setup_attempted=1")
 })
 
 it("rejects conflicting checkout team locators before preparation", async () => {

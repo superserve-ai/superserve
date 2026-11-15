@@ -243,6 +243,40 @@ describe("observeFingerprintSignup", () => {
     )
   })
 
+  it("labels the observation with the page that ran the check", async () => {
+    process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          event_id: "event-1",
+          identification: { visitor_id: "visitor-1", visitor_found: true },
+        }),
+        { status: 200 },
+      ),
+    )
+
+    await observeFingerprintSignup({
+      eventId: "event-1",
+      signupMethod: "google",
+      entryPoint: "signin",
+      signupAttemptId: "attempt-1",
+    })
+    const task = vi.mocked(after).mock.calls[0]?.[0]
+    if (typeof task !== "function")
+      throw new Error("Expected an after callback")
+    await task()
+
+    expect(trackEvent).toHaveBeenCalledWith(
+      "auth_fingerprint_signup_observed",
+      expect.anything(),
+      expect.objectContaining({
+        signup_attempt_id: "attempt-1",
+        signup_method: "google",
+        entry_point: "signin",
+      }),
+    )
+  })
+
   it("attributes a verified email observation to the user created after lookup", async () => {
     process.env.FINGERPRINT_SECRET_API_KEY = "server-secret"
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
