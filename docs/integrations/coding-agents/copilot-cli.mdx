@@ -178,7 +178,10 @@ const jsonResult = await sandbox.commands.run(
   { timeoutMs: 600_000, onStderr: (data) => process.stderr.write(data) },
 )
 
-const events = jsonResult.stdout.trim().split("\n").map((line) => JSON.parse(line))
+const events = jsonResult.stdout
+  .split("\n")
+  .filter((line) => line.trim() !== "")
+  .map((line) => JSON.parse(line))
 if (jsonResult.exitCode !== 0) {
   const error = events.find((e) => e.type === "session.error")
   throw new Error(error?.data.message ?? jsonResult.stderr)
