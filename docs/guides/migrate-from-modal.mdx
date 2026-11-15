@@ -65,7 +65,8 @@ The main changes: you build your Modal image into a template once, every sandbox
 | Timeout | `timeout=` on create. Default 5 minutes. Terminates the sandbox. | `timeout_seconds=` on create or `sbx.update(timeout_seconds=)`. Pauses. |
 | Idle timeout | `idle_timeout=`. Terminates the sandbox. | `idle_timeout_seconds=`. Pauses. |
 | Env vars and secrets | `env={...}`, `secrets=[modal.Secret.from_name(...)]` | `env_vars={...}` on create, `env` per command, `secrets={"ENV_VAR": "secret-name"}` for API keys. See [Secrets](/secrets/overview). |
-| Public URL | `encrypted_ports=[port]` on create, then `sb.tunnels()[port].url` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Public URL | `encrypted_ports=[port]` on create, then `sb.tunnels()[port].url` | `sbx.publish_preview_port(port, access="public")`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Authenticated URL | `sb.create_connect_token(port=port)` returns `url` and `token` | `sbx.publish_preview_port(port, access="private")`, then `sbx.get_preview_url(port)`. For the token, use `sbx.get_preview_token(port)` (send `token` in the returned `header`) or `sbx.get_signed_preview_url(port)` for a browser. |
 | List and terminate | `modal.Sandbox.list(app_id=)` / `sb.terminate()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -85,7 +86,8 @@ The main changes: you build your Modal image into a template once, every sandbox
 | Timeout | `timeoutMs` on create. Default 5 minutes. Terminates the sandbox. | `timeoutSeconds` on create or `sbx.update({ timeoutSeconds })`. Pauses. |
 | Idle timeout | `idleTimeoutMs`. Terminates the sandbox. | `idleTimeoutSeconds`. Pauses. |
 | Env vars and secrets | `env`, `secrets: [await modal.secrets.fromName(...)]` | `envVars` on create, `env` per command, `secrets: { ENV_VAR: "secret-name" }` for API keys. See [Secrets](/secrets/overview). |
-| Public URL | `encryptedPorts: [port]` on create, then `(await sb.tunnels())[port].url` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Public URL | `encryptedPorts: [port]` on create, then `(await sb.tunnels())[port].url` | `await sbx.publishPreviewPort(port, { access: "public" })`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Authenticated URL | `await sb.createConnectToken({ port })` returns `url` and `token` | `await sbx.publishPreviewPort(port, { access: "private" })`, then `sbx.getPreviewUrl(port)`. For the token, use `await sbx.getPreviewToken(port)` (send `token` in the returned `header`) or `await sbx.getSignedPreviewUrl(port)` for a browser. |
 | List and terminate | `modal.sandboxes.list({ appId })` / `sb.terminate()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -136,7 +138,7 @@ sbx = Sandbox.create(
     env_vars={"MODE": "ci"},
 )
 sbx.commands.run("pytest")
-sbx.publish_preview_port(8000)
+sbx.publish_preview_port(8000, access="public")  # a Modal tunnel is public
 url = sbx.get_preview_url(8000)
 snap = sbx.snapshot()
 fork = Sandbox.create(name="fork", from_snapshot=snap)
@@ -180,7 +182,7 @@ const sbx = await Sandbox.create({
   envVars: { MODE: "ci" },
 })
 await sbx.commands.run("pytest")
-await sbx.publishPreviewPort(8000)
+await sbx.publishPreviewPort(8000, { access: "public" }) // a Modal tunnel is public
 const url = sbx.getPreviewUrl(8000)
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
@@ -203,6 +205,7 @@ APP = "my-app"  # the Modal app that owns your sandboxes
 SRC = "/root"  # directory to copy from each Modal sandbox
 DST = "/home/user"  # directory to copy into in Superserve
 TEMPLATE = "superserve/base"  # or the template you built from your Modal image
+TIMEOUT_SECONDS = 10 * 60  # limit for each upload and extract
 failed = False
 
 app = modal.App.lookup(APP)
@@ -220,8 +223,10 @@ for src in modal.Sandbox.list(app_id=app.app_id):
         from_template=TEMPLATE,
         metadata={**src.get_tags(), "migrated_from": sid},
     )
-    dst.files.write("/tmp/state.tgz", tgz)
-    out = dst.commands.run(f"tar xzf /tmp/state.tgz -C {DST}")
+    dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
+    out = dst.commands.run(
+        f"tar xzf /tmp/state.tgz -C {DST}", timeout_seconds=TIMEOUT_SECONDS
+    )
     if out.exit_code != 0:
         print(f"{sid}: copy failed: {out.stderr}", file=sys.stderr)
         failed = True
@@ -239,6 +244,7 @@ const APP = "my-app" // the Modal app that owns your sandboxes
 const SRC = "/root" // directory to copy from each Modal sandbox
 const DST = "/home/user" // directory to copy into in Superserve
 const TEMPLATE = "superserve/base" // or the template you built from your Modal image
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
 
 const modal = new ModalClient()
 const app = await modal.apps.fromName(APP)
@@ -257,8 +263,10 @@ for await (const src of modal.sandboxes.list({ appId: app.appId })) {
     fromTemplate: TEMPLATE,
     metadata: { ...(await src.getTags()), migrated_from: sid },
   })
-  await dst.files.write("/tmp/state.tgz", tgz)
-  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`)
+  await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`, {
+    timeoutMs: TIMEOUT_MS,
+  })
   if (out.exitCode !== 0) {
     console.error(`${sid}: copy failed: ${out.stderr}`)
     process.exitCode = 1
@@ -269,6 +277,8 @@ for await (const src of modal.sandboxes.list({ appId: app.appId })) {
 ```
 </CodeGroup>
 
+Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_SECONDS` / `TIMEOUT_MS`.
+
 The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
 
 </Step>
@@ -277,9 +287,9 @@ The script copies files. Start your services in the new sandbox, then take a Sup
 Run your test suite against Superserve. Check the sandbox list in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link). When the results match, send production traffic to Superserve.
 
 </Step>
-<Step title="Uninstall Modal">
+<Step title="Remove Modal when nothing uses it">
 
-After the cutover, remove the `modal` package. Delete your Modal token from your environment and CI secrets.
+After the cutover, search your code and deployments for other Modal uses, such as Modal Functions. If none remain, remove the `modal` package and delete your Modal token from your environment and CI secrets. If some remain, keep the package and the token for them.
 
 <CodeGroup>
 ```bash Python
@@ -327,13 +337,20 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
      on timeout, Modal terminates. If the code relies on the sandbox ending, call kill().
    - secrets=[modal.Secret.from_name(x)] -> create the Superserve secret, then
      secrets: {ENV_VAR: "secret-name"}.
-   - encrypted_ports=[p] + tunnels()[p].url -> publishPreviewPort(p), then getPreviewUrl(p).
-     New sandboxes route only published ports. Ports must be 1024 to 65535.
+   - encrypted_ports=[p] + tunnels()[p].url -> publishPreviewPort(p, {access: "public"}),
+     then getPreviewUrl(p).
+   - create_connect_token(port=p) -> publishPreviewPort(p, {access: "private"}), then
+     getPreviewUrl(p). Send the Superserve preview credential: getPreviewToken(p) returns
+     {header, token} for machine clients; getSignedPreviewUrl(p) returns a URL for browsers.
+   - A new port is public by default. New sandboxes route only published ports.
+     Ports must be 1024 to 65535.
    - Sandbox.from_id(id) -> Sandbox.connect(id). Sandbox.list() / terminate() -> Sandbox.list() / kill().
    - Python: use snake_case (from_template, timeout_seconds, env_vars, from_snapshot).
 3. Run the test suite. Fix failures. Do not delete Modal code paths you cannot test; list them.
 4. Report: files changed, tests run and their result, and anything left for a human.
-5. Only after I confirm the cutover: uninstall modal and remove the Modal token.
+5. Only after I confirm the cutover: search the repo and its deploy config for other Modal uses,
+   such as Modal Functions. If none remain, uninstall modal and remove the Modal token.
+   If some remain, keep modal and the token, and list the remaining uses.
 ```
 
 ### Give your agent the full reference
@@ -358,5 +375,5 @@ The API mapping and the migration script are in the **Human** tab.
 | Images | Build your image into a template once with `Template.create`. Every sandbox then starts from the built template. Set `vcpu` and `memory_mib` on the template. |
 | Grouping | Group sandboxes with `metadata` and filter `Sandbox.list` by it. |
 | Secrets | A Modal secret puts the real value in the environment. A Superserve secret keeps the real value out of the sandbox: code sees a stand-in value, and Superserve attaches the real value to outbound requests. Use `envVars` for values that are not credentials. |
-| Preview ports | Modal opens tunnels for the ports you list at create time. Superserve publishes ports on a running sandbox. Call `publishPreviewPort` before you use a preview URL. |
+| Preview ports | Modal opens tunnels for the ports you list at create time. Superserve publishes ports on a running sandbox, and a new port is public by default. Publish with `access: "private"` and send a preview token to keep a port protected. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
