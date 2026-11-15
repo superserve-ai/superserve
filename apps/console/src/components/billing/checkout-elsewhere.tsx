@@ -53,35 +53,39 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
       <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
     )
 
+  const current = target.current
+  const lock = {
+    acquire: () => {
+      if (current.busy) return false
+      current.busy = true
+      setBusy(true)
+      setFailed(undefined)
+      return true
+    },
+    release: () => {
+      current.busy = false
+      if (current.live) setBusy(false)
+    },
+  }
   const switchTeam = async (team: { id: string; region: string }) => {
-    const current = target.current
-    if (current.busy) return
-    current.busy = true
-    setBusy(true)
-    setFailed(undefined)
+    if (!lock.acquire()) return
     try {
       await setActiveTeamAction(team.id, team.region)
       if (current.live) window.location.assign(returnPath)
     } catch {
+      lock.release()
       if (current.live) {
-        current.busy = false
-        setBusy(false)
         setFailed("We couldn't switch teams. Try again.")
       }
     }
   }
   const switchAccount = async () => {
-    const current = target.current
-    if (current.busy) return
-    current.busy = true
-    setBusy(true)
-    setFailed(undefined)
+    if (!lock.acquire()) return
     try {
       await signOut(returnPath)
     } catch {
+      lock.release()
       if (current.live) {
-        current.busy = false
-        setBusy(false)
         setFailed("We couldn't sign you out. Try again.")
       }
     }
@@ -148,9 +152,15 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
         </Button>
       </div>
       {result.kind === "switch" ? (
-        <OtherTeams besides={locator.team} hideOpen className="mt-5" />
+        <OtherTeams
+          besides={locator.team}
+          hideOpen
+          className="mt-5"
+          lock={lock}
+          disabled={busy}
+        />
       ) : result.kind !== "signed_out" ? (
-        <OtherTeams className="mt-5" />
+        <OtherTeams className="mt-5" lock={lock} disabled={busy} />
       ) : null}
       {failed && (
         <p role="alert" className="mt-3 text-center text-xs text-destructive">

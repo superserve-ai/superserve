@@ -315,6 +315,39 @@ describe("PlanPickerOptions", () => {
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
   })
 
+  it("opens another team only once on double click", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    let resolve!: () => void
+    const switching = new Promise<void>((done) => {
+      resolve = done
+    })
+    mocks.switchTeam.mockReturnValueOnce(switching)
+    render(
+      <PlanPickerOptions preselected={null} locator={locator} adminRequired />,
+    )
+    const button = await screen.findByRole("button", { name: "Open team" })
+    act(() => {
+      fireEvent.click(button)
+      fireEvent.click(button)
+    })
+    expect(mocks.switchTeam).toHaveBeenCalledExactlyOnceWith("team-2", "use")
+    expect(button).toBeDisabled()
+    expect(
+      screen.getByRole("combobox", { name: "Team to open" }),
+    ).toBeDisabled()
+    expect(assign).not.toHaveBeenCalled()
+    await act(async () => resolve())
+    expect(assign).toHaveBeenCalledExactlyOnceWith("/sandboxes")
+    fireEvent.click(button)
+    expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
+  })
+
   it("labels each team with its region when the teams span regions", async () => {
     mocks.offers = [offer("developer_monthly", "Builder")]
     mocks.canManage = false

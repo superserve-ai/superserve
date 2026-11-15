@@ -12,7 +12,7 @@ import {
   Spinner,
 } from "@superserve/ui"
 import Link from "next/link"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 
 import { useSignOut } from "@/hooks/use-sign-out"
 import { useSubmitOnce } from "@/hooks/use-submit-once"
@@ -186,14 +186,19 @@ export function OtherTeams({
   besides,
   hideOpen = besides === undefined,
   className,
+  disabled,
+  lock,
 }: {
   besides?: string
   hideOpen?: boolean
   className?: string
+  disabled?: boolean
+  lock?: { acquire: () => boolean; release: () => void }
 }) {
   const [teams, setTeams] = useState<TeamSummary[]>()
   const [picked, setPicked] = useState<string>()
   const [switching, setSwitching] = useState(false)
+  const switchingRef = useRef(false)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let live = true
@@ -231,12 +236,17 @@ export function OtherTeams({
     multiRegion ? `${team.name} · ${regionLabel(team.region)}` : team.name
   const selected = teams.find((team) => teamKey(team) === picked) ?? teams[0]!
   const open = async () => {
+    if (switching || switchingRef.current) return
+    if (lock && !lock.acquire()) return
+    switchingRef.current = true
     setSwitching(true)
     setFailed(false)
     try {
       await setActiveTeamAction(selected.id, selected.region)
       window.location.assign("/sandboxes")
     } catch {
+      switchingRef.current = false
+      lock?.release()
       setSwitching(false)
       setFailed(true)
     }
@@ -253,7 +263,7 @@ export function OtherTeams({
         <Select
           value={teamKey(selected)}
           onValueChange={(value) => setPicked(value as string)}
-          disabled={switching}
+          disabled={disabled || switching}
         >
           <SelectTrigger aria-label="Team to open" className="h-8 min-w-0">
             {/* Base UI's Value renders the raw option value by default. */}
@@ -273,7 +283,7 @@ export function OtherTeams({
           variant="outline"
           size="sm"
           className="shrink-0"
-          disabled={switching}
+          disabled={disabled || switching}
           onClick={() => void open()}
         >
           {switching ? <Spinner size="sm" /> : null}

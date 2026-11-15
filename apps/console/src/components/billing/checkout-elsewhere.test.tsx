@@ -144,7 +144,7 @@ describe("CheckoutElsewhere", () => {
     expect(mocks.signOut).not.toHaveBeenCalled()
   })
 
-  it("offers only other teams while preserving the checkout switch return path", async () => {
+  it("offers only other teams and opens the selected team before navigating", async () => {
     mocks.lookup.mockResolvedValue({ kind: "switch", team })
     mocks.listTeams.mockResolvedValue({
       activeTeamId: "open-team",
@@ -181,13 +181,102 @@ describe("CheckoutElsewhere", () => {
     expect(mocks.assign).not.toHaveBeenCalled()
     await act(async () => switching.resolve())
     expect(mocks.assign).toHaveBeenCalledExactlyOnceWith("/sandboxes")
+    expect(checkoutSwitch).toBeDisabled()
     await user.click(checkoutSwitch)
+    expect(mocks.setActiveTeam).toHaveBeenCalledTimes(1)
+    expect(mocks.assign).toHaveBeenCalledTimes(1)
+  })
+
+  it("disables other teams while the checkout team switch is pending", async () => {
+    const switching = deferred<void>()
+    mocks.lookup.mockResolvedValue({ kind: "switch", team })
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [{ id: "another-team", name: "Another team", region: "use" }],
+    })
+    mocks.setActiveTeam.mockReturnValue(switching.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    const openTeam = await screen.findByRole("button", { name: "Open team" })
+    const checkoutSwitch = screen.getByRole("button", {
+      name: "Switch to Example team",
+    })
+    act(() => {
+      fireEvent.click(checkoutSwitch)
+      fireEvent.click(openTeam)
+    })
+    expect(openTeam).toBeDisabled()
+    expect(
+      screen.getByRole("combobox", { name: "Team to open" }),
+    ).toBeDisabled()
+    fireEvent.click(openTeam)
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith("team", "use")
+    expect(mocks.assign).not.toHaveBeenCalled()
+    await act(async () => switching.resolve())
+    expect(mocks.assign).toHaveBeenCalledExactlyOnceWith(returnPath)
+  })
+
+  it("disables the checkout team switch while another team is opening", async () => {
+    const switching = deferred<void>()
+    mocks.lookup.mockResolvedValue({ kind: "switch", team })
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [{ id: "another-team", name: "Another team", region: "use" }],
+    })
+    mocks.setActiveTeam.mockReturnValue(switching.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    const openTeam = await screen.findByRole("button", { name: "Open team" })
+    const checkoutSwitch = screen.getByRole("button", {
+      name: "Switch to Example team",
+    })
+    act(() => {
+      fireEvent.click(openTeam)
+      fireEvent.click(checkoutSwitch)
+    })
+    expect(checkoutSwitch).toBeDisabled()
+    fireEvent.click(checkoutSwitch)
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith(
+      "another-team",
+      "use",
+    )
+    expect(mocks.assign).not.toHaveBeenCalled()
+    await act(async () => switching.resolve())
+    expect(mocks.assign).toHaveBeenCalledExactlyOnceWith("/sandboxes")
+  })
+
+  it("releases the lock after opening another team fails", async () => {
+    const switching = deferred<void>()
+    mocks.lookup.mockResolvedValue({ kind: "switch", team })
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [{ id: "another-team", name: "Another team", region: "use" }],
+    })
+    mocks.setActiveTeam.mockReturnValueOnce(switching.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    const openTeam = await screen.findByRole("button", { name: "Open team" })
+    const checkoutSwitch = screen.getByRole("button", {
+      name: "Switch to Example team",
+    })
+    fireEvent.click(openTeam)
+    expect(checkoutSwitch).toBeDisabled()
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith(
+      "another-team",
+      "use",
+    )
+    await act(async () => switching.reject(new Error("Unavailable")))
+    expect(screen.getByRole("alert")).toHaveTextContent(
+      "We couldn't open that team. Please try again.",
+    )
+    expect(openTeam).toBeEnabled()
+    expect(screen.getByRole("combobox", { name: "Team to open" })).toBeEnabled()
+    expect(checkoutSwitch).toBeEnabled()
+    expect(mocks.assign).not.toHaveBeenCalled()
+    fireEvent.click(checkoutSwitch)
     expect(mocks.setActiveTeam).toHaveBeenNthCalledWith(2, "team", "use")
     await waitFor(() =>
-      expect(mocks.assign).toHaveBeenNthCalledWith(2, returnPath),
-    )
-    expect(mocks.setActiveTeam.mock.invocationCallOrder[1]).toBeLessThan(
-      mocks.assign.mock.invocationCallOrder[1]!,
+      expect(mocks.assign).toHaveBeenCalledExactlyOnceWith(returnPath),
     )
   })
 
