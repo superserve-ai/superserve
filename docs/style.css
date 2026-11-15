@@ -21,7 +21,7 @@ html.dark .has-line-numbers .line-highlight::after {
 
 /*
  * Benchmark comparison cards (snippets/benchmark-comparison.jsx).
- * One flat card per benchmark: the other provider's bar is grey, the
+ * One dashed card per benchmark: the other provider's bar is grey, the
  * Superserve bar is the brand mint #B2FAB4, and its row has a tint, a mint
  * left border and a bold name and value. Docs are dark only; the light values keep
  * the cards readable if that changes.
@@ -63,7 +63,7 @@ html.dark .ss-bench {
   gap: 12px;
   margin: 0;
   padding: 16px;
-  border: 1px solid var(--ss-bench-border);
+  border: 1px dashed var(--ss-bench-border);
   background: var(--ss-bench-surface);
 }
 .ss-bench-head {
@@ -93,7 +93,7 @@ html.dark .ss-bench {
 }
 .ss-bench-badge {
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: 0;
   background: var(--ss-bench-badge-bg);
   color: var(--ss-bench-own-text);
   font-size: 12px;
