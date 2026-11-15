@@ -186,7 +186,10 @@ vi.mock("@/lib/cells", () => ({
 import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
 import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
-import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
+import {
+  invalidateMembershipDirectory,
+  listTeamMembershipsForUserDetailed,
+} from "@/lib/api/team-directory"
 import {
   completedMemberships,
   provisionTeam,
@@ -299,6 +302,7 @@ describe("proxy-auth cell targeting", () => {
       "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
     missingProfileExists = false
     activeTeamCookie = undefined
+    vi.mocked(invalidateMembershipDirectory).mockClear()
     vi.mocked(listTeamMembershipsForUserDetailed).mockReset()
     vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
       memberships: [{ teamId: "team-west", region: "usw" }],
@@ -380,9 +384,12 @@ describe("proxy-auth cell targeting", () => {
     expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
       2,
       user.id,
-      { maxAgeMs: 0 },
+      { publish: false },
     )
     expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+    expect(invalidateMembershipDirectory).toHaveBeenCalledExactlyOnceWith(
+      user.id,
+    )
 
     vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
       memberships: [{ teamId: "team-old", region: "use" }],
@@ -414,7 +421,7 @@ describe("proxy-auth cell targeting", () => {
     expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
       2,
       user.id,
-      { maxAgeMs: 0 },
+      { publish: false },
     )
     expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
     expect(provisionTeam).not.toHaveBeenCalled()
@@ -441,9 +448,10 @@ describe("proxy-auth cell targeting", () => {
     expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
       2,
       user.id,
-      { maxAgeMs: 0 },
+      { publish: false },
     )
     expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+    expect(invalidateMembershipDirectory).not.toHaveBeenCalled()
     expect(provisionTeam).not.toHaveBeenCalled()
   })
 
@@ -469,9 +477,10 @@ describe("proxy-auth cell targeting", () => {
       expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
         2,
         user.id,
-        { maxAgeMs: 0 },
+        { publish: false },
       )
       expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+      expect(invalidateMembershipDirectory).not.toHaveBeenCalled()
       expect(provisionTeam).not.toHaveBeenCalled()
       expect(warn).toHaveBeenCalledExactlyOnceWith(
         "Membership directory refresh failed; using cached directory",

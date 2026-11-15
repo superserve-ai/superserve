@@ -230,6 +230,31 @@ describe("cell failure isolation", () => {
     errSpy.mockRestore()
   })
 
+  it("preserves the healthy cached directory when a non-publishing read degrades", async () => {
+    const errSpy = vi.spyOn(console, "error").mockImplementation(() => {})
+    cellClients.use = cellClient([])
+    cellClients.usw = cellClient([{ team_id: "team-west" }])
+    const healthy = {
+      memberships: [{ teamId: "team-west", region: "usw" }],
+      degradedRegions: [],
+    }
+
+    await expect(listTeamMembershipsForUserDetailed("u1")).resolves.toEqual(
+      healthy,
+    )
+    cellClients.usw = failingClient("usw pooler unreachable")
+
+    await expect(
+      listTeamMembershipsForUserDetailed("u1", { publish: false }),
+    ).resolves.toEqual({ memberships: [], degradedRegions: ["usw"] })
+    await expect(listTeamMembershipsForUserDetailed("u1")).resolves.toEqual(
+      healthy,
+    )
+    expect(cellClients.use.from).toHaveBeenCalledTimes(4)
+    expect(cellClients.usw.from).toHaveBeenCalledTimes(2)
+    errSpy.mockRestore()
+  })
+
   it("still throws when the default cell fails", async () => {
     cellClients.use = failingClient("primary down")
     cellClients.usw = cellClient([{ team_id: "team-9" }])

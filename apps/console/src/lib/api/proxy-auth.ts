@@ -104,9 +104,8 @@ async function getTeamForUser(
     userId,
     await listTeamMembershipsForUserDetailed(userId),
   )
-  // The route handler does not share server actions' module caches, so a team
-  // created or joined elsewhere may be missing from this cached directory.
-  // Re-read before falling back to a different team.
+  // Teams created or joined elsewhere may be missing from this module's cache.
+  // Refresh without publishing failures, then invalidate after a healthy read.
   if (
     selection &&
     !directory.memberships.some(
@@ -118,8 +117,11 @@ async function getTeamForUser(
     try {
       const fresh = await completedMemberships(
         userId,
-        await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+        await listTeamMembershipsForUserDetailed(userId, { publish: false }),
       )
+      if (fresh.degradedRegions.length === 0) {
+        invalidateMembershipDirectory(userId)
+      }
       // Keep completed cached memberships only for unreadable regions;
       // successful reads must still respect confirmed removals.
       directory = {
