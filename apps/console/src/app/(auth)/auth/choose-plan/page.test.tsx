@@ -1,7 +1,6 @@
 import { render, screen } from "@testing-library/react"
-import userEvent from "@testing-library/user-event"
 import { StrictMode } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 let params = new URLSearchParams()
 const replace = vi.fn()
@@ -21,8 +20,7 @@ vi.mock("next/link", () => ({
     href: string
   }) => <a href={href}>{children}</a>,
 }))
-vi.mock("@superserve/ui", async () => ({
-  ...(await vi.importActual<typeof import("@superserve/ui")>("@superserve/ui")),
+vi.mock("@superserve/ui", () => ({
   cn: (...classes: unknown[]) => classes.filter(Boolean).join(" "),
   Button: ({
     render,
@@ -36,19 +34,6 @@ vi.mock("@superserve/ui", async () => ({
     ),
 }))
 vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
-const teams = vi.hoisted(() => ({
-  directory: {
-    activeTeamId: "team-b" as string | null,
-    activeRegion: "use" as string | null,
-    teams: [] as { id: string; name: string; region: string }[],
-  },
-  switchTeam: vi.fn(async (_id: string, _region: string) => {}),
-}))
-vi.mock("@/lib/api/teams-actions", () => ({
-  listTeamsAction: async () => teams.directory,
-  setActiveTeamAction: teams.switchTeam,
-}))
-afterEach(() => vi.unstubAllGlobals())
 const trial = vi.hoisted(() => ({
   outcome: null as TrialOutcome | null,
   perTeam: {} as Record<string, TrialOutcome | null>,
@@ -72,8 +57,6 @@ describe("plan picker", () => {
     capture.mockClear()
     trial.outcome = null
     trial.perTeam = {}
-    teams.directory = { activeTeamId: "team-b", activeRegion: "use", teams: [] }
-    teams.switchTeam.mockClear()
   })
 
   it("offers both plans when the trial has ended", async () => {
@@ -180,43 +163,18 @@ describe("plan picker", () => {
     },
   )
 
-  it("offers the checkout team while keeping the original checkout return link", async () => {
-    const assign = vi.fn()
-    vi.stubGlobal("location", { ...window.location, assign })
-    teams.directory.teams = [
-      { id: "team-a", name: "Team A", region: "use" },
-      { id: "team-b", name: "Team B", region: "use" },
-    ]
+  it("only re-checks the original checkout for checkout_elsewhere", () => {
     params = new URLSearchParams({
       reason: "checkout_elsewhere",
       account: "u1",
-      team: "use:team-a",
+      team: "use:team-1",
     })
-    const user = userEvent.setup()
     render(<ChoosePlanPage />)
-    expect(screen.getByRole("link", { name: "Check again" })).toHaveAttribute(
-      "href",
-      "/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-a",
-    )
-    await user.click(
-      await screen.findByRole("combobox", { name: "Team to open" }),
-    )
-    expect(
-      (await screen.findAllByRole("option")).map(
-        (option) => option.textContent,
-      ),
-    ).toEqual(["Team A"])
-    await user.click(screen.getByRole("option", { name: "Team A" }))
     expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
     expect(screen.queryByRole("button", { name: "Pro" })).toBeNull()
-    expect(screen.queryByRole("button", { name: /^Choose / })).toBeNull()
-    expect(screen.queryByRole("form")).toBeNull()
-    await user.click(screen.getByRole("button", { name: "Open team" }))
-    expect(teams.switchTeam).toHaveBeenCalledExactlyOnceWith("team-a", "use")
-    await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
-    expect(teams.switchTeam.mock.invocationCallOrder[0]).toBeLessThan(
-      assign.mock.invocationCallOrder[0]!,
-    )
+    expect(
+      screen.getByRole("link", { name: "Check again" }).getAttribute("href"),
+    ).toBe("/api/onboarding/checkout/return/?account=u1&team=use%3Ateam-1")
   })
 
   it("sends an old payment-confirming link to the payment wait, not the picker", () => {
@@ -274,11 +232,7 @@ describe("plan picker", () => {
     expect(screen.queryByText(/used up/)).toBeNull()
   })
 
-  it("offers another team without a checkout locator", async () => {
-    teams.directory.teams = [
-      { id: "team-a", name: "Team A", region: "use" },
-      { id: "team-b", name: "Team B", region: "use" },
-    ]
+  it("offers no purchase when a checkout return names no checkout", () => {
     params = new URLSearchParams({ reason: "checkout_elsewhere" })
     render(<ChoosePlanPage />)
     expect(screen.queryByRole("button", { name: "Developer" })).toBeNull()
@@ -287,10 +241,6 @@ describe("plan picker", () => {
         .getByRole("link", { name: "Back to console" })
         .getAttribute("href"),
     ).toBe("/sandboxes")
-    expect(
-      await screen.findByRole("combobox", { name: "Team to open" }),
-    ).toHaveTextContent("Team A")
-    expect(screen.getByRole("button", { name: "Open team" })).toBeTruthy()
   })
 
   it("records why the picker opened and which plan was asked for", async () => {

@@ -181,15 +181,13 @@ function teamKey(team: { id: string; region: string }) {
 
 // The user's other teams, so anyone on this gate can carry on in one of
 // theirs instead of buying a plan here. One dropdown keeps the page short
-// however many teams there are. `besides` is the team the gate is for and is
-// left out. Without it (a checkout for another team), the open team is left
-// out instead, so the checkout's own team stays in the list. Nothing shows
-// while the teams load or can't be read, or when no other team remains.
-export function OtherTeams({
-  besides,
+// however many teams there are. Nothing shows while they load or can't be
+// read, or when the user has no other team.
+function OtherTeams({
+  locator,
   className,
 }: {
-  besides?: string
+  locator: CheckoutLocator
   className?: string
 }) {
   const [teams, setTeams] = useState<TeamSummary[]>()
@@ -199,31 +197,24 @@ export function OtherTeams({
   useEffect(() => {
     let live = true
     listTeamsAction()
-      .then((directory) => {
-        const hidden =
-          besides ??
-          (directory.activeTeamId && directory.activeRegion
-            ? teamKey({
-                id: directory.activeTeamId,
-                region: directory.activeRegion,
-              })
-            : null)
-        if (live)
+      .then(
+        (directory) =>
+          live &&
           setTeams(
             directory.teams
-              .filter((team) => teamKey(team) !== hidden)
+              .filter((team) => teamKey(team) !== locator.team)
               .toSorted(
                 (a, b) =>
                   a.name.localeCompare(b.name) ||
                   a.region.localeCompare(b.region),
               ),
-          )
-      })
+          ),
+      )
       .catch(() => undefined)
     return () => {
       live = false
     }
-  }, [besides])
+  }, [locator.team])
   if (!teams?.length) return null
   // Region badges only add signal when the teams span regions.
   const multiRegion = new Set(teams.map((team) => team.region)).size > 1
@@ -344,7 +335,7 @@ export function PlanPickerOptions({
             one of them to upgrade this team.
           </p>
         )}
-        <OtherTeams besides={locator.team} />
+        <OtherTeams locator={locator} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
@@ -376,7 +367,7 @@ export function PlanPickerOptions({
         {enterprise ? (
           <EnterpriseOption card={enterprise} className="w-full max-w-sm" />
         ) : null}
-        <OtherTeams besides={locator.team} />
+        <OtherTeams locator={locator} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
@@ -409,7 +400,7 @@ export function PlanPickerOptions({
             </form>
           ))}
         </div>
-        <OtherTeams besides={locator.team} className="mt-5" />
+        <OtherTeams locator={locator} className="mt-5" />
       </div>
     )
   return (
@@ -444,7 +435,7 @@ export function PlanPickerOptions({
           />
         ) : null}
       </div>
-      <OtherTeams besides={locator.team} className="mt-8" />
+      <OtherTeams locator={locator} className="mt-8" />
     </div>
   )
 }
