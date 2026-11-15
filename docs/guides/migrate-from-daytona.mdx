@@ -11,6 +11,12 @@ Daytona and Superserve sandboxes do the same job: run untrusted code in an isola
 
 ## How Superserve compares
 
+Time to interactive is the latest run. The scores are out of 100 over the last 7 days.
+
+- Time to interactive. **Lower is better.**
+- Snapshot and restore. **Higher is better.**
+- Pause and resume. **Higher is better.**
+
 <BenchmarkComparison compare="daytona" compareName="Daytona" />
 
 ## Ready to switch
@@ -23,8 +29,7 @@ Pick how you want to migrate. Do it yourself step by step, or give the prompt to
 <Info>
 **Before you start**
 
-- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
-- **Keep Daytona installed.** You remove it only after the cutover, in step 6.
+[Get an API key](https://console.superserve.ai/api-keys/) in the Superserve console. If you have no account, sign up first. It is free and needs no card.
 </Info>
 
 <Steps>
@@ -358,7 +363,7 @@ The API mapping and the migration script are in the **Human** tab.
 | Area | What to do |
 | --- | --- |
 | Snapshots | A Daytona snapshot is a base image for new sandboxes. In Superserve that is a template. A Superserve snapshot saves the memory and disk of one sandbox. |
-| Idle behavior | Daytona stops an idle sandbox after 15 minutes by default, which ends its processes. Superserve has no idle timeout by default. Set `idleTimeoutSeconds` to pause an idle sandbox and keep its processes. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
+| Idle behavior | Daytona stops an idle sandbox after 15 minutes by default, which ends its processes. By default, a Superserve sandbox does not pause for being idle. Set `idleTimeoutSeconds` to pause an idle sandbox and keep its processes. |
 | Commands | `commands.run` returns `stdout` and `stderr` separately and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. |
 | Resources | Set `vcpu` and `memoryMib` on the template, not on the sandbox. Memory is in MiB, not GiB. |
 | Home directory | Daytona sandboxes use `/home/daytona`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
