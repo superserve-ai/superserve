@@ -255,6 +255,22 @@ The sandbox sees a proxy token; the platform swaps in the real credential only f
 
 **Templates.** A sandbox inherits its vCPU/memory/disk from its template and can't override them at `sandbox_create` time. To get a specific shape (say, a 4 vCPU sandbox) or preinstalled software, build a template with `sandbox_template_create`, then poll `sandbox_template_list` until its `status` is `ready` before passing it as `from_template`.
 
+`sandbox_template_create` takes:
+
+| Input | Description |
+| --- | --- |
+| `name` | Template name in your team's namespace. Can't start with `superserve/`. |
+| `from` | Base image, for example `python:3.11` or `ubuntu:24.04`. |
+| `vcpu` | vCPUs for sandboxes from this template. Default `1`. |
+| `memory_mib` | Memory in MiB that sandboxes boot with. Default `1024`. |
+| `memory_max_mib` | Optional ceiling in MiB that sandboxes can grow memory to while running. Omit it for a fixed memory size. |
+| `disk_mib` | Disk in MiB. Default `4096`. |
+| `run_steps` | Shell commands run in order at build time, for example `["pip install numpy"]`. |
+| `start_cmd` | Process started after the build and captured running in the snapshot. |
+| `ready_cmd` | Readiness probe that must exit 0 before the build is ready. |
+
+`memory_max_mib` must be greater than `memory_mib`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128 MiB. See [Live memory resizing](/sandbox/live-memory-resizing) and [Growing memory](/templates/build-spec#growing-memory). `sandbox_template_list` and `sandbox_info` show a growable shape as a range, for example `1 vCPU / 2048-8192 MiB`, and `sandbox_info` returns `memory_max_mib`. The maximum vCPU, memory and disk depend on your team's plan; see [Resource limits](/templates/build-spec#resource-limits).
+
 **Ports.** New MCP sandboxes use `public` as the default access for newly
 published ports; only explicitly published ports are reachable. Pass
 `preview_access: "private"` to `sandbox_create` (or `sandbox_update`) to change
@@ -330,6 +346,7 @@ The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever hold
 - **First call is slow.** `npx` downloads the package on first use and caches it; later starts are fast.
 - **Requires Node 18+.** The local server runs on Node via `npx`. (The [hosted](#hosted-remote) endpoint has no local runtime requirement.)
 - **`401 Unauthorized` from the hosted endpoint.** The `Authorization` header is missing or malformed (another scheme, or an empty token). Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)). An invalid key still connects, but every tool call returns `Authentication failed`.
+- **A sandbox won't start because of billing (`402`).** The tool result explains the cause. For the trial codes and `billing_ineligible`, it also tells the agent not to retry (for `trial_check_unavailable`, not to retry in a loop) and to ask the user to add a card and choose a plan, or check billing. It gives the console link when the API sends one. For `free_allowance_exhausted` and `sandbox_exceeds_plan_limits`, the tool result is the API message only. See [Billing errors](/errors#billing-errors-402).
 
 ## Related
 

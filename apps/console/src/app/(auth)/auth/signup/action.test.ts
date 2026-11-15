@@ -258,10 +258,10 @@ describe("post-trial signup with the real Cloudflare observer", () => {
                 )
               : await beginGoogleSignup("recaptcha-token", "turnstile-token")
           expect(result.success).toBe(true)
-          expect(callbacks).toHaveLength(1)
-          await expect(
-            Promise.resolve(callbacks.shift()!()),
-          ).resolves.toBeUndefined()
+          // Google also sends its two PostHog events after the response.
+          expect(callbacks).toHaveLength(method === "email" ? 1 : 3)
+          for (const callback of callbacks.splice(0))
+            await expect(Promise.resolve(callback())).resolves.toBeUndefined()
           const attemptId =
             mockObserveCloudflareSignup.mock.lastCall![0].signupAttemptId
           expect(mockTrackEvent).toHaveBeenCalledWith(
@@ -1550,7 +1550,8 @@ describe("beginGoogleSignup", () => {
       mockBeginSignupEvidenceAttempt.mock.invocationCallOrder[0],
     ).toBeLessThan(mockIssueGoogleSignupProof.mock.invocationCallOrder[0])
     expect(mockIssueGoogleSignupProof).toHaveBeenCalled()
-    expect(mockAfter).toHaveBeenCalledTimes(1)
+    // Cloudflare observation and the two PostHog events.
+    expect(mockAfter).toHaveBeenCalledTimes(3)
     expect(mockObserveCloudflareSignup).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         signupAttemptId: result.signupAttemptId,
@@ -1566,7 +1567,155 @@ describe("beginGoogleSignup", () => {
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_google_signup_captcha_verified",
       expect.any(String),
-      { stage: "captcha_verification" },
+      { stage: "captcha_verification", entry_point: "signup" },
+    )
+  })
+
+  it("labels a check the sign-in page ran, with the same verification", async () => {
+    const result = await beginGoogleSignup(
+      "google-token",
+      undefined,
+      undefined,
+      undefined,
+      "signin",
+    )
+
+    expect(result).toEqual({
+      success: true,
+      signupAttemptId: expect.any(String),
+    })
+    expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
+      "google-token",
+      "signup_google",
+    )
+    expect(mockIssueGoogleSignupProof).toHaveBeenCalledTimes(1)
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_signup_recaptcha_observed",
+      expect.any(String),
+      expect.objectContaining({ entry_point: "signin" }),
+    )
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_verified",
+      expect.any(String),
+      { stage: "captcha_verification", entry_point: "signin" },
+    )
+  })
+
+  it("blocks a low-score check from the sign-in page like any other", async () => {
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      reason: "low_score",
+    })
+
+    const result = await beginGoogleSignup(
+      "google-token",
+      undefined,
+      undefined,
+      undefined,
+      "signin",
+    )
+
+    expect(result).toMatchObject({
+      success: false,
+      errorCode: "captcha_failed",
+    })
+    expect(mockIssueGoogleSignupProof).not.toHaveBeenCalled()
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_failed",
+      expect.any(String),
+      expect.objectContaining({ entry_point: "signin" }),
+    )
+  })
+
+  it("labels an unknown entry point as the sign-up page", async () => {
+    await beginGoogleSignup(
+      "google-token",
+      undefined,
+      undefined,
+      undefined,
+      "elsewhere" as "signin",
+    )
+
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_google_signup_captcha_verified",
+      expect.any(String),
+      { stage: "captcha_verification", entry_point: "signup" },
+    )
+  })
+
+  it("labels the Cloudflare observation and keeps the Turnstile token for a sign-in check", async () => {
+    await beginGoogleSignup(
+      "google-token",
+      "turnstile-token",
+      undefined,
+      undefined,
+      "signin",
+    )
+
+    expect(mockObserveCloudflareSignup).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        signupMethod: "google",
+        turnstileToken: "turnstile-token",
+        entryPoint: "signin",
+      }),
+    )
+  })
+
+  it("labels the Cloudflare observation of the sign-up page as sign-up", async () => {
+    await beginGoogleSignup("google-token", "turnstile-token")
+
+    expect(mockObserveCloudflareSignup).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({ entryPoint: "signup" }),
+    )
+  })
+
+  it.each([
+    ["signin", "signin"],
+    [undefined, "signup"],
+  ] as const)(
+    "labels the fingerprint diagnostics and lookup (%s)",
+    async (entryPoint, label) => {
+      fingerprintSignupEventId = encodeURIComponent("event-456")
+      diagnostics.contexts.mockClear()
+
+      await beginGoogleSignup(
+        "google-token",
+        undefined,
+        undefined,
+        undefined,
+        entryPoint,
+      )
+
+      expect(diagnostics.contexts).toHaveBeenCalledWith(
+        expect.objectContaining({ signupMethod: "google", entryPoint: label }),
+      )
+      expect(mockResolveFingerprintSignup).toHaveBeenCalledWith(
+        expect.objectContaining({ eventId: "event-456", entryPoint: label }),
+      )
+    },
+  )
+
+  it("labels the fingerprint observation of a sign-in check that reCAPTCHA blocks", async () => {
+    fingerprintSignupEventId = encodeURIComponent("event-456")
+    mockVerifyRecaptcha.mockResolvedValue({
+      verified: false,
+      reason: "low_score",
+    })
+
+    await beginGoogleSignup(
+      "google-token",
+      undefined,
+      undefined,
+      undefined,
+      "signin",
+    )
+
+    expect(mockObserveFingerprintSignup).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        eventId: "event-456",
+        signupMethod: "google",
+        entryPoint: "signin",
+      }),
     )
   })
 
@@ -1598,7 +1747,8 @@ describe("beginGoogleSignup", () => {
 
       const result = await beginGoogleSignup("google-token", "turnstile-token")
 
-      expect(mockAfter).toHaveBeenCalledTimes(1)
+      // Cloudflare observation plus the two PostHog events.
+      expect(mockAfter).toHaveBeenCalledTimes(3)
       expect(mockObserveCloudflareSignup).not.toHaveBeenCalled()
       expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
         "google-token",
@@ -1650,6 +1800,7 @@ describe("beginGoogleSignup", () => {
       {
         reason: "Google signup proof signing secret is not configured",
         stage: "proof_issuance",
+        entry_point: "signup",
       },
     )
   })
@@ -1677,6 +1828,7 @@ describe("beginGoogleSignup", () => {
       {
         reason: "low_score",
         stage: "captcha_verification",
+        entry_point: "signup",
       },
     )
   })
@@ -1698,8 +1850,91 @@ describe("beginGoogleSignup", () => {
       {
         reason: "provider_unavailable",
         stage: "captcha_verification",
+        entry_point: "signup",
       },
     )
+  })
+
+  describe("PostHog events", () => {
+    let queued: Array<() => void | Promise<void>>
+
+    beforeEach(() => {
+      queued = []
+      mockAfter.mockReset().mockImplementation((callback) => {
+        queued.push(callback)
+      })
+    })
+
+    // Next.js does not wait for one callback before it starts the next.
+    const runQueued = () =>
+      Promise.all(queued.splice(0).map((callback) => callback()))
+
+    it.each([
+      ["verified", { verified: true }, "auth_google_signup_captcha_verified"],
+      [
+        "low_score",
+        { verified: false, reason: "low_score" },
+        "auth_google_signup_captcha_failed",
+      ],
+    ] as const)(
+      "answers a %s check before PostHog flushes its events",
+      async (_case, recaptcha, outcomeEvent) => {
+        mockVerifyRecaptcha.mockResolvedValue(recaptcha)
+        // A flush that never ends must not hold back the answer.
+        mockTrackEvent.mockReset().mockReturnValue(new Promise(() => {}))
+
+        const result = await beginGoogleSignup(
+          "google-token",
+          undefined,
+          undefined,
+          undefined,
+          "signin",
+        )
+
+        expect(result.success).toBe(recaptcha.verified)
+        expect(mockTrackEvent).not.toHaveBeenCalled()
+        void runQueued()
+        await vi.waitFor(() => expect(mockTrackEvent).toHaveBeenCalledTimes(2))
+        expect(mockTrackEvent).toHaveBeenNthCalledWith(
+          1,
+          "auth_signup_recaptcha_observed",
+          expect.any(String),
+          expect.objectContaining({ entry_point: "signin" }),
+        )
+        expect(mockTrackEvent).toHaveBeenNthCalledWith(
+          2,
+          outcomeEvent,
+          expect.any(String),
+          expect.objectContaining({ entry_point: "signin" }),
+        )
+      },
+    )
+
+    it("answers when PostHog cannot be scheduled", async () => {
+      mockAfter.mockReset().mockImplementation((callback) => {
+        if (mockAfter.mock.calls.length > 1)
+          throw new Error("Request lifecycle unavailable")
+        queued.push(callback)
+      })
+
+      await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+        success: true,
+        signupAttemptId: expect.any(String),
+      })
+      expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
+    })
+
+    it("does not let a failed PostHog flush reject the scheduled work", async () => {
+      mockTrackEvent.mockReset().mockRejectedValue(new Error("posthog down"))
+
+      await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+        success: true,
+        signupAttemptId: expect.any(String),
+      })
+      await expect(runQueued()).resolves.toBeDefined()
+      expect(mockTrackEvent).toHaveBeenCalledTimes(2)
+      expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
+    })
   })
 
   it("still issues proof when reCAPTCHA is not configured", async () => {

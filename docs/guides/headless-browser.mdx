@@ -201,7 +201,7 @@ with sync_playwright() as p:
 
 - Keep the port private. Anyone who can open a public Playwright server port can control the browser.
 - The client and the server must have the same Playwright version, or `connect` fails.
-- `page.goto` runs in the sandbox, so the page loads from the sandbox's network, and [network rules](/sandbox/networking) apply to it.
+- `page.goto` runs in the sandbox, so the page loads from the sandbox's network, and [network rules](/sandbox/networking) apply to it. An allowlist with domain rules must also allow the DNS resolvers `1.1.1.1/32` and `8.8.8.8/32`, or no page loads.
 
 ## Clean up
 

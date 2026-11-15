@@ -26,7 +26,7 @@ from superserve import RunStep, EnvStep, EnvStepValue, WorkdirStep, UserStep, Us
 
 ### `Template.create`
 
-Register a new template and queue its first build. Returns as soon as the template row exists and a `build_id` is assigned - the build itself runs asynchronously. Call [`waitUntilReady`](#waituntilready-wait-until-ready) to block until the build finishes.
+Register a new template and queue its first build. Returns as soon as the template row exists and a `build_id` is assigned - the build itself runs asynchronously. Call [`waitUntilReady`](#waituntilready-/-wait_until_ready) to block until the build finishes.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -227,7 +227,7 @@ Throws `SandboxError` if no `buildId` is supplied and the template has no builds
 
 Queue a new build for this template. Returns the new [`TemplateBuildInfo`](#templatebuildinfo). Idempotent: if an in-flight build already matches the same configuration, the existing build is returned.
 
-`rebuild()` does not update `latestBuildId` / `latest_build_id`. On a template returned by `Template.create`, `waitUntilReady()` / `wait_until_ready()` keeps waiting on the first build. To wait for the new build, poll the returned build ID with [`getBuild`](#getbuild-get-build):
+`rebuild()` does not update `latestBuildId` / `latest_build_id`. On a template returned by `Template.create`, `waitUntilReady()` / `wait_until_ready()` keeps waiting on the first build. To wait for the new build, poll the returned build ID with [`getBuild`](#getbuild-/-get_build):
 
 <CodeGroup>
 ```typescript TypeScript

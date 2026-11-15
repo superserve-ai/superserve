@@ -69,7 +69,7 @@ async with AsyncAnthropic(auth_token=environment_key) as client:
     ).handle_item()
 ```
 
-See the [full guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents) for the complete walkthrough.
+See the [full guide](https://docs.superserve.ai/integrations/agent-platforms/claude-managed-agents) for the complete walkthrough.
 
 ## Prerequisites
 
@@ -127,6 +127,6 @@ node orchestrator.mjs           # long-running
 
 ## See also
 
-- [Full integration guide](https://docs.superserve.ai/integrations/managed-agents/claude-managed-agents)
+- [Full integration guide](https://docs.superserve.ai/integrations/agent-platforms/claude-managed-agents)
 - [Claude Managed Agents docs](https://platform.claude.com/docs/en/managed-agents/overview)
 - [Superserve SDK reference](https://docs.superserve.ai/sdk-reference/sandbox)

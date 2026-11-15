@@ -51,6 +51,40 @@ describe("observeCloudflareSignup", () => {
     )
   })
 
+  it("labels the observation with the page that ran the check", async () => {
+    mockRpc.mockResolvedValue({ data: true, error: null })
+    vi.spyOn(console, "info").mockImplementation(() => {})
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify({ success: true })),
+    )
+    process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "secret"
+    await observeCloudflareSignup({
+      signupAttemptId: "attempt-1",
+      signupMethod: "google",
+      entryPoint: "signin",
+      turnstileToken: "token",
+    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_cloudflare_signup_observed",
+      "attempt-1",
+      expect.objectContaining({
+        entry_point: "signin",
+        signup_method: "google",
+      }),
+    )
+    mockRpc.mockResolvedValue({ data: null, error: new Error("down") })
+    await observeCloudflareSignup({
+      signupAttemptId: "attempt-2",
+      signupMethod: "google",
+      entryPoint: "signin",
+    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "auth_cloudflare_signup_observation_failed",
+      "attempt-2",
+      expect.objectContaining({ entry_point: "signin" }),
+    )
+  })
+
   it("verifies a Turnstile token and persists Free Siteverify fields", async () => {
     process.env.CLOUDFLARE_TURNSTILE_SECRET_KEY = "secret"
     process.env.CLOUDFLARE_SIGNUP_CONFIG_VERSION = "free-v1"

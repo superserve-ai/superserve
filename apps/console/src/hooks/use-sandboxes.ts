@@ -89,6 +89,33 @@ export function useSandbox(id: string | null) {
   })
 }
 
+// The current memory of an active growable sandbox, refreshed at the list's
+// cadence. It has its own cache entry so the refresh never reaches the
+// sandbox detail query, whose access token feeds open terminal sessions.
+export function useSandboxMemory(
+  sandbox: Pick<SandboxResponse, "id" | "status" | "memory_max_mib">,
+) {
+  const queryScope = useQueryScope()
+  const growable = sandbox.memory_max_mib != null
+  return useQuery({
+    queryKey: [...sandboxKeys.detail(sandbox.id), "memory", queryScope],
+    queryFn: () => getSandbox(sandbox.id),
+    select: (s) => s.memory_current_mib ?? null,
+    enabled: growable,
+    // The page's copy goes stale once the sandbox is paused or resumed
+    // elsewhere, so each poll decides from its own latest response: often
+    // while active, slowly while not, so a resume is picked up. Only a
+    // deleted sandbox stops it; a transient failure is retried next interval.
+    refetchInterval: (query) => {
+      const err = query.state.error
+      if (err instanceof ApiError && err.status === 404) return false
+      const status = (query.state.data ?? sandbox).status
+      return status === "active" ? 10_000 : 60_000
+    },
+    refetchIntervalInBackground: false,
+  })
+}
+
 // --- Mutations ----------------------------------------------------------
 
 export function useCreateSandbox() {
