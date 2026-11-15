@@ -65,6 +65,7 @@ Most calls keep their names. The main changes: every sandbox needs a `name`, tim
 | Timeout | `sbx.setTimeout(ms)`. Kills by default. | `sbx.update({ timeoutSeconds })`. Pauses. Also `idleTimeoutSeconds`. |
 | Env vars | `envs` | `envVars` on create, `env` per command, `secrets` for API keys |
 | Public URL | `sbx.getHost(port)` | `await sbx.publishPreviewPort(port)`, then `sbx.getPreviewUrl(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Public URL with auth | `network: { allowPublicTraffic: false }`, then send `sbx.trafficAccessToken` | `await sbx.publishPreviewPort(port, { access: "private" })`, then `sbx.getPreviewUrl(port)`. For the token, use `await sbx.getPreviewToken(port)` (send `token` in the returned `header`) or `await sbx.getSignedPreviewUrl(port)` for a browser. |
 | List and kill | `Sandbox.list()` / `sbx.kill()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -83,6 +84,7 @@ Most calls keep their names. The main changes: every sandbox needs a `name`, tim
 | Timeout | `sbx.set_timeout(seconds)`. Kills by default. | `sbx.update(timeout_seconds=)`. Pauses. Also `idle_timeout_seconds`. |
 | Env vars | `envs` | `env_vars` on create, `env` per command, `secrets` for API keys |
 | Public URL | `sbx.get_host(port)` | `sbx.publish_preview_port(port)`, then `sbx.get_preview_url(port)`. New sandboxes route only published ports. See [Preview URLs](/sandbox/preview-urls). |
+| Public URL with auth | `network={"allow_public_traffic": False}`, then send `sbx.traffic_access_token` | `sbx.publish_preview_port(port, access="private")`, then `sbx.get_preview_url(port)`. For the token, use `sbx.get_preview_token(port)` (send `token` in the returned `header`) or `sbx.get_signed_preview_url(port)` for a browser. |
 | List and kill | `Sandbox.list()` / `sbx.kill()` | `Sandbox.list()` / `sbx.kill()` |
 
 </Tab>
@@ -160,6 +162,7 @@ import { Sandbox } from "@superserve/sdk"
 // Sandboxes from other templates start from superserve/base.
 const TEMPLATES: Record<string, string> = { "my-e2b-template-id": "my-tpl" }
 const DIR = "/home/user"
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
 
 const pages = E2B.list()
 while (pages.hasNext) {
@@ -173,8 +176,10 @@ while (pages.hasNext) {
       fromTemplate: TEMPLATES[info.templateId] ?? "superserve/base",
       metadata: { ...info.metadata, migrated_from: info.sandboxId },
     })
-    await dst.files.write("/tmp/state.tgz", tgz)
-    const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DIR}`)
+    await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DIR}`, {
+      timeoutMs: TIMEOUT_MS,
+    })
     if (out.exitCode !== 0) {
       console.error(`${info.sandboxId}: copy failed: ${out.stderr}`)
       process.exitCode = 1
@@ -195,6 +200,7 @@ from superserve import Sandbox
 # Sandboxes from other templates start from superserve/base.
 TEMPLATES = {"my-e2b-template-id": "my-tpl"}
 DIR = "/home/user"
+TIMEOUT_SECONDS = 10 * 60  # limit for each upload and extract
 failed = False
 
 pages = E2B.list()
@@ -209,8 +215,10 @@ while pages.has_next:
             from_template=TEMPLATES.get(info.template_id, "superserve/base"),
             metadata={**info.metadata, "migrated_from": info.sandbox_id},
         )
-        dst.files.write("/tmp/state.tgz", bytes(tgz))
-        out = dst.commands.run(f"tar xzf /tmp/state.tgz -C {DIR}")
+        dst.files.write("/tmp/state.tgz", bytes(tgz), timeout=TIMEOUT_SECONDS)
+        out = dst.commands.run(
+            f"tar xzf /tmp/state.tgz -C {DIR}", timeout_seconds=TIMEOUT_SECONDS
+        )
         if out.exit_code != 0:
             print(f"{info.sandbox_id}: copy failed: {out.stderr}", file=sys.stderr)
             failed = True
@@ -220,6 +228,8 @@ while pages.has_next:
 sys.exit(1 if failed else 0)
 ```
 </CodeGroup>
+
+Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS` / `TIMEOUT_SECONDS`.
 
 <Warning>
 The script copies files only. Running processes and memory do not move. Start your services again in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to keep that state.
@@ -273,6 +283,10 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
      If the code relies on the sandbox being killed, call kill() explicitly.
    - getHost(port) -> publishPreviewPort(port), then getPreviewUrl(port). New sandboxes route only
      published ports. getPreviewUrl returns a full URL, so remove any "https://" prefix.
+     A new port is public by default. If the E2B sandbox set allowPublicTraffic: false and sent
+     trafficAccessToken, publish with publishPreviewPort(port, {access: "private"}) and send the
+     Superserve preview credential: getPreviewToken(port) returns {header, token} for machine
+     clients; getSignedPreviewUrl(port) returns a URL for browsers.
    - Python: use snake_case (from_template, timeout_seconds, env_vars, from_snapshot).
 3. Convert E2B templates to Template.create({name, from, steps}).
 4. Run the test suite. Fix failures. Do not delete E2B code paths you cannot test; list them.
@@ -299,5 +313,5 @@ The API mapping and the migration script are in the **Human** tab.
 | --- | --- |
 | Timeout behavior | E2B kills a sandbox at its timeout by default. Superserve pauses it and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
 | Images | Build an image into a template with `Template.create` first, then create sandboxes from the template. |
-| Preview ports | New sandboxes route only published ports. Call `publishPreviewPort` before you use a preview URL. Ports 1024 to 65535 only: move a server on port 80 or 443 to a higher port. |
+| Preview ports | New sandboxes route only published ports, and a new port is public by default. Call `publishPreviewPort` before you use a preview URL. Publish with `access: "private"` and send a preview token to keep a port protected. Ports 1024 to 65535 only: move a server on port 80 or 443 to a higher port. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
