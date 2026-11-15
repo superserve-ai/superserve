@@ -1,0 +1,377 @@
+---
+title: "GitHub Copilot CLI"
+sidebarTitle: GitHub Copilot CLI
+description: Run GitHub Copilot CLI in a Superserve sandbox.
+icon: "/logos/integrations/copilot.svg"
+---
+
+GitHub Copilot CLI is GitHub's terminal coding agent. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+Copilot CLI can use models from a GitHub Copilot subscription, or a model provider key that you bring yourself. This page uses an Anthropic API key, which needs no GitHub account. To use your Copilot subscription instead, see [Use a GitHub Copilot subscription](#use-a-github-copilot-subscription).
+
+## Via the console
+
+1. On the [Secrets page](https://console.superserve.ai/secrets?utm_source=docs&utm_medium=link), create a secret with the **Anthropic** provider and paste your API key — you only do this once, and the key never enters the sandbox.
+2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+3. Pick the **`superserve/node-22`** template.
+4. Under **Advanced Options → Secrets**, bind that secret to `COPILOT_PROVIDER_API_KEY`.
+5. Under **Advanced Options → Environment Variables**, add `COPILOT_PROVIDER_TYPE` = `anthropic`, `COPILOT_PROVIDER_BASE_URL` = `https://api.anthropic.com`, and `COPILOT_MODEL` = `claude-sonnet-4-6`.
+6. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   npm install -g @github/copilot && copilot
+   ```
+
+## Via the SDK
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({
+  name: "anthropic-key",
+  value: "sk-ant-...",
+  provider: "anthropic",
+})
+
+const sandbox = await Sandbox.create({
+  name: "copilot-cli",
+  fromTemplate: "superserve/node-22",
+  secrets: { COPILOT_PROVIDER_API_KEY: "anthropic-key" },
+  envVars: {
+    COPILOT_PROVIDER_TYPE: "anthropic",
+    COPILOT_PROVIDER_BASE_URL: "https://api.anthropic.com",
+    COPILOT_MODEL: "claude-sonnet-4-6",
+  },
+})
+
+await sandbox.commands.run("npm install -g @github/copilot", {
+  timeoutMs: 300_000,
+})
+```
+
+```python Python
+import sys
+
+from superserve import Sandbox, Secret
+
+# One-time: store your key as a secret. It never enters the sandbox.
+Secret.create(name="anthropic-key", value="sk-ant-...", provider="anthropic")
+
+sandbox = Sandbox.create(
+    name="copilot-cli",
+    from_template="superserve/node-22",
+    secrets={"COPILOT_PROVIDER_API_KEY": "anthropic-key"},
+    env_vars={
+        "COPILOT_PROVIDER_TYPE": "anthropic",
+        "COPILOT_PROVIDER_BASE_URL": "https://api.anthropic.com",
+        "COPILOT_MODEL": "claude-sonnet-4-6",
+    },
+)
+
+sandbox.commands.run("npm install -g @github/copilot", timeout_seconds=300)
+```
+</CodeGroup>
+
+When `COPILOT_PROVIDER_BASE_URL` is set, Copilot CLI sends model requests to that provider instead of GitHub, and it doesn't ask you to sign in. `COPILOT_MODEL` selects the model. Copilot CLI reads the key from `COPILOT_PROVIDER_API_KEY`, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent.
+
+Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `copilot`. On the first start, Copilot CLI asks whether you trust the files in the current folder.
+
+## Use an OpenAI key
+
+To use an OpenAI model, create the secret with the **OpenAI** provider and point Copilot CLI at the OpenAI API. `COPILOT_PROVIDER_TYPE` defaults to `openai`, so you can leave it out. Set `COPILOT_PROVIDER_WIRE_API` to `responses` for GPT-5 series models.
+
+<CodeGroup>
+```typescript TypeScript
+await Secret.create({ name: "openai-key", value: "sk-...", provider: "openai" })
+
+const openaiSandbox = await Sandbox.create({
+  name: "copilot-cli-openai",
+  fromTemplate: "superserve/node-22",
+  secrets: { COPILOT_PROVIDER_API_KEY: "openai-key" },
+  envVars: {
+    COPILOT_PROVIDER_BASE_URL: "https://api.openai.com/v1",
+    COPILOT_PROVIDER_WIRE_API: "responses",
+    COPILOT_MODEL: "gpt-5.5",
+  },
+})
+```
+
+```python Python
+Secret.create(name="openai-key", value="sk-...", provider="openai")
+
+openai_sandbox = Sandbox.create(
+    name="copilot-cli-openai",
+    from_template="superserve/node-22",
+    secrets={"COPILOT_PROVIDER_API_KEY": "openai-key"},
+    env_vars={
+        "COPILOT_PROVIDER_BASE_URL": "https://api.openai.com/v1",
+        "COPILOT_PROVIDER_WIRE_API": "responses",
+        "COPILOT_MODEL": "gpt-5.5",
+    },
+)
+```
+</CodeGroup>
+
+Run `copilot help providers-env` in the sandbox for every provider setting, including Azure OpenAI and other OpenAI-compatible endpoints.
+
+## Run headless
+
+Pass a prompt with `-p`. Copilot CLI runs it in the sandbox, prints its final answer and a usage summary, and exits. A headless run can't ask for approval, so it denies every tool that no allow rule covers. Add `--allow-all-tools` so the agent runs shell commands and edits files without stopping.
+
+An agent run can take several minutes. Pass output callbacks to each `run()` that starts the agent: a streamed `run()` gets keepalive messages while the agent works, so the connection stays open. A `run()` without callbacks gets no response until the command ends, and in TypeScript on Node.js it fails after 300 seconds, even with a longer `timeoutMs`. See [Streaming output](/commands/streaming).
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'mkdir -p ~/app && cd ~/app && copilot -p "Create primes.js, a Node.js script that prints the first 10 prime numbers" --allow-all-tools',
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+if (result.exitCode !== 0) throw new Error(`Copilot CLI exited with ${result.exitCode}`)
+```
+
+```python Python
+result = sandbox.commands.run(
+    'mkdir -p ~/app && cd ~/app && copilot -p "Create primes.js, a Node.js script that prints the first 10 prime numbers" --allow-all-tools',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+if result.exit_code != 0:
+    raise RuntimeError(f"Copilot CLI exited with {result.exit_code}")
+```
+</CodeGroup>
+
+Add `-s` to print only the agent's answer, without the usage summary. To allow less than every tool, replace `--allow-all-tools` with rules such as `--allow-tool='write' --allow-tool='shell(npm:*)'`, and block commands with `--deny-tool='shell(git push)'`. Deny rules win over every allow rule. Run `copilot help permissions` for the rule syntax.
+
+<Note>
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect. With a provider key, Copilot CLI needs only your provider's API host, for example `api.anthropic.com`, plus `registry.npmjs.org` if you install it after you restrict the network. If you deny all other traffic, also allow the sandbox's DNS resolvers, `1.1.1.1/32` and `8.8.8.8/32`, so these names resolve.
+</Note>
+
+## Get JSON output
+
+Use `--output-format json` to get one JSON event per line. Each `assistant.message` event holds a message from the agent in `data.content`, and the last one holds its final answer. The last line is a `result` event with the session ID in `sessionId` and the run's exit code in `exitCode`. If the run fails, for example because the key is not valid, Copilot CLI exits with a non-zero code, and a `session.error` event holds the message in `data.message`.
+
+These runs pass only a stderr callback, so the events on stdout aren't printed while they arrive. The callback still keeps the connection open, and `result.stdout` holds every event when the run ends.
+
+<CodeGroup>
+```typescript TypeScript
+const jsonResult = await sandbox.commands.run(
+  'cd ~/app && copilot -p "Add a --count option to primes.js" --allow-all-tools --output-format json',
+  { timeoutMs: 600_000, onStderr: (data) => process.stderr.write(data) },
+)
+
+const events = jsonResult.stdout.trim().split("\n").map((line) => JSON.parse(line))
+if (jsonResult.exitCode !== 0) {
+  const error = events.find((e) => e.type === "session.error")
+  throw new Error(error?.data.message ?? jsonResult.stderr)
+}
+
+const answer = events.filter((e) => e.type === "assistant.message").at(-1)
+const sessionId: string = events.find((e) => e.type === "result").sessionId
+
+console.log(answer?.data.content)
+```
+
+```python Python
+import json
+
+result = sandbox.commands.run(
+    'cd ~/app && copilot -p "Add a --count option to primes.js" --allow-all-tools --output-format json',
+    timeout_seconds=600,
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+
+events = [json.loads(line) for line in result.stdout.strip().splitlines()]
+if result.exit_code != 0:
+    error = next((e for e in events if e["type"] == "session.error"), None)
+    raise RuntimeError(error["data"]["message"] if error else result.stderr)
+
+answer = [e for e in events if e["type"] == "assistant.message"][-1]
+session_id = next(e for e in events if e["type"] == "result")["sessionId"]
+
+print(answer["data"]["content"])
+```
+</CodeGroup>
+
+Other events report tool calls (`tool.execution_start`, `tool.execution_complete`) and streamed text (`assistant.message_delta`).
+
+## Continue a session
+
+Copilot CLI saves each run as a session in `~/.copilot`. Pass the session ID to `--resume` to send a follow-up with the earlier context, or use `--continue` to resume the most recent session.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  `cd ~/app && copilot --resume=${sessionId} -p "Now add a test for it" --allow-all-tools`,
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    f'cd ~/app && copilot --resume={session_id} -p "Now add a test for it" --allow-all-tools',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+```
+</CodeGroup>
+
+## Work on a repository
+
+Clone a repository into the sandbox, stream Copilot CLI's output while it works, then read the diff.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+)
+
+await sandbox.commands.run(
+  'cd ~/repo && copilot -p "Add JSDoc comments to all exported functions" --allow-all-tools',
+  {
+    timeoutMs: 600_000,
+    onStdout: (data) => process.stdout.write(data),
+    onStderr: (data) => process.stderr.write(data),
+  },
+)
+
+const diff = await sandbox.commands.run("cd ~/repo && git diff")
+console.log(diff.stdout)
+```
+
+```python Python
+sandbox.commands.run(
+    "git clone --depth 1 https://github.com/your-org/your-repo.git ~/repo",
+)
+
+sandbox.commands.run(
+    'cd ~/repo && copilot -p "Add JSDoc comments to all exported functions" --allow-all-tools',
+    timeout_seconds=600,
+    on_stdout=lambda data: print(data, end=""),
+    on_stderr=lambda data: print(data, end="", file=sys.stderr),
+)
+
+diff = sandbox.commands.run("cd ~/repo && git diff")
+print(diff.stdout)
+```
+</CodeGroup>
+
+## Use a GitHub Copilot subscription
+
+To use the models of your Copilot subscription, give Copilot CLI a GitHub token instead of a provider key. Create a [fine-grained personal access token](https://github.com/settings/personal-access-tokens/new) with the **Copilot Requests** account permission (it starts with `github_pat_`). Classic tokens (`ghp_`) don't work. Pass the token as `COPILOT_GITHUB_TOKEN`, and don't set the `COPILOT_PROVIDER_*` variables, because they replace the Copilot models.
+
+```bash
+export COPILOT_GITHUB_TOKEN=github_pat_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+const githubSandbox = await Sandbox.create({
+  name: "copilot-cli-github",
+  fromTemplate: "superserve/node-22",
+  envVars: { COPILOT_GITHUB_TOKEN: process.env.COPILOT_GITHUB_TOKEN! },
+})
+```
+
+```python Python
+import os
+
+github_sandbox = Sandbox.create(
+    name="copilot-cli-github",
+    from_template="superserve/node-22",
+    env_vars={"COPILOT_GITHUB_TOKEN": os.environ["COPILOT_GITHUB_TOKEN"]},
+)
+```
+</CodeGroup>
+
+[Environment variables](/sandbox/environment-variables) are plain text, so any process in the sandbox, including the agent, can read the token. Give the token only the **Copilot Requests** permission, and delete it on GitHub's [token settings](https://github.com/settings/personal-access-tokens) page if it leaks. Install Copilot CLI and run it as shown above. To pick one of your subscription's models, pass `--model`.
+
+If the token is not valid, Copilot CLI exits with code `1` and prints `Authentication token found but could not be validated`. If no token and no provider are set, it prints `No authentication information found`.
+
+## Keep the version fixed
+
+Copilot CLI checks for updates and downloads newer versions in the background, so a long-lived or resumed sandbox can end up on a newer version than the one you installed. Install a specific version and set `COPILOT_AUTO_UPDATE` to `false` to turn off updates:
+
+<CodeGroup>
+```typescript TypeScript
+const pinnedSandbox = await Sandbox.create({
+  name: "copilot-cli",
+  fromTemplate: "superserve/node-22",
+  secrets: { COPILOT_PROVIDER_API_KEY: "anthropic-key" },
+  envVars: {
+    COPILOT_PROVIDER_TYPE: "anthropic",
+    COPILOT_PROVIDER_BASE_URL: "https://api.anthropic.com",
+    COPILOT_MODEL: "claude-sonnet-4-6",
+    COPILOT_AUTO_UPDATE: "false",
+  },
+})
+
+await pinnedSandbox.commands.run("npm install -g @github/copilot@1.0.112", {
+  timeoutMs: 300_000,
+})
+```
+
+```python Python
+pinned_sandbox = Sandbox.create(
+    name="copilot-cli",
+    from_template="superserve/node-22",
+    secrets={"COPILOT_PROVIDER_API_KEY": "anthropic-key"},
+    env_vars={
+        "COPILOT_PROVIDER_TYPE": "anthropic",
+        "COPILOT_PROVIDER_BASE_URL": "https://api.anthropic.com",
+        "COPILOT_MODEL": "claude-sonnet-4-6",
+        "COPILOT_AUTO_UPDATE": "false",
+    },
+)
+
+pinned_sandbox.commands.run(
+    "npm install -g @github/copilot@1.0.112", timeout_seconds=300
+)
+```
+</CodeGroup>
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
+
+## Delete when finished
+
+A paused sandbox is kept until you delete it. When you no longer need the sandbox, delete it. This also deletes its files and saved state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).
