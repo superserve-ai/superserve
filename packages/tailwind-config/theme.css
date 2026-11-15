@@ -25,11 +25,14 @@
   --color-primary-hover: var(--color-brand-hover);
 
   /* destructive is the text/icon/border red; destructive-fill* is only for solid fills under light text (text-foreground: 5.53:1). */
-  --color-destructive: oklch(0.72 0.16 12);
+  --color-destructive: #ff8f7a;
   --color-destructive-fill: oklch(0.5 0.18 12);
   --color-destructive-fill-hover: oklch(0.42 0.18 12);
   --color-success: oklch(0.6 0.15 155);
-  --color-warning: oklch(0.65 0.14 75);
+  --color-warning: #f5c76b;
+  /* info (cyan): compute, paused. ecosystem (violet): templates, snapshots, storage. */
+  --color-info: #7cc4fa;
+  --color-ecosystem: #c3a6ff;
 
   --animate-fade-in: fade-in 0.5s ease-out forwards;
   --animate-accordion-down: accordion-down 0.2s ease-out;

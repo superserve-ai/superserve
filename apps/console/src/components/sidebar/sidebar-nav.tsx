@@ -67,7 +67,13 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
                 <CornerBrackets size="sm" className="border-brand/50" />
               </motion.span>
             )}
-            <Icon className="relative size-4 shrink-0" weight="light" />
+            <Icon
+              className={cn(
+                "relative size-4 shrink-0",
+                !isActive && item.iconClassName,
+              )}
+              weight="light"
+            />
             {!isCollapsed && (
               <span className="relative text-sm leading-none tracking-tight">
                 {item.label}

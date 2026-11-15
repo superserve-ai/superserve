@@ -6,6 +6,7 @@ type BadgeVariant =
   | "default"
   | "active"
   | "success"
+  | "info"
   | "warning"
   | "destructive"
   | "muted"
@@ -19,6 +20,7 @@ const variantClasses: Record<BadgeVariant, string> = {
   default: "bg-foreground/10 text-foreground/80",
   active: "bg-brand/10 text-brand",
   success: "bg-brand/10 text-brand",
+  info: "bg-info/10 text-info",
   warning: "bg-warning/10 text-warning",
   destructive: "bg-destructive/10 text-destructive",
   muted: "bg-muted/10 text-muted",
@@ -28,6 +30,7 @@ const dotColorClasses: Record<BadgeVariant, string> = {
   default: "bg-foreground/60",
   active: "bg-brand",
   success: "bg-brand",
+  info: "bg-info",
   warning: "bg-warning",
   destructive: "bg-destructive",
   muted: "bg-muted",

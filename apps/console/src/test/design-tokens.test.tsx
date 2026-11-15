@@ -129,6 +129,15 @@ describe("design token contrast (WCAG 2.x)", () => {
     expect(contrast("--color-destructive", surface)).toBeGreaterThanOrEqual(4.5)
   })
 
+  it.each(["--color-info", "--color-ecosystem", "--color-warning"])(
+    "%s text has at least 4.5:1 on each surface",
+    (token) => {
+      for (const surface of surfaces) {
+        expect(contrast(token, surface)).toBeGreaterThanOrEqual(4.5)
+      }
+    },
+  )
+
   it.each(["--color-destructive-fill", "--color-destructive-fill-hover"])(
     "foreground text has at least 4.5:1 on %s",
     (fill) => {
