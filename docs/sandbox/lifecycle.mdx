@@ -91,7 +91,7 @@ After a resume, keep using the same `sandbox` — your `commands` and `files` ca
 
 `kill()` deletes the sandbox and all its resources. It's idempotent - deleting an already-deleted sandbox is a no-op that swallows the `404`.
 
-In Python, methods on the `sandbox` object you killed, such as `get_info()`, `pause()`, and `update()`, raise `SandboxError` without sending a request, instead of the `404` `NotFoundError`.
+In Python, some methods on the `sandbox` object you killed, including `get_info()`, `pause()`, and `update()`, raise `SandboxError` without sending a request, instead of the `404` `NotFoundError`.
 
 <CodeGroup>
 ```typescript TypeScript {5}
