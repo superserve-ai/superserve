@@ -115,10 +115,35 @@ async function getTeamForUser(
         membership.region === selection.region,
     )
   ) {
-    directory = await completedMemberships(
-      userId,
-      await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
-    )
+    try {
+      const fresh = await completedMemberships(
+        userId,
+        await listTeamMembershipsForUserDetailed(userId, { maxAgeMs: 0 }),
+      )
+      // Keep completed cached memberships only for unreadable regions;
+      // successful reads must still respect confirmed removals.
+      directory = {
+        memberships: [
+          ...fresh.memberships.filter(
+            (membership) => !fresh.degradedRegions.includes(membership.region),
+          ),
+          ...directory.memberships.filter((membership) =>
+            fresh.degradedRegions.includes(membership.region),
+          ),
+        ],
+        degradedRegions: fresh.degradedRegions.filter((region) =>
+          directory.degradedRegions.includes(region),
+        ),
+      }
+    } catch {
+      console.warn(
+        "Membership directory refresh failed; using cached directory",
+        {
+          userId,
+          stage: "proxy-auth",
+        },
+      )
+    }
   }
   let memberships = directory.memberships
   if (googleUser && memberships.length === 0) {

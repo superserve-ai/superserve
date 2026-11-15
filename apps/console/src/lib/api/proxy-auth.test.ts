@@ -420,6 +420,68 @@ describe("proxy-auth cell targeting", () => {
     expect(provisionTeam).not.toHaveBeenCalled()
   })
 
+  it("keeps the cached fallback when the fresh directory cannot read its region", async () => {
+    const user = { id: "degraded-refresh-fallback-user" }
+    activeTeamCookie = "usw:removed-team"
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({
+        memberships: [{ teamId: "team-west", region: "usw" }],
+        degradedRegions: [],
+      })
+      .mockResolvedValueOnce({
+        memberships: [],
+        degradedRegions: ["usw"],
+      })
+    vi.mocked(provisionTeam).mockClear()
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "usw" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      2,
+      user.id,
+      { maxAgeMs: 0 },
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("keeps the cached fallback when the fresh directory read rejects", async () => {
+    const user = { id: "failed-refresh-fallback-user" }
+    activeTeamCookie = "usw:removed-team"
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({
+        memberships: [{ teamId: "team-west", region: "usw" }],
+        degradedRegions: [],
+      })
+      .mockRejectedValueOnce(new Error("default cell unavailable"))
+    vi.mocked(provisionTeam).mockClear()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+    try {
+      await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual(
+        {
+          apiKey: deriveRawKey(user.id, "team-west"),
+          team: { teamId: "team-west", region: "usw" },
+        },
+      )
+      expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+        2,
+        user.id,
+        { maxAgeMs: 0 },
+      )
+      expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+      expect(provisionTeam).not.toHaveBeenCalled()
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        "Membership directory refresh failed; using cached directory",
+        { userId: user.id, stage: "proxy-auth" },
+      )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
   it("reads the directory once when no team is selected", async () => {
     const user = { id: "no-selection-single-directory-read-user" }
 
