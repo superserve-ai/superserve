@@ -365,6 +365,33 @@ describe("CheckoutElsewhere", () => {
     expect(mocks.assign).not.toHaveBeenCalled()
   })
 
+  it("ignores a pending other team switch immediately on a bfcache restore", async () => {
+    const switching = deferred<void>()
+    mocks.lookup.mockResolvedValue({ kind: "switch", team })
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [{ id: "another-team", name: "Another team", region: "use" }],
+    })
+    mocks.setActiveTeam.mockReturnValueOnce(switching.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Open team" }))
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith(
+      "another-team",
+      "use",
+    )
+    expect(mocks.assign).not.toHaveBeenCalled()
+
+    await act(async () => {
+      window.dispatchEvent(pageShowEvent(true))
+      switching.resolve()
+      await switching.promise
+    })
+
+    expect(mocks.lookup).toHaveBeenCalledTimes(2)
+    expect(mocks.assign).not.toHaveBeenCalled()
+  })
+
   it("does not refresh teams on a normal pageshow", async () => {
     mocks.lookup.mockResolvedValue({ kind: "switch", team })
     render(<CheckoutElsewhere locator={locator} />)

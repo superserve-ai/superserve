@@ -78,6 +78,7 @@ export function CheckoutElsewhere({ locator }: { locator: CheckoutLocator }) {
       current.busy = false
       if (current.live) setBusy(false)
     },
+    live: () => current.live,
   }
   const switchTeam = async (team: { id: string; region: string }) => {
     if (!lock.acquire()) return

@@ -193,7 +193,7 @@ export function OtherTeams({
   hideOpen?: boolean
   className?: string
   disabled?: boolean
-  lock?: { acquire: () => boolean; release: () => void }
+  lock?: { acquire: () => boolean; release: () => void; live: () => boolean }
 }) {
   const [teams, setTeams] = useState<TeamSummary[]>()
   const [picked, setPicked] = useState<string>()
@@ -250,9 +250,11 @@ export function OtherTeams({
     setFailed(false)
     try {
       await setActiveTeamAction(selected.id, selected.region)
-      if (mountedRef.current) window.location.assign("/sandboxes")
+      const live = mountedRef.current && (lock?.live() ?? true)
+      if (live) window.location.assign("/sandboxes")
     } catch {
-      if (!mountedRef.current) return
+      const live = mountedRef.current && (lock?.live() ?? true)
+      if (!live) return
       switchingRef.current = false
       lock?.release()
       setSwitching(false)
