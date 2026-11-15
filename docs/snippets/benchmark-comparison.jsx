@@ -48,14 +48,12 @@ export const BenchmarkComparison = ({
     {
       key: "snapshot",
       title: "Snapshot and restore",
-      description: "Score out of 100",
       unit: "score",
       better: "higher",
     },
     {
       key: "pause",
       title: "Pause and resume",
-      description: "Score out of 100",
       unit: "score",
       better: "higher",
     },
@@ -190,7 +188,10 @@ export const BenchmarkComparison = ({
                 <span className="ss-bench-heading">
                   <strong className="ss-bench-title">{chart.title}</strong>
                   <span className="ss-bench-desc">
-                    {chart.description} · {chart.better} is better
+                    {chart.description && `${chart.description}. `}
+                    <strong>
+                      {chart.better === "lower" ? "Lower" : "Higher"} is better.
+                    </strong>
                   </span>
                 </span>
                 {badge && <span className="ss-bench-badge">{badge}</span>}
