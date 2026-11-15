@@ -63,7 +63,7 @@ afterEach(() => {
 describe("confirmedSignupDestinationAction", () => {
   it("sends a new Pro trial to the console, not the upgrade page", async () => {
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe("/sandboxes")
     expect(fetchMock).toHaveBeenCalledWith(
       "https://api.example.test/billing/plan",
@@ -74,10 +74,10 @@ describe("confirmedSignupDestinationAction", () => {
   it("sends an unfinished YC claim to its claim page first", async () => {
     cookieJar.set("yc_claim_confirmation", "pending")
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe("/yc/claim")
     await expect(
-      confirmedSignupDestinationAction(undefined, "/"),
+      confirmedSignupDestinationAction(undefined, "/", "u1"),
     ).resolves.toBe("/yc/claim")
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -85,7 +85,7 @@ describe("confirmedSignupDestinationAction", () => {
   it("sends a team whose trial is used up to its plan picker", async () => {
     plan = { ok: true, body: { entry_state: "trial_ended" } }
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe(
       "/auth/choose-plan/?reason=trial_ended&offer=pro_monthly&account=u1&team=use%3Ateam-1",
     )
@@ -93,7 +93,7 @@ describe("confirmedSignupDestinationAction", () => {
 
   it("asks the backend without an offer too", async () => {
     await expect(
-      confirmedSignupDestinationAction(undefined, "/"),
+      confirmedSignupDestinationAction(undefined, "/", "u1"),
     ).resolves.toBe("/sandboxes")
   })
 
@@ -101,14 +101,14 @@ describe("confirmedSignupDestinationAction", () => {
     // The callback's own lookup may have sent a trial to the console.
     plan = { ok: false, body: {} }
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe("/")
   })
 
   it("keeps the offer's landing page when the team awaits no plan", async () => {
     plan = { ok: true, body: {} }
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe("/billing/pro/")
   })
 
@@ -117,23 +117,23 @@ describe("confirmedSignupDestinationAction", () => {
     // the console, so this tab must not guess the upgrade page.
     pricing.mockRejectedValue(new Error("Plans are unavailable"))
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe("/")
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/", "u1"),
     ).resolves.toBe("/")
     await expect(
-      confirmedSignupDestinationAction("enterprise", "/yc/claim"),
+      confirmedSignupDestinationAction("enterprise", "/yc/claim", "u1"),
     ).resolves.toBe("/")
   })
 
   it("keeps a step every pricing version takes when pricing cannot be read", async () => {
     pricing.mockRejectedValue(new Error("Plans are unavailable"))
     await expect(
-      confirmedSignupDestinationAction(undefined, "/yc/claim"),
+      confirmedSignupDestinationAction(undefined, "/yc/claim", "u1"),
     ).resolves.toBe("/yc/claim")
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/yc/claim"),
+      confirmedSignupDestinationAction("pro_monthly", "/yc/claim", "u1"),
     ).resolves.toBe("/yc/claim")
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -141,14 +141,14 @@ describe("confirmedSignupDestinationAction", () => {
   it("uses the offer's landing page under legacy pricing", async () => {
     pricing.mockResolvedValue("legacy")
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe("/billing/pro/")
     expect(fetchMock).not.toHaveBeenCalled()
   })
 
   it("leaves an Enterprise sign-up to the dashboard entry", async () => {
     await expect(
-      confirmedSignupDestinationAction("enterprise", "/"),
+      confirmedSignupDestinationAction("enterprise", "/", "u1"),
     ).resolves.toBe("/")
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -157,14 +157,14 @@ describe("confirmedSignupDestinationAction", () => {
     // A failed lookup can keep the session, so no step is guessed here.
     getUser.mockResolvedValue({ data: { user: null } })
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/", "u1"),
     ).rejects.toThrow()
     getUser.mockResolvedValue({
       data: { user: null },
       error: new Error("Service Unavailable"),
     })
     await expect(
-      confirmedSignupDestinationAction(undefined, "/yc/claim"),
+      confirmedSignupDestinationAction(undefined, "/yc/claim", "u1"),
     ).rejects.toThrow()
     expect(pricing).not.toHaveBeenCalled()
   })
@@ -172,26 +172,26 @@ describe("confirmedSignupDestinationAction", () => {
   it("routes an explicit offer landing page through the team state", async () => {
     // As /auth/callback does for next=/billing/pro/ on a new sign-up.
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/", "u1"),
     ).resolves.toBe("/sandboxes")
     expect(fetchMock).toHaveBeenCalledTimes(1)
     plan = { ok: false, body: {} }
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/", "u1"),
     ).resolves.toBe("/")
   })
 
   it("keeps an explicit landing page ahead of a YC claim, as the callback does", async () => {
     cookieJar.set("yc_claim_confirmation", "pending")
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/"),
+      confirmedSignupDestinationAction("pro_monthly", "/billing/pro/", "u1"),
     ).resolves.toBe("/sandboxes")
   })
 
   it("sends a plain console path through the team state", async () => {
     plan = { ok: true, body: { entry_state: "trial_ended" } }
     await expect(
-      confirmedSignupDestinationAction(undefined, "/templates"),
+      confirmedSignupDestinationAction(undefined, "/templates", "u1"),
     ).resolves.toBe(
       "/auth/choose-plan/?reason=trial_ended&account=u1&team=use%3Ateam-1",
     )
@@ -199,7 +199,7 @@ describe("confirmedSignupDestinationAction", () => {
 
   it("keeps an explicit step the confirmation email carries", async () => {
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/yc/claim"),
+      confirmedSignupDestinationAction("pro_monthly", "/yc/claim", "u1"),
     ).resolves.toBe("/yc/claim")
     expect(fetchMock).not.toHaveBeenCalled()
   })
@@ -209,12 +209,16 @@ describe("confirmedSignupDestinationAction", () => {
     // callback picks its default step for anything else.
     pricing.mockResolvedValue("legacy")
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/templates"),
+      confirmedSignupDestinationAction("pro_monthly", "/templates", "u1"),
     ).resolves.toBe("/billing/pro/")
     pricing.mockResolvedValue("v2")
     plan = { ok: true, body: { entry_state: "trial_ended" } }
     await expect(
-      confirmedSignupDestinationAction(undefined, "/onboarding/plan/?team=t"),
+      confirmedSignupDestinationAction(
+        undefined,
+        "/onboarding/plan/?team=t",
+        "u1",
+      ),
     ).resolves.toBe(
       "/auth/choose-plan/?reason=trial_ended&account=u1&team=use%3Ateam-1",
     )
@@ -223,7 +227,7 @@ describe("confirmedSignupDestinationAction", () => {
   it("sets up the first team before a payment step, as the callback does", async () => {
     pricing.mockResolvedValue("legacy")
     await expect(
-      confirmedSignupDestinationAction("pro_monthly", "/"),
+      confirmedSignupDestinationAction("pro_monthly", "/", "u1"),
     ).resolves.toBe("/billing/pro/")
     expect(signupPlan).toHaveBeenCalledWith(
       undefined,
@@ -241,6 +245,7 @@ describe("confirmedSignupDestinationAction", () => {
       confirmedSignupDestinationAction(
         undefined,
         "/billing-usage/buy-credit/?amount=500",
+        "u1",
       ),
     ).resolves.toBe(
       `/auth/auth-code-error?${new URLSearchParams({
@@ -254,6 +259,7 @@ describe("confirmedSignupDestinationAction", () => {
       confirmedSignupDestinationAction(
         undefined,
         "/billing-usage/buy-credit/?amount=500",
+        "u1",
       ),
     ).resolves.toMatch(/^\/auth\/auth-code-error\?reason=account_setup&/)
     expect(fetchMock).not.toHaveBeenCalled()
@@ -262,13 +268,28 @@ describe("confirmedSignupDestinationAction", () => {
   it("gives a restricted sign-up the callback's restriction notice", async () => {
     signupPlan.mockRejectedValue(new SignupRestrictedError())
     await expect(
-      confirmedSignupDestinationAction(undefined, "/billing/pro/"),
+      confirmedSignupDestinationAction(undefined, "/billing/pro/", "u1"),
     ).resolves.toBe("/auth/auth-code-error?reason=signup_blocked")
+  })
+
+  it("sets up nothing when another account signed in since the tab saw it", async () => {
+    getUser.mockResolvedValue({ data: { user: { id: "u2" } } })
+    await expect(
+      confirmedSignupDestinationAction(undefined, "/billing/pro/", "u1"),
+    ).rejects.toThrow()
+    expect(signupPlan).not.toHaveBeenCalled()
+    expect(fetchMock).not.toHaveBeenCalled()
+  })
+
+  it("treats a next path that does not parse as none", async () => {
+    await expect(
+      confirmedSignupDestinationAction(undefined, "/\n/[", "u1"),
+    ).resolves.toBe("/sandboxes")
   })
 
   it("treats a next path that leaves the site as none", async () => {
     await expect(
-      confirmedSignupDestinationAction(undefined, "/\\attacker.example"),
+      confirmedSignupDestinationAction(undefined, "/\\attacker.example", "u1"),
     ).resolves.toBe("/sandboxes")
   })
 })

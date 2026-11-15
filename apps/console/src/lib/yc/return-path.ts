@@ -8,7 +8,14 @@ export function ycReturnPath(raw: string | null | undefined): string | null {
     raw.startsWith("//")
   )
     return null
-  const url = new URL(raw, "https://console.invalid")
+  // The URL parser drops tabs and newlines, so "/\n/[" passes the checks
+  // above and then fails to parse as a host.
+  let url: URL
+  try {
+    url = new URL(raw, "https://console.invalid")
+  } catch {
+    return null
+  }
   if (
     url.origin !== "https://console.invalid" ||
     url.hash ||

@@ -33,6 +33,7 @@ import {
 export async function confirmedSignupDestinationAction(
   rawOffer: string | undefined,
   rawNext: string,
+  account: string,
 ): Promise<string> {
   // The next path the confirmation email carried, which the callback used.
   const requested = confirmedSignupReturnPath(
@@ -45,6 +46,9 @@ export async function confirmedSignupDestinationAction(
   // No user here can be a failed lookup with the session intact. Fail, so the
   // tab takes its own fallback for the account it saw sign in.
   if (!user) throw new Error("No signed-in user to follow")
+  // Another tab may have switched accounts since this tab saw the sign-in.
+  // Set up nothing for an account the tab did not see.
+  if (user.id !== account) throw new Error("Signed-in account changed")
   const ycClaimPending = !!(await cookies()).get(YC_COOKIE)
   const stepFor = (pricing: PricingVersion) => {
     const signupOffer =

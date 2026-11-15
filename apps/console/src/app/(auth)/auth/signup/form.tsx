@@ -476,7 +476,7 @@ export default function SignUpContent() {
       let timer: ReturnType<typeof setTimeout> | undefined
       try {
         const path = await Promise.race([
-          confirmedSignupDestinationAction(rawOffer, confirmedNext),
+          confirmedSignupDestinationAction(rawOffer, confirmedNext, account),
           new Promise<string>((resolve) => {
             timer = setTimeout(
               () => resolve(fallbackNext),

@@ -83,11 +83,14 @@ vi.mock("@/lib/supabase/client", () => ({
 }))
 
 const mockConfirmedDestination = vi.fn<
-  (offer: string | undefined, next: string) => Promise<string>
+  (offer: string | undefined, next: string, account: string) => Promise<string>
 >((_offer, next) => Promise.resolve(next))
 vi.mock("@/lib/auth/signup-return-actions", () => ({
-  confirmedSignupDestinationAction: (offer: string | undefined, next: string) =>
-    mockConfirmedDestination(offer, next),
+  confirmedSignupDestinationAction: (
+    offer: string | undefined,
+    next: string,
+    account: string,
+  ) => mockConfirmedDestination(offer, next, account),
 }))
 
 const mockEnsureFingerprintSignupEventId = vi.fn<
@@ -228,6 +231,14 @@ describe("SignUpPage", () => {
     expect(screen.getByRole("button", { name: "Sign Up" })).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: /Continue with Google/ }),
+    ).toBeInTheDocument()
+  })
+
+  it("renders the signup form when next does not parse as a URL", async () => {
+    mockSearchParams = new URLSearchParams({ next: "/\n/[" })
+    render(<SignUpPage />)
+    expect(
+      await screen.findByRole("button", { name: "Sign Up" }),
     ).toBeInTheDocument()
   })
 
@@ -1215,6 +1226,7 @@ describe("SignUpPage", () => {
       expect(mockConfirmedDestination).toHaveBeenCalledWith(
         undefined,
         "/yc/claim",
+        "user-1",
       )
     })
 
@@ -1237,6 +1249,7 @@ describe("SignUpPage", () => {
       expect(mockConfirmedDestination).toHaveBeenCalledWith(
         "pro_monthly",
         "/billing/pro/",
+        "user-1",
       )
       expect(mockReplace).toHaveBeenCalledTimes(1)
     })
@@ -1251,7 +1264,11 @@ describe("SignUpPage", () => {
       confirmInOtherTab()
 
       await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
-      expect(mockConfirmedDestination).toHaveBeenCalledWith(undefined, "/")
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(
+        undefined,
+        "/",
+        "user-1",
+      )
     })
 
     it("takes the requested path when the server is slow", async () => {
@@ -1403,7 +1420,11 @@ describe("SignUpPage", () => {
       await waitFor(() =>
         expect(mockReplace).toHaveBeenCalledWith("/sandboxes"),
       )
-      expect(mockConfirmedDestination).toHaveBeenCalledWith("pro_monthly", "/")
+      expect(mockConfirmedDestination).toHaveBeenCalledWith(
+        "pro_monthly",
+        "/",
+        "user-1",
+      )
       expect(mockReplace).not.toHaveBeenCalledWith("/billing/pro/")
     })
 
