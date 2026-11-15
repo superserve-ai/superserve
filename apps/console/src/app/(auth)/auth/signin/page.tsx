@@ -27,6 +27,7 @@ import { clearFingerprintSignupCapture } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
+import { RecaptchaScript } from "@/lib/recaptcha/script"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import { beginGoogleSignIn } from "./google-action"
@@ -326,12 +327,8 @@ function SignInContent() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       {/* Loaded up front: Continue with Google runs the sign-up check. */}
-      {RECAPTCHA_SITE_KEY && (
-        <Script
-          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
-        />
-      )}
+      {/* Loaded up front: Continue with Google runs the sign-up check. */}
+      <RecaptchaScript />
       {/* Loaded up front too: the sign-up check sends its observation token. */}
       {TURNSTILE_SITE_KEY && (
         <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
