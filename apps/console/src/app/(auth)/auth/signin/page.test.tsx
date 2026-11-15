@@ -2,6 +2,8 @@ import { render, screen, waitFor, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { AUTH_MESSAGES } from "@/lib/auth/sign-in-messages"
+
 // --- Mocks ---
 
 // @superserve/ui — mock only the pieces the page uses. Input renders its
@@ -121,6 +123,7 @@ vi.mock("@/lib/recaptcha/client", () => ({
     return recaptcha.siteKey
   },
   getRecaptchaToken: (...args: unknown[]) => recaptcha.getToken(...args),
+  markRecaptchaScriptFailed: () => {},
 }))
 
 const mockSignInWithPassword = vi.fn()
@@ -729,7 +732,9 @@ describe("SignInPage", () => {
     expect(callback.searchParams.has("signup_attempt_id")).toBe(false)
     // A failed check must not leave capture state for a later sign-up.
     expect(mockClearFingerprintCapture).toHaveBeenCalledTimes(1)
-    expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(AUTH_MESSAGES.googleSignInFailed),
+    ).not.toBeInTheDocument()
   })
 
   it("keeps the fingerprint capture when Google OAuth does not start", async () => {
@@ -739,7 +744,9 @@ describe("SignInPage", () => {
     await user.click(
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
-    expect(await screen.findByText(/Error signing in/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(AUTH_MESSAGES.googleSignInFailed),
+    ).toBeInTheDocument()
     expect(mockClearFingerprintCapture).not.toHaveBeenCalled()
   })
 
@@ -757,10 +764,14 @@ describe("SignInPage", () => {
     })
     await user.click(button)
     await new Promise((resolve) => setTimeout(resolve, 20))
-    expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(AUTH_MESSAGES.googleSignInFailed),
+    ).not.toBeInTheDocument()
     expect(button).toBeDisabled()
     finishCheck("attempt-123")
-    expect(await screen.findByText(/Error signing in/)).toBeInTheDocument()
+    expect(
+      await screen.findByText(AUTH_MESSAGES.googleSignInFailed),
+    ).toBeInTheDocument()
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
     expect(mockClearFingerprintCapture).not.toHaveBeenCalled()
   })
