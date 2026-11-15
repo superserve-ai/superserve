@@ -27,10 +27,10 @@ export const BenchmarkComparison = ({
   const BUNDLED = {
     fetchedAt: "2026-11-14T00:04:36.863Z",
     metrics: {
-      tti: { values: { superserve: 446, e2b: 1068 } },
-      dax: { values: { superserve: 57422, e2b: 64219 } },
-      snapshot: { values: { superserve: 95.4, e2b: 84.2 } },
-      pause: { values: { superserve: 97, e2b: 90.9 } },
+      tti: { values: { superserve: 446, e2b: 1068, vercel: 521 } },
+      dax: { values: { superserve: 57422, e2b: 64219, vercel: 72265 } },
+      snapshot: { values: { superserve: 95.4, e2b: 84.2, vercel: 0 } },
+      pause: { values: { superserve: 97, e2b: 90.9, vercel: 85.3 } },
     },
   }
 
