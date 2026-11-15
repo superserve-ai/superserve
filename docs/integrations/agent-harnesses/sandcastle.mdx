@@ -76,7 +76,7 @@ For the Python version, run `pip install superserve` and export the keys from `.
 
 ## Add the sandbox provider
 
-Sandcastle's `createIsolatedSandboxProvider` turns a `create` function into a sandbox provider. This provider creates a Superserve sandbox for each run, and sends Sandcastle's commands and file copies to it. It tags each sandbox with the metadata `sandcastle: "true"`, and deletes the sandbox when the run ends. Save it as `.sandcastle/superserve.ts`:
+Sandcastle's `createIsolatedSandboxProvider` turns a `create` function into a sandbox provider. This provider creates a Superserve sandbox for each run, and sends Sandcastle's commands and file copies to it. It tags each sandbox with the metadata `sandcastle: "true"`, keeps a heartbeat tag up to date while the run uses the sandbox, and deletes the sandbox when the run ends. Save it as `.sandcastle/superserve.ts`:
 
 ```typescript .sandcastle/superserve.ts expandable
 import { execFile } from "node:child_process"
@@ -122,15 +122,30 @@ export const superserve = (
     env: { IS_SANDBOX: "1", ...env },
 
     async create({ env: sandboxEnv }): Promise<IsolatedSandboxHandle> {
+      // The run owns its sandbox while it updates the heartbeat tag (Unix
+      // time in ms). cleanup.ts deletes only sandboxes with a stale heartbeat.
+      const metadata = { sandcastle: "true", ...createOptions.metadata }
+      const lease = () => ({
+        ...metadata,
+        "sandcastle-heartbeat": String(Date.now()),
+      })
+
       const sandbox = await Sandbox.create({
         name: `sandcastle-${randomUUID().slice(0, 8)}`,
-        // Pause after 10 minutes with no open command, for example when the
-        // host process stops. cleanup.ts deletes paused sandboxes.
+        // Pause the sandbox after 10 minutes with no command, to stop billing
+        // for it. The next command resumes it.
         idleTimeoutSeconds: 10 * 60,
         ...createOptions,
-        metadata: { sandcastle: "true", ...createOptions.metadata },
+        metadata: lease(),
         envVars: sandboxEnv,
       })
+
+      // Update the heartbeat every minute until close(), also while the
+      // sandbox is paused. updateById does not resume a paused sandbox.
+      const heartbeat = setInterval(() => {
+        Sandbox.updateById(sandbox.id, { metadata: lease() }).catch(() => {})
+      }, 60_000)
+      heartbeat.unref()
 
       // Run a setup command and throw its stderr when it fails.
       const sh = async (command: string) => {
@@ -143,6 +158,7 @@ export const superserve = (
       try {
         await sh(`mkdir -p ${WORKTREE}`)
       } catch (error) {
+        clearInterval(heartbeat)
         await sandbox.kill()
         throw error
       }
@@ -205,6 +221,7 @@ export const superserve = (
         },
 
         async close() {
+          clearInterval(heartbeat)
           await sandbox.kill()
         },
       }
@@ -220,7 +237,7 @@ export const superserve = (
 | `env` | `{}` | Environment variables to set in every sandbox. |
 | `commandTimeoutMs` | 1 hour | Timeout for each command, including the agent run. |
 
-The provider also sets [`idleTimeoutSeconds`](/sandbox/lifecycle#idle-timeout) to 10 minutes, unless you pass another value. A sandbox does not pause while a command runs in it, so the idle timeout pauses only a sandbox that no run uses.
+The provider also sets [`idleTimeoutSeconds`](/sandbox/lifecycle#idle-timeout) to 10 minutes, unless you pass another value, so a sandbox with no command running stops billing. A paused sandbox can still belong to a run, for example while a `host.onSandboxReady` hook runs on your machine. The next command resumes it.
 
 ## Run Claude Code
 
@@ -250,10 +267,10 @@ node --env-file=.env .sandcastle/main.ts
 ```
 
 ```text
-[Agent] Started on branch sandcastle/20261114-171238-791749
-  tail -f .sandcastle/logs/main-sandcastle-20261114-171238-791749.log
+[Agent] Started on branch sandcastle/20261115-084120-a6cb20
+  tail -f .sandcastle/logs/main-sandcastle-20261115-084120-a6cb20.log
 Branch: main
-Commit: 317b0e1fb331a7ca1f8df4356a8fab750e06216c
+Commit: 6ab9bcf50f04a6128ca0cb1dd23314a2dcdf0885
 ```
 
 Sandcastle writes the agent's progress to the log file. Output from a run with `claude-sonnet-4-6` (trimmed):
@@ -263,17 +280,18 @@ Sandcastle Run
   Agent: claude-code
   Sandbox: superserve
   Max iterations: 1
-  Branch: sandcastle/20261114-171238-791749
+  Branch: sandcastle/20261115-084120-a6cb20
 Iteration 1/1
 Setting up sandbox
 Setting up sandbox done (0.2s)
 Agent started
-Bash(python3 /home/user/workspace/fizzbuzz.py)
+Bash(ls /home/user/workspace/)
+Bash(python3 fizzbuzz.py)
 Output looks correct. Now committing.
-Bash(git -C /home/user/workspace add fizzbuzz.py && git -C /home/user/workspace commit -m ...)
+Bash(git add fizzbuzz.py && git commit -m ...)
 Agent stopped
 Syncing 1 commit to host
-Syncing 1 commit to host done (0.6s)
+Syncing 1 commit to host done (0.5s)
 Merging to main
 Merging to main done (0.0s)
 Reached max iterations (1).
@@ -344,15 +362,14 @@ Output from a run with `gpt-5.5` (trimmed):
 Iteration 1/1
 Setting up sandbox
   npm install -g @openai/codex
-Setting up sandbox done (5.8s)
+Setting up sandbox done (6.0s)
 Agent started
 Bash(/bin/bash -lc "sed -n '1,200p' fizzbuzz.py")
 Bash(/bin/bash -lc 'node fizzbuzz.js')
-`node fizzbuzz.js` printed the expected 1-to-15 sequence ending in `FizzBuzz`. Since the file is new and untracked, I’m staging it directly and committing.
-Bash(/bin/bash -lc 'git add fizzbuzz.js && git commit -m "Add Node fizzbuzz implementation"')
+Bash(/bin/bash -lc 'git add fizzbuzz.js && git commit -m "Add Node fizzbuzz example"')
 Agent stopped
 Syncing 1 commit to host
-Syncing 1 commit to host done (0.5s)
+Syncing 1 commit to host done (0.4s)
 Merging to main
 Merging to main done (0.0s)
 ```
@@ -361,29 +378,39 @@ To skip the install in every run, build a [template](/templates/overview) with C
 
 ## Delete leftover sandboxes
 
-The provider deletes its sandbox when a run ends, also when the run fails. If the Node.js process stops before that, for example on `kill -9`, the sandbox stays. With no command running, the leftover sandbox pauses after the idle timeout. A sandbox that a run uses stays active, also when the run is in another process or on a teammate's machine. To delete only leftover sandboxes, delete the tagged sandboxes that are paused:
+The provider deletes its sandbox when a run ends, also when the run fails. If the Node.js process stops before that, for example on `kill -9`, the sandbox stays.
+
+The sandbox's status does not tell you if a run still uses it. Use the heartbeat tag instead: while the run's process is alive, the provider sets `sandcastle-heartbeat` to the current time every minute, also while the sandbox is paused. These scripts delete only tagged sandboxes with no heartbeat for 15 minutes, so they do not delete a sandbox that a run in another process or on a teammate's machine still uses:
 
 <CodeGroup>
 ```typescript .sandcastle/cleanup.ts
 import { Sandbox } from "@superserve/sdk"
 
-// A run in progress keeps its sandbox active. A sandbox left behind by a
-// stopped run pauses after the idle timeout, so delete only paused ones.
-const leftovers = await Sandbox.list({
-  metadata: { sandcastle: "true" },
-  status: "paused",
-})
-for (const { id } of leftovers) {
+// A run updates its sandbox's heartbeat every minute, also while the sandbox
+// is paused. Delete only sandboxes with no heartbeat for 15 minutes.
+const STALE_MS = 15 * 60_000
+
+const sandboxes = await Sandbox.list({ metadata: { sandcastle: "true" } })
+for (const { id, metadata } of sandboxes) {
+  const heartbeat = metadata["sandcastle-heartbeat"]
+  if (!heartbeat || Date.now() - Number(heartbeat) < STALE_MS) continue
   await Sandbox.killById(id)
   console.log(`Deleted sandbox ${id}`)
 }
 ```
 ```python cleanup.py
+import time
+
 from superserve import Sandbox
 
-# A run in progress keeps its sandbox active. A sandbox left behind by a
-# stopped run pauses after the idle timeout, so delete only paused ones.
-for sandbox in Sandbox.list(metadata={"sandcastle": "true"}, status="paused"):
+# A run updates its sandbox's heartbeat every minute, also while the sandbox
+# is paused. Delete only sandboxes with no heartbeat for 15 minutes.
+STALE_MS = 15 * 60_000
+
+for sandbox in Sandbox.list(metadata={"sandcastle": "true"}):
+    heartbeat = sandbox.metadata.get("sandcastle-heartbeat")
+    if not heartbeat or time.time() * 1000 - int(heartbeat) < STALE_MS:
+        continue
     Sandbox.kill_by_id(sandbox.id)
     print(f"Deleted sandbox {sandbox.id}")
 ```
@@ -394,10 +421,12 @@ node --env-file=.env .sandcastle/cleanup.ts
 ```
 
 ```text
-Deleted sandbox 04aba513-4a02-455b-b7d6-e8de0f9708c4
+Deleted sandbox f539aa1f-7132-446b-a5c8-4a1c9682b7b9
 ```
 
-To delete leftover sandboxes automatically, also pass `autoDeleteSeconds` to `superserve()`. Superserve then deletes a sandbox after it stays paused for that long. See [Lifecycle](/sandbox/lifecycle) for these options, and [Metadata tags](/sandbox/metadata) for more about filters.
+The heartbeat comes from the clock of the machine that runs Sandcastle, and the scripts compare it with the clock of the machine that runs them. Keep both clocks in sync. If the machine that runs Sandcastle sleeps for more than 15 minutes during a run, for example a closed laptop, the run looks stale, and the scripts delete its sandbox. Keep that machine awake during runs, or increase `STALE_MS`.
+
+You can also pass `autoDeleteSeconds` to `superserve()`. Superserve then deletes a sandbox after it stays paused for that long, and it does not check the heartbeat. Set it longer than any pause during a run, such as a long `host.onSandboxReady` hook. See [Lifecycle](/sandbox/lifecycle) for these options, and [Metadata tags](/sandbox/metadata) for more about filters.
 
 ## Good to know
 
@@ -405,7 +434,7 @@ To delete leftover sandboxes automatically, also pass `autoDeleteSeconds` to `su
 - The provider supports `run()`. It does not support `interactive()`, because it does not implement `interactiveExec`.
 - Commands in the sandbox run as root. Claude Code refuses `--dangerously-skip-permissions` as root unless `IS_SANDBOX=1` is set, so the provider sets it in every sandbox.
 - Sandcastle copies the repo into the sandbox with `git bundle`, so the template must have `git`. Uncommitted changes and ignored files are not copied.
-- The agent's output reaches Sandcastle line by line while it runs. If the agent prints nothing for 10 minutes, Sandcastle stops the run. Change this with the `idleTimeoutSeconds` option of `run()`.
+- The agent's output reaches Sandcastle line by line while it runs. If the agent prints nothing for 10 minutes, Sandcastle stops the run. Change this with the `idleTimeoutSeconds` option of `run()`. It is a different option from the sandbox's `idleTimeoutSeconds` in `superserve()`.
 - The provider writes the prompt and copied directories to temporary files in the sandbox's `/tmp`, and deletes them after use.
 - To limit what the agent can reach, pass [network rules](/sandbox/networking) as `network`. Allow the agent's API host, and any hosts that the `onSandboxReady` hooks need, such as the npm registry.
 
