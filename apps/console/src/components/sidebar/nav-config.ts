@@ -66,7 +66,7 @@ export const mainNavItems: NavItem[] = [
     label: "Secrets",
     href: "/secrets",
     icon: LockKeyIcon,
-    iconClassName: "text-warning",
+    iconClassName: "text-attention",
   },
   {
     label: "Snapshots",
@@ -79,7 +79,7 @@ export const mainNavItems: NavItem[] = [
     label: "API Keys",
     href: "/api-keys",
     icon: KeyIcon,
-    iconClassName: "text-warning",
+    iconClassName: "text-attention",
   },
   { label: "Billing & Usage", href: "/billing-usage", icon: ChartBarIcon },
   { label: "Settings", href: "/settings", icon: GearIcon },

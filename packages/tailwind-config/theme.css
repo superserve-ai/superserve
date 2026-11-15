@@ -30,6 +30,8 @@
   --color-destructive-fill-hover: oklch(0.42 0.18 12);
   --color-success: oklch(0.6 0.15 155);
   --color-warning: #f5c76b;
+  /* attention: things that need care (secrets, API keys). Same value as warning for now. */
+  --color-attention: var(--color-warning);
   /* info (cyan): compute, paused. ecosystem (violet): templates, snapshots, storage. */
   --color-info: #7cc4fa;
   --color-ecosystem: #c3a6ff;

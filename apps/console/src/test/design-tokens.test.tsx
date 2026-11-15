@@ -138,6 +138,29 @@ describe("design token contrast (WCAG 2.x)", () => {
     },
   )
 
+  it.each([
+    "--color-info",
+    "--color-warning",
+    "--color-destructive",
+    "--color-brand",
+  ])("%s badge text has at least 4.5:1 on its 10%% tint", (token) => {
+    // Badges render text-<token> on bg-<token>/10 over each surface.
+    const text = color(token).rgb
+    for (const surface of surfaces) {
+      const base = color(surface).rgb
+      const tint = text.map((channel, i) => 0.1 * channel + 0.9 * base[i])
+      const a = luminance(text)
+      const b = luminance(tint)
+      expect(
+        (Math.max(a, b) + 0.05) / (Math.min(a, b) + 0.05),
+      ).toBeGreaterThanOrEqual(4.5)
+    }
+  })
+
+  it("aliases attention to warning", () => {
+    expect(tokens["--color-attention"]).toBe("var(--color-warning)")
+  })
+
   it.each(["--color-destructive-fill", "--color-destructive-fill-hover"])(
     "foreground text has at least 4.5:1 on %s",
     (fill) => {
