@@ -199,7 +199,14 @@ export function OtherTeams({
   const [picked, setPicked] = useState<string>()
   const [switching, setSwitching] = useState(false)
   const switchingRef = useRef(false)
+  const mountedRef = useRef(false)
   const [failed, setFailed] = useState(false)
+  useEffect(() => {
+    mountedRef.current = true
+    return () => {
+      mountedRef.current = false
+    }
+  }, [])
   useEffect(() => {
     let live = true
     listTeamsAction()
@@ -243,8 +250,9 @@ export function OtherTeams({
     setFailed(false)
     try {
       await setActiveTeamAction(selected.id, selected.region)
-      window.location.assign("/sandboxes")
+      if (mountedRef.current) window.location.assign("/sandboxes")
     } catch {
+      if (!mountedRef.current) return
       switchingRef.current = false
       lock?.release()
       setSwitching(false)

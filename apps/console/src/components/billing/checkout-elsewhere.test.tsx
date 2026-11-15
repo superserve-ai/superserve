@@ -314,6 +314,57 @@ describe("CheckoutElsewhere", () => {
     },
   )
 
+  it("ignores a pending checkout team switch immediately on a bfcache restore", async () => {
+    const switching = deferred<void>()
+    mocks.lookup.mockResolvedValue({ kind: "switch", team })
+    mocks.setActiveTeam.mockReturnValueOnce(switching.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Switch to Example team" }),
+    )
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith("team", "use")
+    expect(mocks.assign).not.toHaveBeenCalled()
+
+    await act(async () => {
+      window.dispatchEvent(pageShowEvent(true))
+      switching.resolve()
+      await switching.promise
+    })
+
+    expect(mocks.lookup).toHaveBeenCalledTimes(2)
+    expect(mocks.assign).not.toHaveBeenCalled()
+  })
+
+  it("ignores a pending other team switch after a bfcache restore", async () => {
+    const switching = deferred<void>()
+    const refreshed = deferred<CheckoutTeam>()
+    mocks.lookup
+      .mockResolvedValueOnce({ kind: "switch", team })
+      .mockReturnValue(refreshed.promise)
+    mocks.listTeams.mockResolvedValue({
+      activeTeamId: "open-team",
+      activeRegion: "use",
+      teams: [{ id: "another-team", name: "Another team", region: "use" }],
+    })
+    mocks.setActiveTeam.mockReturnValueOnce(switching.promise)
+    render(<CheckoutElsewhere locator={locator} />)
+    fireEvent.click(await screen.findByRole("button", { name: "Open team" }))
+    expect(mocks.setActiveTeam).toHaveBeenCalledExactlyOnceWith(
+      "another-team",
+      "use",
+    )
+    expect(mocks.assign).not.toHaveBeenCalled()
+
+    act(() => {
+      window.dispatchEvent(pageShowEvent(true))
+    })
+    expect(screen.queryByRole("button", { name: "Open team" })).toBeNull()
+    await act(async () => switching.resolve())
+
+    expect(mocks.lookup).toHaveBeenCalledTimes(2)
+    expect(mocks.assign).not.toHaveBeenCalled()
+  })
+
   it("does not refresh teams on a normal pageshow", async () => {
     mocks.lookup.mockResolvedValue({ kind: "switch", team })
     render(<CheckoutElsewhere locator={locator} />)

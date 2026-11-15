@@ -348,6 +348,32 @@ describe("PlanPickerOptions", () => {
     expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
   })
 
+  it("does not navigate when another team switch resolves after unmount", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    let resolve!: () => void
+    const switching = new Promise<void>((done) => {
+      resolve = done
+    })
+    mocks.switchTeam.mockReturnValueOnce(switching)
+    const { unmount } = render(
+      <PlanPickerOptions preselected={null} locator={locator} adminRequired />,
+    )
+    fireEvent.click(await screen.findByRole("button", { name: "Open team" }))
+    expect(mocks.switchTeam).toHaveBeenCalledExactlyOnceWith("team-2", "use")
+    expect(assign).not.toHaveBeenCalled()
+
+    unmount()
+    await act(async () => resolve())
+
+    expect(assign).not.toHaveBeenCalled()
+  })
+
   it("labels each team with its region when the teams span regions", async () => {
     mocks.offers = [offer("developer_monthly", "Builder")]
     mocks.canManage = false
