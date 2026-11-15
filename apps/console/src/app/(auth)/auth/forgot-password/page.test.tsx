@@ -65,6 +65,7 @@ vi.mock("@/lib/recaptcha/client", () => ({
     return recaptcha.siteKey
   },
   getRecaptchaToken: (...args: unknown[]) => recaptcha.getToken(...args),
+  markRecaptchaScriptFailed: () => {},
 }))
 vi.mock("./action", () => ({
   sendPasswordResetEmail: (...args: unknown[]) =>

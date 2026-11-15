@@ -30,6 +30,7 @@ import { bucketLabel, formatUsageCost } from "./page-client"
 
 const useTeamPlan = vi.fn()
 vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamEntry: () => ({ data: null, isPending: false, isError: false }),
   useTeamPlan: (...args: unknown[]) => useTeamPlan(...args),
   useFreeAllowance: () => ({ data: undefined }),
   usePrepaidBalance: () => ({ data: undefined }),

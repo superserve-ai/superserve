@@ -15,6 +15,8 @@ export interface SandboxListItem {
   memory_mib: number
   /** Ceiling memory can grow to while running; absent when memory is fixed. */
   memory_max_mib?: number
+  /** Memory the sandbox last held; absent when memory is fixed. */
+  memory_current_mib?: number | null
   snapshot_id?: string
   /** The saved snapshot this sandbox was created from. */
   source_snapshot_id?: string

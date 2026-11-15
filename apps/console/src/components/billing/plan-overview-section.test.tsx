@@ -67,6 +67,7 @@ vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: mocks.version,
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamEntry: () => ({ data: null, isPending: false, isError: false }),
   useTeamPlan: mocks.plan,
   useFreeAllowance: mocks.allowance,
   useAllowancePricing: mocks.pricing,

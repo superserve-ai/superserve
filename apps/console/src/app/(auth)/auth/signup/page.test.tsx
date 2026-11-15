@@ -1338,4 +1338,29 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       )
     })
   })
+
+  it("shows the blocker error at once when the reCAPTCHA script fails to load", async () => {
+    const { markRecaptchaScriptFailed } = await import("@/lib/recaptcha/client")
+    markRecaptchaScriptFailed()
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "Password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    // Without the recorded failure the page waits 8 s for the script.
+    expect(
+      await screen.findByText(/content or ad blocker/i, {}, { timeout: 1000 }),
+    ).toBeInTheDocument()
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+  })
 })
