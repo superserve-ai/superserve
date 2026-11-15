@@ -18,3 +18,161 @@ html.dark
 html.dark .has-line-numbers .line-highlight::after {
   background: rgb(var(--primary-light) / 0.08) !important;
 }
+
+/*
+ * Brand accents (dark mode). Mint stays the primary and action color.
+ * Each extra hue has one job on every Superserve surface:
+ *   mint   #b2fab4  brand, actions, running, Superserve data
+ *   cyan   #7cc4fa  info, compute, sandboxes, paused
+ *   violet #c3a6ff  ecosystem: templates, storage, integrations
+ *   amber  #f5c76b  attention: warnings, secrets, migration
+ *   coral  #ff8f7a  errors only
+ * All five pass WCAG AA (4.5:1) as text on #141414 and on the callout tints.
+ */
+html.dark {
+  --ss-mint: #b2fab4;
+  --ss-cyan: #7cc4fa;
+  --ss-violet: #c3a6ff;
+  --ss-amber: #f5c76b;
+  --ss-coral: #ff8f7a;
+}
+
+/* Sidebar groups: a square in the group color before the group title. */
+html.dark .sidebar-group-header .sidebar-title::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  vertical-align: 1px;
+  background: var(--ss-group, transparent);
+  content: "";
+}
+html.dark .sidebar-group-header:has(+ ul > li:first-child[id="/introduction"]) {
+  --ss-group: var(--ss-mint);
+}
+html.dark
+  .sidebar-group-header:is(
+    :has(+ ul > li:first-child[id="/sandbox/create"]),
+    :has(+ ul > li:first-child[id="/commands/overview"]),
+    :has(+ ul > li:first-child[id="/guides/run-ci-jobs"])
+  ) {
+  --ss-group: var(--ss-cyan);
+}
+html.dark
+  .sidebar-group-header:is(
+    :has(+ ul > li:first-child[id="/templates/overview"]),
+    :has(+ ul > li:first-child[id="/filesystem/read-write"]),
+    :has(+ ul > li:first-child[id="/storage/archil"]),
+    :has(+ ul > li:first-child[id="/integrations/overview"])
+  ) {
+  --ss-group: var(--ss-violet);
+}
+html.dark
+  .sidebar-group-header:is(
+    :has(+ ul > li:first-child[id="/sandbox/environment-variables"]),
+    :has(+ ul > li:first-child[id="/guides/migrate-from-e2b"])
+  ) {
+  --ss-group: var(--ss-amber);
+}
+html.dark .sidebar-group-header:has(+ ul > li:first-child[id="/errors"]) {
+  --ss-group: var(--ss-coral);
+}
+
+/* Page eyebrow (the group name above the title) uses the group color. */
+html.dark:is(
+    [data-current-path^="/sandbox/"],
+    [data-current-path^="/commands/"],
+    [data-current-path^="/guides/"]
+  )
+  #header
+  .eyebrow {
+  color: var(--ss-cyan);
+}
+html.dark:is(
+    [data-current-path^="/templates/"],
+    [data-current-path^="/filesystem/"],
+    [data-current-path^="/storage/"],
+    [data-current-path^="/integrations/"]
+  )
+  #header
+  .eyebrow {
+  color: var(--ss-violet);
+}
+html.dark:is(
+    [data-current-path^="/secrets/"],
+    [data-current-path="/sandbox/environment-variables"],
+    [data-current-path="/guides/migrate-from-e2b"]
+  )
+  #header
+  .eyebrow {
+  color: var(--ss-amber);
+}
+html.dark[data-current-path="/integrations/mcp"] #header .eyebrow {
+  color: var(--ss-mint);
+}
+html.dark[data-current-path="/errors"] #header .eyebrow {
+  color: var(--ss-coral);
+}
+
+/* Callouts: note and info cyan, tip and check mint, warning amber, danger coral. */
+html.dark :is([data-callout-type="note"], [data-callout-type="info"]) {
+  --ss-callout: var(--ss-cyan);
+}
+html.dark :is([data-callout-type="tip"], [data-callout-type="check"]) {
+  --ss-callout: var(--ss-mint);
+}
+html.dark [data-callout-type="warning"] {
+  --ss-callout: var(--ss-amber);
+}
+html.dark [data-callout-type="danger"] {
+  --ss-callout: var(--ss-coral);
+}
+html.dark .callout[data-callout-type] {
+  border-color: color-mix(
+    in srgb,
+    var(--ss-callout) 35%,
+    transparent
+  ) !important;
+  background: color-mix(in srgb, var(--ss-callout) 7%, #141414) !important;
+}
+html.dark .callout[data-callout-type] [data-component-part="callout-icon"] svg {
+  color: var(--ss-callout) !important;
+  fill: var(--ss-callout) !important;
+}
+html.dark .callout[data-callout-type] [data-component-part="callout-content"] {
+  color: #d6d6d6 !important;
+}
+
+/*
+ * Code: map github-dark-default token colors onto the brand hues.
+ * keyword violet, string mint, function cyan, constant and number amber.
+ */
+html.dark span[style*="--shiki-dark:#FF7B72"] {
+  color: var(--ss-violet) !important;
+}
+html.dark
+  :is(
+    span[style*="--shiki-dark:#A5D6FF"],
+    span[style*="--shiki-dark:#7EE787"]
+  ) {
+  color: var(--ss-mint) !important;
+}
+html.dark span[style*="--shiki-dark:#D2A8FF"] {
+  color: var(--ss-cyan) !important;
+}
+html.dark
+  :is(
+    span[style*="--shiki-dark:#79C0FF"],
+    span[style*="--shiki-dark:#FFA657"]
+  ) {
+  color: var(--ss-amber) !important;
+}
+
+/*
+ * Benchmark cards (.ss-bench): competitor bars and dots stay grey, only the
+ * Superserve bar uses mint. #7a7a7a on the #2a2a2a track is 3.34:1 (UI
+ * minimum 3:1). Set on the rows so it wins over the card default.
+ */
+html.dark .ss-bench-rows {
+  --ss-bench-peer-bar: #7a7a7a;
+}
