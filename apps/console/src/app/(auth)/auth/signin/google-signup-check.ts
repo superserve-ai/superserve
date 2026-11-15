@@ -19,11 +19,25 @@ import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
  * to Google without the check. The check is optional: an existing account
  * needs no proof, and a new account without one still goes to the "Complete
  * signup" recovery page, where the same check runs again. The capture and
- * reCAPTCHA run side by side and normally take one to two seconds. reCAPTCHA
- * alone can wait eight seconds for its script, so a stalled step must not hold
- * back a returning user for longer than this.
+ * reCAPTCHA run side by side and normally take one to two seconds. The capture
+ * and Turnstile have budgets below this limit. Only a reCAPTCHA token that is
+ * still on its way can hold the check longer, up to
+ * `GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS`.
  */
 export const GOOGLE_SIGNUP_CHECK_DEADLINE_MS = 4000
+
+/**
+ * How long the check waits for a reCAPTCHA token that is still on its way,
+ * counted from its start. On a slow connection the reCAPTCHA script and its
+ * frame can still be loading when the user clicks, and the token then arrives
+ * after `GOOGLE_SIGNUP_CHECK_DEADLINE_MS`. Without the token there is no proof,
+ * so a new account goes to the "Complete signup" recovery page. A token is
+ * worth this wait. A reCAPTCHA that cannot give a token (its script did not
+ * load, or it answered with an error) ends the wait at once, so the wait
+ * applies only while the token can still arrive. This is also the load limit
+ * of `getRecaptchaToken`.
+ */
+export const GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS = 8000
 
 /**
  * The longest the check can take, counted from its start, once its server call
@@ -31,6 +45,9 @@ export const GOOGLE_SIGNUP_CHECK_DEADLINE_MS = 4000
  * the proof cookie, which can take a few seconds on its own. A proof that
  * arrives inside this limit is used, so a new account does not go to Google a
  * second time only because the server answered after the browser deadline.
+ * A server call sent late, after a slow reCAPTCHA token, still gets as much
+ * time as a call sent at the browser deadline: this limit less
+ * `GOOGLE_SIGNUP_CHECK_DEADLINE_MS`.
  */
 export const GOOGLE_SIGNUP_PROOF_DEADLINE_MS = 8000
 
@@ -151,11 +168,13 @@ function captureWithinBudget(): {
 async function runCheck(
   isCurrent: () => boolean,
   cancelled: AbortSignal,
+  onRecaptchaSettled: () => void,
   onSend: () => void,
 ): Promise<string | undefined> {
   // Start the capture first: its server action then leads the queue.
   const capture = captureWithinBudget()
   const recaptcha = getRecaptchaToken("signup_google")
+  recaptcha.then(onRecaptchaSettled, onRecaptchaSettled)
   const turnstile = turnstileTokenWithinBudget(cancelled)
   const [budgetedCapture, recaptchaToken] = await Promise.all([
     capture.result,
@@ -199,10 +218,14 @@ export function cancelGoogleSignupCheck(): void {
  * new, so it runs the check for every Google sign-in. A new account then has
  * its proof at the first callback and does not go to Google a second time.
  *
- * The browser steps must finish within `deadlineMs`, so a stalled reCAPTCHA or
+ * The browser steps must finish within `deadlineMs`, so a stalled capture or
  * Turnstile cannot hold back a returning user, and a slow capture is reported
- * as unavailable within its own budget. Once the server call is sent, the
- * check waits for its answer until `proofDeadlineMs` after the start. A call
+ * as unavailable within its own budget. A reCAPTCHA token that is still on
+ * its way at `deadlineMs` gets until `recaptchaDeadlineMs`: on a slow
+ * connection the token is often the last step, and without it a new account
+ * goes to the recovery page. Once the server call is sent, the check waits for
+ * its answer until `proofDeadlineMs` after the start, and at least
+ * `proofDeadlineMs - deadlineMs` after the call. A call
  * that is past its deadline, or that a newer call has replaced, is cancelled:
  * it starts no further step and returns nothing. In particular it never
  * reaches the server call that replaces the evidence cookie and issues the
@@ -231,22 +254,51 @@ export function cancelGoogleSignupCheck(): void {
 export function googleSignupAttemptForSignIn(
   deadlineMs: number = GOOGLE_SIGNUP_CHECK_DEADLINE_MS,
   proofDeadlineMs: number = GOOGLE_SIGNUP_PROOF_DEADLINE_MS,
+  recaptchaDeadlineMs: number = GOOGLE_SIGNUP_RECAPTCHA_DEADLINE_MS,
 ): Promise<string | undefined> {
   const check = ++latestCheck
   latestAbort?.abort()
   const abort = new AbortController()
   latestAbort = abort
   const isCurrent = () => !abort.signal.aborted && check === latestCheck
+  const start = Date.now()
+  let recaptchaSettled = false
   return new Promise((resolve) => {
+    let browserTimer: ReturnType<typeof setTimeout> | undefined
+    let proofTimer: ReturnType<typeof setTimeout> | undefined
     const giveUp = () => {
       clearTimeout(browserTimer)
       clearTimeout(proofTimer)
       abort.abort()
       resolve(undefined)
     }
-    const browserTimer = setTimeout(giveUp, deadlineMs)
-    const proofTimer = setTimeout(giveUp, Math.max(deadlineMs, proofDeadlineMs))
-    runCheck(isCurrent, abort.signal, () => clearTimeout(browserTimer)).then(
+    // At the browser deadline, a reCAPTCHA token still on its way extends the
+    // wait to its own deadline. Any other step that is still running ends it.
+    const atBrowserDeadline = () => {
+      const left = start + recaptchaDeadlineMs - Date.now()
+      if (recaptchaSettled || left <= 0) giveUp()
+      else browserTimer = setTimeout(giveUp, left)
+    }
+    browserTimer = setTimeout(atBrowserDeadline, deadlineMs)
+    // The server call gets until the proof deadline, and never less time
+    // than a call sent at the browser deadline gets.
+    const onSend = () => {
+      clearTimeout(browserTimer)
+      const left = Math.max(
+        proofDeadlineMs - (Date.now() - start),
+        proofDeadlineMs - deadlineMs,
+        0,
+      )
+      proofTimer = setTimeout(giveUp, left)
+    }
+    runCheck(
+      isCurrent,
+      abort.signal,
+      () => {
+        recaptchaSettled = true
+      },
+      onSend,
+    ).then(
       (attemptId) => {
         clearTimeout(browserTimer)
         clearTimeout(proofTimer)
