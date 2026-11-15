@@ -22,8 +22,9 @@ html.dark .has-line-numbers .line-highlight::after {
 /*
  * Benchmark comparison cards (snippets/benchmark-comparison.jsx).
  * One flat card per benchmark: the other provider's bar is grey, the
- * Superserve bar and value are the brand mint #B2FAB4. Docs are dark only;
- * the light values keep the cards readable if that changes.
+ * Superserve bar and value are the brand mint #B2FAB4, and its row has a
+ * tint and a mint left border. Docs are dark only; the light values keep
+ * the cards readable if that changes.
  */
 .ss-bench {
   --ss-bench-fg: #141414;
@@ -35,6 +36,8 @@ html.dark .has-line-numbers .line-highlight::after {
   --ss-bench-own-bar: #2f9e44;
   --ss-bench-own-text: #1d7a32;
   --ss-bench-badge-bg: rgba(47, 158, 68, 0.1);
+  --ss-bench-peer-text: #5c5c5c;
+  --ss-bench-own-row: #eef7ee;
   display: grid;
   gap: 12px;
   margin: 12px 0 8px;
@@ -52,6 +55,8 @@ html.dark .ss-bench {
   --ss-bench-own-bar: #b2fab4;
   --ss-bench-own-text: #b2fab4;
   --ss-bench-badge-bg: rgba(178, 250, 180, 0.1);
+  --ss-bench-peer-text: #b0b0b0;
+  --ss-bench-own-row: #282e28;
 }
 .ss-bench-card {
   display: grid;
@@ -145,6 +150,19 @@ html.dark .ss-bench {
   font-weight: 600;
   font-variant-numeric: tabular-nums;
   text-align: right;
+}
+.ss-bench-row:not(.ss-bench-own) .ss-bench-name,
+.ss-bench-row:not(.ss-bench-own) .ss-bench-val {
+  color: var(--ss-bench-peer-text);
+}
+.ss-bench-own {
+  margin: 0 -8px;
+  padding: 4px 8px 4px 6px;
+  border-left: 2px solid var(--ss-bench-own-bar);
+  background: var(--ss-bench-own-row);
+}
+.ss-bench-own .ss-bench-name {
+  font-weight: 600;
 }
 .ss-bench-own .ss-bench-dot,
 .ss-bench-own .ss-bench-bar {
