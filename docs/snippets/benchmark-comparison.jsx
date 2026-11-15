@@ -9,9 +9,14 @@
 //
 // Mintlify loads snippets as client components and supports named exports
 // only, so every helper and the bundled data stay inside the component.
+//
+// Props: `compare` is the provider key in the endpoint data, `compareName`
+// its display name, and `sourceUrl` the ComputeSDK comparison page for that
+// provider. Without `sourceUrl`, the source link goes to the ratings page.
 export const BenchmarkComparison = ({
   compare = "e2b",
   compareName = "E2B",
+  sourceUrl,
 }) => {
   const ENDPOINT = "https://www.superserve.ai/api/benchmarks/"
   const STORAGE_KEY = "superserve-benchmarks-v1"
@@ -48,14 +53,12 @@ export const BenchmarkComparison = ({
     {
       key: "snapshot",
       title: "Snapshot and restore",
-      description: "Score out of 100",
       unit: "score",
       better: "higher",
     },
     {
       key: "pause",
       title: "Pause and resume",
-      description: "Score out of 100",
       unit: "score",
       better: "higher",
     },
@@ -190,7 +193,10 @@ export const BenchmarkComparison = ({
                 <span className="ss-bench-heading">
                   <strong className="ss-bench-title">{chart.title}</strong>
                   <span className="ss-bench-desc">
-                    {chart.description} · {chart.better} is better
+                    {chart.description && `${chart.description}. `}
+                    <strong>
+                      {chart.better === "lower" ? "Lower" : "Higher"} is better.
+                    </strong>
                   </span>
                 </span>
                 {badge && <span className="ss-bench-badge">{badge}</span>}
@@ -215,9 +221,9 @@ export const BenchmarkComparison = ({
         })}
       </div>
       <p>
-        Source: <a href={RATINGS_URL}>ComputeSDK benchmarks</a>, updated{" "}
-        {updated}. Times are from the latest run. Scores are out of 100 and
-        cover the last 7 days.
+        Source: <a href={sourceUrl || RATINGS_URL}>ComputeSDK benchmarks</a>,
+        updated {updated}. Times are from the latest run. Scores are out of 100
+        and cover the last 7 days.
       </p>
     </>
   )
