@@ -50,9 +50,30 @@ See [Growing memory](/templates/build-spec#growing-memory) for the values `memor
 It's automatic: no API calls, no restarts, and no changes to your code.
 
 - **Growing:** when a sandbox runs low on memory, it grows automatically, up to its limit. A program can even ask for a large block of memory at once, more than the sandbox started with, and the sandbox grows as the program uses it.
-- **Shrinking:** once the burst is over and memory use has stayed low for about one minute, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`.
+- **Shrinking:** once the burst is over and memory use has stayed low for about one minute, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`. To wait longer, set a [shrink delay](#change-the-shrink-delay) on the template.
 - **Pause, resume and snapshots:** a sandbox resumes at the size it was paused at, and a sandbox created from a snapshot starts at its source's size.
 - **Above the limit:** if a program needs more than `memoryMaxMib`, Linux stops that program, as on any machine that runs out of memory. The sandbox keeps running.
+
+## Change the shrink delay
+
+Set `memory_shrink_after_seconds` when you create a template to change how long memory must stay low before a sandbox shrinks. The value is an integer from 60 to 1800 seconds, and the template must also set `memory_max_mib`. A longer delay keeps the memory available between bursts that come close together, and you pay for it while the sandbox holds it.
+
+```bash
+curl https://api.superserve.ai/templates \
+  -H "X-API-Key: $SUPERSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-growable-env",
+    "memory_mib": 2048,
+    "memory_max_mib": 8192,
+    "memory_shrink_after_seconds": 300,
+    "build_spec": { "from": "python:3.11" }
+  }'
+```
+
+Sandboxes from the template, and sandboxes created from their snapshots, get the same delay. It stays the same when a sandbox pauses and resumes. When the field isn't set, the default of about one minute applies. Template and sandbox responses include `memory_shrink_after_seconds` only when it's set.
+
+The setting is in the REST API only. The SDKs, CLI and MCP server don't take it yet. See [Create a template](/api-reference/templates/create-a-template-and-kick-off-the-first-build) in the API reference.
 
 ## Billing
 
