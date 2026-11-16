@@ -16,7 +16,7 @@ Codex is OpenAI's terminal coding agent. Run it in a Superserve sandbox so its s
 5. Create the sandbox, open its **Terminal**, and run:
 
    ```bash
-   npm install -g @openai/codex && codex
+   apt-get update && apt-get install -y procps && npm install -g @openai/codex && codex
    ```
 
 ## Via the SDK
@@ -46,7 +46,10 @@ const sandbox = await Sandbox.create({
   secrets: { OPENAI_API_KEY: "openai-key" },
 })
 
-await sandbox.commands.run("npm install -g @openai/codex")
+// The Codex TUI needs `ps`, which superserve/node-22 does not include.
+await sandbox.commands.run(
+  "apt-get update -qq && apt-get install -y -qq procps && npm install -g @openai/codex",
+)
 ```
 
 ```python Python
@@ -61,7 +64,11 @@ sandbox = Sandbox.create(
     secrets={"OPENAI_API_KEY": "openai-key"},
 )
 
-sandbox.commands.run("npm install -g @openai/codex")
+# The Codex TUI needs `ps`, which superserve/node-22 does not include.
+sandbox.commands.run(
+    "apt-get update -qq && apt-get install -y -qq procps"
+    " && npm install -g @openai/codex"
+)
 ```
 </CodeGroup>
 

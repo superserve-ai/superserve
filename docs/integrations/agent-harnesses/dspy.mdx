@@ -388,7 +388,7 @@ rlm = dspy.RLM("context, query -> answer", interpreter_factory=DataInterpreter)
 - The model can create sub-agents in its code, such as `dspy.Predict` or a nested `dspy.RLM`. They run in your app and use your API key. A nested `dspy.RLM` uses the same interpreter factory, so it gets its own sandbox.
 - DSPy sends the input variables again with every step. Inputs of several megabytes work, but each step uploads them again.
 - If a step, including the host tools it calls, does not finish within `step_timeout` seconds (600 by default), the interpreter raises `CodeInterpreterError`. The call stops and the sandbox is killed. A host tool that is still running is not stopped, but the step no longer waits for it.
-- `dspy.RLM` is marked experimental in DSPy. This page was tested with DSPy 3.4.1.
+- `dspy.RLM` is marked experimental in DSPy. This page was tested with DSPy 3.5.0.
 
 ## Resources
 
