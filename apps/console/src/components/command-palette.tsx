@@ -13,6 +13,7 @@ import {
   RocketLaunchIcon,
   StackIcon,
   LockKeyIcon,
+  UsersIcon,
 } from "@phosphor-icons/react"
 import { Command } from "cmdk"
 import { AnimatePresence, motion } from "motion/react"
@@ -90,6 +91,11 @@ export function CommandPalette() {
       label: "Settings",
       icon: GearIcon,
       onSelect: () => navigate("/settings"),
+    },
+    {
+      label: "Team",
+      icon: UsersIcon,
+      onSelect: () => navigate("/team"),
     },
     {
       label: "Get Started",

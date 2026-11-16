@@ -16,7 +16,6 @@ import {
   canApprovePlatformSignups,
   canReadAdminBilling,
   canReadPlatformTeams,
-  canViewOtherUsersAccount,
 } from "@/lib/admin/permissions"
 
 import {
@@ -43,10 +42,11 @@ export function Sidebar() {
   const { user } = useUser()
   const navItems = [
     ...mainNavItems,
+    // Every user can open Team; the page shows what their team role allows.
+    userManagementNavItem,
     ...(canReadPlatformTeams(user) ? [adminNavItem] : []),
     ...(canApprovePlatformSignups(user) ? [pendingSignupsNavItem] : []),
     ...(canReadAdminBilling(user) ? [adminBillingNavItem] : []),
-    ...(canViewOtherUsersAccount(user) ? [userManagementNavItem] : []),
   ]
 
   return (
