@@ -346,6 +346,7 @@ The server wraps the [TypeScript SDK](/sdk-reference/sandbox) and only ever hold
 - **First call is slow.** `npx` downloads the package on first use and caches it; later starts are fast.
 - **Requires Node 18+.** The local server runs on Node via `npx`. (The [hosted](#hosted-remote) endpoint has no local runtime requirement.)
 - **`401 Unauthorized` from the hosted endpoint.** The `Authorization` header is missing or malformed (another scheme, or an empty token). Send it as `Authorization: Bearer ss_live_…` (see [Hosted](#hosted-remote)). An invalid key still connects, but every tool call returns `Authentication failed`.
+- **A sandbox won't start because of billing (`402`).** The tool result explains the cause. For the trial codes and `billing_ineligible`, it also tells the agent not to retry (for `trial_check_unavailable`, not to retry in a loop) and to ask the user to add a card and choose a plan, or check billing. It gives the console link when the API sends one. For `free_allowance_exhausted` and `sandbox_exceeds_plan_limits`, the tool result is the API message only. See [Billing errors](/errors#billing-errors-402).
 
 ## Related
 

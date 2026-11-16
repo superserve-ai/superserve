@@ -1,36 +1,25 @@
 "use client"
 
-import { Button, cn, Spinner } from "@superserve/ui"
-import { useQueryClient } from "@tanstack/react-query"
-import Link from "next/link"
+import { Button, cn } from "@superserve/ui"
 import { useCallback, useSyncExternalStore } from "react"
 
 import {
   BannerShell,
   ManageAction,
 } from "@/components/billing/plan-aware-banner"
+import { TrialUpgradeAction } from "@/components/billing/trial-upgrade-action"
 import { useQueryScope } from "@/components/query-provider"
-import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
 import { useBillingReturnNotice } from "@/hooks/use-billing-return-notice"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamEntry } from "@/hooks/use-billing-v2"
-import { useSubmitOnce } from "@/hooks/use-submit-once"
-import { useUser } from "@/hooks/use-user"
 import type {
   BillingSummaryResponse,
   BillingTrialBalance,
   BillingTrialBlock,
 } from "@/lib/api/billing"
-import type { SignupPlanContext } from "@/lib/api/signup-plan"
-import { pickerOfferSellable, pickerPlanLabel } from "@/lib/billing/plan-picker"
-import {
-  type AwaitingPlanState,
-  planPickerPath,
-  signupCheckoutPath,
-  trialPlanOffer,
-} from "@/lib/billing/signup-checkout-paths"
+import type { AwaitingPlanState } from "@/lib/billing/signup-checkout-paths"
 
 // SS-484 billingTrialRunway accepts observations strictly newer than 15 minutes.
 // Expire cached observations too, including when background polling is suspended.
@@ -135,25 +124,10 @@ function TrialEntryBanner({
   entry: AwaitingPlanState
   summary: BillingSummaryResponse
 }) {
-  const { teamKey } = useBillingContext()
   const scope = useQueryScope()
-  const offers = useBillingCapabilities().data?.offers
-  const signup = useQueryClient().getQueryData<SignupPlanContext>([
-    "signup-plan",
-    teamKey,
-  ])
-  const user = useUser().user
-  const account = signup?.userId ?? user?.id
-  const locator = account && teamKey ? { account, team: teamKey } : null
-  const requested = trialPlanOffer(signup?.requestedOffer)
-  const selected =
-    requested && pickerOfferSellable(offers, requested) ? requested : undefined
   const stage = trialStage(entry, summary.trial, summary.trial_block)
   const remaining = formatUsd(summary.trial?.remaining_usd)
-  const plan = selected ? pickerPlanLabel(offers, selected) : null
-  const upgrade = plan ? `Upgrade to ${plan}` : "Upgrade"
   const canManage = scope === "self" && summary.permissions.can_manage
-  const { submitting, onSubmit } = useSubmitOnce<true>()
   return (
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
@@ -164,35 +138,7 @@ function TrialEntryBanner({
       }
       action={
         <ManageAction canManage={canManage}>
-          {selected && locator ? (
-            <form
-              method="post"
-              action={signupCheckoutPath(selected, locator)}
-              onSubmit={onSubmit(true)}
-            >
-              <Button type="submit" size="sm" disabled={submitting !== null}>
-                {submitting ? <Spinner size="sm" /> : null}
-                {upgrade}
-              </Button>
-            </form>
-          ) : (
-            <Button
-              size="sm"
-              render={
-                <Link href={planPickerPath("upgrade", undefined, locator)} />
-              }
-            >
-              {upgrade}
-            </Button>
-          )}
-          {selected && locator ? (
-            <Link
-              href={planPickerPath("upgrade", selected, locator)}
-              className="self-center underline underline-offset-4"
-            >
-              Other plans
-            </Link>
-          ) : null}
+          <TrialUpgradeAction />
         </ManageAction>
       }
     >

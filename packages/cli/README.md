@@ -63,7 +63,7 @@ Add `--json` to any command that returns data for machine-readable output on std
 superserve sandbox list --json | jq -r '.[].id'
 ```
 
-With `--json`, errors are printed to stderr as `{"error": {"message", "code", "status"}}`.
+With `--json`, errors are printed to stderr as `{"error": {"message", "code", "status", "action_url"}}`. `action_url` is set only when the API sends a link, for example a `402` billing error where the user can add a card and choose a plan.
 
 ## Exit codes
 

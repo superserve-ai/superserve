@@ -18,6 +18,7 @@ interface DiagnosticContext {
   eventId?: string
   userId?: string | null
   signupMethod?: "email" | "google"
+  entryPoint?: "signin" | "signup"
 }
 
 /** One bounded, post-response batch per boundary; delivery cannot affect signup. */
@@ -56,6 +57,7 @@ export function fingerprintDiagnostics(context: DiagnosticContext) {
           row.provider_event_id ??
           (source === "server" ? diagnosticId(context.eventId) : undefined),
         signup_method: context.signupMethod,
+        entry_point: context.entryPoint,
       })
       if (scheduled) return
       scheduled = true
