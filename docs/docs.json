@@ -227,6 +227,7 @@
                   "integrations/agent-harnesses/mastra",
                   "integrations/agent-harnesses/openai-agents-sdk",
                   "integrations/agent-harnesses/pydantic-ai",
+                  "integrations/agent-harnesses/sandcastle",
                   "integrations/agent-harnesses/vercel-ai-sdk"
                 ]
               },
