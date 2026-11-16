@@ -25,12 +25,12 @@ export const BenchmarkComparison = ({
   // Last good data at the time of writing. Used only until the first
   // successful fetch in this browser. Keys match the endpoint response.
   const BUNDLED = {
-    fetchedAt: "2026-11-14T00:04:36.863Z",
+    fetchedAt: "2026-11-16T17:05:38.733Z",
     metrics: {
       tti: { values: { superserve: 446, e2b: 1068, daytona: 627 } },
       dax: { values: { superserve: 57422, e2b: 64219 } },
-      snapshot: { values: { superserve: 95.4, e2b: 84.2, daytona: 59.6 } },
-      pause: { values: { superserve: 97, e2b: 90.9, daytona: 0 } },
+      snapshot: { values: { superserve: 95.4, e2b: 84.8, daytona: 71.1 } },
+      pause: { values: { superserve: 97.1, e2b: 91, daytona: 0 } },
     },
   }
 
