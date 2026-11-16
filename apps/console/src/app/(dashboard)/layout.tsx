@@ -3,7 +3,6 @@ import { redirect } from "next/navigation"
 import { ImpersonationBanner } from "@/components/admin/impersonation-banner"
 import { PlanBanner } from "@/components/billing/plan-banner"
 import { PlanUnavailableBanner } from "@/components/billing/plan-unavailable-banner"
-import { FingerprintAccountDeviceObserver } from "@/components/fingerprint-account-device-observer"
 import { DashboardShell } from "@/components/layout/dashboard-shell"
 import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redirect"
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
@@ -16,7 +15,6 @@ import {
 import { needsPlanSelection } from "@/lib/api/signup-plan"
 import { getSignupPlanPageState } from "@/lib/api/signup-plan-page"
 import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
-import { configuredRegions } from "@/lib/cells"
 
 export default async function DashboardLayout({
   children,
@@ -55,11 +53,6 @@ export default async function DashboardLayout({
       }
     >
       <SessionExpiryRedirect />
-      {!impersonationContext && (
-        <FingerprintAccountDeviceObserver
-          regions={configuredRegions().join(",")}
-        />
-      )}
       <SignupPlanGate>
         <DashboardShell
           globalBanner={

@@ -77,9 +77,6 @@ vi.mock("@/components/admin/impersonation-banner", () => ({
 vi.mock("@/components/layout/session-expiry-redirect", () => ({
   SessionExpiryRedirect: () => null,
 }))
-vi.mock("@/components/fingerprint-account-device-observer", () => ({
-  FingerprintAccountDeviceObserver: () => null,
-}))
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
 
 import DashboardLayout from "./layout"
