@@ -15,7 +15,7 @@ Every error raised by the SDK extends a common base class - `SandboxError` in Ty
 | `ValidationError` | `ValidationError` | `400` | Request body or parameters rejected by the API. |
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
 | `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-paused sandbox, or patching `network` rules while paused). |
-| `SandboxError` | `SandboxError` | `402` | The team's billing or plan does not allow the sandbox to start. Branch on `code` (see [Billing errors](#billing-errors-402)). |
+| `BillingError` | `BillingError` | `402` | The team's billing or plan does not allow the sandbox to start. Branch on `code` and show `actionUrl` / `action_url` (see [Billing errors](#billing-errors-402)). |
 | `RateLimitError` | `RateLimitError` | `429` | Rate limit or per-team quota reached. Branch on `code` (see below). |
 | `TimeoutError` | `SandboxTimeoutError` | - | The SDK stopped waiting for a response. A command that reaches its own timeout doesn't throw: it returns exit code `124`. |
 | `ServerError` | `ServerError` | `5xx` | Platform error - usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
@@ -116,24 +116,64 @@ The error `message` already includes the cap and a contact-support hint, so surf
 
 ## Billing errors (`402`)
 
-Creating or resuming a sandbox fails with `402 Payment Required` when the team's billing or plan does not allow it. This includes the automatic resume when you connect to a paused sandbox. In SDK 0.11.6 and earlier, there is no `402` subclass: the SDK raises the base `SandboxError` with `statusCode` / `status_code` set to `402`. Branch on `code`:
+Creating or resuming a sandbox fails with `402 Payment Required` when the team's billing or plan does not allow it. This includes the automatic resume when you connect to a paused sandbox. The SDK raises `BillingError`, a subclass of `SandboxError`, with `statusCode` / `status_code` set to `402`. Branch on `code`:
 
 | Code | Meaning | What to do |
 |---|---|---|
 | `trial_exhausted` | The team has no plan, and its free trial credit is used up or has expired. | Add a card and choose a plan at `action_url`, then retry. |
 | `trial_unavailable` | The team has no plan and did not get the free trial, for example because it is not the first team its creator made. | Add a card and choose a plan at `action_url`, then retry. |
-| `trial_check_unavailable` | The team has no plan, and the free trial could not be confirmed because a required check did not complete. This is not a decision that the team is ineligible. | Add a card and choose a plan at `action_url`, then retry. |
+| `trial_check_unavailable` | The team has no plan, and the free trial could not be confirmed because a required check did not complete. This is not a decision that the team is ineligible. | Right after sign-up, wait a few seconds and retry once, because account setup can still be in progress. Otherwise, or if the code stays, add a card and choose a plan at `action_url`, or contact support@superserve.ai. Do not retry in a loop. |
 | `billing_ineligible` | Sandbox usage is unavailable until billing is active, for a reason other than the trial codes above. An unpaid invoice is one example (see [Unpaid invoices](#unpaid-invoices)). The message is `Sandbox usage is unavailable until billing is active`. | Check the team's billing on the [Billing & Usage](https://console.superserve.ai/billing-usage) page: add a payment method, choose a plan, or pay the open invoice. Then retry. |
 | `free_allowance_exhausted` | The team is on a legacy Free plan and has used its daily compute allowance. Running sandboxes are paused too. New accounts start on the free trial instead. | Wait until the allowance resets, or upgrade on the [Billing & Usage](https://console.superserve.ai/billing-usage) page for unlimited runtime. |
 | `sandbox_exceeds_plan_limits` | The sandbox's vCPU, memory, or disk is larger than the team's plan allows. The message gives the sandbox size and the plan's limits. | Use a smaller template, or upgrade on the [Billing & Usage](https://console.superserve.ai/billing-usage) page. |
 
 A team whose free trial was refused by an abuse or account check, for example because the creator's email domain is restricted, gets `billing_ineligible`, not `trial_unavailable`.
 
-Some codes add a field to the `error` object of the API response. In SDK 0.11.6 and earlier, the SDK error does not carry these fields, so read them from the raw API response if you need them:
+Some codes add a field to the `error` object of the API response. `BillingError` exposes `action_url` as `actionUrl` / `action_url` (`undefined` / `None` for other codes). The other fields stay in the raw API response, so read them from there if you need them:
 
 - `action_url` (`trial_exhausted`, `trial_unavailable`, `trial_check_unavailable`): the console page where the team adds a card and chooses a plan. The `message` ends with the same URL, so a user who sees the message also gets the link.
 - `resets_at` (`free_allowance_exhausted`): the UTC time (RFC 3339) when sandboxes can start again.
 - `limits` (`sandbox_exceeds_plan_limits`): the plan's vCPU, memory, and disk maximums.
+
+The error `message` is safe to show to users. The SDK never retries a `402`.
+
+The CLI prints `action_url` in `--json` errors and waits for account setup after a browser sign-up (see [Scripting](/cli#scripting)). For the trial codes and `billing_ineligible`, the MCP server tells the agent not to retry and to send the user to billing. For other `402` codes, it returns the API message (see [MCP troubleshooting](/integrations/mcp#troubleshooting)).
+
+A billing block does not delete sandboxes on its own. A sandbox set to auto-delete after a pause can still be deleted while billing is blocked.
+
+<CodeGroup>
+```typescript TypeScript
+import { BillingError, Sandbox } from "@superserve/sdk"
+
+try {
+  const sandbox = await Sandbox.create({ name: "billing-check" })
+} catch (err) {
+  if (err instanceof BillingError) {
+    // Show the message, and the link when there is one
+    console.error(err.code, err.message)
+    if (err.actionUrl) console.error(`Add a card and choose a plan: ${err.actionUrl}`)
+  } else {
+    throw err
+  }
+}
+```
+
+```python Python
+from superserve import BillingError, Sandbox
+
+try:
+    sandbox = Sandbox.create(name="billing-check")
+except BillingError as err:
+    # Show the message, and the link when there is one
+    print(err.code, err)
+    if err.action_url:
+        print(f"Add a card and choose a plan: {err.action_url}")
+```
+</CodeGroup>
+
+<Note>
+`BillingError` is available in SDK 0.12.0 and later (`@superserve/sdk` and `superserve`). In earlier versions, a `402` raises the base `SandboxError` with the same `statusCode` / `status_code` and `code`, but without `actionUrl` / `action_url`. To support both, check `statusCode === 402` / `status_code == 402` on `SandboxError`. The CLI and MCP behavior above needs CLI 2.2.0 or later and MCP 0.4.0 or later.
+</Note>
 
 ### Unpaid invoices
 
