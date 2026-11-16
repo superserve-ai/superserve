@@ -12,6 +12,7 @@ import dotenv
 import orchestrator
 import uvicorn
 from fastapi import BackgroundTasks, FastAPI, HTTPException, Request
+from standardwebhooks import WebhookVerificationError
 
 dotenv.load_dotenv(override=True)
 
@@ -73,7 +74,7 @@ async def webhook(request: Request, background_tasks: BackgroundTasks):
             headers=dict(request.headers),
             key=WEBHOOK_SECRET,
         )
-    except anthropic.APIWebhookValidationError as e:
+    except WebhookVerificationError as e:
         raise HTTPException(status_code=401, detail=str(e)) from e
 
     if event.data.type != "session.status_run_started":

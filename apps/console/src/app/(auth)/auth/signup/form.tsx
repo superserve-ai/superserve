@@ -12,8 +12,14 @@ import { useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
+import {
+  TURNSTILE_SCRIPT_SRC,
+  TURNSTILE_SITE_KEY,
+  getTurnstileToken,
+} from "@/lib/cloudflare/turnstile-client"
 import {
   clearFingerprintSignupCapture,
   ensureFingerprintSignupCapture,
@@ -21,6 +27,8 @@ import {
 } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
+import { RecaptchaScript } from "@/lib/recaptcha/script"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import {
@@ -32,94 +40,8 @@ import {
   signUpWithEmail,
 } from "./action"
 
-const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
-const TURNSTILE_SITE_KEY = process.env.NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY
-
-declare global {
-  interface Window {
-    grecaptcha?: {
-      enterprise: {
-        ready: (callback: () => void) => void
-        execute: (
-          siteKey: string,
-          options: { action: string },
-        ) => Promise<string>
-      }
-    }
-    turnstile?: {
-      render: (element: HTMLElement, options: Record<string, unknown>) => string
-      remove: (widgetId: string) => void
-    }
-  }
-}
-
-const TURNSTILE_LOAD_TIMEOUT_MS = 1500
-const TURNSTILE_TOKEN_TIMEOUT_MS = 3000
-
-const getTurnstileToken = async (): Promise<string | undefined> => {
-  if (!TURNSTILE_SITE_KEY) return undefined
-  const start = Date.now()
-  while (!window.turnstile && Date.now() - start < TURNSTILE_LOAD_TIMEOUT_MS)
-    await new Promise((resolve) => setTimeout(resolve, 100))
-  if (!window.turnstile) return undefined
-  return new Promise((resolve) => {
-    const container = document.createElement("div")
-    container.style.position = "fixed"
-    container.style.bottom = "16px"
-    container.style.right = "16px"
-    container.style.zIndex = "50"
-    document.body.appendChild(container)
-    let widgetId = ""
-    const cleanup = () => {
-      if (widgetId) window.turnstile?.remove(widgetId)
-      container.remove()
-    }
-    const deadline = setTimeout(() => {
-      cleanup()
-      resolve(undefined)
-    }, TURNSTILE_TOKEN_TIMEOUT_MS)
-    try {
-      widgetId = window.turnstile!.render(container, {
-        sitekey: TURNSTILE_SITE_KEY,
-        size: "compact",
-        appearance: "interaction-only",
-        callback: (token: string) => {
-          clearTimeout(deadline)
-          cleanup()
-          resolve(token)
-        },
-        "error-callback": () => {
-          clearTimeout(deadline)
-          cleanup()
-          resolve(undefined)
-        },
-        "timeout-callback": () => {
-          clearTimeout(deadline)
-          cleanup()
-          resolve(undefined)
-        },
-      })
-    } catch {
-      clearTimeout(deadline)
-      cleanup()
-      resolve(undefined)
-    }
-  })
-}
-
-const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
-  if (window.grecaptcha) return true
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    if (window.grecaptcha) return true
-  }
-  return false
-}
-
-const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
 // A failed bot-check is a retry, not a dead end: say what the user can change.
 const CAPTCHA_FAILED_MESSAGE =
@@ -148,32 +70,6 @@ const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
 const RESEND_COOLDOWN_SECONDS = 60
 const BOT_CHECK_UNAVAILABLE =
   "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
-
-const getRecaptchaToken = async (
-  action: string,
-): Promise<string | undefined> => {
-  if (!RECAPTCHA_SITE_KEY) return undefined
-  if (!(await waitForGrecaptcha())) return undefined
-  try {
-    const tokenPromise = new Promise<string>((resolve, reject) => {
-      window.grecaptcha!.enterprise.ready(() => {
-        window
-          .grecaptcha!.enterprise.execute(RECAPTCHA_SITE_KEY, { action })
-          .then(resolve)
-          .catch(reject)
-      })
-    })
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("recaptcha_execute_timeout")),
-        RECAPTCHA_EXECUTE_TIMEOUT_MS,
-      ),
-    )
-    return await Promise.race([tokenPromise, timeoutPromise])
-  } catch {
-    return undefined
-  }
-}
 
 function sanitizeNext(raw: string | null): string {
   const next = raw ?? "/"
@@ -268,9 +164,8 @@ export default function SignUpContent() {
     const newErrors: Record<string, string> = {}
     if (!fullName) newErrors.fullName = "Name is required."
     if (!email) newErrors.email = "Email is required."
-    if (!password) newErrors.password = "Password is required."
-    else if (password.length < 8)
-      newErrors.password = "Must be at least 8 characters."
+    const passwordError = passwordRuleError(password)
+    if (passwordError) newErrors.password = passwordError
     if (password && password !== confirmPassword)
       newErrors.confirmPassword = "Passwords do not match."
     if (Object.keys(newErrors).length > 0) {
@@ -545,17 +440,9 @@ export default function SignUpContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      {RECAPTCHA_SITE_KEY && (
-        <Script
-          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
-        />
-      )}
+      <RecaptchaScript />
       {TURNSTILE_SITE_KEY && (
-        <Script
-          src="https://challenges.cloudflare.com/turnstile/v0/api.js?render=explicit"
-          strategy="afterInteractive"
-        />
+        <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
@@ -689,6 +576,9 @@ export default function SignUpContent() {
                 value={password}
                 onChange={(e) => setFormValue("password", e.target.value)}
                 error={errors.password}
+                aria-describedby={
+                  errors.password ? undefined : "signup-password-rule"
+                }
                 suffix={
                   <button
                     type="button"
@@ -703,6 +593,14 @@ export default function SignUpContent() {
                   </button>
                 }
               />
+              {!errors.password && (
+                <p
+                  id="signup-password-rule"
+                  className="-mt-1 text-xs text-muted"
+                >
+                  {PASSWORD_RULE_HINT}
+                </p>
+              )}
               <Input
                 type={showConfirmPassword ? "text" : "password"}
                 placeholder="Confirm Password"

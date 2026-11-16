@@ -17,6 +17,7 @@ import { formatTime } from "@/lib/format"
 import { ACTIVITY_STATUS_VARIANT, formatDuration } from "@/lib/sandbox-utils"
 
 import { ActivityDetail } from "./activity-detail"
+import { activityActionLabel, activityResource } from "./activity-labels"
 
 interface ActivitySummaryRowProps {
   log: ActivityResponse
@@ -58,10 +59,12 @@ export function ActivitySummaryRow({
         </div>
       </TableCell>
       <TableCell className="font-mono text-foreground/80">
-        {log.sandbox_name ?? log.secret_name ?? "-"}
+        {activityResource(log)}
       </TableCell>
       <TableCell className="text-muted capitalize">{log.category}</TableCell>
-      <TableCell className="text-foreground/80">{log.action}</TableCell>
+      <TableCell className="text-foreground/80">
+        {activityActionLabel(log.action)}
+      </TableCell>
       <TableCell className="font-mono text-xs text-muted tabular-nums">
         {formatDuration(log.duration_ms)}
       </TableCell>

@@ -9,6 +9,7 @@ export interface TeamManagementCapabilities {
   can_assign_roles: boolean
   can_revoke_roles: boolean
   // Newer backends only; absent means the action is not offered.
+  invitable_roles?: string[]
   can_invite_owners?: boolean
   invite_blocked_reason?: "free_plan" | null
   can_rename_team?: boolean
@@ -23,6 +24,7 @@ export type TeamInvitationStatus =
 export type TeamInvitationDelivery = "pending" | "sent" | "failed"
 
 export interface TeamInvitation {
+  role?: string
   id: string
   email: string
   status: TeamInvitationStatus

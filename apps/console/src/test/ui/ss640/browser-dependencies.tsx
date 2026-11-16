@@ -14,8 +14,8 @@ export { Button, Input }
 export const syntheticSignupValues = {
   fullName: "Synthetic account",
   email: "fixture@example.test",
-  password: "synthetic-form-value",
-  confirmPassword: "synthetic-form-value",
+  password: "Synthetic-form-value-1",
+  confirmPassword: "Synthetic-form-value-1",
 }
 
 export const productionSignupCases = new Set([

@@ -31,6 +31,25 @@ describe("inviteControlState", () => {
     ).toBe("blocked_free_plan")
   })
 
+  it("uses the new roles capability without requiring owner invitation permission", () => {
+    expect(
+      inviteControlState({
+        ...none,
+        can_invite_members: true,
+        can_invite_owners: false,
+        invitable_roles: ["viewer"],
+      }),
+    ).toBe("enabled")
+    expect(
+      inviteControlState({
+        ...none,
+        can_invite_members: true,
+        can_invite_owners: true,
+        invitable_roles: [],
+      }),
+    ).toBe("hidden")
+  })
+
   it("enables it only when the backend allows owner invites", () => {
     const base = { ...none, can_invite_members: true }
     expect(inviteControlState({ ...base, can_invite_owners: true })).toBe(

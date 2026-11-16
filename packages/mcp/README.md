@@ -77,15 +77,36 @@ claude mcp add --transport http superserve https://mcp.superserve.ai \
   --header "Authorization: Bearer ss_live_xxxxxxxxxxxxxxxx"
 ```
 
-**Cursor / VS Code** (`.cursor/mcp.json`, `.vscode/mcp.json`):
+**Cursor** (`.cursor/mcp.json`):
 
 ```json
 {
+  "mcpServers": {
+    "superserve": {
+      "url": "https://mcp.superserve.ai",
+      "headers": { "Authorization": "Bearer ss_live_xxxxxxxxxxxxxxxx" }
+    }
+  }
+}
+```
+
+**VS Code** (`.vscode/mcp.json`, prompts for the key):
+
+```json
+{
+  "inputs": [
+    {
+      "id": "superserve-key",
+      "type": "promptString",
+      "description": "Superserve API key",
+      "password": true
+    }
+  ],
   "servers": {
     "superserve": {
       "type": "http",
       "url": "https://mcp.superserve.ai",
-      "headers": { "Authorization": "Bearer ss_live_xxxxxxxxxxxxxxxx" }
+      "headers": { "Authorization": "Bearer ${input:superserve-key}" }
     }
   }
 }

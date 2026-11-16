@@ -19,9 +19,9 @@ vi.mock("@/hooks/use-user", () => ({
 }))
 vi.mock("next/navigation", () => ({ useRouter: () => ({ replace: vi.fn() }) }))
 
-import { UserManagementClient } from "./user-management-client"
+import { TeamClient } from "./team-client"
 
-describe("UserManagementClient without team-management permission", () => {
+describe("TeamClient without team-management permission", () => {
   it("keeps the leave control without refetching the refused query", async () => {
     mocks.management.mockRejectedValue(
       new ApiError(403, "forbidden", "Forbidden"),
@@ -40,7 +40,7 @@ describe("UserManagementClient without team-management permission", () => {
     render(
       <QueryClientProvider client={client}>
         <ToastProvider>
-          <UserManagementClient />
+          <TeamClient />
         </ToastProvider>
       </QueryClientProvider>,
     )
@@ -48,6 +48,9 @@ describe("UserManagementClient without team-management permission", () => {
     expect(
       await screen.findByRole("button", { name: /^leave team$/i }),
     ).toBeEnabled()
+    expect(
+      screen.queryByText("Make another member an owner before leaving."),
+    ).not.toBeInTheDocument()
     // A refetch on mount would show the loading state and unmount it again.
     await new Promise((resolve) => setTimeout(resolve, 50))
     expect(screen.getByRole("button", { name: /^leave team$/i })).toBeEnabled()

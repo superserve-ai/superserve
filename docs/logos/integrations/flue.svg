@@ -1,0 +1,7 @@
+<!-- Flue mark, from apps/www/public/favicon.svg in https://github.com/withastro/flue (Apache-2.0). Background removed, white fill. -->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="36 18 36 72" fill="none">
+  <rect x="54" y="18" width="18" height="18" fill="white"/>
+  <rect x="36" y="36" width="18" height="18" fill="white"/>
+  <rect x="54" y="54" width="18" height="18" fill="white"/>
+  <rect x="36" y="72" width="18" height="18" fill="white"/>
+</svg>

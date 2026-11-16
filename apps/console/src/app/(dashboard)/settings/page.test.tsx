@@ -353,6 +353,9 @@ describe("Settings billing", () => {
 })
 
 describe("Settings change password", () => {
+  const hint =
+    "Use 8 or more characters with an uppercase letter, a lowercase letter, and a number."
+
   beforeEach(() => {
     addToast.mockReset()
     signInWithPassword.mockReset().mockResolvedValue({ error: null })
@@ -378,23 +381,74 @@ describe("Settings change password", () => {
     })
   })
 
-  function submitPasswords() {
+  function submitPasswords(next: string) {
     fireEvent.change(screen.getByLabelText("Current Password"), {
       target: { value: "Current-value-1" },
     })
     fireEvent.change(screen.getByLabelText("New Password"), {
-      target: { value: "Sandbox12345" },
+      target: { value: next },
     })
     fireEvent.change(screen.getByLabelText("Confirm New Password"), {
-      target: { value: "Sandbox12345" },
+      target: { value: next },
     })
     fireEvent.click(screen.getByRole("button", { name: "Update Password" }))
   }
 
+  it("shows the password rule under the new password", () => {
+    renderPage()
+
+    expect(screen.getByText(hint).id).toBe("settings-password-rule")
+    expect(
+      screen.getByLabelText("New Password").getAttribute("aria-describedby"),
+    ).toBe("settings-password-rule")
+  })
+
+  it("names the missing part of a weak password without calling the server", () => {
+    renderPage()
+
+    submitPasswords("sandbox12345")
+
+    const error = screen.getByText("Add an uppercase letter.")
+    const input = screen.getByLabelText("New Password")
+    expect(input.getAttribute("aria-invalid")).toBe("true")
+    expect(input.getAttribute("aria-describedby")).toBe(error.id)
+    expect(screen.queryByText(hint)).toBeNull()
+    expect(signInWithPassword).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("rejects a password over 72 bytes without calling the server", () => {
+    renderPage()
+
+    submitPasswords("Sandbox42".padEnd(73, "x"))
+
+    expect(screen.getByText("Use 72 characters or fewer.")).toBeTruthy()
+    expect(signInWithPassword).not.toHaveBeenCalled()
+    expect(updateUser).not.toHaveBeenCalled()
+  })
+
+  it("clears the rule error once a corrected password is submitted", async () => {
+    renderPage()
+
+    submitPasswords("sandbox12345")
+    expect(screen.getByText("Add an uppercase letter.")).toBeTruthy()
+
+    submitPasswords("Sandbox12345")
+
+    await waitFor(() =>
+      expect(updateUser).toHaveBeenCalledWith({
+        password: "Sandbox12345",
+        current_password: "Current-value-1",
+      }),
+    )
+    expect(screen.queryByText("Add an uppercase letter.")).toBeNull()
+    expect(screen.getByText(hint)).toBeTruthy()
+  })
+
   it("sends the current password so Auth can check it on the server", async () => {
     renderPage()
 
-    submitPasswords()
+    submitPasswords("Sandbox12345")
 
     await waitFor(() =>
       expect(addToast).toHaveBeenCalledWith("Password updated", "success"),
@@ -418,7 +472,7 @@ describe("Settings change password", () => {
     })
     renderPage()
 
-    submitPasswords()
+    submitPasswords("Sandbox12345")
 
     await waitFor(() =>
       expect(addToast).toHaveBeenCalledWith(
@@ -435,7 +489,7 @@ describe("Settings change password", () => {
       updateUser.mockResolvedValue({ error: { code } })
       renderPage()
 
-      submitPasswords()
+      submitPasswords("Sandbox12345")
 
       await waitFor(() =>
         expect(addToast).toHaveBeenCalledWith(
@@ -457,7 +511,7 @@ describe("Settings change password", () => {
     updateUser.mockResolvedValue({ error: { code: "same_password" } })
     renderPage()
 
-    submitPasswords()
+    submitPasswords("Sandbox12345")
 
     await waitFor(() =>
       expect(addToast).toHaveBeenCalledWith(

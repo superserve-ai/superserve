@@ -6,6 +6,7 @@ import { regionLabel } from "@/lib/format"
 import { loadInviteView } from "@/lib/invite/accept"
 import { INVITE_COPY } from "@/lib/invite/copy"
 import { parseInviteFailure, type InviteView } from "@/lib/invite/decision"
+import { knownTeamRole, TEAM_ROLES } from "@/lib/team/roles"
 
 import { beginInviteAuthAction } from "./actions"
 import { AutoJoin, ConfirmControls, MismatchControls } from "./invite-controls"
@@ -64,11 +65,24 @@ function InviteBody({ view, token }: { view: InviteView; token: string }) {
   switch (view.kind) {
     case "signed_out": {
       const { preview } = view
+      const role = knownTeamRole(preview.role)
       return (
         <>
           <Title>{INVITE_COPY.signedOut.title(preview.teamName)}</Title>
-          <Body>{INVITE_COPY.signedOut.body}</Body>
-          <p className="mb-6 text-xs text-muted">{INVITE_COPY.ownerNotice}</p>
+          <Body>
+            {preview.role
+              ? INVITE_COPY.roleInvitation(preview.teamName, preview.role)
+              : INVITE_COPY.signedOut.body}
+          </Body>
+          {preview.role ? (
+            role && (
+              <p className="mb-6 text-xs text-muted">
+                {TEAM_ROLES[role].description}
+              </p>
+            )
+          ) : (
+            <p className="mb-6 text-xs text-muted">{INVITE_COPY.ownerNotice}</p>
+          )}
           <div className="space-y-3">
             <form action={beginInviteAuthAction.bind(null, token, "signup")}>
               <Button type="submit" className="w-full">
@@ -94,9 +108,11 @@ function InviteBody({ view, token }: { view: InviteView; token: string }) {
         <>
           <Title>{INVITE_COPY.confirm.title(preview.teamName)}</Title>
           <Body>
-            {view.teamless
-              ? INVITE_COPY.confirm.bodyNoTeam
-              : INVITE_COPY.confirm.body}
+            {preview.role
+              ? INVITE_COPY.roleInvitation(preview.teamName, preview.role)
+              : view.teamless
+                ? INVITE_COPY.confirm.bodyNoTeam
+                : INVITE_COPY.confirm.body}
           </Body>
           <ConfirmControls token={token} />
           <Small>{regionLabel(preview.region)}</Small>
@@ -123,6 +139,14 @@ function InviteBody({ view, token }: { view: InviteView; token: string }) {
       return (
         <>
           <Title>{INVITE_COPY.confirm.title(view.preview.teamName)}</Title>
+          {view.preview.role && (
+            <Body>
+              {INVITE_COPY.roleInvitation(
+                view.preview.teamName,
+                view.preview.role,
+              )}
+            </Body>
+          )}
           <AutoJoin token={token} />
         </>
       )

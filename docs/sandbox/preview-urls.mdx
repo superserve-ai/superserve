@@ -87,15 +87,14 @@ await sandbox.commands.spawn("npm run dev -- --host 0.0.0.0")
 await sandbox.publishPreviewPort(3000, { access: "private" })
 
 const url = sandbox.getPreviewUrl(3000)
-
-````
+```
 
 ```python Python
 await sandbox.commands.spawn("npm run dev -- --host 0.0.0.0")
 await sandbox.publish_preview_port(3000, access="private")
 
 url = sandbox.get_preview_url(3000)  # not awaited
-````
+```
 
 </CodeGroup>
 
@@ -122,10 +121,9 @@ Mint a token and send it using the header name returned by the API:
 const credential = await sandbox.getPreviewToken(3000)
 
 await fetch(sandbox.getPreviewUrl(3000), {
-headers: { [credential.header]: credential.token },
+  headers: { [credential.header]: credential.token },
 })
-
-````
+```
 
 ```python Python
 import httpx
@@ -137,7 +135,7 @@ async with httpx.AsyncClient() as client:
         sandbox.get_preview_url(3000),
         headers={credential.header: credential.token},
     )
-````
+```
 
 </CodeGroup>
 

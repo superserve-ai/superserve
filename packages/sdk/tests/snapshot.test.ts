@@ -43,7 +43,12 @@ function snapshotBody(status: string, extra: Record<string, unknown> = {}) {
     status,
     name: "before-upgrade",
     size_bytes: status === "ready" ? 4096 : 0,
-    resources: { vcpu_count: 2, memory_mib: 2048, disk_mib: 8192 },
+    resources: {
+      vcpu_count: 2,
+      memory_mib: 2048,
+      disk_mib: 8192,
+      memory_max_mib: 4096,
+    },
     created_at: "2026-01-02T00:00:00.000Z",
     ready_at: status === "ready" ? "2026-01-02T00:00:01.000Z" : null,
     ...extra,
@@ -102,6 +107,7 @@ describe("Sandbox#snapshot", () => {
       vcpuCount: 2,
       memoryMib: 2048,
       diskMib: 8192,
+      memoryMaxMib: 4096,
     })
     expect(snap.readyAt).toBeInstanceOf(Date)
   })

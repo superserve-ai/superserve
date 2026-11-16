@@ -125,6 +125,8 @@ export interface TemplateSummary {
   status: string
   vcpu: number
   memoryMib: number
+  /** Ceiling memory can grow to while running; absent when memory is fixed. */
+  memoryMaxMib?: number
   diskMib: number
 }
 
@@ -170,6 +172,7 @@ export interface TemplateCreateInput {
   from: string
   vcpu?: number
   memoryMib?: number
+  memoryMaxMib?: number
   diskMib?: number
   steps?: BuildStep[]
   startCmd?: string
@@ -286,6 +289,7 @@ function toTemplateSummary(t: TemplateInfo): TemplateSummary {
     status: t.status,
     vcpu: t.vcpu,
     memoryMib: t.memoryMib,
+    memoryMaxMib: t.memoryMaxMib,
     diskMib: t.diskMib,
   }
 }
@@ -377,6 +381,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         from: input.from,
         vcpu: input.vcpu,
         memoryMib: input.memoryMib,
+        memoryMaxMib: input.memoryMaxMib,
         diskMib: input.diskMib,
         steps: input.steps,
         startCmd: input.startCmd,
@@ -390,6 +395,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         status: t.status,
         vcpu: t.vcpu,
         memoryMib: t.memoryMib,
+        memoryMaxMib: t.memoryMaxMib,
         diskMib: t.diskMib,
         createdAt: t.createdAt,
       })

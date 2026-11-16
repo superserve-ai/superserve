@@ -65,6 +65,7 @@ interface TemplateCreateArgs {
   from: string
   vcpu?: number
   memory_mib?: number
+  memory_max_mib?: number
   disk_mib?: number
   run_steps?: string[]
   start_cmd?: string
@@ -289,7 +290,7 @@ export function registerLifecycleTools(
           ? templates
               .map(
                 (t) =>
-                  `${t.name}\t${t.status}\t${t.vcpu} vCPU / ${t.memoryMib} MiB`,
+                  `${t.name}\t${t.status}\t${t.vcpu} vCPU / ${memoryText(t.memoryMib, t.memoryMaxMib)}`,
               )
               .join("\n")
           : "(no templates)"
@@ -335,6 +336,16 @@ export function registerLifecycleTools(
           .positive()
           .optional()
           .describe("Memory (MiB) for sandboxes built from this template."),
+        memory_max_mib: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Optional ceiling (MiB) sandboxes from this template can grow memory to while running; " +
+              "memory_mib stays the boot size. Must exceed memory_mib, be at most 4 times it, and differ " +
+              "from it by a multiple of 128. Omit for a fixed memory size.",
+          ),
         disk_mib: z
           .number()
           .int()
@@ -372,6 +383,7 @@ export function registerLifecycleTools(
       from,
       vcpu,
       memory_mib,
+      memory_max_mib,
       disk_mib,
       run_steps,
       start_cmd,
@@ -386,13 +398,14 @@ export function registerLifecycleTools(
           from,
           vcpu,
           memoryMib: memory_mib,
+          memoryMaxMib: memory_max_mib,
           diskMib: disk_mib,
           steps,
           startCmd: start_cmd,
           readyCmd: ready_cmd,
         })
         return toolOk(
-          `building template ${t.name} (${t.vcpu} vCPU / ${t.memoryMib} MiB), status ${t.status}. ` +
+          `building template ${t.name} (${t.vcpu} vCPU / ${memoryText(t.memoryMib, t.memoryMaxMib)}), status ${t.status}. ` +
             `Poll sandbox_template_list until status is 'ready', then use from_template: "${t.name}".`,
           { template: t },
         )
@@ -467,6 +480,9 @@ export function registerLifecycleTools(
           created_at: toIsoOrUndefined(i.createdAt),
           metadata: i.metadata,
         }
+        if (i.memoryMaxMib !== undefined) {
+          structured.memory_max_mib = i.memoryMaxMib
+        }
         if (i.timeoutSeconds !== undefined) {
           structured.timeout_seconds = i.timeoutSeconds
         }
@@ -494,7 +510,7 @@ export function registerLifecycleTools(
           }))
         }
         return toolOk(
-          `${i.id} (${i.name}) — ${i.status}, ${i.vcpuCount} vCPU / ${i.memoryMib} MiB`,
+          `${i.id} (${i.name}) — ${i.status}, ${i.vcpuCount} vCPU / ${memoryText(i.memoryMib, i.memoryMaxMib)}`,
           structured,
         )
       } catch (e) {
@@ -827,6 +843,10 @@ export function registerLifecycleTools(
  * Guards `.toISOString()`, which throws a RangeError on an Invalid Date — a case
  * optional chaining would not catch (the value is a Date object, just NaN).
  */
+function memoryText(min: number, max: number | undefined): string {
+  return max === undefined ? `${min} MiB` : `${min}-${max} MiB`
+}
+
 function toIsoOrUndefined(d: Date | undefined): string | undefined {
   return d && !Number.isNaN(d.getTime()) ? d.toISOString() : undefined
 }

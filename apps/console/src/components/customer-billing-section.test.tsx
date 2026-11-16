@@ -1,15 +1,18 @@
 vi.mock("@/hooks/use-billing-capabilities", () => ({
   useBillingCapabilities: () => ({
-    data: {
-      pricing_version: "legacy",
-      entry_open: false,
-      fresh_entry: {
-        starter: false,
-        pro: false,
-        auto_recharge: false,
-        choose_free: false,
-      },
-    },
+    data: mocks.capabilitiesPending
+      ? undefined
+      : {
+          pricing_version: mocks.pricingVersion,
+          offers: mocks.offers,
+          entry_open: false,
+          fresh_entry: {
+            starter: false,
+            pro: false,
+            auto_recharge: false,
+            choose_free: false,
+          },
+        },
   }),
 }))
 vi.mock("@/hooks/use-user", () => ({
@@ -20,11 +23,38 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
+import type { SignupPlanContext } from "@/lib/api/signup-plan"
+import { AWAITING_PLAN_STATES } from "@/lib/billing/signup-checkout-paths"
 
+import { TrialUpgradeAction } from "./billing/trial-upgrade-action"
 import {
   CustomerBillingSection,
+  billingProblem,
   usePlanBillingControls,
 } from "./customer-billing-section"
+
+const mocks = vi.hoisted(() => ({
+  entry: vi.fn(),
+  pricingVersion: "legacy" as "legacy" | "v2",
+  capabilitiesPending: false,
+  offers: undefined as unknown[] | undefined,
+  scope: "self",
+}))
+
+vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamEntry: mocks.entry,
+}))
+vi.mock("@/hooks/use-billing-context", () => ({
+  useBillingContext: () => ({
+    teamKey: "use:team-1",
+    cacheScope: mocks.scope,
+    ready: true,
+  }),
+}))
+vi.mock("@/components/query-provider", async (original) => ({
+  ...(await original<typeof import("@/components/query-provider")>()),
+  useQueryScope: () => mocks.scope,
+}))
 
 const useCustomerBillingPeriods = vi.fn()
 const createStripeCheckoutSession = vi.fn()
@@ -136,12 +166,16 @@ function PlanBillingControls({
   })
 }
 
-function renderControls(summary: BillingSummaryResponse | null = baseSummary) {
+function renderControls(
+  summary: BillingSummaryResponse | null = baseSummary,
+  signup?: SignupPlanContext,
+) {
   const queryClient = new QueryClient({
     defaultOptions: {
       queries: { retry: false },
     },
   })
+  if (signup) queryClient.setQueryData(["signup-plan", "use:team-1"], signup)
 
   return render(
     <QueryClientProvider client={queryClient}>
@@ -196,6 +230,15 @@ function renderSection(
 
 describe("CustomerBillingSection", () => {
   beforeEach(() => {
+    mocks.entry.mockReset().mockReturnValue({
+      data: null,
+      isPending: false,
+      isError: false,
+    })
+    mocks.pricingVersion = "legacy"
+    mocks.capabilitiesPending = false
+    mocks.offers = undefined
+    mocks.scope = "self"
     sessionStorage.clear()
     addToast.mockReset()
     createStripeCheckoutSession.mockReset()
@@ -593,5 +636,297 @@ describe("CustomerBillingSection", () => {
       "Billing is live, but no customer portal is currently available.",
     )
     expect(screen.queryByRole("button")).not.toBeInTheDocument()
+  })
+
+  it.each(
+    AWAITING_PLAN_STATES.flatMap((entry) =>
+      [false, true].map((paymentSetupRequired) => ({
+        entry,
+        paymentSetupRequired,
+      })),
+    ),
+  )(
+    "offers an upgrade for $entry with setup required $paymentSetupRequired",
+    ({ entry, paymentSetupRequired }) => {
+      mocks.pricingVersion = "v2"
+      mocks.entry.mockReturnValue({
+        data: entry,
+        isPending: false,
+        isError: false,
+      })
+      renderControls({
+        ...baseSummary,
+        portal_available: false,
+        payment_setup_required: paymentSetupRequired,
+      })
+
+      expect(screen.getByTestId("plan-billing-controls")).toBeInTheDocument()
+      expect(
+        screen.queryByTestId("plan-billing-problem"),
+      ).not.toBeInTheDocument()
+      expect(
+        screen.queryByRole("button", { name: "Set Up Billing" }),
+      ).not.toBeInTheDocument()
+      const upgrade = screen.getByRole("link", { name: "Upgrade" })
+      const url = new URL(upgrade.getAttribute("href")!, "https://console.test")
+      expect(url.pathname).toMatch(/^\/auth\/choose-plan\/?$/)
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        reason: "upgrade",
+        account: "u1",
+        team: "use:team-1",
+      })
+    },
+  )
+
+  it("shares pending checkout between trial upgrade actions", () => {
+    mocks.offers = [
+      {
+        offer_key: "developer_monthly",
+        display_name: "Builder",
+        sellable: true,
+      },
+    ]
+    const queryClient = new QueryClient()
+    queryClient.setQueryData<SignupPlanContext>(["signup-plan", "use:team-1"], {
+      userId: "signup-account",
+      teamKey: "use:team-1",
+      state: "selecting",
+      offer: null,
+      requestedOffer: "developer",
+    })
+    render(
+      <QueryClientProvider client={queryClient}>
+        <TrialUpgradeAction />
+        <TrialUpgradeAction />
+      </QueryClientProvider>,
+    )
+
+    const buttons = screen.getAllByRole("button", {
+      name: "Upgrade to Builder",
+    })
+    expect(fireEvent.submit(buttons[0].closest("form")!)).toBe(true)
+    expect(fireEvent.submit(buttons[1].closest("form")!)).toBe(false)
+    for (const button of buttons) expect(button).toBeDisabled()
+
+    // Back from Checkout restores this page from the back-forward cache.
+    const restore = new Event("pageshow")
+    Object.defineProperty(restore, "persisted", { value: true })
+    act(() => void window.dispatchEvent(restore))
+    for (const button of buttons) expect(button).toBeEnabled()
+    expect(fireEvent.submit(buttons[1].closest("form")!)).toBe(true)
+    expect(fireEvent.submit(buttons[0].closest("form")!)).toBe(false)
+  })
+
+  it("uses the requested offer's checkout and offers other plans for a trial", () => {
+    mocks.pricingVersion = "v2"
+    mocks.entry.mockReturnValue({
+      data: "trial",
+      isPending: false,
+      isError: false,
+    })
+    mocks.offers = [
+      {
+        offer_key: "developer_monthly",
+        display_name: "Builder",
+        sellable: true,
+      },
+    ]
+    renderControls(
+      { ...baseSummary, portal_available: false },
+      {
+        userId: "signup-account",
+        teamKey: "use:team-1",
+        state: "selecting",
+        offer: null,
+        requestedOffer: "developer",
+      },
+    )
+
+    const upgrade = screen.getByRole("button", { name: "Upgrade to Builder" })
+    const form = upgrade.closest("form")!
+    expect(form).toHaveAttribute("method", "post")
+    const action = new URL(form.getAttribute("action")!, "https://console.test")
+    expect(action.pathname).toBe("/api/onboarding/checkout/")
+    expect(Object.fromEntries(action.searchParams)).toEqual({
+      offer: "developer",
+      account: "signup-account",
+      team: "use:team-1",
+    })
+    const otherPlans = new URL(
+      screen.getByRole("link", { name: "Other plans" }).getAttribute("href")!,
+      "https://console.test",
+    )
+    expect(otherPlans.pathname).toMatch(/^\/auth\/choose-plan\/?$/)
+    expect(Object.fromEntries(otherPlans.searchParams)).toEqual({
+      reason: "upgrade",
+      offer: "developer",
+      account: "signup-account",
+      team: "use:team-1",
+    })
+    expect(fireEvent.submit(form)).toBe(true)
+    expect(upgrade).toBeDisabled()
+    expect(fireEvent.submit(form)).toBe(false)
+    expect(screen.queryByTestId("plan-billing-problem")).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole("button", { name: "Set Up Billing" }),
+    ).not.toBeInTheDocument()
+  })
+
+  it.each([
+    { scope: "self", canManage: false },
+    { scope: "impersonated", canManage: true },
+  ])(
+    "leaves trial upgrades to billing admins in their own scope: $scope, $canManage",
+    ({ scope, canManage }) => {
+      mocks.pricingVersion = "v2"
+      mocks.scope = scope
+      mocks.entry.mockReturnValue({
+        data: "trial",
+        isPending: false,
+        isError: false,
+      })
+      renderControls({
+        ...baseSummary,
+        portal_available: false,
+        payment_setup_required: true,
+        permissions: { can_view: true, can_manage: canManage },
+      })
+
+      expect(
+        screen.getByText("Ask a team billing admin to upgrade."),
+      ).toHaveClass("text-xs", "text-muted")
+      expect(screen.queryByRole("link")).not.toBeInTheDocument()
+      expect(screen.queryByRole("button")).not.toBeInTheDocument()
+      expect(
+        screen.queryByTestId("plan-billing-problem"),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it.each([
+    {
+      data: undefined,
+      isPending: true,
+      isError: false,
+      fetchStatus: "fetching",
+    },
+    { data: "activating", isPending: false, isError: false },
+  ])(
+    "hides all billing controls while entry is $data (pending: $isPending)",
+    (entry) => {
+      mocks.entry.mockReturnValue(entry)
+      const { container } = renderControls({
+        ...baseSummary,
+        portal_available: false,
+        payment_setup_required: true,
+      })
+      expect(container).toBeEmptyDOMElement()
+      expect(mocks.entry).toHaveBeenCalledWith(true)
+    },
+  )
+
+  it.each(["v2", "pending"] as const)(
+    "hides unsupported setup checkout with %s capabilities",
+    (pricing) => {
+      mocks.pricingVersion = "v2"
+      mocks.capabilitiesPending = pricing === "pending"
+      renderControls({ ...baseSummary, portal_available: false })
+      expect(
+        screen.queryByRole("button", { name: "Set Up Billing" }),
+      ).not.toBeInTheDocument()
+    },
+  )
+
+  it("offers working legacy checkout without a missing portal warning", () => {
+    renderControls({ ...baseSummary, portal_available: false })
+    expect(screen.getByRole("button", { name: "Set Up Billing" })).toBeEnabled()
+    expect(screen.queryByTestId("plan-billing-problem")).not.toBeInTheDocument()
+  })
+
+  it("keeps paid billing controls when the entry read cannot run", () => {
+    mocks.entry.mockReturnValue({
+      data: undefined,
+      isPending: true,
+      isError: false,
+      fetchStatus: "idle",
+    })
+    renderControls()
+    expect(
+      screen.getByRole("button", { name: "Open Customer Portal" }),
+    ).toBeEnabled()
+  })
+
+  it("keeps legacy billing recovery when the entry read fails", () => {
+    mocks.entry.mockReturnValue({
+      data: "trial",
+      isPending: false,
+      isError: true,
+    })
+    renderControls({
+      ...baseSummary,
+      portal_available: false,
+      payment_setup_required: true,
+    })
+    expect(screen.getByRole("button", { name: "Set Up Billing" })).toBeEnabled()
+    expect(screen.getByTestId("plan-billing-problem")).toHaveTextContent(
+      "Payment setup required",
+    )
+    expect(
+      screen.queryByRole("link", { name: /Upgrade/ }),
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe("billingProblem", () => {
+  const disconnected = { ...baseSummary, portal_available: false }
+
+  it.each([undefined, {}, { checkoutReady: false }])(
+    "keeps the missing portal warning without working checkout: %j",
+    (options) => {
+      expect(billingProblem(disconnected, null, options)).toBe(
+        "Billing is live, but no customer portal is currently available.",
+      )
+    },
+  )
+
+  it("suppresses the missing portal warning when checkout is ready", () => {
+    expect(
+      billingProblem(disconnected, null, { checkoutReady: true }),
+    ).toBeNull()
+  })
+
+  it("keeps payment setup required first even when checkout is ready", () => {
+    expect(
+      billingProblem({ ...disconnected, payment_setup_required: true }, null, {
+        checkoutReady: true,
+      }),
+    ).toBe(
+      "Payment setup required. Start checkout to connect Stripe for this team.",
+    )
+  })
+
+  it("keeps shadow billing quiet when checkout is ready", () => {
+    expect(
+      billingProblem({ ...disconnected, billing_mode: "shadow" }, null, {
+        checkoutReady: true,
+      }),
+    ).toBeNull()
+  })
+
+  it("keeps subscription problems when a portal exists and checkout is ready", () => {
+    expect(
+      billingProblem(
+        baseSummary,
+        {
+          status: "active",
+          cancel_at_period_end: false,
+          stripe_subscription_status: "past_due",
+          stripe_invoice_status: "open",
+        },
+        { checkoutReady: true },
+      ),
+    ).toBe(
+      "The last payment failed. Update your payment method in the customer portal.",
+    )
   })
 })

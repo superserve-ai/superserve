@@ -2,6 +2,7 @@ import "dotenv/config"
 import Anthropic from "@anthropic-ai/sdk"
 import { Sandbox } from "@superserve/sdk"
 import { writeFileSync, unlinkSync, existsSync, readFileSync } from "node:fs"
+import { setTimeout as sleep } from "node:timers/promises"
 
 const ENVIRONMENT_KEY = process.env.ANTHROPIC_ENVIRONMENT_KEY
 const ENVIRONMENT_ID = process.env.ANTHROPIC_ENVIRONMENT_ID
@@ -22,7 +23,7 @@ async def main():
     key = os.environ["ANTHROPIC_ENVIRONMENT_KEY"]
     async with AsyncAnthropic(auth_token=key) as client:
         await client.beta.environments.work.worker(
-            environment_key=key, workdir="/workspace", unrestricted_paths=True, max_idle=300,
+            environment_key=key, workdir="/workspace", max_idle=300,
         ).handle_item()
 
 asyncio.run(main())
@@ -87,7 +88,7 @@ rm -f "$PIDFILE" "$EXITFILE"
 `
 
 const lastActive = new Map()
-let shuttingDown = false
+const shutdown = new AbortController()
 
 function acquireLock() {
   const lockPath = `/tmp/superserve-cma-${ENVIRONMENT_ID}.lock`
@@ -162,8 +163,8 @@ async function findOrCreateSandbox(sessionId, workId, metadata) {
   if (metadata?.["superserve.sandbox_id"]) {
     const sandboxId = metadata["superserve.sandbox_id"]
     console.log(`attaching prepared sandbox=${sandboxId} for session=${sessionId}`)
+    // connect() resumes a paused sandbox, so no separate resume() call.
     const sandbox = await Sandbox.connect(sandboxId)
-    if (sandbox.status === "paused") await sandbox.resume()
     await updateMetadata(sandbox, {
       [META_SESSION_ID]: sessionId, [META_WORK_ID]: workId, [META_MODE]: "active", [META_PAUSED_AT]: null,
     })
@@ -174,11 +175,10 @@ async function findOrCreateSandbox(sessionId, workId, metadata) {
   const live = existing.filter((s) => s.status === "active" || s.status === "paused")
 
   if (live.length > 0) {
-    const sandbox = await Sandbox.connect(live[0].id)
     if (live[0].status === "paused") {
       console.log(`resuming sandbox=${live[0].id} for session=${sessionId}`)
-      await sandbox.resume()
     }
+    const sandbox = await Sandbox.connect(live[0].id)
     await updateMetadata(sandbox, {
       [META_WORK_ID]: workId, [META_MODE]: "active", [META_PAUSED_AT]: null,
     })
@@ -250,10 +250,9 @@ async function handleWork(work) {
 }
 
 async function janitorLoop() {
-  // eslint-disable-next-line no-unmodified-loop-condition -- signal handlers flip shuttingDown.
-  while (!shuttingDown) {
-    await new Promise((r) => setTimeout(r, JANITOR_INTERVAL))
-    if (shuttingDown) return
+  while (!shutdown.signal.aborted) {
+    await sleep(JANITOR_INTERVAL, undefined, { signal: shutdown.signal }).catch(() => {})
+    if (shutdown.signal.aborted) return
 
     try {
       const sandboxes = await Sandbox.list()
@@ -290,8 +289,7 @@ async function pollLoop() {
   const client = new Anthropic({ authToken: ENVIRONMENT_KEY })
   console.log(`polling env=${ENVIRONMENT_ID} template=${TEMPLATE_NAME}`)
 
-  // eslint-disable-next-line no-unmodified-loop-condition -- signal handlers flip shuttingDown.
-  while (!shuttingDown) {
+  while (!shutdown.signal.aborted) {
     try {
       for await (const work of client.beta.environments.work.poller({
         environmentId: ENVIRONMENT_ID,
@@ -299,6 +297,7 @@ async function pollLoop() {
         blockMs: 999,
         reclaimOlderThanMs: 2000,
         autoStop: false,
+        signal: shutdown.signal,
       })) {
         backoff = 0
         try {
@@ -311,12 +310,21 @@ async function pollLoop() {
       backoff = Math.min(backoff + 1, 6)
       const wait = Math.min(60_000, 2 ** backoff * 1000)
       console.warn(`poll error, retrying in ${wait / 1000}s: ${e.message}`)
-      await new Promise((r) => setTimeout(r, wait))
+      await sleep(wait, undefined, { signal: shutdown.signal }).catch(() => {})
     }
   }
 }
 
+// The first signal stops polling after the current work item. A second
+// signal exits at once. Both paths run the exit hook that removes the lock.
+function onSignal(signal) {
+  if (shutdown.signal.aborted) process.exit(1)
+  console.log(`${signal} received, shutting down`)
+  shutdown.abort()
+}
+
 acquireLock()
-process.once("SIGTERM", () => { shuttingDown = true })
-process.once("SIGINT", () => { shuttingDown = true })
+process.on("SIGTERM", onSignal)
+process.on("SIGINT", onSignal)
 await Promise.all([pollLoop(), janitorLoop()])
+console.log("orchestrator stopped")

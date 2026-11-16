@@ -178,6 +178,7 @@ export function createFakeClient(): FakeClient {
         status: "building",
         vcpu: input.vcpu ?? 2,
         memoryMib: input.memoryMib ?? 2048,
+        memoryMaxMib: input.memoryMaxMib,
         diskMib: input.diskMib ?? 8192,
       }
       templates.push(summary)

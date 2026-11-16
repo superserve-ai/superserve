@@ -14,15 +14,19 @@ const sandbox = await Sandbox.create({
   name: "data-analyzer",
   fromTemplate: "superserve/python-3.11",
 })
-const result = await sandbox.commands.run("python analyze.py")
+await sandbox.files.write("/home/user/analyze.py", "print(sum(range(10)))")
+const result = await sandbox.commands.run("python /home/user/analyze.py")
 console.log(result.stdout)
+
+await sandbox.kill()
 ```
 
 ```python Python
 from superserve import Sandbox
 
 sandbox = Sandbox.create(name="data-analyzer", from_template="superserve/python-3.11")
-result = sandbox.commands.run("python analyze.py")
+sandbox.files.write("/home/user/analyze.py", "print(sum(range(10)))")
+result = sandbox.commands.run("python /home/user/analyze.py")
 print(result.stdout)
 
 sandbox.kill()

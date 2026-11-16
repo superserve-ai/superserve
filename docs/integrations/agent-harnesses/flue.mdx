@@ -1,0 +1,339 @@
+---
+title: "Flue"
+sidebarTitle: Flue
+description: Use Superserve sandboxes as the execution runtime for agents built with Flue.
+icon: "/logos/integrations/flue.svg"
+---
+
+[Flue](https://flueframework.com) is a TypeScript framework for building agents. Its built-in tools (`bash`, `read`, `write`, `edit`, `grep`, and `glob`) run against the sandbox you pass to `useSandbox`. Back that sandbox with a Superserve sandbox, and every command the model runs, and every file it writes, stays in an isolated VM instead of on your machine. The model API key stays in your app; the sandbox never sees it.
+
+## Setup
+
+Flue needs Node.js 22.19 or later. Create a project with this `package.json`:
+
+```json package.json
+{
+  "name": "flue-superserve",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@flue/runtime": "^2.3.0",
+    "@superserve/sdk": "^0.11.6"
+  },
+  "devDependencies": {
+    "@flue/cli": "^2.3.0"
+  },
+  "overrides": {
+    "@earendil-works/pi-ai": "1.4.0",
+    "@earendil-works/pi-agent-core": "1.4.0"
+  }
+}
+```
+
+<Note>
+`@flue/runtime` 2.3.0 does not load with version 1.5.0 of its `@earendil-works/pi-ai` dependency (`does not provide an export named 'Type'`). The `overrides` block pins the 1.4.0 release until a fixed Flue release ships. See [flue#912](https://github.com/withastro/flue/issues/912).
+</Note>
+
+Install the packages and put your keys in `.env`. `flue run` loads `.env` from the project directory.
+
+```bash
+npm install
+```
+
+```bash .env
+SUPERSERVE_API_KEY=ss_live_...
+ANTHROPIC_API_KEY=sk-ant-...
+```
+
+See [API keys](/api-key) to create a Superserve API key.
+
+## Add the sandbox adapter
+
+Flue's `sandboxFromDriver` turns a small driver object into the sandbox that Flue's tools use. This driver sends commands to `sandbox.commands.run` and file reads and writes to `sandbox.files`. Save it as `src/sandboxes/superserve.ts`.
+
+```typescript src/sandboxes/superserve.ts
+import { sandboxFromDriver } from "@flue/runtime"
+import type {
+  FileStat,
+  Sandbox as FlueSandbox,
+  SandboxDriver,
+  ShellResult,
+} from "@flue/runtime"
+import type { Sandbox } from "@superserve/sdk"
+
+export interface SuperserveAdapterOptions {
+  /** Working directory for the agent. Defaults to `/home/user`. */
+  cwd?: string
+  /** Timeout for commands that do not set one. Defaults to 10 minutes. */
+  defaultTimeoutMs?: number
+}
+
+// Quote a value for /bin/sh.
+const quote = (value: string) => `'${value.replaceAll("'", `'\\''`)}'`
+
+class SuperserveDriver implements SandboxDriver {
+  private readonly sandbox: Sandbox
+  private readonly defaultTimeoutMs: number
+
+  constructor(sandbox: Sandbox, defaultTimeoutMs: number) {
+    this.sandbox = sandbox
+    this.defaultTimeoutMs = defaultTimeoutMs
+  }
+
+  async exec(
+    command: string,
+    options?: { cwd?: string; env?: Record<string, string>; timeoutMs?: number },
+  ): Promise<ShellResult> {
+    // A non-zero exit resolves with its exit code. When the timeout expires,
+    // the sandbox stops the command and returns exit code 124. The abort
+    // signal is not passed on: aborting the request does not stop the command.
+    const { stdout, stderr, exitCode } = await this.sandbox.commands.run(
+      command,
+      {
+        cwd: options?.cwd,
+        env: options?.env,
+        timeoutMs: options?.timeoutMs ?? this.defaultTimeoutMs,
+      },
+    )
+    return { stdout, stderr, exitCode }
+  }
+
+  readFile(path: string): Promise<string> {
+    return this.sandbox.files.readText(path)
+  }
+
+  readFileBuffer(path: string): Promise<Uint8Array> {
+    return this.sandbox.files.read(path)
+  }
+
+  writeFile(path: string, content: string | Uint8Array): Promise<void> {
+    return this.sandbox.files.write(path, content)
+  }
+
+  async stat(path: string): Promise<FileStat> {
+    const p = quote(path)
+    const out = await this.sh(
+      `stat -L -c '%F|%s|%Y' -- ${p} && { [ -L ${p} ] && echo link || echo file; }`,
+    )
+    const [info = "", kind] = out.trim().split("\n")
+    const [type = "", size, mtime] = info.split("|")
+    return {
+      isFile: type.startsWith("regular"),
+      isDirectory: type === "directory",
+      isSymbolicLink: kind === "link",
+      size: Number(size),
+      mtime: new Date(Number(mtime) * 1000),
+    }
+  }
+
+  async readdir(path: string): Promise<string[]> {
+    const out = await this.sh(
+      `cd -- ${quote(path)} && find . -mindepth 1 -maxdepth 1 -printf '%f\\0'`,
+    )
+    return out.split("\0").filter(Boolean)
+  }
+
+  async exists(path: string): Promise<boolean> {
+    const p = quote(path)
+    return (await this.exec(`[ -e ${p} ] || [ -L ${p} ]`)).exitCode === 0
+  }
+
+  async mkdir(path: string, options?: { recursive?: boolean }): Promise<void> {
+    await this.sh(`mkdir ${options?.recursive ? "-p " : ""}-- ${quote(path)}`)
+  }
+
+  async rm(
+    path: string,
+    options?: { recursive?: boolean; force?: boolean },
+  ): Promise<void> {
+    const flags = `${options?.recursive ? "r" : ""}${options?.force ? "f" : ""}`
+    await this.sh(`rm ${flags ? `-${flags} ` : ""}-- ${quote(path)}`)
+  }
+
+  // Run a helper command and throw its stderr when it fails.
+  private async sh(command: string): Promise<string> {
+    const { stdout, stderr, exitCode } = await this.exec(command)
+    if (exitCode !== 0) {
+      throw new Error(stderr.trim() || `${command} exited with ${exitCode}`)
+    }
+    return stdout
+  }
+}
+
+/** Wrap a Superserve sandbox as a Flue sandbox. */
+export function superserve(
+  sandbox: Sandbox,
+  options: SuperserveAdapterOptions = {},
+): FlueSandbox {
+  const driver = new SuperserveDriver(
+    sandbox,
+    options.defaultTimeoutMs ?? 10 * 60_000,
+  )
+  return sandboxFromDriver(driver, options.cwd ?? "/home/user")
+}
+```
+
+Every command gets a timeout. Without one, the SDK request ends after 30 seconds, so long installs and builds would fail.
+
+## Write the agent
+
+Flue calls `createSandbox` with the agent instance id. The agent below tags its sandbox with the agent name and that id, so later turns for the same agent and id find and reuse the same sandbox. Save it as `src/agents/coder.ts`.
+
+```typescript src/agents/coder.ts {9-30}
+"use agent"
+import { useModel, useSandbox } from "@flue/runtime"
+import { Sandbox } from "@superserve/sdk"
+import { superserve } from "../sandboxes/superserve.ts"
+
+export function Coder() {
+  useModel("anthropic/claude-sonnet-5-5")
+
+  useSandbox({
+    // Flue passes the agent instance id. Reuse the sandbox for this agent
+    // and id, or create one on the first turn.
+    async createSandbox({ id }) {
+      const metadata = { flueAgent: "coder", flueAgentId: id }
+      const [existing] = await Sandbox.list({
+        metadata,
+        status: ["starting", "active", "pausing", "paused", "resuming"],
+      })
+      if (existing) {
+        // Resumes the sandbox if it is paused.
+        return superserve(await Sandbox.connect(existing.id))
+      }
+      const sandbox = await Sandbox.create({
+        name: `flue-coder-${id}`,
+        metadata,
+        idleTimeoutSeconds: 15 * 60,
+        autoDeleteSeconds: 24 * 60 * 60,
+      })
+      return superserve(sandbox)
+    },
+  })
+
+  return "You are a coding agent. Use your tools to do the work in the sandbox, then reply in two or three sentences."
+}
+```
+
+Flue does not tell the adapter when an agent instance is finished, so the sandbox cleans up after itself. `idleTimeoutSeconds` pauses the sandbox after 15 minutes with no activity, and `autoDeleteSeconds` deletes it after one day paused. A paused sandbox keeps its files, and `Sandbox.connect()` resumes it on the next turn. See [Idle timeout](/sandbox/lifecycle#idle-timeout) and [Auto-delete](/sandbox/lifecycle#auto-delete).
+
+## Run the agent
+
+Pass an `--id` so later turns continue the same agent instance:
+
+```bash
+npx flue run src/agents/coder.ts --id demo-1 \
+  --message "Write fizzbuzz.py that prints FizzBuzz for 1 to 15, run it with python3, and show me the last three lines of output."
+```
+
+Output from a run with `claude-sonnet-5-5` (trimmed):
+
+```text
+tool write
+tool done write
+tool bash
+tool done bash
+assistant
+  I wrote `/home/user/fizzbuzz.py` and ran it with `python3`. It prints FizzBuzz for 1 to 15. The last three lines of output are:
+
+  13
+  14
+  FizzBuzz
+```
+
+Run a second turn with the same id. Flue keeps the conversation, and `createSandbox` finds the sandbox from the first turn, so the file is still there:
+
+```bash
+npx flue run src/agents/coder.ts --id demo-1 \
+  --message "Search the sandbox files for the line that prints Fizz, change the program to count to 20, and show me the last line it prints."
+```
+
+```text
+tool grep
+tool edit
+tool done grep
+tool done edit
+tool bash
+tool done bash
+assistant
+  The line that prints Fizz is line 5 of `fizzbuzz.py`: `print("Fizz")`. I changed the loop to `range(1, 21)` so it counts to 20, and the last line it prints is `Buzz`.
+```
+
+## Use a template
+
+The default sandbox has `python3`, `git`, `curl`, and Node.js. To give the agent other tools, build a [template](/templates/overview) once and create the agent's sandboxes from it. This template adds `ripgrep`, which Flue's `grep` tool uses when it is installed.
+
+```typescript scripts/build-template.ts
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "flue-coder",
+  from: "node:22",
+  steps: [{ run: "apt-get update && apt-get install -y ripgrep" }],
+})
+await template.waitUntilReady()
+console.log(`Template ${template.name} is ready`)
+```
+
+```bash
+node --env-file=.env scripts/build-template.ts
+```
+
+Then pass the template name to `Sandbox.create` in `src/agents/coder.ts`:
+
+```typescript {3}
+const sandbox = await Sandbox.create({
+  name: `flue-coder-${id}`,
+  fromTemplate: "flue-coder",
+  metadata,
+  idleTimeoutSeconds: 15 * 60,
+  autoDeleteSeconds: 24 * 60 * 60,
+})
+```
+
+## Delete a sandbox
+
+To delete an agent's sandbox before auto-delete does, find it by its metadata tag:
+
+```typescript scripts/delete-sandbox.ts
+import { Sandbox } from "@superserve/sdk"
+
+const [agentId] = process.argv.slice(2)
+if (!agentId) throw new Error("Usage: delete-sandbox.ts <agent-id>")
+
+for (const { id } of await Sandbox.list({
+  metadata: { flueAgent: "coder", flueAgentId: agentId },
+})) {
+  await Sandbox.killById(id)
+  console.log(`Deleted sandbox ${id}`)
+}
+```
+
+```bash
+node --env-file=.env scripts/delete-sandbox.ts demo-1
+```
+
+```text
+Deleted sandbox 718cffb7-6289-4cc7-86ad-628f9a4b2e62
+```
+
+See [Metadata tags](/sandbox/metadata) for more about filters.
+
+## Good to know
+
+- The lookup in `createSandbox` is not atomic. If two processes can start the same agent instance at the same time, store the sandbox id with the conversation in your database, and connect to that id instead.
+- The model can call only Flue's tools. Keep `kill()`, `pause()`, and `update()` in your application code, not in a tool.
+- Cancelling a Flue call does not stop a command that is already running in the sandbox. The command stops when its timeout expires.
+- The default sandbox has `python3` but no `python`. Tell the model in the system prompt, or use a template with the tools you need.
+- To limit what model-written code can reach, create the sandbox with [network rules](/sandbox/networking).
+
+## Resources
+
+<CardGroup cols={2}>
+  <Card title="Flue docs" icon="book" href="https://flueframework.com/docs/guide/sandboxes/">
+    Sandboxes, tools, and durable agents in Flue.
+  </Card>
+  <Card title="Run commands" icon="terminal" href="/commands/overview">
+    Options for `commands.run`, including environment variables and working directory.
+  </Card>
+</CardGroup>

@@ -54,6 +54,7 @@ describe("Template.create", () => {
       name: "my-env",
       vcpu: 2,
       memoryMib: 2048,
+      memoryMaxMib: 8192,
       diskMib: 4096,
       from: "python:3.11",
       steps: [
@@ -76,6 +77,7 @@ describe("Template.create", () => {
       name: "my-env",
       vcpu: 2,
       memory_mib: 2048,
+      memory_max_mib: 8192,
       disk_mib: 4096,
       build_spec: {
         from: "python:3.11",

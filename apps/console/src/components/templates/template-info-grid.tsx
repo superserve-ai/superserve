@@ -19,6 +19,8 @@ export function TemplateInfoGrid({ template }: { template: TemplateResponse }) {
           <p className="text-xs text-muted">Resources</p>
           <p className="mt-2 font-mono text-sm text-foreground/80 tabular-nums">
             {template.vcpu} vCPU &middot; {formatMemory(template.memory_mib)}
+            {template.memory_max_mib != null &&
+              `–${formatMemory(template.memory_max_mib)}`}
             &nbsp;&middot; {formatMemory(template.disk_mib)}
           </p>
         </div>

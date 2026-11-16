@@ -3,6 +3,7 @@ import { inviteTokenRegion } from "@/lib/auth/invite-return-path"
 import { cellFor, DEFAULT_REGION } from "@/lib/cells"
 
 export interface InvitePreview {
+  role?: string
   invitationId: string
   teamId: string
   teamName: string
@@ -114,6 +115,7 @@ export async function previewInvitation(
   return {
     ok: true,
     preview: {
+      ...(typeof data.role === "string" ? { role: data.role } : {}),
       invitationId,
       teamId,
       teamName,

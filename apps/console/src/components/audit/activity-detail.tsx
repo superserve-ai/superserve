@@ -5,6 +5,7 @@ import {
   TerminalIcon,
   LockKeyIcon,
   WarningIcon,
+  UsersIcon,
 } from "@phosphor-icons/react"
 import { Badge, HighlightedCode, Separator } from "@superserve/ui"
 import Link from "next/link"
@@ -18,10 +19,13 @@ import {
   formatDuration,
 } from "@/lib/sandbox-utils"
 
+import { activityActionLabel, activityResource } from "./activity-labels"
+
 const CATEGORY_META: Record<
   string,
   { icon: React.ElementType; label: string }
 > = {
+  team: { icon: UsersIcon, label: "Team" },
   sandbox: { icon: CubeIcon, label: "Sandbox" },
   template: { icon: StackIcon, label: "Template" },
   exec: { icon: TerminalIcon, label: "Exec" },
@@ -115,7 +119,8 @@ export function ActivityDetail({ log }: { log: ActivityResponse }) {
       <div className="mb-4 flex items-center gap-2">
         <Icon className="size-3.5 text-muted" weight="light" />
         <span className="font-mono text-xs text-muted uppercase">
-          {meta?.label ?? log.category} &middot; {log.action}
+          {meta?.label ?? log.category} &middot;{" "}
+          {activityActionLabel(log.action)}
         </span>
       </div>
 
@@ -125,7 +130,11 @@ export function ActivityDetail({ log }: { log: ActivityResponse }) {
             {formatTime(new Date(log.created_at)).absolute}
           </span>
         </Field>
-        {log.secret_name ? (
+        {log.category === "team" ? (
+          <Field label="Team resource">
+            <span className="font-mono break-all">{activityResource(log)}</span>
+          </Field>
+        ) : log.secret_name ? (
           <Field label="Secret">
             {log.secret_id ? (
               <Link
@@ -153,7 +162,7 @@ export function ActivityDetail({ log }: { log: ActivityResponse }) {
           </>
         )}
         <Field label="Action">
-          <span className="font-mono">{log.action}</span>
+          <span className="font-mono">{activityActionLabel(log.action)}</span>
         </Field>
         <Field label="Duration">
           <span className="font-mono tabular-nums">

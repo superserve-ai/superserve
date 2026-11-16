@@ -118,7 +118,7 @@ sandbox.kill()
 
 ## Share one disk across many sandboxes
 
-Add `--shared` to mount the same disk from several sandboxes at once. Every mount is strongly read-after-write consistent, so a write from one sandbox is immediately visible to the others. That makes it a fit for parallel-agent setups that build on shared state.
+Add `--shared` to mount the same disk from several sandboxes at once. A shared mount takes no lock on the disk, so the disk is read-only to each sandbox until that sandbox checks out a path with `archil checkout <path>`. The checkout, which Archil calls a *delegation*, gives that sandbox exclusive write access to the path. Other sandboxes can still read the path, but can't write to it. Some operations, such as creating a file or a directory, check out a path automatically. See Archil's [Sharing Disks](https://docs.archil.com/concepts/sharing-disks) guide for the full rules and the other mount modes.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -135,6 +135,14 @@ sandbox.commands.run(
 )
 ```
 </CodeGroup>
+
+A write from one sandbox isn't visible to the others right away. Each mount buffers writes and caches reads. A write reaches the disk once `fsync` returns or `archil sync /mnt/archil` completes, and another sandbox sees it the next time it opens the file. Directory listings and file attributes can be served from cache for a while, so run `archil invalidate-cache /mnt/archil` in the reading sandbox before it looks for new files. To hand off work between sandboxes, flush in the writer, then signal the reader through your orchestrator instead of polling the disk. See Archil's [Consistency](https://docs.archil.com/details/consistency) docs for the exact rules.
+
+### Who owns a shared mount
+
+No single sandbox owns a `--shared` mount. Each sandbox owns only the paths it has checked out, and any path that no sandbox has checked out stays free for another sandbox to check out. A sandbox releases its paths with `archil checkin <path>` or `archil unmount`, so unmount before you kill it, as in step 3 above.
+
+If a sandbox stops without unmounting, writes that haven't reached the disk are lost, and its checkouts stay in place. Other sandboxes can still read those paths, but can't write to them until you force the checkout off with `archil checkout <path> --force`. Forcing discards any in-progress writes from the stopped sandbox. Mounting again doesn't release the old checkouts, because every mount is a new client.
 
 ## How it complements pause and resume
 

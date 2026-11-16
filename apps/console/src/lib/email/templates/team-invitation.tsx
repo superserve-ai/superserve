@@ -1,8 +1,11 @@
 import { Button, Heading, Text } from "@react-email/components"
 
+import { knownTeamRole, TEAM_ROLES } from "@/lib/team/roles"
+
 import { EmailLayout } from "./components/email-layout"
 
 interface TeamInvitationEmailProps {
+  role?: string
   teamName: string
   regionLabel: string
   inviterName: string
@@ -20,23 +23,29 @@ export const TeamInvitationEmail = ({
   inviterName,
   expiresOn,
   inviteUrl,
-}: TeamInvitationEmailProps) => (
-  <EmailLayout preview={`${inviterName} invited you to join ${teamName}`}>
-    <Heading style={heading}>You&apos;re invited to join {teamName}</Heading>
-    <Text style={paragraph}>
-      {inviterName} invited you to join {teamName} ({regionLabel}) on Superserve
-      as an Owner.
-    </Text>
-    <Text style={paragraph}>
-      Owners have full access to the team&apos;s sandboxes, billing, and
-      members.
-    </Text>
-    <Text style={paragraph}>This invitation expires on {expiresOn}.</Text>
-    <Button style={primaryButton} href={inviteUrl}>
-      View invitation
-    </Button>
-  </EmailLayout>
-)
+  role,
+}: TeamInvitationEmailProps) => {
+  const knownRole = knownTeamRole(role)
+  return (
+    <EmailLayout preview={`${inviterName} invited you to join ${teamName}`}>
+      <Heading style={heading}>You&apos;re invited to join {teamName}</Heading>
+      <Text style={paragraph}>
+        {knownRole
+          ? `${inviterName} invited you to join ${teamName} as ${TEAM_ROLES[knownRole].label} (${regionLabel}) on Superserve.`
+          : `${inviterName} invited you to join ${teamName} (${regionLabel}) on Superserve as an Owner.`}
+      </Text>
+      <Text style={paragraph}>
+        {knownRole
+          ? TEAM_ROLES[knownRole].description
+          : "Owners have full access to the team's sandboxes, billing, and members."}
+      </Text>
+      <Text style={paragraph}>This invitation expires on {expiresOn}.</Text>
+      <Button style={primaryButton} href={inviteUrl}>
+        View invitation
+      </Button>
+    </EmailLayout>
+  )
+}
 
 const heading: React.CSSProperties = {
   fontFamily: "'Instrument Sans', Helvetica, Arial, sans-serif",

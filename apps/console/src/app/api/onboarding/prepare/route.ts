@@ -34,6 +34,13 @@ export async function GET(request: Request) {
     continuation = pinned.pathname + pinned.search
   }
   const destination = signupPlanPath(params)
+  // Set the flag through the query, so a plan path with no other
+  // parameters does not get a stray "?&".
+  const withFlag = (flag: "setup_error" | "setup_attempted") => {
+    const url = new URL(destination, request.url)
+    url.searchParams.set(flag, "1")
+    return url.pathname + url.search
+  }
   const retry =
     continuation && params.account
       ? `/auth/auth-code-error?${new URLSearchParams({ reason: "account_setup", account: params.account, next: continuation })}`
@@ -57,10 +64,10 @@ export async function GET(request: Request) {
       terminal.searchParams.set("reason", error.reason)
       redirect(terminal.pathname + terminal.search)
     }
-    redirect(retry ?? `${destination}&setup_error=1`)
+    redirect(retry ?? withFlag("setup_error"))
   }
   if (continuation && params.account) redirect(continuation)
   // Preparation can succeed against a cached team that the page's fresh
   // membership read no longer sees. Allow only one automatic attempt.
-  redirect(`${destination}&setup_attempted=1`)
+  redirect(withFlag("setup_attempted"))
 }

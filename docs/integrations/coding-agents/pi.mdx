@@ -21,10 +21,17 @@ Pi is a minimal, open-source terminal coding agent from [pi.dev](https://pi.dev)
 
 ## Via the SDK
 
-```bash
+<CodeGroup>
+```bash TypeScript
 npm install @superserve/sdk
 export SUPERSERVE_API_KEY=ss_live_...
 ```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
 
 <CodeGroup>
 ```typescript TypeScript
@@ -104,12 +111,12 @@ Use `--mode json` to get one JSON event per line. The first line is the session 
 
 <CodeGroup>
 ```typescript TypeScript
-const result = await sandbox.commands.run(
+const jsonResult = await sandbox.commands.run(
   'cd ~/app && pi --mode json "Add a /health endpoint"',
   { timeoutMs: 600_000 },
 )
 
-const events = result.stdout.trim().split("\n").map((line) => JSON.parse(line))
+const events = jsonResult.stdout.trim().split("\n").map((line) => JSON.parse(line))
 const sessionId = events[0].id
 const done = events.filter((e) => e.type === "message_end").pop()
 
@@ -199,3 +206,19 @@ print(diff.stdout)
 await sandbox.pause()
 await sandbox.resume()
 ```
+
+## Delete when finished
+
+A paused sandbox is kept until you delete it. When you no longer need the sandbox, delete it. This also deletes its files and saved state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+sandbox.kill()
+```
+</CodeGroup>
+
+To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).

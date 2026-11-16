@@ -1,6 +1,7 @@
 import "dotenv/config"
 import Anthropic from "@anthropic-ai/sdk"
 import { createServer } from "node:http"
+import { fileURLToPath } from "node:url"
 import { handleWork } from "./orchestrator.mjs"
 
 const ENVIRONMENT_KEY = process.env.ANTHROPIC_ENVIRONMENT_KEY
@@ -8,15 +9,10 @@ const ENVIRONMENT_ID = process.env.ANTHROPIC_ENVIRONMENT_ID
 const WEBHOOK_SECRET = process.env.ANTHROPIC_WEBHOOK_SECRET
 const PORT = parseInt(process.env.PORT || "5051")
 
-if (!WEBHOOK_SECRET) {
-  console.error("ANTHROPIC_WEBHOOK_SECRET is not set")
-  process.exit(1)
-}
-
 const client = new Anthropic({ authToken: ENVIRONMENT_KEY })
 let draining = false
 
-async function drainWork() {
+export async function drainWork() {
   if (draining) return
   draining = true
   try {
@@ -45,7 +41,7 @@ function fallbackDrainLoop() {
   }, 30_000)
 }
 
-const server = createServer(async (req, res) => {
+export const server = createServer(async (req, res) => {
   if (req.method === "GET" && req.url === "/healthz") {
     res.writeHead(200, { "content-type": "application/json" })
     res.end(JSON.stringify({ ok: true, environment_id: ENVIRONMENT_ID }))
@@ -88,8 +84,16 @@ const server = createServer(async (req, res) => {
   res.end(JSON.stringify({ status: "queued" }))
 })
 
-fallbackDrainLoop()
+// Start only when run directly, so importing this module does not start the server.
+if (process.argv[1] === fileURLToPath(import.meta.url)) {
+  if (!WEBHOOK_SECRET) {
+    console.error("ANTHROPIC_WEBHOOK_SECRET is not set")
+    process.exit(1)
+  }
 
-server.listen(PORT, () => {
-  console.log(`webhook orchestrator listening on :${PORT} env=${ENVIRONMENT_ID}`)
-})
+  fallbackDrainLoop()
+
+  server.listen(PORT, () => {
+    console.log(`webhook orchestrator listening on :${PORT} env=${ENVIRONMENT_ID}`)
+  })
+}

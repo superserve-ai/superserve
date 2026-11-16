@@ -1,0 +1,6 @@
+@import "../../../../app/globals.css";
+@source "../../../../app/(dashboard)/team";
+
+body {
+  margin: 0;
+}

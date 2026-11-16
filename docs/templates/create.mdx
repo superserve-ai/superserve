@@ -106,7 +106,7 @@ const sandbox2 = await Sandbox.create({
 // Option 3: pass the ID
 const sandbox3 = await Sandbox.create({
   name: "run-3",
-  fromTemplate: "8b050452",
+  fromTemplate: template.id,
 })
 ```
 
@@ -135,13 +135,13 @@ sandbox2 = Sandbox.create(
 # Option 3: pass the ID
 sandbox3 = Sandbox.create(
     name="run-3",
-    from_template="8b050452",
+    from_template=template.id,
 )
 ```
 
 </CodeGroup>
 
-The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape).
+The sandbox's vCPU, memory, and disk size are inherited from the template; they cannot be overridden at sandbox creation (the snapshot dictates VM shape). To let sandboxes grow memory while running, build the template with `memoryMaxMib`; see [Growing memory](/templates/build-spec#growing-memory).
 
 ## Related
 

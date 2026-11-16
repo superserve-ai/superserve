@@ -16,7 +16,7 @@ Preview at `http://localhost:3000`.
 docs/
 ├── docs.json              # Mintlify config and navigation
 ├── introduction.mdx       # Introduction
-├── logo/                  # Logos
+├── logos/                 # Logos
 └── favicon.svg            # Favicon
 ```
 

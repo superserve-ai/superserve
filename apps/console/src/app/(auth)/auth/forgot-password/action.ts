@@ -3,6 +3,7 @@
 import { headers } from "next/headers"
 import * as z from "zod"
 
+import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
@@ -47,6 +48,7 @@ export const sendPasswordResetEmail = async (
   // Server actions expose an RPC endpoint with no runtime type enforcement.
   email: unknown,
   recaptchaToken?: unknown,
+  next?: unknown,
 ): Promise<
   | { success: true }
   | {
@@ -102,7 +104,8 @@ export const sendPasswordResetEmail = async (
 
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
-    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password`
+    const invite = inviteReturnPath(typeof next === "string" ? next : undefined)
+    const redirectTo = `${appUrl}/auth/callback?next=/auth/reset-password${invite ? `&${new URLSearchParams({ invite })}` : ""}`
 
     const { data, error } = await supabase.auth.admin.generateLink({
       type: "recovery",
