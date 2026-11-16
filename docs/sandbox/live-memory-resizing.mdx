@@ -50,15 +50,15 @@ See [Growing memory](/templates/build-spec#growing-memory) for the values `memor
 It's automatic: no API calls, no restarts, and no changes to your code.
 
 - **Growing:** when a sandbox runs low on memory, it grows automatically, up to its limit. A program can even ask for a large block of memory at once, more than the sandbox started with, and the sandbox grows as the program uses it.
-- **Shrinking:** once the burst is over and memory use has stayed low for a while, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`. You can [change how long it waits](#shrink-timing).
+- **Shrinking:** once the burst is over and memory use has stayed low for about one minute, the sandbox shrinks to fit what it's using. It never goes below `memoryMib`. You can [make it wait longer](#shrink-timing).
 - **Pause, resume and snapshots:** a sandbox resumes at the size it was paused at, and a sandbox created from a snapshot starts at its source's size.
 - **Above the limit:** if a program needs more than `memoryMaxMib`, Linux stops that program, as on any machine that runs out of memory. The sandbox keeps running.
 
 ## Shrink timing
 
-`memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` sets how long, in seconds, memory must stay low after growing before the sandbox shrinks back toward `memoryMib`. It takes 60 to 1800 seconds (1 to 30 minutes) and only applies to growable templates, so it requires `memoryMaxMib`. When unset, the platform default applies.
+`memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` sets how long, in seconds, memory must stay low after growing before the sandbox shrinks back toward `memoryMib`. It takes 60 to 1800 seconds (1 to 30 minutes) and only applies to growable templates, so it requires `memoryMaxMib`. When unset, it's about one minute, which is also the minimum, so the setting can only make the wait longer.
 
-Set it on a template. Sandboxes created from the template, or from a snapshot of one of its sandboxes, inherit it.
+Set it on a template. Sandboxes created from the template, or from a snapshot of one of its sandboxes, inherit it. The value is fixed when the template is created; to change it, create a new template.
 
 <CodeGroup>
 
@@ -93,7 +93,7 @@ superserve template create my-growable-env --from python:3.11 \
 
 </CodeGroup>
 
-A longer wait suits workloads that burst repeatedly, so the sandbox doesn't shrink between bursts. A shorter wait gives memory back sooner. The value appears on the template and sandbox as `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds`; it's absent when the platform default applies.
+A longer wait suits workloads that burst repeatedly, so the sandbox doesn't shrink between bursts. You're billed for the grown memory while the sandbox holds it, so a longer wait costs more. The value appears on the template and sandbox as `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds`; it's absent when the default applies.
 
 ## Billing
 

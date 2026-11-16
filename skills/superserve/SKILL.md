@@ -223,7 +223,7 @@ memory · 8192 MiB disk**.
   Omit it for fixed memory; only templates built with it set can grow.
 - Optional `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` (60 to 1800) sets how
   long memory must stay low after growing before it shrinks back. Requires `memoryMaxMib`;
-  set on the template; its sandboxes and their snapshots inherit it. Unset means the platform default.
+  set on the template; its sandboxes and their snapshots inherit it. Unset means the default of about one minute, which is also the minimum.
 - `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
   team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
