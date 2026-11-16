@@ -9,6 +9,8 @@ export interface TemplateShape {
   memoryMib: number
   /** Ceiling for live memory resizing; null keeps memory fixed. */
   memoryMaxMib: number | null
+  /** Seconds memory stays low before shrinking; null takes the platform default. */
+  memoryShrinkAfterSeconds: number | null
   diskMib: number
 }
 
@@ -19,6 +21,9 @@ export function createRequest(shape: TemplateShape): CreateTemplateRequest {
     vcpu: shape.vcpu,
     memory_mib: shape.memoryMib,
     ...(shape.memoryMaxMib !== null && { memory_max_mib: shape.memoryMaxMib }),
+    ...(shape.memoryShrinkAfterSeconds !== null && {
+      memory_shrink_after_seconds: shape.memoryShrinkAfterSeconds,
+    }),
     disk_mib: shape.diskMib,
     build_spec: { from: shape.from },
   }
@@ -54,6 +59,9 @@ export function cliCommand(shape: TemplateShape): string {
     ...(shape.memoryMaxMib === null
       ? []
       : [`--memory-max ${cliSize(shape.memoryMaxMib)}`]),
+    ...(shape.memoryShrinkAfterSeconds === null
+      ? []
+      : [`--memory-shrink-after ${shape.memoryShrinkAfterSeconds}`]),
     `--disk ${cliSize(shape.diskMib)}`,
   ].join(" \\\n  ")
 }
@@ -70,6 +78,9 @@ export function typescriptSnippet(shape: TemplateShape): string {
     ...(shape.memoryMaxMib === null
       ? []
       : [`  memoryMaxMib: ${shape.memoryMaxMib},`]),
+    ...(shape.memoryShrinkAfterSeconds === null
+      ? []
+      : [`  memoryShrinkAfterSeconds: ${shape.memoryShrinkAfterSeconds},`]),
     `  diskMib: ${shape.diskMib},`,
     `})`,
     `await template.waitUntilReady()`,
@@ -88,6 +99,9 @@ export function pythonSnippet(shape: TemplateShape): string {
     ...(shape.memoryMaxMib === null
       ? []
       : [`    memory_max_mib=${shape.memoryMaxMib},`]),
+    ...(shape.memoryShrinkAfterSeconds === null
+      ? []
+      : [`    memory_shrink_after_seconds=${shape.memoryShrinkAfterSeconds},`]),
     `    disk_mib=${shape.diskMib},`,
     `)`,
     `template.wait_until_ready()`,
