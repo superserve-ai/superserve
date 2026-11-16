@@ -367,6 +367,7 @@ async def poll_loop() -> None:
                 consumer.result()
             except asyncio.CancelledError:
                 consumer.cancel()
+                await asyncio.gather(consumer, return_exceptions=True)
                 raise
             except Exception as e:
                 backoff = min(backoff + 1, 6)
