@@ -99,3 +99,6 @@ export const MAX_NETWORK_LOG_LIMIT = 200
 export const MAX_AUTO_DELETE_SECONDS = 30 * 24 * 60 * 60 // 2592000 (30 days)
 export const MAX_TIMEOUT_SECONDS = 7 * 24 * 60 * 60 // 604800 (7 days)
 export const MIN_IDLE_TIMEOUT_SECONDS = 60
+/** `memory_shrink_after_seconds` bounds (1 to 30 minutes), mirroring the API. */
+export const MIN_MEMORY_SHRINK_AFTER_SECONDS = 60
+export const MAX_MEMORY_SHRINK_AFTER_SECONDS = 30 * 60
