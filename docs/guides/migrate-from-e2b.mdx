@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Superserve and E2B both run Firecracker microVMs and have a similar SDK, so most code moves with a find-and-replace.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on E2B today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -102,7 +102,7 @@ To rebuild an E2B template, see [Create a template](/templates/create).
 Change the import, add a `name`, and convert timeouts to seconds.
 
 <CodeGroup>
-```ts Before (E2B)
+```ts E2B
 import { Sandbox } from "e2b"
 
 const sbx = await Sandbox.create("my-tpl", {
@@ -114,7 +114,7 @@ const snap = await sbx.createSnapshot()
 const fork = await Sandbox.create(snap.snapshotId)
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox } from "@superserve/sdk"
 
 const sbx = await Sandbox.create({
@@ -128,8 +128,10 @@ await sbx.commands.run("npm test", { timeoutMs: 10 * 60 * 1000 })
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
+</CodeGroup>
 
-```python Before (E2B, Python)
+<CodeGroup>
+```python E2B
 from e2b import Sandbox
 
 sbx = Sandbox.create("my-tpl", timeout=600, envs={"MODE": "ci"})
@@ -138,7 +140,7 @@ snap = sbx.create_snapshot()
 fork = Sandbox.create(snap.snapshot_id)
 ```
 
-```python After (Superserve, Python)
+```python Superserve
 from superserve import Sandbox
 
 sbx = Sandbox.create(

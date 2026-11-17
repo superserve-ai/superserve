@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Modal Sandboxes and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Modal today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -105,51 +105,7 @@ To turn a Modal image into a template, see [Create a template](/templates/create
 Build the template once. Then replace the app and image with a `name` and `from_template`, turn argument lists into shell strings, and convert timeouts to seconds.
 
 <CodeGroup>
-```python Before (Modal, Python)
-import modal
-
-app = modal.App.lookup("my-app", create_if_missing=True)
-image = modal.Image.debian_slim().pip_install("pytest")
-
-sb = modal.Sandbox.create(
-    app=app,
-    image=image,
-    timeout=600,
-    env={"MODE": "ci"},
-    encrypted_ports=[8000],
-)
-sb.exec("pytest").wait()
-url = sb.tunnels()[8000].url
-img = sb.snapshot_filesystem()
-fork = modal.Sandbox.create(app=app, image=img)
-```
-
-```python After (Superserve, Python)
-from superserve import RunStep, Sandbox, Template
-
-# Build once. Sandboxes then start from the template.
-tpl = Template.create(
-    name="my-tpl",
-    from_="python:3.11",
-    steps=[RunStep(run="pip install pytest")],
-)
-tpl.wait_until_ready()
-
-sbx = Sandbox.create(
-    name="ci-run",
-    from_template="my-tpl",
-    timeout_seconds=600,
-    env_vars={"MODE": "ci"},
-)
-# run() stops a command after 30 s by default
-sbx.commands.run("pytest", timeout_seconds=10 * 60)
-sbx.publish_preview_port(8000, access="public")  # a Modal tunnel is public
-url = sbx.get_preview_url(8000)
-snap = sbx.snapshot()
-fork = Sandbox.create(name="fork", from_snapshot=snap)
-```
-
-```ts Before (Modal)
+```ts Modal
 import { ModalClient } from "modal"
 
 const modal = new ModalClient()
@@ -169,7 +125,7 @@ const img = await sb.snapshotFilesystem()
 const fork = await modal.sandboxes.create(app, img)
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox, Template } from "@superserve/sdk"
 
 // Build once. Sandboxes then start from the template.
@@ -192,6 +148,52 @@ await sbx.publishPreviewPort(8000, { access: "public" }) // a Modal tunnel is pu
 const url = sbx.getPreviewUrl(8000)
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
+```
+</CodeGroup>
+
+<CodeGroup>
+```python Modal
+import modal
+
+app = modal.App.lookup("my-app", create_if_missing=True)
+image = modal.Image.debian_slim().pip_install("pytest")
+
+sb = modal.Sandbox.create(
+    app=app,
+    image=image,
+    timeout=600,
+    env={"MODE": "ci"},
+    encrypted_ports=[8000],
+)
+sb.exec("pytest").wait()
+url = sb.tunnels()[8000].url
+img = sb.snapshot_filesystem()
+fork = modal.Sandbox.create(app=app, image=img)
+```
+
+```python Superserve
+from superserve import RunStep, Sandbox, Template
+
+# Build once. Sandboxes then start from the template.
+tpl = Template.create(
+    name="my-tpl",
+    from_="python:3.11",
+    steps=[RunStep(run="pip install pytest")],
+)
+tpl.wait_until_ready()
+
+sbx = Sandbox.create(
+    name="ci-run",
+    from_template="my-tpl",
+    timeout_seconds=600,
+    env_vars={"MODE": "ci"},
+)
+# run() stops a command after 30 s by default
+sbx.commands.run("pytest", timeout_seconds=10 * 60)
+sbx.publish_preview_port(8000, access="public")  # a Modal tunnel is public
+url = sbx.get_preview_url(8000)
+snap = sbx.snapshot()
+fork = Sandbox.create(name="fork", from_snapshot=snap)
 ```
 </CodeGroup>
 

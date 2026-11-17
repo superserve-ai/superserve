@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Daytona and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Daytona today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -104,7 +104,7 @@ To turn a Daytona snapshot or image into a template, see [Create a template](/te
 Build the template once. Then replace the Daytona client with `Sandbox`, add a `name`, and convert intervals from minutes to seconds.
 
 <CodeGroup>
-```ts Before (Daytona)
+```ts Daytona
 import { Daytona, Image } from "@daytona/sdk"
 
 const daytona = new Daytona()
@@ -123,7 +123,7 @@ const { url, token } = await sandbox.getPreviewLink(8000)
 const fork = await sandbox.fork({ name: "fork" })
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox, Template } from "@superserve/sdk"
 
 // Build once. Sandboxes then start from the template.
@@ -148,8 +148,10 @@ const { header, token } = await sbx.getPreviewToken(8000) // send as a header
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
+</CodeGroup>
 
-```python Before (Daytona, Python)
+<CodeGroup>
+```python Daytona
 from daytona import (
     CreateSandboxFromSnapshotParams,
     CreateSnapshotParams,
@@ -177,7 +179,7 @@ preview = sandbox.get_preview_link(8000)  # preview.url, preview.token
 fork = sandbox.fork(name="fork")
 ```
 
-```python After (Superserve, Python)
+```python Superserve
 from superserve import RunStep, Sandbox, Template
 
 # Build once. Sandboxes then start from the template.
