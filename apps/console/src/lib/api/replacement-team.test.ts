@@ -34,12 +34,6 @@ it("uses both the user and removed team to derive the operation id", () => {
   )
 })
 
-it("appends the first eight hex characters of the operation id", () => {
-  expect(replacementTeamName("user@example.com", userId)).toBe(
-    "user@example.com (11111111)",
-  )
-})
-
 it.each([
   ["a", 245],
   ["é", 122],
@@ -66,15 +60,19 @@ it("preserves mixed multibyte code points up to the exact byte limit", () => {
   expect(Buffer.byteLength(name, "utf8")).toBe(256)
 })
 
-it.each(["user@example.com", "USER@EXAMPLE.COM"])(
-  "recognizes a replacement name for %s regardless of email case",
-  (email) => {
-    const operationId = replacementTeamOperationId(userId, removedTeamId)
-    const name = replacementTeamName("User@Example.com", operationId)
+it.each([
+  "00000000",
+  "01234567",
+  "89abcdef",
+  "ffffffff",
+  "abcdef12-3456-4789-abcd-0123456789ab",
+  replacementTeamOperationId(userId, removedTeamId),
+])("recognizes the suffix from %s regardless of email case", (suffixSource) => {
+  const name = replacementTeamName("User@Example.com", suffixSource)
 
-    expect(isReplacementTeamName(name, email)).toBe(true)
-  },
-)
+  expect(isReplacementTeamName(name, "user@example.com")).toBe(true)
+  expect(isReplacementTeamName(name, "USER@EXAMPLE.COM")).toBe(true)
+})
 
 it("recognizes a truncated replacement name for a long multibyte email", () => {
   const email = `${"界".repeat(100)}@example.com`

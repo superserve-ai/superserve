@@ -11,12 +11,17 @@ import {
 } from "./replacement-team"
 
 const mocks = vi.hoisted(() => ({
+  randomUUID: vi.fn(),
   publish: vi.fn(),
   recover: vi.fn(),
   prepare: vi.fn(),
   complete: vi.fn(),
   recoverEnterprise: vi.fn(),
   completeEnterprise: vi.fn(),
+}))
+vi.mock("node:crypto", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("node:crypto")>()),
+  randomUUID: mocks.randomUUID,
 }))
 vi.mock("./promotion-publication", () => ({
   publishAccountPromotion: mocks.publish,
@@ -192,6 +197,7 @@ function seedRemovedTeam(teamId = originalTeamId) {
 
 beforeEach(() => {
   vi.resetAllMocks()
+  mocks.randomUUID.mockReturnValue("abcdef12-3456-4789-abcd-0123456789ab")
   rows.clear()
   creations.clear()
   writes.length = 0
@@ -231,13 +237,15 @@ it("replaces a removed owner's automatic team and leaves the old team's rows unt
   seedRemovedTeam()
   const originalRows = structuredClone([...rows])
   const operationId = replacementTeamOperationId(user.id, originalTeamId)
-  const name = replacementTeamName(user.email!, operationId)
+  const team = await create()
+  const { name } = team
 
-  await expect(create()).resolves.toEqual({
+  expect(team).toEqual({
     id: replacementTeamId,
-    name,
+    name: expect.stringMatching(/^user@example\.com \([0-9a-f]{8}\)$/),
     region: "use",
   })
+  expect(name).not.toBe(replacementTeamName(user.email!, operationId))
 
   expect(mocks.recover.mock.calls).toEqual([
     [{ userId: user.id, region: "use", operationId: user.id }],
@@ -297,7 +305,15 @@ it("replaces a removed owner's automatic team and leaves the old team's rows unt
 it("recovers the same replacement on retry without preparing or publishing again", async () => {
   seedCreation()
   seedRemovedTeam()
+  mocks.complete.mockRejectedValueOnce(new Error("completion interrupted"))
+  await expect(create()).rejects.toThrow("completion interrupted")
+  const operationId = replacementTeamOperationId(user.id, originalTeamId)
+  const prepared = creations.get(operationId)!
+  mocks.randomUUID.mockReturnValue("fedcba98-7654-4321-abcd-0123456789ab")
+
   const team = await create()
+  expect(team.name).toBe(prepared.name)
+  expect(mocks.complete).toHaveBeenLastCalledWith(prepared)
   const previousRows = structuredClone([...rows])
 
   await expect(create()).resolves.toEqual(team)
@@ -306,7 +322,11 @@ it("recovers the same replacement on retry without preparing or publishing again
   expect(mocks.publish).toHaveBeenCalledTimes(1)
   expect([...rows]).toEqual(previousRows)
   expect(mocks.complete).toHaveBeenLastCalledWith(
-    expect.objectContaining({ teamId: replacementTeamId, state: "completed" }),
+    expect.objectContaining({
+      teamId: replacementTeamId,
+      name: prepared.name,
+      state: "completed",
+    }),
   )
 })
 
@@ -322,13 +342,16 @@ it("follows the chain when the user is later removed from the replacement", asyn
     .find((row) => row.id === replacementTeamId)!.revoked_at = observedAt
   const previousRows = structuredClone([...rows])
   const operationId = replacementTeamOperationId(user.id, replacementTeamId)
-  const name = replacementTeamName(user.email!, operationId)
+  mocks.randomUUID.mockReturnValue("fedcba98-7654-4321-abcd-0123456789ab")
+  const team = await create()
+  const { name } = team
 
-  await expect(create()).resolves.toEqual({
+  expect(team).toEqual({
     id: thirdTeamId,
-    name,
+    name: expect.stringMatching(/^user@example\.com \([0-9a-f]{8}\)$/),
     region: "use",
   })
+  expect(name).not.toBe(replacementTeamName(user.email!, operationId))
 
   expect(mocks.prepare).toHaveBeenCalledTimes(2)
   expect(mocks.prepare).toHaveBeenLastCalledWith(

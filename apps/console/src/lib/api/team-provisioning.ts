@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import type { User } from "@supabase/supabase-js"
 
 import {
@@ -382,7 +384,9 @@ async function followRemovedAccountTeams(
       ...locator,
       operationId: replacementTeamOperationId(locator.userId, prepared.teamId),
     }
-    name = replacementTeamName(originalName, locator.operationId)
+    // Team names are unique: others must not be able to derive the suffix
+    // and take the replacement name before it is created.
+    name = replacementTeamName(originalName, randomUUID())
     prepared = await recoverPromotionTeam(locator)
   }
   return { locator, prepared, name }

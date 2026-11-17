@@ -21,8 +21,11 @@ export function replacementTeamOperationId(
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`
 }
 
-export function replacementTeamName(name: string, operationId: string): string {
-  const suffix = ` (${operationId.replaceAll("-", "").slice(0, 8)})`
+export function replacementTeamName(
+  name: string,
+  suffixSource: string,
+): string {
+  const suffix = ` (${suffixSource.replaceAll("-", "").slice(0, 8)})`
   let prefix = ""
   let bytes = Buffer.byteLength(suffix, "utf8")
   for (const character of name) {
