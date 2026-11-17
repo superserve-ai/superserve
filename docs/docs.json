@@ -191,6 +191,7 @@
             "group": "Migrate",
             "pages": [
               "guides/migrate-from-blaxel",
+              "guides/migrate-from-cloudflare",
               "guides/migrate-from-daytona",
               "guides/migrate-from-e2b",
               "guides/migrate-from-modal",
@@ -206,6 +207,7 @@
                 "expanded": true,
                 "pages": [
                   "integrations/coding-agents/acp",
+                  "integrations/coding-agents/amp",
                   "integrations/coding-agents/claude",
                   "integrations/coding-agents/codex",
                   "integrations/coding-agents/kilocode",
