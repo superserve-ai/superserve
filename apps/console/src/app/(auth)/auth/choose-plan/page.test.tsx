@@ -138,7 +138,7 @@ describe("plan picker", () => {
     render(<ChoosePlanPage />)
     expect(
       await screen.findByText(
-        "We couldn't confirm the free trial for this account because a required check didn't complete. Choose a plan to run sandboxes.",
+        "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Choose a plan to run sandboxes.",
       ),
     ).toBeTruthy()
     expect(screen.queryByText(/used up|isn't available/)).toBeNull()

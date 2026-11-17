@@ -55,7 +55,7 @@ const TRIAL_COPY: Record<TrialOutcome, string> = {
   unavailable:
     "The free trial isn't available for this account. Choose a plan to run sandboxes.",
   check_unavailable:
-    "We couldn't confirm the free trial for this account because a required check didn't complete. Choose a plan to run sandboxes.",
+    "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Choose a plan to run sandboxes.",
   unknown: MESSAGES.trial_ended,
 }
 

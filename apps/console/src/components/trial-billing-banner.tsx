@@ -162,7 +162,8 @@ function TrialEntryBanner({
       ) : stage === "check_unavailable" ? (
         <>
           We couldn&apos;t confirm the free trial for this account because a
-          required check didn&apos;t complete. Upgrade to run sandboxes.
+          required check didn&apos;t complete. An ad or privacy blocker can stop
+          this check. Upgrade to run sandboxes.
         </>
       ) : stage === "ended" ? (
         <>
@@ -241,8 +242,8 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
         {block === "trial_check_unavailable" ? (
           <>
             We couldn&apos;t confirm the free trial for this account because a
-            required check didn&apos;t complete. Add a payment method to run
-            sandboxes.
+            required check didn&apos;t complete. An ad or privacy blocker can
+            stop this check. Add a payment method to run sandboxes.
           </>
         ) : block === "trial_exhausted" ? (
           <>

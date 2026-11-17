@@ -123,7 +123,7 @@ describe("TrialBillingBanner", () => {
   it.each([
     [
       "trial_check_unavailable",
-      "We couldn't confirm the free trial for this account because a required check didn't complete. Add a payment method to run sandboxes.",
+      "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Add a payment method to run sandboxes.",
     ],
     [
       "trial_unavailable",
@@ -532,7 +532,7 @@ describe("TrialBillingBanner for a new team's trial", () => {
     })
     mount()
     expect(banner()).toHaveTextContent(
-      "We couldn't confirm the free trial for this account because a required check didn't complete. Upgrade to run sandboxes.",
+      "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Upgrade to run sandboxes.",
     )
     expect(banner()).not.toHaveTextContent(/ended|used up|isn't available/)
   })
