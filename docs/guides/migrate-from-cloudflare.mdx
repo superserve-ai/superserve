@@ -175,11 +175,14 @@ const sbx = await Sandbox.create({
   envVars: { MODE: "ci" },
   idleTimeoutSeconds: 600,
 })
+const timeoutMs = 10 * 60 * 1000 // run() stops a command after 30 s by default
 await sbx.commands.run(
   "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+  { timeoutMs },
 )
 const result = await sbx.commands.run("npm install && npm test", {
   cwd: "/home/user/app",
+  timeoutMs,
 })
 console.log(result.stdout)
 await sbx.publishPreviewPort(3000, { access: "private" })
@@ -197,10 +200,14 @@ sbx = Sandbox.create(
     env_vars={"MODE": "ci"},
     idle_timeout_seconds=600,
 )
+timeout = 10 * 60  # run() stops a command after 30 s by default
 sbx.commands.run(
-    "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app"
+    "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+    timeout_seconds=timeout,
 )
-result = sbx.commands.run("npm install && npm test", cwd="/home/user/app")
+result = sbx.commands.run(
+    "npm install && npm test", cwd="/home/user/app", timeout_seconds=timeout
+)
 print(result.stdout)
 sbx.publish_preview_port(3000, access="private")
 url = sbx.get_signed_preview_url(3000)  # opens in a browser
@@ -212,25 +219,36 @@ fork = Sandbox.create(name="fork", from_snapshot=snap)
 </Step>
 <Step title="Move existing sandboxes with the migration script">
 
-A Cloudflare sandbox is reachable only through your Worker. First add a temporary export route to the Worker. The route archives `/workspace` in one sandbox and returns the archive. Protect it with a `MIGRATION_TOKEN` secret.
+A Cloudflare sandbox is reachable only through your Worker. First add a temporary export route to the Worker. The route archives `/workspace` in one sandbox and streams the archive back. Protect it with a `MIGRATION_TOKEN` secret. The route refuses all requests until the secret is set.
 
 <CodeGroup>
 ```ts Export route (Cloudflare 0.12)
-import { getSandbox, type Sandbox } from "@cloudflare/sandbox"
+import { getSandbox, streamFile, type Sandbox } from "@cloudflare/sandbox"
 
 type Env = { Sandbox: DurableObjectNamespace<Sandbox>; MIGRATION_TOKEN: string }
 
 // Call this from your fetch handler for requests to /migrate/export.
 export async function exportSandbox(request: Request, env: Env): Promise<Response> {
-  if (request.headers.get("Authorization") !== `Bearer ${env.MIGRATION_TOKEN}`) {
+  const token = env.MIGRATION_TOKEN
+  if (!token || request.headers.get("Authorization") !== `Bearer ${token}`) {
     return new Response("unauthorized", { status: 401 })
   }
   const id = new URL(request.url).searchParams.get("id") ?? ""
   const sandbox = getSandbox(env.Sandbox, id)
   const tar = await sandbox.exec("tar czf /tmp/state.tgz -C /workspace .")
   if (!tar.success) return new Response(tar.stderr, { status: 500 })
-  const file = await sandbox.readFile("/tmp/state.tgz", { encoding: "base64" })
-  return new Response(Uint8Array.from(atob(file.content), (c) => c.charCodeAt(0)))
+  // Stream the archive so the Worker holds one chunk at a time, not the whole file.
+  const chunks = streamFile(await sandbox.readFileStream("/tmp/state.tgz"))
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { value, done } = await chunks.next()
+      if (done) return controller.close()
+      controller.enqueue(
+        typeof value === "string" ? new TextEncoder().encode(value) : value,
+      )
+    },
+  })
+  return new Response(body)
 }
 ```
 
@@ -257,7 +275,8 @@ export class Sandbox extends DurableObject<Env> {
 
 // Call this from your fetch handler for requests to /migrate/export.
 export async function exportSandbox(request: Request, env: Env): Promise<Response> {
-  if (request.headers.get("Authorization") !== `Bearer ${env.MIGRATION_TOKEN}`) {
+  const token = env.MIGRATION_TOKEN
+  if (!token || request.headers.get("Authorization") !== `Bearer ${token}`) {
     return new Response("unauthorized", { status: 401 })
   }
   const id = new URL(request.url).searchParams.get("id") ?? ""
@@ -266,7 +285,7 @@ export async function exportSandbox(request: Request, env: Env): Promise<Respons
 ```
 </CodeGroup>
 
-Then run the script with the sandbox IDs that your app passes to `getSandbox()` or `getByName()`. The script copies each archive into `/home/user` in a new Superserve sandbox. It does not change or delete your Cloudflare sandboxes. Set `CLOUDFLARE_EXPORT_URL` to the full URL of the route, and set `MIGRATION_TOKEN` and `SUPERSERVE_API_KEY`.
+Then run the script with the sandbox IDs that your app passes to `getSandbox()` or `getByName()`. The script copies each archive into `/home/user` in a new Superserve sandbox. It does not change or delete your Cloudflare sandboxes. If a copy fails, the script deletes the new Superserve sandbox. Set `CLOUDFLARE_EXPORT_URL` to the full URL of the route, and set `MIGRATION_TOKEN` and `SUPERSERVE_API_KEY`.
 
 <CodeGroup>
 ```ts migrate-from-cloudflare.ts
@@ -274,6 +293,9 @@ import { Sandbox } from "@superserve/sdk"
 
 const EXPORT_URL = process.env.CLOUDFLARE_EXPORT_URL // https://<your-worker>/migrate/export
 const TOKEN = process.env.MIGRATION_TOKEN
+if (!EXPORT_URL || !TOKEN) {
+  throw new Error("Set CLOUDFLARE_EXPORT_URL and MIGRATION_TOKEN")
+}
 const DST = "/home/user" // directory to copy into in Superserve
 const TEMPLATE = "superserve/base" // or the template you built from your Dockerfile
 const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
@@ -294,13 +316,20 @@ for (const id of process.argv.slice(2)) {
     fromTemplate: TEMPLATE,
     metadata: { migrated_from: id },
   })
-  await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
-  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`, {
-    timeoutMs: TIMEOUT_MS,
-  })
-  if (out.exitCode !== 0) {
-    console.error(`${id}: copy failed: ${out.stderr}`)
+  try {
+    await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(
+      `tar xzf /tmp/state.tgz -C ${DST} && rm /tmp/state.tgz`,
+      { timeoutMs: TIMEOUT_MS },
+    )
+    if (out.exitCode !== 0) throw new Error(out.stderr)
+  } catch (err) {
+    console.error(`${id}: copy failed: ${err}`)
     process.exitCode = 1
+    // Delete the new sandbox so a failed copy does not keep running.
+    await dst
+      .kill()
+      .catch(() => console.error(`${id}: delete ${dst.id} by hand`))
     continue
   }
   console.log(`${id} -> ${dst.id}`)
@@ -339,13 +368,22 @@ for sandbox_id in sys.argv[1:]:
         from_template=TEMPLATE,
         metadata={"migrated_from": sandbox_id},
     )
-    dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
-    out = dst.commands.run(
-        f"tar xzf /tmp/state.tgz -C {DST}", timeout_seconds=TIMEOUT_SECONDS
-    )
-    if out.exit_code != 0:
-        print(f"{sandbox_id}: copy failed: {out.stderr}", file=sys.stderr)
+    try:
+        dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
+        out = dst.commands.run(
+            f"tar xzf /tmp/state.tgz -C {DST} && rm /tmp/state.tgz",
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if out.exit_code != 0:
+            raise RuntimeError(out.stderr)
+    except Exception as err:
+        print(f"{sandbox_id}: copy failed: {err}", file=sys.stderr)
         failed = True
+        # Delete the new sandbox so a failed copy does not keep running.
+        try:
+            dst.kill()
+        except Exception:
+            print(f"{sandbox_id}: delete {dst.id} by hand", file=sys.stderr)
         continue
     print(f"{sandbox_id} -> {dst.id}")
 
@@ -403,6 +441,8 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
    - exec(cmd, {cwd, env, timeout}) -> commands.run(cmd, {cwd, env, timeoutMs}).
      1.0 container.exec(argv) + output() -> commands.run(one shell string). Quote arguments.
      stdout and stderr are strings. It does not throw on a nonzero exit code, so keep the checks.
+     Without timeoutMs, run() stops the command after 30 seconds. Set timeoutMs on installs,
+     builds, tests and any other command that can take longer.
      createSession({cwd, env}) -> pass cwd and env to each commands.run call.
    - execStream(cmd) -> commands.run(cmd, {onStdout, onStderr}).
    - startProcess(cmd) -> commands.spawn(cmd). Python: on AsyncSandbox.
@@ -454,7 +494,7 @@ The API mapping and the migration script are in the **Human** tab.
 | Where your code runs | Cloudflare sandboxes are Durable Objects inside your Worker. Superserve is an API, so call it from your Worker, a server, CI or a notebook. |
 | Sandbox ID | Cloudflare uses the ID that you pass to `getSandbox()`. Superserve gives each sandbox an `id` on create. Store it, or set your ID in `metadata` and find the sandbox with `Sandbox.list({ metadata })`. |
 | Idle behavior | Cloudflare stops an idle sandbox after 10 minutes by default, and the next start has a fresh disk. By default, a Superserve sandbox does not pause for being idle. Set `idleTimeoutSeconds` to pause it with its memory, processes and disk. |
-| Commands | `commands.run` takes one shell string, as 0.12 `exec()` did. It returns `stdout` and `stderr` as strings and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. |
+| Commands | `commands.run` takes one shell string, as 0.12 `exec()` did. It returns `stdout` and `stderr` as strings and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. Without a timeout, `run()` stops a command after 30 seconds, so set `timeoutMs` / `timeout_seconds` on installs, builds and tests. |
 | Home directory | Cloudflare sandboxes use `/workspace`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
 | Preview ports | Each published port gets its own URL, with no DNS or Worker route to set up. A new port is public by default. Publish with `access: "private"` and send a preview token to keep a port protected. Serve on a port from 1024 to 65535. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
