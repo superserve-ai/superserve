@@ -188,6 +188,15 @@
             ]
           },
           {
+            "group": "Migrate",
+            "pages": [
+              "guides/migrate-from-daytona",
+              "guides/migrate-from-e2b",
+              "guides/migrate-from-modal",
+              "guides/migrate-from-vercel-sandbox"
+            ]
+          },
+          {
             "group": "Integrations",
             "pages": [
               "integrations/overview",
@@ -195,6 +204,7 @@
                 "group": "Coding agents",
                 "expanded": true,
                 "pages": [
+                  "integrations/coding-agents/acp",
                   "integrations/coding-agents/amp",
                   "integrations/coding-agents/claude",
                   "integrations/coding-agents/codex",
@@ -228,6 +238,7 @@
                   "integrations/agent-harnesses/mastra",
                   "integrations/agent-harnesses/openai-agents-sdk",
                   "integrations/agent-harnesses/pydantic-ai",
+                  "integrations/agent-harnesses/sandcastle",
                   "integrations/agent-harnesses/vercel-ai-sdk"
                 ]
               },

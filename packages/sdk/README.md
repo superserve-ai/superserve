@@ -138,6 +138,7 @@ import {
   ValidationError, // 400
   NotFoundError, // 404
   ConflictError, // 409 — invalid state for operation
+  BillingError, // 402 — billing blocks the request; has code and actionUrl
   TimeoutError, // request timed out
   ServerError, // 500
 } from "@superserve/sdk"
