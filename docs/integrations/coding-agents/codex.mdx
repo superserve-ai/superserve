@@ -49,6 +49,7 @@ const sandbox = await Sandbox.create({
 // The Codex TUI needs `ps`, which superserve/node-22 does not include.
 await sandbox.commands.run(
   "apt-get update -qq && apt-get install -y -qq procps && npm install -g @openai/codex",
+  { timeoutMs: 300_000 },
 )
 ```
 
@@ -67,7 +68,8 @@ sandbox = Sandbox.create(
 # The Codex TUI needs `ps`, which superserve/node-22 does not include.
 sandbox.commands.run(
     "apt-get update -qq && apt-get install -y -qq procps"
-    " && npm install -g @openai/codex"
+    " && npm install -g @openai/codex",
+    timeout_seconds=300,
 )
 ```
 </CodeGroup>
