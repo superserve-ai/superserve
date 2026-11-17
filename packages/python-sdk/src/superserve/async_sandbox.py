@@ -306,9 +306,10 @@ class AsyncSandbox:
                     timeout=mount.get("timeout", 180.0),
                 )
         except BaseException as error:
-            try:
-                await asyncio.shield(
-                    async_api_request(
+
+            async def cleanup_created_sandbox() -> None:
+                try:
+                    await async_api_request(
                         "DELETE",
                         f"{config.base_url}/sandboxes/{sandbox.id}",
                         headers={"X-API-Key": config.api_key},
@@ -317,16 +318,31 @@ class AsyncSandbox:
                         retry_conflict=True,
                         client=sandbox._http_client,
                     )
-                )
-            except NotFoundError:
-                pass
-            except Exception:
+                except NotFoundError:
+                    pass
+                finally:
+                    await sandbox._close_http_client()
+
+            cleanup = asyncio.create_task(cleanup_created_sandbox())
+            deferred_cancel: asyncio.CancelledError | None = None
+            # Shield leaves the child running when its caller is cancelled.
+            # Drain its bounded DELETE and close before propagating cancellation.
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError as cancelled:
+                    deferred_cancel = cancelled
+                except Exception:
+                    break
+            try:
+                cleanup.result()
+            except (Exception, asyncio.CancelledError):
                 raise SandboxError(
                     f"Volume attachment failed and newly created sandbox {sandbox.id} could not be deleted",
                     code="volume_cleanup_failed",
                 ) from error
-            finally:
-                await sandbox._close_http_client()
+            if deferred_cancel is not None:
+                raise deferred_cancel
             raise
         return sandbox
 

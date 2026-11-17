@@ -14,6 +14,7 @@ from superserve import (
     AsyncVolume,
     ConflictError,
     Sandbox,
+    SandboxError,
     ValidationError,
     Volume,
 )
@@ -347,6 +348,151 @@ async def test_async_cancellation_cleans_only_new_sandbox() -> None:
         with pytest.raises(asyncio.CancelledError):
             await task
         assert cleanup.call_count == 1
+
+
+@pytest.mark.parametrize("cancel_mount", [False, True])
+@pytest.mark.parametrize("cleanup_status", [204, 500])
+async def test_repeated_cancellation_drains_native_cleanup_before_closing_client(
+    monkeypatch: pytest.MonkeyPatch, cancel_mount: bool, cleanup_status: int
+) -> None:
+    mount_entered = asyncio.Event()
+    cleanup_entered = asyncio.Event()
+    finish_cleanup = asyncio.Event()
+    cleanup_finished = asyncio.Event()
+    guests: list[AsyncSandbox] = []
+    original_attach = AsyncSandbox.attach_volume
+
+    async def capture_guest(self: AsyncSandbox, *args: Any, **kwargs: Any) -> Any:
+        guests.append(self)
+        return await original_attach(self, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSandbox, "attach_volume", capture_guest)
+
+    async def mounting(_request: httpx.Request) -> httpx.Response:
+        mount_entered.set()
+        if cancel_mount:
+            await asyncio.Event().wait()
+        return httpx.Response(
+            409, json={"error": {"code": "volume_in_use", "message": "busy"}}
+        )
+
+    async def deleting(_request: httpx.Request) -> httpx.Response:
+        cleanup_entered.set()
+        await finish_cleanup.wait()
+        assert not guests[0]._http_client.is_closed
+        cleanup_finished.set()
+        return (
+            httpx.Response(204)
+            if cleanup_status == 204
+            else httpx.Response(
+                500, json={"error": {"code": "cleanup_rejected", "message": "failed"}}
+            )
+        )
+
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes").respond(201, json=GUEST)
+        router.get(f"{API}/volumes/data").respond(200, json=VOLUME)
+        router.post(f"{API}/sandboxes/{GUEST['id']}/volumes").mock(side_effect=mounting)
+        cleanup = router.delete(f"{API}/sandboxes/{GUEST['id']}").mock(
+            side_effect=deleting
+        )
+        task = asyncio.create_task(
+            AsyncSandbox.create(
+                name="example", volumes=[{"volume": "data", "mount_path": "/mnt/data"}]
+            )
+        )
+        try:
+            await asyncio.wait_for(mount_entered.wait(), 5)
+            if cancel_mount:
+                task.cancel("cancel mount")
+            await asyncio.wait_for(cleanup_entered.wait(), 5)
+            for _ in range(3):
+                task.cancel("cancel while cleanup is blocked")
+                await asyncio.sleep(0)
+                assert not task.done()
+                assert not guests[0]._http_client.is_closed
+                assert not cleanup_finished.is_set()
+            finish_cleanup.set()
+            if cleanup_status == 204:
+                with pytest.raises(asyncio.CancelledError):
+                    await asyncio.wait_for(task, 5)
+            else:
+                with pytest.raises(SandboxError) as error:
+                    await asyncio.wait_for(task, 5)
+                assert error.value.code == "volume_cleanup_failed"
+                assert GUEST["id"] in str(error.value)
+            assert cleanup_finished.is_set()
+            assert guests[0]._http_client.is_closed
+            assert cleanup.call_count == 1
+        finally:
+            finish_cleanup.set()
+            if not task.done():
+                try:
+                    await asyncio.wait_for(task, 5)
+                except (Exception, asyncio.CancelledError):
+                    pass
+
+
+async def test_cancellation_keeps_cleanup_client_alive_for_native_delete_retry(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    retry_started = asyncio.Event()
+    retry_entered = asyncio.Event()
+    finish_cleanup = asyncio.Event()
+    guests: list[AsyncSandbox] = []
+    original_attach = AsyncSandbox.attach_volume
+
+    async def capture_guest(self: AsyncSandbox, *args: Any, **kwargs: Any) -> Any:
+        guests.append(self)
+        return await original_attach(self, *args, **kwargs)
+
+    monkeypatch.setattr(AsyncSandbox, "attach_volume", capture_guest)
+    attempts = 0
+
+    async def deleting(_request: httpx.Request) -> httpx.Response:
+        nonlocal attempts
+        attempts += 1
+        if attempts == 1:
+            retry_started.set()
+            return httpx.Response(503, json={"error": {"code": "unavailable"}})
+        retry_entered.set()
+        await finish_cleanup.wait()
+        assert not guests[0]._http_client.is_closed
+        return httpx.Response(204)
+
+    with respx.mock() as router:
+        router.post(f"{API}/sandboxes").respond(201, json=GUEST)
+        router.get(f"{API}/volumes/data").respond(200, json=VOLUME)
+        router.post(f"{API}/sandboxes/{GUEST['id']}/volumes").respond(
+            409, json={"error": {"code": "volume_in_use", "message": "busy"}}
+        )
+        cleanup = router.delete(f"{API}/sandboxes/{GUEST['id']}").mock(
+            side_effect=deleting
+        )
+        task = asyncio.create_task(
+            AsyncSandbox.create(
+                name="example", volumes=[{"volume": "data", "mount_path": "/mnt/data"}]
+            )
+        )
+        try:
+            await asyncio.wait_for(retry_started.wait(), 5)
+            task.cancel("cancel pending cleanup retry")
+            await asyncio.wait_for(retry_entered.wait(), 5)
+            assert not task.done()
+            assert not guests[0]._http_client.is_closed
+            task.cancel("cancel the retry again")
+            finish_cleanup.set()
+            with pytest.raises(asyncio.CancelledError):
+                await asyncio.wait_for(task, 5)
+            assert cleanup.call_count == 2
+            assert guests[0]._http_client.is_closed
+        finally:
+            finish_cleanup.set()
+            if not task.done():
+                try:
+                    await asyncio.wait_for(task, 5)
+                except (Exception, asyncio.CancelledError):
+                    pass
 
 
 @pytest.mark.parametrize("guest_type", [Sandbox, AsyncSandbox])
