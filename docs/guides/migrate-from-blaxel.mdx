@@ -147,11 +147,14 @@ const sbx = await Sandbox.create({
   idleTimeoutSeconds: 60,
   autoDeleteSeconds: 24 * 60 * 60,
 })
+const timeoutMs = 10 * 60 * 1000 // run() stops a command after 30 s by default
 await sbx.commands.run(
   "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+  { timeoutMs },
 )
 const result = await sbx.commands.run("npm install && npm test", {
   cwd: "/home/user/app",
+  timeoutMs,
 })
 console.log(result.stdout)
 await sbx.publishPreviewPort(3000, { access: "private" })
@@ -220,10 +223,14 @@ async def main() -> None:
         idle_timeout_seconds=60,
         auto_delete_seconds=24 * 60 * 60,
     )
+    timeout = 10 * 60  # run() stops a command after 30 s by default
     await sbx.commands.run(
-        "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app"
+        "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+        timeout_seconds=timeout,
     )
-    result = await sbx.commands.run("npm install && npm test", cwd="/home/user/app")
+    result = await sbx.commands.run(
+        "npm install && npm test", cwd="/home/user/app", timeout_seconds=timeout
+    )
     print(result.stdout)
     await sbx.publish_preview_port(3000, access="private")
     url = await sbx.get_signed_preview_url(3000)  # opens in a browser
@@ -238,7 +245,7 @@ asyncio.run(main())
 </Step>
 <Step title="Move existing sandboxes with the migration script">
 
-The script copies `/blaxel` from each deployed Blaxel sandbox into `/home/user` in a new Superserve sandbox. A sandbox on standby resumes when the script calls it. The script does not change or delete your Blaxel sandboxes; it removes only the temporary archive. Run it with `BL_WORKSPACE`, `BL_API_KEY` and `SUPERSERVE_API_KEY` set. Unarchive an archived sandbox first to include it.
+The script copies `/blaxel` from each deployed Blaxel sandbox into `/home/user` in a new Superserve sandbox. A sandbox on standby resumes when the script calls it. The script does not change or delete your Blaxel sandboxes; it removes only the temporary archive. If a copy fails, the script deletes the new Superserve sandbox. Run it with `BL_WORKSPACE`, `BL_API_KEY` and `SUPERSERVE_API_KEY` set. Unarchive an archived sandbox first to include it.
 
 <CodeGroup>
 ```ts migrate-from-blaxel.ts
@@ -271,13 +278,20 @@ for await (const src of await SandboxInstance.list({ limit: 50 })) {
     fromTemplate: TEMPLATE,
     metadata: { migrated_from: name },
   })
-  await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
-  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`, {
-    timeoutMs: TIMEOUT_MS,
-  })
-  if (out.exitCode !== 0) {
-    console.error(`${name}: copy failed: ${out.stderr}`)
+  try {
+    await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(
+      `tar xzf /tmp/state.tgz -C ${DST} && rm /tmp/state.tgz`,
+      { timeoutMs: TIMEOUT_MS },
+    )
+    if (out.exitCode !== 0) throw new Error(out.stderr)
+  } catch (err) {
+    console.error(`${name}: copy failed: ${err}`)
     process.exitCode = 1
+    // Delete the new sandbox so a failed copy does not keep running.
+    await dst
+      .kill()
+      .catch(() => console.error(`${name}: delete ${dst.id} by hand`))
     continue
   }
   console.log(`${name} -> ${dst.id}`)
@@ -320,13 +334,22 @@ async def main() -> int:
             from_template=TEMPLATE,
             metadata={"migrated_from": name},
         )
-        await dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
-        out = await dst.commands.run(
-            f"tar xzf /tmp/state.tgz -C {DST}", timeout_seconds=TIMEOUT_SECONDS
-        )
-        if out.exit_code != 0:
-            print(f"{name}: copy failed: {out.stderr}", file=sys.stderr)
+        try:
+            await dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
+            out = await dst.commands.run(
+                f"tar xzf /tmp/state.tgz -C {DST} && rm /tmp/state.tgz",
+                timeout_seconds=TIMEOUT_SECONDS,
+            )
+            if out.exit_code != 0:
+                raise RuntimeError(out.stderr)
+        except Exception as err:
+            print(f"{name}: copy failed: {err}", file=sys.stderr)
             failed = True
+            # Delete the new sandbox so a failed copy does not keep running.
+            try:
+                await dst.kill()
+            except Exception:
+                print(f"{name}: delete {dst.id} by hand", file=sys.stderr)
             continue
         print(f"{name} -> {dst.id}")
     return 1 if failed else 0
@@ -389,6 +412,8 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
    - process.exec({command, workingDir, env, waitForCompletion: true}) ->
      commands.run(cmd, {cwd, env, timeoutMs}). It waits for the command and returns exitCode,
      stdout and stderr. It does not throw on a nonzero exit code, so keep the checks.
+     Without timeoutMs, run() stops the command after 30 seconds. Set timeoutMs on installs,
+     builds, tests and any other command that can take longer.
    - process.exec({command, onLog}) or process.streamLogs -> commands.run(cmd, {onStdout, onStderr}).
    - process.exec({name, command}) without waiting, then process.wait / process.kill ->
      commands.spawn(cmd), then wait() / kill().
@@ -444,7 +469,7 @@ The API mapping and the migration script are in the **Human** tab.
 | Credentials | Blaxel reads `BL_WORKSPACE` and `BL_API_KEY`. Superserve reads `SUPERSERVE_API_KEY`. |
 | Sandbox ID | Blaxel finds a sandbox by its name. Superserve gives each sandbox an `id` on create. Store it, or set your key in `metadata` and find the sandbox with `Sandbox.list({ metadata })`. |
 | Idle behavior | Blaxel puts a sandbox with no connection on standby after a few seconds. By default, a Superserve sandbox does not pause for being idle. Set `idleTimeoutSeconds` to pause it with its memory, processes and disk. |
-| Commands | `process.exec` returns when the process starts unless you set `waitForCompletion`. `commands.run` waits for the command and returns `stdout` and `stderr`. It does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. |
+| Commands | `process.exec` returns when the process starts unless you set `waitForCompletion`. `commands.run` waits for the command and returns `stdout` and `stderr`. It does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. Without a timeout, `run()` stops a command after 30 seconds, so set `timeoutMs` / `timeout_seconds` on installs, builds and tests. |
 | Home directory | The Blaxel base image uses `/blaxel`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
 | Resources | Set `vcpu` and `memoryMib` on the template, not on the sandbox. |
 | Preview ports | Bind servers to `0.0.0.0` instead of `$HOST`. Each published port gets its own URL. A new port is public by default. Publish with `access: "private"` and send a preview token to keep a port protected. Serve on a port from 1024 to 65535. |
