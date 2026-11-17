@@ -42,6 +42,7 @@ class TestCreate:
                 memory_mib=2048,
                 memory_max_mib=8192,
                 memory_shrink_after_seconds=600,
+                vcpu_max=4,
                 disk_mib=4096,
                 from_="python:3.11",
                 start_cmd="python server.py",
@@ -54,14 +55,17 @@ class TestCreate:
             assert b"vcpu" in body
             assert json.loads(body)["memory_max_mib"] == 8192
             assert json.loads(body)["memory_shrink_after_seconds"] == 600
+            assert json.loads(body)["vcpu_max"] == 4
 
-    def test_omits_memory_max_when_unset(self) -> None:
+    def test_omits_growth_ceilings_when_unset(self) -> None:
         with respx.mock() as router:
             route = router.post(f"{API}/templates").mock(
                 return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
             )
             Template.create(name="x", memory_mib=2048, from_="python:3.11")
-            assert "memory_max_mib" not in json.loads(route.calls.last.request.content)
+            sent = json.loads(route.calls.last.request.content)
+            assert "memory_max_mib" not in sent
+            assert "vcpu_max" not in sent
 
     def test_throws_on_missing_build_id(self) -> None:
         with respx.mock() as router:

@@ -58,6 +58,8 @@ class SandboxInfo(BaseModel):
     memory_current_mib: Optional[int] = None
     # Seconds memory must stay low after growing before it shrinks back; None when the platform default applies.
     memory_shrink_after_seconds: Optional[int] = None
+    # Ceiling the CPU count can grow to while running; None when it is fixed.
+    vcpu_max: Optional[int] = None
     created_at: datetime
     timeout_seconds: Optional[int] = None
     # Pause the sandbox after this many seconds with no activity.
@@ -211,6 +213,7 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         memory_max_mib=raw.get("memory_max_mib"),
         memory_current_mib=raw.get("memory_current_mib"),
         memory_shrink_after_seconds=raw.get("memory_shrink_after_seconds"),
+        vcpu_max=raw.get("vcpu_max"),
         created_at=_parse_iso8601(raw["created_at"]),
         timeout_seconds=raw.get("timeout_seconds"),
         idle_timeout_seconds=raw.get("idle_timeout_seconds"),
@@ -249,6 +252,8 @@ class SnapshotResources(BaseModel):
     disk_mib: int = 0
     # Ceiling memory can grow to while running; None when memory is fixed.
     memory_max_mib: Optional[int] = None
+    # Ceiling the CPU count can grow to while running; None when it is fixed.
+    vcpu_max: Optional[int] = None
 
 
 class SnapshotInfo(BaseModel):
@@ -291,6 +296,7 @@ def to_snapshot_info(raw: dict[str, Any]) -> SnapshotInfo:
             memory_mib=resources.get("memory_mib") or 0,
             disk_mib=resources.get("disk_mib") or 0,
             memory_max_mib=resources.get("memory_max_mib"),
+            vcpu_max=resources.get("vcpu_max"),
         ),
         created_at=_parse_iso8601(raw["created_at"]),
         ready_at=_parse_iso8601(raw["ready_at"]) if raw.get("ready_at") else None,
@@ -335,6 +341,8 @@ class TemplateInfo(BaseModel):
     memory_max_mib: Optional[int] = None
     # Seconds memory must stay low after growing before it shrinks back; None when the platform default applies.
     memory_shrink_after_seconds: Optional[int] = None
+    # Ceiling the CPU count can grow to while running; None when it is fixed.
+    vcpu_max: Optional[int] = None
     disk_mib: int = 0
     size_bytes: Optional[int] = None
     error_message: Optional[str] = None
@@ -421,6 +429,7 @@ def to_template_info(
         memory_mib=raw.get("memory_mib", 0),
         memory_max_mib=raw.get("memory_max_mib"),
         memory_shrink_after_seconds=raw.get("memory_shrink_after_seconds"),
+        vcpu_max=raw.get("vcpu_max"),
         disk_mib=raw.get("disk_mib", 0),
         size_bytes=raw.get("size_bytes"),
         error_message=raw.get("error_message"),
