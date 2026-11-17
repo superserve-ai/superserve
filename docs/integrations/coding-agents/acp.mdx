@@ -1,0 +1,320 @@
+---
+title: "ACP"
+sidebarTitle: ACP
+description: Run an Agent Client Protocol agent in a Superserve sandbox and drive it from your own client.
+icon: "plug"
+---
+
+The [Agent Client Protocol](https://agentclientprotocol.com) (ACP) is an open JSON-RPC protocol between a client, such as an editor, and a coding agent. The agent runs as a subprocess and exchanges messages with the client over stdin and stdout. Run the agent in a Superserve sandbox and keep your client outside it: the agent's file edits and shell commands stay in the sandbox, and your client receives the same stream of messages, tool calls, and permission requests.
+
+This page uses these ACP adapters:
+
+| Agent | npm package | Command | API key variable |
+| --- | --- | --- | --- |
+| Claude Code | `@agentclientprotocol/claude-agent-acp` | `claude-agent-acp` | `ANTHROPIC_API_KEY` |
+| Codex | `@agentclientprotocol/codex-acp` | `codex-acp` | `OPENAI_API_KEY` |
+
+## Set up the sandbox
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk @agentclientprotocol/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve agent-client-protocol
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+Create a sandbox from the `superserve/node-22` template and install the adapter in it. The Python code is complete in the next section.
+
+```typescript TypeScript
+import * as acp from "@agentclientprotocol/sdk"
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({ name: "anthropic-key", value: "sk-ant-...", provider: "anthropic" })
+
+const sandbox = await Sandbox.create({
+  name: "acp-claude",
+  fromTemplate: "superserve/node-22",
+  secrets: { ANTHROPIC_API_KEY: "anthropic-key" },
+})
+
+await sandbox.commands.run(
+  "npm install -g @agentclientprotocol/claude-agent-acp && mkdir -p /home/user/project",
+  { timeoutMs: 300_000 },
+)
+```
+
+The adapter reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to Anthropic, never exposed to the agent.
+
+## Connect an ACP client
+
+Start the adapter with `sandbox.commands.spawn()`. Then connect its stdin and stdout to an ACP client from the [ACP SDK](https://agentclientprotocol.com/libraries/typescript). ACP sends one JSON message per line, so the bridge only has to move bytes in each direction.
+
+<CodeGroup>
+```typescript TypeScript
+// Start the adapter. Its stdout feeds a byte stream that the ACP client reads.
+const encoder = new TextEncoder()
+let toClient!: ReadableStreamDefaultController<Uint8Array>
+const fromAgent = new ReadableStream<Uint8Array>({
+  start: (controller) => {
+    toClient = controller
+  },
+})
+const agent = await sandbox.commands.spawn("claude-agent-acp", {
+  cwd: "/home/user/project",
+  onStdout: (data) => toClient.enqueue(encoder.encode(data)),
+  onStderr: (data) => process.stderr.write(data),
+})
+// Bytes that the ACP client writes go to the adapter's stdin.
+const toAgent = new WritableStream<Uint8Array>({
+  write: (chunk) => agent.stdin.write(chunk),
+  close: () => agent.stdin.close(),
+})
+
+const result = await acp
+  .client({ name: "my-acp-client" })
+  .onNotification(acp.methods.client.session.update, ({ params }) => {
+    const update = params.update
+    if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
+      process.stdout.write(update.content.text)
+    } else if (update.sessionUpdate === "tool_call") {
+      console.log(`\n[tool] ${update.title}`)
+    }
+  })
+  .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+    // Approve each tool call once. A real client asks the user here.
+    const option = params.options.find((o) => o.kind === "allow_once") ?? params.options[0]
+    console.log(`[permission] ${params.toolCall.title} -> ${option.name}`)
+    return { outcome: { outcome: "selected", optionId: option.optionId } }
+  })
+  .connectWith(acp.ndJsonStream(toAgent, fromAgent), async (ctx) => {
+    await ctx.request(acp.methods.agent.initialize, {
+      protocolVersion: acp.PROTOCOL_VERSION,
+      clientCapabilities: {},
+    })
+    const session = await ctx.request(acp.methods.agent.session.new, {
+      cwd: "/home/user/project",
+      mcpServers: [],
+    })
+    return ctx.request(acp.methods.agent.session.prompt, {
+      sessionId: session.sessionId,
+      prompt: [
+        {
+          type: "text",
+          text: "Create hello.js that prints 'hello from superserve', then run it with node.",
+        },
+      ],
+    })
+  })
+
+console.log(`\nstop reason: ${result.stopReason}`)
+await agent.close()
+```
+
+```python Python
+import asyncio
+import json
+import sys
+from typing import Any
+
+from acp import PROTOCOL_VERSION, Client, connect_to_agent
+from acp.schema import (
+    AgentMessageChunk,
+    AllowedOutcome,
+    PermissionOption,
+    RequestPermissionResponse,
+    TextContentBlock,
+    ToolCallStart,
+    ToolCallUpdate,
+)
+from superserve import AsyncCommandSession, AsyncSandbox, AsyncSecret
+
+
+class SandboxTransport:
+    """Carries ACP messages over the stdin and stdout of a sandbox process."""
+
+    def __init__(self) -> None:
+        self.process: AsyncCommandSession | None = None
+        self.messages: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
+        self.buffer = ""
+
+    def on_stdout(self, data: str) -> None:
+        # The adapter writes one JSON-RPC message per line.
+        self.buffer += data
+        *lines, self.buffer = self.buffer.split("\n")
+        for line in lines:
+            if line.strip():
+                self.messages.put_nowait(json.loads(line))
+
+    async def send(self, message: dict[str, Any]) -> None:
+        assert self.process is not None
+        await self.process.stdin.write(json.dumps(message) + "\n")
+
+    async def receive(self) -> dict[str, Any] | None:
+        return await self.messages.get()
+
+    async def close(self) -> None:
+        self.messages.put_nowait(None)
+
+
+class PrintingClient(Client):
+    async def request_permission(
+        self,
+        session_id: str,
+        tool_call: ToolCallUpdate,
+        options: list[PermissionOption],
+        **kwargs: Any,
+    ) -> RequestPermissionResponse:
+        # Approve each tool call once. A real client asks the user here.
+        option = next((o for o in options if o.kind == "allow_once"), options[0])
+        print(f"[permission] {tool_call.title} -> {option.name}")
+        return RequestPermissionResponse(
+            outcome=AllowedOutcome(outcome="selected", option_id=option.option_id)
+        )
+
+    async def session_update(self, session_id: str, update: Any, **kwargs: Any) -> None:
+        if isinstance(update, AgentMessageChunk) and isinstance(
+            update.content, TextContentBlock
+        ):
+            print(update.content.text, end="", flush=True)
+        elif isinstance(update, ToolCallStart):
+            print(f"\n[tool] {update.title}")
+
+
+async def main() -> None:
+    # One-time: store your key as a secret. It never enters the sandbox.
+    await AsyncSecret.create(
+        name="anthropic-key", value="sk-ant-...", provider="anthropic"
+    )
+
+    sandbox = await AsyncSandbox.create(
+        name="acp-claude",
+        from_template="superserve/node-22",
+        secrets={"ANTHROPIC_API_KEY": "anthropic-key"},
+    )
+    await sandbox.commands.run(
+        "npm install -g @agentclientprotocol/claude-agent-acp"
+        " && mkdir -p /home/user/project",
+        timeout_seconds=300,
+    )
+
+    transport = SandboxTransport()
+    transport.process = await sandbox.commands.spawn(
+        "claude-agent-acp",
+        cwd="/home/user/project",
+        on_stdout=transport.on_stdout,
+        on_stderr=lambda data: print(data, end="", file=sys.stderr),
+    )
+    conn = connect_to_agent(PrintingClient(), transport)
+    await conn.initialize(protocol_version=PROTOCOL_VERSION)
+    session = await conn.new_session(cwd="/home/user/project")
+    result = await conn.prompt(
+        session_id=session.session_id,
+        prompt=[
+            TextContentBlock(
+                type="text",
+                text="Create hello.js that prints 'hello from superserve',"
+                " then run it with node.",
+            )
+        ],
+    )
+    print(f"\nstop reason: {result.stop_reason}")
+    await conn.close()
+    await transport.process.close()
+
+    await sandbox.kill()
+
+
+asyncio.run(main())
+```
+</CodeGroup>
+
+The agent writes `hello.js` and runs it in the sandbox:
+
+````text
+[tool] Terminal
+I created `hello.js` and ran it with node. It printed:
+
+```
+hello from superserve
+```
+stop reason: end_turn
+````
+
+Some points about this client:
+
+- **Files stay in the sandbox.** The client sends empty `clientCapabilities`, so the agent reads and writes files and runs commands with its own tools in the sandbox. If you advertise the `fs` or `terminal` capabilities, the agent sends those operations to your client instead.
+- **Permissions come to your client.** Before a tool call, the agent can send a `session/request_permission` request. The handler above approves each call once. A real client shows the request to the user.
+- **The session stays open.** To continue the conversation, send another `session/prompt` with the same `sessionId`. Close the process with `agent.close()` (TypeScript) or `transport.process.close()` (Python) when you are done.
+
+<Note>
+`agent-client-protocol` 1.0.0 for Python logs `Method not found` for the `auth/status_update` notification that the Claude Code adapter sends. The error does not stop the session.
+</Note>
+
+## Use Codex
+
+The Codex adapter needs three changes. Bind your OpenAI key and install the adapter:
+
+```typescript TypeScript
+import * as acp from "@agentclientprotocol/sdk"
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({ name: "openai-key", value: "sk-...", provider: "openai" })
+
+const sandbox = await Sandbox.create({
+  name: "acp-codex",
+  fromTemplate: "superserve/node-22",
+  secrets: { OPENAI_API_KEY: "openai-key" },
+})
+
+await sandbox.commands.run(
+  "npm install -g @agentclientprotocol/codex-acp && mkdir -p /home/user/project",
+  { timeoutMs: 300_000 },
+)
+```
+
+Spawn `codex-acp` instead of `claude-agent-acp`. `NO_BROWSER=1` hides the ChatGPT sign-in option, which needs a browser:
+
+```typescript TypeScript
+const agent = await sandbox.commands.spawn("codex-acp", {
+  cwd: "/home/user/project",
+  env: { NO_BROWSER: "1" },
+  onStdout: (data) => toClient.enqueue(encoder.encode(data)),
+  onStderr: (data) => process.stderr.write(data),
+})
+```
+
+After `initialize`, call `authenticate` with the `api-key` method:
+
+```typescript TypeScript
+await ctx.request(acp.methods.agent.initialize, {
+  protocolVersion: acp.PROTOCOL_VERSION,
+  clientCapabilities: {},
+})
+// Codex reads OPENAI_API_KEY after this call.
+await ctx.request(acp.methods.agent.authenticate, { methodId: "api-key" })
+```
+
+To choose the model, set `CODEX_CONFIG` in `env`, for example `CODEX_CONFIG: JSON.stringify({ model: "gpt-5.5" })`.
+
+## Delete when finished
+
+When you no longer need the sandbox, delete it. This also deletes its files and saved state.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.kill()
+```
+
+```python Python
+await sandbox.kill()
+```
+</CodeGroup>
+
+To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).
