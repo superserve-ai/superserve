@@ -305,6 +305,8 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+import { replacementTeamOperationId } from "@/lib/api/replacement-team"
+import * as teamProvisioning from "@/lib/api/team-provisioning"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
   SignupRestrictedError,
@@ -316,6 +318,8 @@ import {
   listTeamsAction,
   setActiveTeamAction,
 } from "./teams-actions"
+
+const mockProvisionTeam = vi.spyOn(teamProvisioning, "provisionTeam")
 
 async function createAllowedTeam(name: string, region?: string) {
   const result = await createTeamAction(name, region)
@@ -343,6 +347,7 @@ describe("createTeamAction", () => {
     omittedTeams = []
     cellLookupFails = false
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
+    mockProvisionTeam.mockClear()
     mockPublishPromotionIdentity.mockClear()
     googleUser = false
     existingRbacAssignment = false
@@ -401,6 +406,18 @@ describe("createTeamAction", () => {
       use: recordingCellClient(),
       usw: recordingCellClient(),
     }
+  })
+
+  it("rejects another user's replacement operation ID before provisioning", async () => {
+    const operationId = replacementTeamOperationId(
+      "22222222-2222-4222-8222-222222222222",
+      "33333333-3333-4333-8333-333333333333",
+    )
+
+    await expect(
+      createActualTeamAction("acme", "use", operationId),
+    ).rejects.toThrow("A distinct team creation operation is required")
+    expect(mockProvisionTeam).not.toHaveBeenCalled()
   })
 
   it("writes the full RBAC chain into the target cell", async () => {
