@@ -25,6 +25,7 @@ export const BenchmarkComparison = ({
     tti: {
       superserve: 446,
       e2b: 1068,
+      blaxel: 425,
       cloudflare: 3003,
       daytona: 627,
       vercel: 521,
@@ -32,6 +33,7 @@ export const BenchmarkComparison = ({
     dax: {
       superserve: 57422,
       e2b: 64219,
+      blaxel: 60706,
       cloudflare: 107110,
       modal: 48147,
       vercel: 72265,

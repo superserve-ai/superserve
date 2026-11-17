@@ -190,6 +190,7 @@
           {
             "group": "Migrate",
             "pages": [
+              "guides/migrate-from-blaxel",
               "guides/migrate-from-cloudflare",
               "guides/migrate-from-daytona",
               "guides/migrate-from-e2b",
