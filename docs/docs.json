@@ -56,7 +56,10 @@
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "redirects": [
-    { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
+    {
+      "source": "/sandbox/memory",
+      "destination": "/sandbox/live-memory-resizing"
+    },
     {
       "source": "/integrations/managed-agents/claude-managed-agents",
       "destination": "/integrations/agent-platforms/claude-managed-agents",
@@ -188,6 +191,10 @@
             ]
           },
           {
+            "group": "Migrate",
+            "pages": ["guides/migrate-from-e2b"]
+          },
+          {
             "group": "Integrations",
             "pages": [
               "integrations/overview",
@@ -227,6 +234,7 @@
                   "integrations/agent-harnesses/mastra",
                   "integrations/agent-harnesses/openai-agents-sdk",
                   "integrations/agent-harnesses/pydantic-ai",
+                  "integrations/agent-harnesses/sandcastle",
                   "integrations/agent-harnesses/vercel-ai-sdk"
                 ]
               },
