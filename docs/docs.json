@@ -188,6 +188,10 @@
             ]
           },
           {
+            "group": "Migrate",
+            "pages": ["guides/migrate-from-e2b"]
+          },
+          {
             "group": "Integrations",
             "pages": [
               "integrations/overview",
