@@ -37,7 +37,14 @@ from .sandbox import Sandbox
 from .secrets import Secret
 from .snapshots import Snapshot
 from .template import Template
+from .volume import Volume
+from .async_volume import AsyncVolume
 from .types import (
+    VolumeInfo,
+    VolumeStatus,
+    VolumeAttachment,
+    VolumeAttachmentStatus,
+    SandboxVolumeMount,
     BuildLogEvent,
     BuildLogStream,
     BuildStep,
@@ -78,6 +85,13 @@ from .types import (
 __version__ = "0.12.1"
 
 __all__ = [
+    "Volume",
+    "AsyncVolume",
+    "VolumeInfo",
+    "VolumeStatus",
+    "VolumeAttachment",
+    "VolumeAttachmentStatus",
+    "SandboxVolumeMount",
     "AsyncCommandSession",
     "AsyncDesktop",
     "Desktop",

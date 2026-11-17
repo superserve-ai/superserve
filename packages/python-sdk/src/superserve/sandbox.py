@@ -33,7 +33,11 @@ from .snapshots import (
     _snapshot_create_body,
 )
 from .files import Files, FilesDeps
+from .volume import Volume, _get_volume_attachment, _detach_volume_attachment
+from .volume import _VolumeHandle, _assert_volume_connection, _same_volume_sandbox
 from .types import (
+    SandboxVolumeMount,
+    VolumeAttachment,
     UNSET,
     build_update_body,
     list_query,
@@ -56,6 +60,7 @@ from .types import (
 )
 
 if TYPE_CHECKING:
+    from .async_volume import AsyncVolume
     from .async_snapshots import AsyncSnapshot
     from .async_template import AsyncTemplate
     from .template import Template
@@ -170,11 +175,52 @@ class Sandbox:
                 return self._post_and_rotate_token("activate")
             return self._access_token
 
+    def attach_volume(
+        self,
+        volume: str | Volume | AsyncVolume,
+        *,
+        mount_path: str,
+        read_only: bool | None = None,
+        idempotency_key: str | None = None,
+        timeout: float = 180.0,
+    ) -> VolumeAttachment:
+        """Attach an existing volume and wait for the server to confirm its mount."""
+        if isinstance(volume, _VolumeHandle):
+            _assert_volume_connection(self._config, volume._config)
+        resource = (
+            volume
+            if isinstance(volume, Volume)
+            else Volume.connect(
+                volume if isinstance(volume, str) else volume.id,
+                api_key=self._config.api_key,
+                base_url=self._config.base_url,
+            )
+        )
+        return resource.attach(
+            self,
+            mount_path=mount_path,
+            read_only=read_only,
+            idempotency_key=idempotency_key,
+            timeout=timeout,
+        )
+
+    def detach_volume(self, attachment_id: str, *, timeout: float = 30.0) -> None:
+        try:
+            attachment = _get_volume_attachment(self._config, attachment_id, timeout)
+            if not _same_volume_sandbox(attachment.sandbox_id, self.id):
+                from .errors import ValidationError
+
+                raise ValidationError("Attachment belongs to a different sandbox")
+        except NotFoundError:
+            return
+        _detach_volume_attachment(self._config, attachment_id, timeout)
+
     @classmethod
     def create(
         cls,
         *,
         name: str,
+        volumes: Sequence[SandboxVolumeMount] | None = None,
         from_template: "str | Template | AsyncTemplate | None" = None,
         from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
         timeout_seconds: int | None = None,
@@ -201,6 +247,9 @@ class Sandbox:
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
+        for mount in volumes or []:
+            if isinstance(mount["volume"], _VolumeHandle):
+                _assert_volume_connection(mount["volume"]._config, config)
         body: dict[str, Any] = {"name": name}
         if from_template is not None:
             if isinstance(from_template, str):
@@ -245,7 +294,38 @@ class Sandbox:
             raise SandboxError(
                 "Invalid API response from POST /sandboxes: missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
+        sandbox = cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
+        try:
+            for mount in volumes or []:
+                sandbox.attach_volume(
+                    mount["volume"],
+                    mount_path=mount["mount_path"],
+                    read_only=mount.get("read_only"),
+                    idempotency_key=mount.get("idempotency_key"),
+                    timeout=mount.get("timeout", 180.0),
+                )
+        except BaseException as error:
+            try:
+                api_request(
+                    "DELETE",
+                    f"{config.base_url}/sandboxes/{sandbox.id}",
+                    headers={"X-API-Key": config.api_key},
+                    timeout=30.0,
+                    budget=30.0,
+                    retry_conflict=True,
+                    client=sandbox._http_client,
+                )
+            except NotFoundError:
+                pass
+            except Exception:
+                raise SandboxError(
+                    f"Volume attachment failed and newly created sandbox {sandbox.id} could not be deleted",
+                    code="volume_cleanup_failed",
+                ) from error
+            finally:
+                sandbox._close_http_client()
+            raise
+        return sandbox
 
     @classmethod
     def connect(
