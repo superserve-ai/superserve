@@ -238,20 +238,26 @@ for await (const info of await Vercel.list()) {
     fromTemplate: TEMPLATE,
     metadata: { ...info.tags, migrated_from: info.name },
   })
-  await dst.files.write(ARCHIVE, tgz, { timeoutMs: TIMEOUT_MS })
-  const out = await dst.commands.run(`tar xzf ${ARCHIVE} -C ${DST}`, {
-    timeoutMs: TIMEOUT_MS,
-  })
-  if (out.exitCode !== 0) {
-    console.error(`${info.name}: copy failed: ${out.stderr}`)
+  try {
+    await dst.files.write(ARCHIVE, tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(`tar xzf ${ARCHIVE} -C ${DST}`, {
+      timeoutMs: TIMEOUT_MS,
+    })
+    if (out.exitCode !== 0) throw new Error(out.stderr)
+  } catch (err) {
+    console.error(`${info.name}: copy failed: ${err}`)
     process.exitCode = 1
+    // Delete the new sandbox so a failed copy does not keep running.
+    await dst.kill().catch((killErr) => {
+      console.error(`${info.name}: delete ${dst.id} manually: ${killErr}`)
+    })
     continue
   }
   console.log(`${info.name} -> ${dst.id}`)
 }
 ```
 
-The script uses `@vercel/sandbox`, so it runs in Node.js even if your app uses the Python SDK. Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS`.
+The script uses `@vercel/sandbox`, so it runs in Node.js even if your app uses the Python SDK. Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS`. If a copy fails, the script deletes the new Superserve sandbox and moves on to the next one.
 
 The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
 
