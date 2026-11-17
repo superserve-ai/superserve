@@ -45,6 +45,7 @@ interface SandboxItem {
   vcpu_count?: number
   memory_mib?: number
   memory_max_mib?: number | null
+  memory_shrink_after_seconds?: number | null
   snapshot_id?: string
   source_snapshot_id?: string
   created_at?: string
@@ -589,6 +590,12 @@ Examples:
         ["Name", s.name],
         ["Status", s.status, statusColor],
         ["Shape", shape(s)],
+        [
+          "Memory shrink after",
+          s.memory_shrink_after_seconds == null
+            ? undefined
+            : `${s.memory_shrink_after_seconds}s`,
+        ],
         ["Created", formatDate(s.created_at)],
         [
           "Timeout",
