@@ -70,7 +70,7 @@ The main changes: Superserve is an API that you call from any backend, so you ne
 | Save state | `sandbox.createBackup({ dir })` / `restoreBackup(backup)` | `DirectoryBackup` or `container.snapshotContainer()` | `sbx.snapshot()`, then `Sandbox.create({ name, fromSnapshot })`. Saves memory and disk; forks keep running processes. |
 | Idle timeout | `sleepAfter`, default `"10m"`. `keepAlive: true` to stay awake. | `container.setInactivityTimeout(ms)` | `idleTimeoutSeconds`. Off by default. Pauses the sandbox and keeps memory, processes and disk. `sbx.pause()` / `sbx.resume()` at any time. |
 | Env vars and secrets | `envVars` or `setEnvVars()`. Credentials added by `outboundByHost` handlers. | `start({ env })` and an outbound `WorkerEntrypoint` | `envVars` on create, `env` per command, `secrets: { ENV_VAR: "secret-name" }`. The real key never enters the sandbox. See [Secrets](/secrets/overview). |
-| Network rules | `enableInternet`, `allowedHosts`, `deniedHosts` | `start({ enableInternet })` and an outbound `WorkerEntrypoint` | `network: { allowOut: [...], denyOut: ["0.0.0.0/0"] }`. Accepts domains and CIDRs. See [Network rules](/sandbox/networking). |
+| Network rules | `enableInternet`, `allowedHosts`, `deniedHosts` | `start({ enableInternet })` and an outbound `WorkerEntrypoint` | `allowedHosts` becomes `network: { allowOut: ["1.1.1.1/32", "8.8.8.8/32", ...hosts], denyOut: ["0.0.0.0/0"] }`. The two IPs are the sandbox DNS resolvers. Without them, no name resolves. `enableInternet: false` becomes `network: { denyOut: ["0.0.0.0/0"] }`. `denyOut` takes only IPs and CIDRs, so `deniedHosts` has no direct match. Check those rules by hand, or block the hosts with an allowlist that leaves them out. See [Network rules](/sandbox/networking). |
 | Buckets | `sandbox.mountBucket(bucket, path, options)` | `S3Mount` | A FUSE driver in a template. See [Cloud buckets](/storage/cloud-buckets). |
 | Public URL | `sandbox.exposePort(port, { hostname })` and `proxyToSandbox()` on your wildcard domain | Your Worker routes to `container.getTcpPort(port)` | `await sbx.publishPreviewPort(port, { access: "private" })`, then `sbx.getPreviewUrl(port)`. For the token, use `await sbx.getPreviewToken(port)` (send `token` in the returned `header`) or `await sbx.getSignedPreviewUrl(port)` for a browser. No DNS or routing to set up. See [Preview URLs](/sandbox/preview-urls). |
 | List and delete | IDs that your app keeps / `sandbox.destroy()` | IDs that your app keeps / `container.destroy()` | `Sandbox.list({ metadata })` / `sbx.kill()` |
@@ -91,7 +91,7 @@ The main changes: Superserve is an API that you call from any backend, so you ne
 | Save state | `sandbox.createBackup({ dir })` / `restoreBackup(backup)` | `DirectoryBackup` or `container.snapshotContainer()` | `sbx.snapshot()`, then `Sandbox.create(name=, from_snapshot=)`. Saves memory and disk; forks keep running processes. |
 | Idle timeout | `sleepAfter`, default `"10m"`. `keepAlive: true` to stay awake. | `container.setInactivityTimeout(ms)` | `idle_timeout_seconds`. Off by default. Pauses the sandbox and keeps memory, processes and disk. `sbx.pause()` / `sbx.resume()` at any time. |
 | Env vars and secrets | `envVars` or `setEnvVars()`. Credentials added by `outboundByHost` handlers. | `start({ env })` and an outbound `WorkerEntrypoint` | `env_vars` on create, `env` per command, `secrets={"ENV_VAR": "secret-name"}`. The real key never enters the sandbox. See [Secrets](/secrets/overview). |
-| Network rules | `enableInternet`, `allowedHosts`, `deniedHosts` | `start({ enableInternet })` and an outbound `WorkerEntrypoint` | `network=NetworkConfig(allow_out=[...], deny_out=["0.0.0.0/0"])`. Accepts domains and CIDRs. See [Network rules](/sandbox/networking). |
+| Network rules | `enableInternet`, `allowedHosts`, `deniedHosts` | `start({ enableInternet })` and an outbound `WorkerEntrypoint` | `allowedHosts` becomes `network=NetworkConfig(allow_out=["1.1.1.1/32", "8.8.8.8/32", *hosts], deny_out=["0.0.0.0/0"])`. The two IPs are the sandbox DNS resolvers. Without them, no name resolves. `enableInternet: false` becomes `network=NetworkConfig(deny_out=["0.0.0.0/0"])`. `deny_out` takes only IPs and CIDRs, so `deniedHosts` has no direct match. Check those rules by hand, or block the hosts with an allowlist that leaves them out. See [Network rules](/sandbox/networking). |
 | Buckets | `sandbox.mountBucket(bucket, path, options)` | `S3Mount` | A FUSE driver in a template. See [Cloud buckets](/storage/cloud-buckets). |
 | Public URL | `sandbox.exposePort(port, { hostname })` and `proxyToSandbox()` on your wildcard domain | Your Worker routes to `container.getTcpPort(port)` | `sbx.publish_preview_port(port, access="private")`, then `sbx.get_preview_url(port)`. For the token, use `sbx.get_preview_token(port)` (send `token` in the returned `header`) or `sbx.get_signed_preview_url(port)` for a browser. No DNS or routing to set up. See [Preview URLs](/sandbox/preview-urls). |
 | List and delete | IDs that your app keeps / `sandbox.destroy()` | IDs that your app keeps / `container.destroy()` | `Sandbox.list(metadata=)` / `sbx.kill()` |
@@ -458,9 +458,12 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
      memory and disk. keepAlive: true -> remove it. There is no idle timeout by default.
    - envVars / setEnvVars -> envVars on create. Credentials added by outboundByHost handlers ->
      Secret.create once, then secrets: {ENV_VAR: "secret-name"} on create.
-   - enableInternet / allowedHosts / deniedHosts -> network {allowOut: [...], denyOut: ["0.0.0.0/0"]},
-     plus "1.1.1.1/32" and "8.8.8.8/32" in allowOut for DNS. enableInternet: false ->
-     network {denyOut: ["0.0.0.0/0"]}.
+   - allowedHosts -> network {allowOut: ["1.1.1.1/32", "8.8.8.8/32", ...hosts],
+     denyOut: ["0.0.0.0/0"]}. The two IPs are the DNS resolvers. Without them, no name resolves.
+     enableInternet: false -> network {denyOut: ["0.0.0.0/0"]} with no allowOut.
+   - deniedHosts has no direct match: denyOut accepts only IPs and CIDRs, not domains. Do not put
+     hostnames in denyOut. List each deniedHosts rule for me to review. If allowedHosts is also
+     set and no allowed pattern matches a denied host, the allowlist already blocks it; say so.
    - exposePort(port) + proxyToSandbox(), or routing to container.getTcpPort(port) ->
      publishPreviewPort(port, {access: "private"}), then getPreviewUrl(port). Send the Superserve
      preview credential: getPreviewToken(port) returns {header, token} for machine clients;
