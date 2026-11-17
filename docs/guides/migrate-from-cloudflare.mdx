@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Cloudflare Sandbox and Superserve sandboxes do the same job: run untrusted code in an isolated Linux environment that you control from code. Most calls move one to one.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Cloudflare today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -107,7 +107,7 @@ To turn your Dockerfile into a template, see [Create a template](/templates/crea
 Replace the sandbox stub or Durable Object with `Sandbox`, add a `name`, and change paths under `/workspace` to `/home/user`.
 
 <CodeGroup>
-```ts Before (Cloudflare 0.12)
+```ts 0.12
 import { getSandbox, type Sandbox } from "@cloudflare/sandbox"
 export { Sandbox } from "@cloudflare/sandbox"
 
@@ -132,7 +132,7 @@ export default {
 }
 ```
 
-```ts Before (Cloudflare 1.0)
+```ts 1.0
 import { DurableObject } from "cloudflare:workers"
 
 interface Env {
@@ -166,7 +166,7 @@ export default {
 } satisfies ExportedHandler<Env>
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox } from "@superserve/sdk"
 
 const sbx = await Sandbox.create({
@@ -190,8 +190,10 @@ const url = await sbx.getSignedPreviewUrl(3000) // opens in a browser
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
+</CodeGroup>
 
-```python After (Superserve, Python)
+<CodeGroup>
+```python Superserve
 from superserve import Sandbox
 
 sbx = Sandbox.create(
