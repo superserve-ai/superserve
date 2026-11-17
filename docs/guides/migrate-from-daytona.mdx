@@ -241,6 +241,9 @@ for await (const src of daytona.list({ states: [SandboxState.STARTED] })) {
     // Remove the temporary archive from the source, also after a failure.
     await src.process
       .executeCommand("rm -f /tmp/state.tgz")
+      .then((rm) => {
+        if (rm.exitCode !== 0) throw new Error(rm.result)
+      })
       .catch(() => console.error(`${src.id}: remove /tmp/state.tgz by hand`))
   }
 
@@ -297,7 +300,9 @@ for src in daytona.list(ListSandboxesQuery(states=[SandboxState.STARTED])):
     finally:
         # Remove the temporary archive from the source, also after a failure.
         try:
-            src.process.exec("rm -f /tmp/state.tgz")
+            rm = src.process.exec("rm -f /tmp/state.tgz")
+            if rm.exit_code != 0:
+                raise RuntimeError(rm.result)
         except Exception:
             print(f"{src.id}: remove /tmp/state.tgz by hand", file=sys.stderr)
 

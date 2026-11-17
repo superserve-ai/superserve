@@ -233,7 +233,8 @@ for src in modal.Sandbox.list(app_id=app.app_id):
     finally:
         # Remove the temporary archive from the source, also after a failure.
         try:
-            src.exec("rm", "-f", "/tmp/state.tgz").wait()
+            if src.exec("rm", "-f", "/tmp/state.tgz").wait() != 0:
+                raise RuntimeError("rm failed")
         except Exception:
             print(f"{sid}: remove /tmp/state.tgz by hand", file=sys.stderr)
 
@@ -294,7 +295,9 @@ for await (const src of modal.sandboxes.list({ appId: app.appId })) {
     // Remove the temporary archive from the source, also after a failure.
     await src
       .exec(["rm", "-f", "/tmp/state.tgz"])
-      .then((rm) => rm.wait())
+      .then(async (rm) => {
+        if ((await rm.wait()) !== 0) throw new Error("rm failed")
+      })
       .catch(() => console.error(`${sid}: remove /tmp/state.tgz by hand`))
   }
 
