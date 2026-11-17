@@ -33,3 +33,11 @@ export function replacementTeamName(name: string, operationId: string): string {
   }
   return prefix + suffix
 }
+
+export function isReplacementTeamName(name: string, email: string): boolean {
+  const match = name.match(/ \(([0-9a-f]{8})\)$/)
+  return (
+    !!match &&
+    name.toLowerCase() === replacementTeamName(email, match[1]).toLowerCase()
+  )
+}

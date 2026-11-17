@@ -1,6 +1,7 @@
 import { expect, it } from "vitest"
 
 import {
+  isReplacementTeamName,
   replacementTeamName,
   replacementTeamOperationId,
 } from "./replacement-team"
@@ -64,3 +65,41 @@ it("preserves mixed multibyte code points up to the exact byte limit", () => {
   expect(name).toBe(`${prefix} (11111111)`)
   expect(Buffer.byteLength(name, "utf8")).toBe(256)
 })
+
+it.each(["user@example.com", "USER@EXAMPLE.COM"])(
+  "recognizes a replacement name for %s regardless of email case",
+  (email) => {
+    const operationId = replacementTeamOperationId(userId, removedTeamId)
+    const name = replacementTeamName("User@Example.com", operationId)
+
+    expect(isReplacementTeamName(name, email)).toBe(true)
+  },
+)
+
+it("recognizes a truncated replacement name for a long multibyte email", () => {
+  const email = `${"界".repeat(100)}@example.com`
+  const name = replacementTeamName(email, userId)
+
+  expect(isReplacementTeamName(name, email)).toBe(true)
+})
+
+it("rejects the plain email", () => {
+  expect(isReplacementTeamName("user@example.com", "user@example.com")).toBe(
+    false,
+  )
+})
+
+it("rejects another email's replacement name", () => {
+  const name = replacementTeamName("other@example.com", userId)
+
+  expect(isReplacementTeamName(name, "user@example.com")).toBe(false)
+})
+
+it.each(["1234567g", "1234567", "123456789", "ABCDEF12"])(
+  "rejects the invalid suffix %s",
+  (suffix) => {
+    expect(
+      isReplacementTeamName(`user@example.com (${suffix})`, "user@example.com"),
+    ).toBe(false)
+  },
+)
