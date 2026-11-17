@@ -14,6 +14,7 @@ import {
   recoverPromotionTeam,
   preparePromotionTeam,
   completePromotionTeam,
+  PromotionEvidenceError,
   type PreparedPromotionTeam,
 } from "@/lib/api/promotion-device-evidence"
 import {
@@ -371,10 +372,11 @@ async function followRemovedAccountTeams(
       throw new Error(
         `Unable to check removed team membership: ${error.message}`,
       )
-    // Missing rows can be a committed creation whose membership writes need retrying.
+    // Missing rows can need retrying; active rows still grant access. Existing
+    // inactive or invited rows must stay untouched while we create a replacement.
     if (
       !memberships?.length ||
-      memberships.some((membership) => membership.status !== "inactive")
+      memberships.some((membership) => membership.status === "active")
     )
       break
     if (hops === 10)
@@ -444,12 +446,26 @@ async function provisionTeamFor(
       additionalTeam:
         !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
     }
-    prepared = enterpriseAuthority
-      ? await preparePromotionTeamForEnterprise(
-          preparation,
-          enterpriseAuthority,
-        )
-      : await preparePromotionTeam(preparation)
+    try {
+      prepared = enterpriseAuthority
+        ? await preparePromotionTeamForEnterprise(
+            preparation,
+            enterpriseAuthority,
+          )
+        : await preparePromotionTeam(preparation)
+    } catch (error) {
+      if (
+        operationId !== undefined ||
+        enterpriseAuthority ||
+        locator.operationId === userId ||
+        !(error instanceof PromotionEvidenceError) ||
+        error.code !== "creation_conflict"
+      )
+        throw error
+      // A concurrent replacement can bind this locator to its random name first.
+      prepared = await recoverPromotionTeam(locator)
+      if (!prepared) throw error
+    }
   }
   if (prepared.authorityUnavailable) {
     // Repair only the regional FK target. The persisted no-credit decision

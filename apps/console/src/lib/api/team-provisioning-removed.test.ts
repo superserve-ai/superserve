@@ -1,9 +1,10 @@
 import type { User } from "@supabase/supabase-js"
 import { beforeEach, expect, it, vi } from "vitest"
 
-import type {
-  PreparedPromotionTeam,
-  PromotionTeamPreparation,
+import {
+  PromotionEvidenceError,
+  type PreparedPromotionTeam,
+  type PromotionTeamPreparation,
 } from "./promotion-device-evidence"
 import {
   replacementTeamName,
@@ -19,14 +20,19 @@ const mocks = vi.hoisted(() => ({
   recoverEnterprise: vi.fn(),
   completeEnterprise: vi.fn(),
 }))
-vi.mock("node:crypto", async (importOriginal) => ({
-  ...(await importOriginal<typeof import("node:crypto")>()),
-  randomUUID: mocks.randomUUID,
-}))
+vi.mock("node:crypto", async (importOriginal) => {
+  const original = await importOriginal<typeof import("node:crypto")>()
+  return {
+    ...original,
+    default: { ...original, randomUUID: mocks.randomUUID },
+    randomUUID: mocks.randomUUID,
+  }
+})
 vi.mock("./promotion-publication", () => ({
   publishAccountPromotion: mocks.publish,
 }))
-vi.mock("./promotion-device-evidence", () => ({
+vi.mock("./promotion-device-evidence", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("./promotion-device-evidence")>()),
   recoverPromotionTeam: mocks.recover,
   preparePromotionTeam: mocks.prepare,
   completePromotionTeam: mocks.complete,
@@ -208,6 +214,18 @@ beforeEach(() => {
       creations.get(operationId) ?? null,
   )
   mocks.prepare.mockImplementation(async (input: PromotionTeamPreparation) => {
+    const existing = creations.get(input.operationId)
+    if (existing) {
+      if (
+        existing.userId !== input.userId ||
+        existing.name !== input.name ||
+        existing.region !== input.region ||
+        existing.authorityUnavailable !== input.authorityUnavailable ||
+        !!existing.additionalTeam !== !!input.additionalTeam
+      )
+        throw new PromotionEvidenceError("creation_conflict", 409)
+      return existing
+    }
     const teamId =
       mocks.prepare.mock.calls.length === 1 ? replacementTeamId : thirdTeamId
     const prepared: PreparedPromotionTeam = {
@@ -330,6 +348,102 @@ it("recovers the same replacement on retry without preparing or publishing again
   )
 })
 
+it("concurrent replacements use the first prepared name and create only one team", async () => {
+  seedCreation()
+  seedRemovedTeam()
+  const originalRows = structuredClone([...rows])
+  const operationId = replacementTeamOperationId(user.id, originalTeamId)
+  mocks.randomUUID
+    .mockReturnValueOnce("abcdef12-3456-4789-abcd-0123456789ab")
+    .mockReturnValueOnce("fedcba98-7654-4321-abcd-0123456789ab")
+  let initialRecoveries = 0
+  let releaseRecoveries!: () => void
+  const bothRecovered = new Promise<void>((resolve) => {
+    releaseRecoveries = resolve
+  })
+  mocks.recover.mockImplementation(async (locator: { operationId: string }) => {
+    const existing = creations.get(locator.operationId) ?? null
+    if (locator.operationId === operationId && !existing) {
+      initialRecoveries += 1
+      if (initialRecoveries === 2) releaseRecoveries()
+      await bothRecovered
+    }
+    return existing
+  })
+
+  const teams = await Promise.all([create(), create()])
+  const prepared = creations.get(operationId)!
+
+  expect(initialRecoveries).toBe(2)
+  expect(mocks.prepare).toHaveBeenCalledTimes(2)
+  expect(mocks.prepare.mock.calls.map(([input]) => input.name)).toEqual([
+    replacementTeamName(user.email!, "abcdef12"),
+    replacementTeamName(user.email!, "fedcba98"),
+  ])
+  expect(mocks.recover).toHaveBeenLastCalledWith({
+    userId: user.id,
+    region: "use",
+    operationId,
+  })
+  expect(teams).toEqual([
+    { id: replacementTeamId, name: prepared.name, region: "use" },
+    { id: replacementTeamId, name: prepared.name, region: "use" },
+  ])
+  expect(prepared.name).toBe(mocks.prepare.mock.calls[0][0].name)
+  expect(creations.size).toBe(2)
+  expect(mocks.complete).toHaveBeenCalledTimes(2)
+  for (const [table, previous] of originalRows) {
+    expect(
+      rows.get(table)?.filter((row) => row.team_id === originalTeamId),
+    ).toEqual(previous)
+    expect(
+      rows.get(table)?.filter((row) => row.team_id !== originalTeamId),
+    ).toEqual([expect.objectContaining({ team_id: replacementTeamId })])
+  }
+})
+
+it.each([
+  new PromotionEvidenceError("creation_conflict", 409),
+  new PromotionEvidenceError("team_name_conflict", 409),
+  new Error("preparation failed"),
+])(
+  "preserves replacement preparation errors without a stored creation: %s",
+  async (error) => {
+    seedCreation()
+    seedRemovedTeam()
+    mocks.prepare.mockRejectedValue(error)
+
+    await expect(create()).rejects.toBe(error)
+
+    expect(mocks.recover).toHaveBeenCalledTimes(
+      error instanceof PromotionEvidenceError &&
+        error.code === "creation_conflict"
+        ? 3
+        : 2,
+    )
+    expect(mocks.complete).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
+  },
+)
+
+it.each([undefined, explicitOperationId])(
+  "does not recover preparation conflicts for the original locator %s",
+  async (operationId) => {
+    const error = new PromotionEvidenceError("creation_conflict", 409)
+    mocks.prepare.mockRejectedValue(error)
+
+    await expect(create(operationId)).rejects.toBe(error)
+
+    expect(mocks.recover).toHaveBeenCalledExactlyOnceWith({
+      userId: user.id,
+      region: "use",
+      operationId: operationId ?? user.id,
+    })
+    expect(mocks.complete).not.toHaveBeenCalled()
+    expect(writes).toEqual([])
+  },
+)
+
 it("follows the chain when the user is later removed from the replacement", async () => {
   seedCreation()
   seedRemovedTeam()
@@ -378,79 +492,114 @@ it("keeps the user id locator and given name for a new user's initial creation",
   expect(mocks.recover).toHaveBeenCalledTimes(1)
 })
 
-it.each(["active", "missing", "inactive and active"])(
-  "finishes the original creation with %s membership rows",
-  async (status) => {
+it.each([
+  "active",
+  "missing",
+  "inactive and active",
+  "invited and active",
+  "inactive and invited and active",
+])("finishes the original creation with %s membership rows", async (status) => {
+  seedCreation()
+  if (status !== "missing") {
+    rows.set("team_memberships", [
+      {
+        id: originalTeamId,
+        team_id: originalTeamId,
+        user_id: user.id,
+        status: "active",
+      },
+      ...(status.includes("inactive")
+        ? [
+            {
+              id: "old-membership",
+              team_id: originalTeamId,
+              user_id: user.id,
+              status: "inactive",
+            },
+          ]
+        : []),
+      ...(status.includes("invited")
+        ? [
+            {
+              id: "invited-membership",
+              team_id: originalTeamId,
+              user_id: user.id,
+              status: "invited",
+            },
+          ]
+        : []),
+    ])
+  }
+
+  await expect(create()).resolves.toEqual({
+    id: originalTeamId,
+    name: user.email,
+    region: "use",
+  })
+
+  expect(mocks.recover).toHaveBeenCalledTimes(1)
+  expect(mocks.prepare).not.toHaveBeenCalled()
+  expect(mocks.publish).not.toHaveBeenCalled()
+  expect(rows.get("team_memberships")).toContainEqual({
+    id: originalTeamId,
+    team_id: originalTeamId,
+    user_id: user.id,
+    status: "active",
+  })
+})
+
+it.each(["invited", "inactive and invited"])(
+  "replaces an automatic team with %s membership rows",
+  async (scenario) => {
     seedCreation()
-    if (status !== "missing") {
-      rows.set("team_memberships", [
-        {
-          id: originalTeamId,
-          team_id: originalTeamId,
-          user_id: user.id,
-          status: "active",
-        },
-        ...(status === "inactive and active"
-          ? [
-              {
-                id: "old-membership",
-                team_id: originalTeamId,
-                user_id: user.id,
-                status: "inactive",
-              },
-            ]
-          : []),
-      ])
-    }
+    seedRemovedTeam()
+    const memberships = rows.get("team_memberships")!
+    memberships[0].status = "invited"
+    if (scenario === "inactive and invited")
+      memberships.push({
+        id: "old-membership",
+        team_id: originalTeamId,
+        user_id: user.id,
+        status: "inactive",
+      })
+    const previousRows = structuredClone([...rows])
 
     await expect(create()).resolves.toEqual({
-      id: originalTeamId,
-      name: user.email,
+      id: replacementTeamId,
+      name: replacementTeamName(user.email!, "abcdef12"),
       region: "use",
     })
 
-    expect(mocks.recover).toHaveBeenCalledTimes(1)
-    expect(mocks.prepare).not.toHaveBeenCalled()
-    expect(mocks.publish).not.toHaveBeenCalled()
-    expect(rows.get("team_memberships")).toContainEqual({
-      id: originalTeamId,
-      team_id: originalTeamId,
-      user_id: user.id,
-      status: "active",
-    })
-  },
-)
-
-it.each(["invited", "inactive and invited", "explicit"])(
-  "keeps the existing membership error for %s membership",
-  async (scenario) => {
-    const operationId =
-      scenario === "explicit" ? explicitOperationId : undefined
-    seedCreation(originalTeamId, operationId ?? user.id)
-    seedRemovedTeam()
-    if (scenario !== "explicit") {
-      const memberships = rows.get("team_memberships")!
-      memberships[0].status = "invited"
-      if (scenario === "inactive and invited")
-        memberships.push({
-          id: "old-membership",
-          team_id: originalTeamId,
-          user_id: user.id,
-          status: "inactive",
-        })
-    }
-    const previousRows = structuredClone([...rows])
-
-    await expect(create(operationId)).rejects.toThrow(
-      "Unable to verify existing active membership",
+    expect(mocks.prepare).toHaveBeenCalledExactlyOnceWith(
+      expect.objectContaining({
+        operationId: replacementTeamOperationId(user.id, originalTeamId),
+      }),
     )
-
-    expect(mocks.recover).toHaveBeenCalledTimes(1)
-    expect(mocks.prepare).not.toHaveBeenCalled()
-    expect(mocks.publish).not.toHaveBeenCalled()
-    expect([...rows]).toEqual(previousRows)
+    for (const [table, previous] of previousRows) {
+      expect(
+        rows.get(table)?.filter((row) => row.team_id === originalTeamId),
+      ).toEqual(previous)
+    }
+    expect(writes.every(({ row }) => row.team_id === replacementTeamId)).toBe(
+      true,
+    )
   },
 )
+
+it("keeps the existing membership error for an explicit creation", async () => {
+  seedCreation(originalTeamId, explicitOperationId)
+  seedRemovedTeam()
+  const previousRows = structuredClone([...rows])
+
+  await expect(create(explicitOperationId)).rejects.toThrow(
+    "Unable to verify existing active membership",
+  )
+
+  expect(mocks.recover).toHaveBeenCalledTimes(1)
+  expect(mocks.prepare).not.toHaveBeenCalled()
+  expect(mocks.publish).not.toHaveBeenCalled()
+  expect([...rows]).toEqual(previousRows)
+})
 
 it.each(["original", "replacement"])(
   "fails closed when the %s membership read fails",
