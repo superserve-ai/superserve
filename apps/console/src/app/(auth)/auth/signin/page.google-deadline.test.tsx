@@ -1,6 +1,8 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { AUTH_MESSAGES } from "@/lib/auth/sign-in-messages"
+
 // The sign-in page with the real Google sign-up check: only the boundaries
 // (capture, reCAPTCHA, server actions, Supabase) are mocked, so these tests
 // show how long a stalled step can hold back Google OAuth.
@@ -168,7 +170,9 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
       expect(callback.searchParams.get("google_signin_intent")).toBe(
         "signin-origin",
       )
-      expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(AUTH_MESSAGES.googleSignInFailed),
+      ).not.toBeInTheDocument()
     },
   )
 
@@ -369,7 +373,9 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
     render(<SignInPage />)
     await clickGoogle()
     await act(() => vi.advanceTimersByTimeAsync(0))
-    expect(screen.getByText(/Error signing in/)).toBeInTheDocument()
+    expect(
+      screen.getByText(AUTH_MESSAGES.googleSignInFailed),
+    ).toBeInTheDocument()
     expect(mocks.signInWithOAuth).not.toHaveBeenCalled()
   })
 
@@ -401,7 +407,9 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
     await act(() =>
       vi.advanceTimersByTimeAsync(GOOGLE_SIGNUP_PROOF_DEADLINE_MS),
     )
-    expect(screen.getByText(/Error signing in/)).toBeInTheDocument()
+    expect(
+      screen.getByText(AUTH_MESSAGES.googleSignInFailed),
+    ).toBeInTheDocument()
     expect(mocks.signInWithOAuth).toHaveBeenCalledTimes(1)
 
     await clickGoogle()
@@ -414,6 +422,8 @@ describe("SignInPage Google sign-in with a stalled sign-up check", () => {
       mocks.signInWithOAuth.mock.calls[1][0].options.redirectTo,
     )
     expect(retry.searchParams.has("signup_attempt_id")).toBe(false)
-    expect(screen.queryByText(/Error signing in/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(AUTH_MESSAGES.googleSignInFailed),
+    ).not.toBeInTheDocument()
   })
 })
