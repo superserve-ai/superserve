@@ -192,7 +192,8 @@
             "pages": [
               "guides/migrate-from-daytona",
               "guides/migrate-from-e2b",
-              "guides/migrate-from-modal"
+              "guides/migrate-from-modal",
+              "guides/migrate-from-vercel-sandbox"
             ]
           },
           {
