@@ -1,0 +1,356 @@
+---
+title: "Migrate from Vercel Sandbox"
+sidebarTitle: From Vercel Sandbox
+description: Move your sandboxes, snapshots and agent code from Vercel Sandbox to Superserve. Includes an API mapping, before and after code, a migration script and a prompt for coding agents.
+icon: "arrow-right-arrow-left"
+---
+
+import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
+
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Vercel Sandbox today, most code moves call by call.
+
+## How Superserve compares
+
+<BenchmarkComparison
+  compare="vercel"
+  compareName="Vercel"
+  sourceUrl="https://www.computesdk.com/benchmarks/sandboxes/compare/superserve-vs-vercel"
+/>
+
+## Ready to switch
+
+Pick how you want to migrate. Do it yourself step by step, or give the prompt to a coding agent and let it change your code.
+
+<Tabs>
+<Tab title="Human">
+
+<Info>
+**Before you start**
+
+- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
+- **Keep Vercel Sandbox installed.** You remove it only after the cutover, in step 6.
+</Info>
+
+<Steps>
+<Step title="Install the SDK and set your API key">
+
+Install the Superserve SDK next to `@vercel/sandbox`. Set `SUPERSERVE_API_KEY` in your environment and CI secrets.
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+</Step>
+<Step title="Map the API">
+
+The main changes: every sandbox needs a `name` and you keep its `id`, a command is one shell string instead of a command and an argument list, times are in seconds, and a timeout pauses the sandbox instead of stopping it. The Vercel column shows `@vercel/sandbox` calls.
+
+<Tabs>
+<Tab title="TypeScript">
+
+| Task | Vercel Sandbox | Superserve |
+| --- | --- | --- |
+| Create | `Sandbox.create({ name, image, timeout, env, tags })` | `Sandbox.create({ name, fromTemplate, timeoutSeconds, envVars, metadata })`. `name` is required. Keep `sbx.id` to reconnect. |
+| Image | `image: "my-repo:v1"` or `runtime: "node24"` | `Template.create({ name, from: img, steps: [{ run }] })`, built once. Then `fromTemplate: name`. The default `superserve/base` template has Node.js, Python and Git. |
+| Source code | `source: { type: "git", url, depth, revision }` | `sbx.commands.run("git clone --depth 1 --branch <revision> <url> /home/user/app")` for a branch or tag. For a commit, run `git fetch --depth 1 origin <sha> && git checkout FETCH_HEAD` in the clone. Or clone in a template step. |
+| Reconnect | `Sandbox.get({ name })` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `sandbox.runCommand({ cmd, args, cwd, env })`, then `await result.stdout()` | `sbx.commands.run(cmd, { cwd, env, timeoutMs })` returns `exitCode`, `stdout` and `stderr`. Without `timeoutMs`, the call waits 30 seconds. |
+| Run as root | `runCommand({ cmd, args, sudo: true })` | Commands run as `root` by default. Pass `user` to run as another user. |
+| Background process | `runCommand({ cmd, args, detached: true })`, then `wait()` / `kill()` | `sbx.commands.spawn(cmd)`, then `wait()` / `kill()` |
+| Files | `sandbox.writeFiles([{ path, content }])` / `readFileToBuffer({ path })` | `sbx.files.write(path, data)` / `read(path)`, one file per call |
+| Snapshot | `sandbox.snapshot()`, then `Sandbox.create({ source: { type: "snapshot", snapshotId } })`. Stops the sandbox. | `sbx.snapshot()`, then `Sandbox.create({ name, fromSnapshot })`. Saves memory and disk; the sandbox keeps running. |
+| Fork | `Sandbox.fork({ sourceSandbox })` | `sbx.snapshot()`, then `Sandbox.create({ name, fromSnapshot })`. Forks keep running processes. |
+| Stop and resume | `sandbox.stop()`, then `Sandbox.get({ name })`. Running processes end. | `sbx.pause()` / `sbx.resume()`. Pause keeps memory and running processes. |
+| Timeout | `timeout` in milliseconds, `extendTimeout(ms)`. Stops the sandbox. | `timeoutSeconds`, `sbx.update({ timeoutSeconds })`. Pauses the sandbox. Also `idleTimeoutSeconds`. |
+| Resources | `resources: { vcpus }` | `vcpu` and `memoryMib` on `Template.create` |
+| Network rules | `networkPolicy: { allow: [...] }` or `"deny-all"` | `network: { allowOut: [...hosts, "1.1.1.1/32", "8.8.8.8/32"], denyOut: ["0.0.0.0/0"] }`. Keep the two DNS resolvers in `allowOut`, or the allowed hosts do not resolve. See [Network rules](/sandbox/networking). |
+| Public URL | `ports: [3000]` on create, then `sandbox.domain(3000)` | `await sbx.publishPreviewPort(3000)`, then `sbx.getPreviewUrl(3000)`. Publish a port at any time. Pass `{ access: "private" }` to require a preview token. See [Preview URLs](/sandbox/preview-urls). |
+| List and delete | `Sandbox.list({ tags })` / `sandbox.delete()` | `Sandbox.list({ metadata })` / `sbx.kill()` |
+
+</Tab>
+<Tab title="Python">
+
+| Task | Vercel Sandbox | Superserve |
+| --- | --- | --- |
+| Create | `Sandbox.create({ name, image, timeout, env, tags })` | `Sandbox.create(name=, from_template=, timeout_seconds=, env_vars=, metadata=)`. `name` is required. Keep `sbx.id` to reconnect. |
+| Image | `image: "my-repo:v1"` or `runtime: "node24"` | `Template.create(name=, from_=img, steps=[RunStep(run=...)])`, built once. Then `from_template=name`. The default `superserve/base` template has Node.js, Python and Git. |
+| Source code | `source: { type: "git", url, depth, revision }` | `sbx.commands.run("git clone --depth 1 --branch <revision> <url> /home/user/app")` for a branch or tag. For a commit, run `git fetch --depth 1 origin <sha> && git checkout FETCH_HEAD` in the clone. Or clone in a template step. |
+| Reconnect | `Sandbox.get({ name })` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
+| Run a command | `sandbox.runCommand({ cmd, args, cwd, env })`, then `await result.stdout()` | `sbx.commands.run(cmd, cwd=, env=, timeout_seconds=)` returns `exit_code`, `stdout` and `stderr`. Without `timeout_seconds`, the call waits 30 seconds. |
+| Run as root | `runCommand({ cmd, args, sudo: true })` | Commands run as `root` by default. Pass `user=` to run as another user. |
+| Background process | `runCommand({ cmd, args, detached: true })`, then `wait()` / `kill()` | `await sbx.commands.spawn(cmd)` on `AsyncSandbox`, then `wait()` / `kill()` |
+| Files | `sandbox.writeFiles([{ path, content }])` / `readFileToBuffer({ path })` | `sbx.files.write(path, data)` / `read(path)`, one file per call |
+| Snapshot | `sandbox.snapshot()`, then `Sandbox.create({ source: { type: "snapshot", snapshotId } })`. Stops the sandbox. | `sbx.snapshot()`, then `Sandbox.create(name=, from_snapshot=)`. Saves memory and disk; the sandbox keeps running. |
+| Fork | `Sandbox.fork({ sourceSandbox })` | `sbx.snapshot()`, then `Sandbox.create(name=, from_snapshot=)`. Forks keep running processes. |
+| Stop and resume | `sandbox.stop()`, then `Sandbox.get({ name })`. Running processes end. | `sbx.pause()` / `sbx.resume()`. Pause keeps memory and running processes. |
+| Timeout | `timeout` in milliseconds, `extendTimeout(ms)`. Stops the sandbox. | `timeout_seconds`, `sbx.update(timeout_seconds=)`. Pauses the sandbox. Also `idle_timeout_seconds`. |
+| Resources | `resources: { vcpus }` | `vcpu=` and `memory_mib=` on `Template.create` |
+| Network rules | `networkPolicy: { allow: [...] }` or `"deny-all"` | `network=NetworkConfig(allow_out=[*hosts, "1.1.1.1/32", "8.8.8.8/32"], deny_out=["0.0.0.0/0"])`. Keep the two DNS resolvers in `allow_out`, or the allowed hosts do not resolve. See [Network rules](/sandbox/networking). |
+| Public URL | `ports: [3000]` on create, then `sandbox.domain(3000)` | `sbx.publish_preview_port(3000)`, then `sbx.get_preview_url(3000)`. Publish a port at any time. Pass `access="private"` to require a preview token. See [Preview URLs](/sandbox/preview-urls). |
+| List and delete | `Sandbox.list({ tags })` / `sandbox.delete()` | `Sandbox.list(metadata=)` / `sbx.kill()` |
+
+</Tab>
+</Tabs>
+
+To turn a Vercel image into a template, see [Create a template](/templates/create).
+
+</Step>
+<Step title="Update your code">
+
+Change the import, add a `name`, convert milliseconds to seconds, and join each command and its arguments into one shell string. Shell-escape each argument, so that the shell does not expand `$VAR`, `*` or quotes. Set a command timeout for long commands such as installs and tests.
+
+<CodeGroup>
+```ts Vercel Sandbox
+import { Sandbox } from "@vercel/sandbox"
+
+const sandbox = await Sandbox.create({
+  source: { type: "git", url: "https://github.com/your-org/your-app.git" },
+  ports: [3000],
+  timeout: 600_000,
+  env: { NODE_ENV: "test" },
+  tags: { team: "infra" },
+})
+await sandbox.runCommand("npm", ["install"])
+const result = await sandbox.runCommand("npm", ["test"])
+console.log(await result.stdout())
+const url = sandbox.domain(3000)
+const snap = await sandbox.snapshot()
+const fork = await Sandbox.create({
+  source: { type: "snapshot", snapshotId: snap.snapshotId },
+})
+```
+
+```ts Superserve
+import { Sandbox } from "@superserve/sdk"
+
+const sbx = await Sandbox.create({
+  name: "ci-run",
+  fromTemplate: "superserve/base",
+  timeoutSeconds: 600,
+  envVars: { NODE_ENV: "test" },
+  metadata: { team: "infra" },
+})
+await sbx.commands.run(
+  "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+  { timeoutMs: 120_000 },
+)
+const result = await sbx.commands.run("npm install && npm test", {
+  cwd: "/home/user/app",
+  timeoutMs: 300_000,
+})
+console.log(result.stdout)
+await sbx.publishPreviewPort(3000)
+const url = sbx.getPreviewUrl(3000)
+const snap = await sbx.snapshot()
+const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
+```
+</CodeGroup>
+
+<CodeGroup>
+```python Vercel Sandbox
+from vercel.sandbox import sync as sandbox
+
+box = sandbox.create_sandbox(
+    source=sandbox.GitSource(url="https://github.com/your-org/your-app.git"),
+    ports=[3000],
+    execution_time_limit=600,
+    env={"NODE_ENV": "test"},
+    tags={"team": "infra"},
+    destroy=False,
+)
+box.run_command("npm", ["install"])
+result = box.run_command("npm", ["test"], capture_output=True)
+print(result.stdout.decode())
+url = next(route.url for route in box.routes if route.port == 3000)
+snap = box.snapshot()
+fork = sandbox.create_sandbox(
+    source=sandbox.SnapshotSource(snapshot_id=snap.id), destroy=False
+)
+```
+
+```python Superserve
+from superserve import Sandbox
+
+sbx = Sandbox.create(
+    name="ci-run",
+    from_template="superserve/base",
+    timeout_seconds=600,
+    env_vars={"NODE_ENV": "test"},
+    metadata={"team": "infra"},
+)
+sbx.commands.run(
+    "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+    timeout_seconds=120,
+)
+result = sbx.commands.run(
+    "npm install && npm test", cwd="/home/user/app", timeout_seconds=300
+)
+print(result.stdout)
+sbx.publish_preview_port(3000)
+url = sbx.get_preview_url(3000)
+snap = sbx.snapshot()
+fork = Sandbox.create(name="fork", from_snapshot=snap)
+```
+</CodeGroup>
+
+</Step>
+<Step title="Move existing sandboxes with the migration script">
+
+The script copies `/vercel/sandbox` from each running or persistent Vercel sandbox into `/home/user` in a new Superserve sandbox. It does not change or delete your Vercel sandboxes. Run it with Node.js and the Vercel credentials you use today (`VERCEL_OIDC_TOKEN`, or `VERCEL_TOKEN`, `VERCEL_TEAM_ID` and `VERCEL_PROJECT_ID`) and `SUPERSERVE_API_KEY` set.
+
+```ts migrate-from-vercel-sandbox.ts
+import { Sandbox } from "@superserve/sdk"
+import { Sandbox as Vercel } from "@vercel/sandbox"
+
+const SRC = "/vercel/sandbox" // directory to copy from each Vercel sandbox
+const DST = "/home/user" // directory to copy into in Superserve
+const TEMPLATE = "superserve/base" // or the template you built from your Vercel image
+const ARCHIVE = "/tmp/state.tgz"
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
+
+for await (const info of await Vercel.list()) {
+  // A stopped sandbox that is not persistent has no files to copy.
+  if (info.status !== "running" && !info.persistent) continue
+  const src = await Vercel.get({ name: info.name })
+  const tar = await src.runCommand("tar", ["czf", ARCHIVE, "-C", SRC, "."])
+  if (tar.exitCode !== 0) {
+    console.error(`${info.name}: archive failed: ${await tar.stderr()}`)
+    process.exitCode = 1
+    continue
+  }
+  const tgz = await src.readFileToBuffer({ path: ARCHIVE })
+  if (!tgz) {
+    console.error(`${info.name}: archive not found`)
+    process.exitCode = 1
+    continue
+  }
+
+  const dst = await Sandbox.create({
+    name: `from-vercel-${info.name}`,
+    fromTemplate: TEMPLATE,
+    metadata: { ...info.tags, migrated_from: info.name },
+  })
+  try {
+    await dst.files.write(ARCHIVE, tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(`tar xzf ${ARCHIVE} -C ${DST}`, {
+      timeoutMs: TIMEOUT_MS,
+    })
+    if (out.exitCode !== 0) throw new Error(out.stderr)
+  } catch (err) {
+    console.error(`${info.name}: copy failed: ${err}`)
+    process.exitCode = 1
+    // Delete the new sandbox so a failed copy does not keep running.
+    await dst.kill().catch((killErr) => {
+      console.error(`${info.name}: delete ${dst.id} manually: ${killErr}`)
+    })
+    continue
+  }
+  console.log(`${info.name} -> ${dst.id}`)
+}
+```
+
+The script uses `@vercel/sandbox`, so it runs in Node.js even if your app uses the Python SDK. Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS`. If a copy fails, the script deletes the new Superserve sandbox and moves on to the next one.
+
+The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
+
+</Step>
+<Step title="Verify and cut over">
+
+Run your test suite against Superserve. Check the sandbox list in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link). When the results match, send production traffic to Superserve.
+
+</Step>
+<Step title="Uninstall Vercel Sandbox">
+
+After the cutover, remove the `@vercel/sandbox` package. Delete the Vercel credentials from your environment and CI secrets if nothing else uses them.
+
+```bash
+npm uninstall @vercel/sandbox
+```
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="Agent">
+
+Paste this prompt into Claude Code, Codex, Cursor or another coding agent at the root of your repo. The agent changes the code and runs your tests. You review the diff.
+
+```text Migration prompt
+Migrate this repository from the Vercel Sandbox SDK (@vercel/sandbox) to the Superserve SDK.
+
+Reference: https://docs.superserve.ai/llms-full.txt (read it first).
+
+Before you start: ask me for a Superserve API key if SUPERSERVE_API_KEY is not set.
+I get it from the console (https://console.superserve.ai/api-keys/). Do not create a key yourself.
+
+1. Install @superserve/sdk (npm) or superserve (pip) next to @vercel/sandbox. Do not remove it.
+   Add SUPERSERVE_API_KEY to code, .env.example, and CI config.
+2. Find every import of "@vercel/sandbox". Apply this mapping:
+   - Sandbox.create({name, image, timeout, env, tags}) -> Sandbox.create({name, fromTemplate,
+     timeoutSeconds: timeout/1000, envVars: env, metadata: tags}). name is required: derive it
+     from context. Superserve reconnects by id, so store sbx.id where the code stored the name.
+     Sandbox.get({name}) -> Sandbox.connect(id).
+   - image / runtime -> a template built once with Template.create({name, from, steps}).
+     The default superserve/base template has Node.js, Python and Git.
+     resources.vcpus -> vcpu and memoryMib on the template.
+   - source: {type: "git", url, revision} -> commands.run("git clone --depth 1 <url> /home/user/app").
+     Keep the revision: add --branch <revision> for a branch or tag. For a commit, then run
+     "git fetch --depth 1 origin <sha> && git checkout FETCH_HEAD" in /home/user/app.
+   - runCommand(cmd, args) or runCommand({cmd, args, cwd, env}) -> commands.run(one shell string,
+     {cwd, env}). Shell-escape every argument (single-quote it, and escape any single quote
+     inside), so the shell does not expand $VAR, globs or quotes. await result.stdout() -> result.stdout.
+     Pass timeoutMs (timeout_seconds in Python) for commands that can take more than 30 seconds.
+     It does not throw on a nonzero exit code, so keep the exitCode checks.
+   - sudo: true -> remove it. Commands run as root. Use the user option for another user.
+   - runCommand({..., detached: true}) -> commands.spawn(cmd). Python: on AsyncSandbox.
+   - writeFiles([{path, content}]) -> one files.write(path, content) per file.
+     readFileToBuffer({path}) -> files.read(path). fs.readFile(path, "utf8") -> files.readText(path).
+   - snapshot() + Sandbox.create({source: {type: "snapshot", snapshotId}}) and
+     Sandbox.fork({sourceSandbox}) -> snapshot() + Sandbox.create({name, fromSnapshot}).
+     The Superserve sandbox keeps running after a snapshot.
+   - stop() -> pause(), and resume() to continue. delete() -> kill().
+     extendTimeout(ms) / update({timeout}) -> update({timeoutSeconds}). A timeout pauses the sandbox.
+   - networkPolicy {allow: [...]} -> network {allowOut: [...], denyOut: ["0.0.0.0/0"]}, plus
+     "1.1.1.1/32" and "8.8.8.8/32" in allowOut for DNS. "deny-all" -> network {denyOut: ["0.0.0.0/0"]}.
+   - ports on create + domain(port) -> publishPreviewPort(port), then getPreviewUrl(port).
+     Ports must be 1024 to 65535.
+   - Sandbox.list({tags}) -> Sandbox.list({metadata}).
+   - Paths under /vercel/sandbox -> /home/user.
+   - Python: use snake_case (from_template, timeout_seconds, env_vars, from_snapshot).
+3. Run the test suite. Fix failures. Do not delete Vercel Sandbox code paths you cannot test; list them.
+4. Report: files changed, tests run and their result, and anything left for a human.
+5. Only after I confirm the cutover: uninstall @vercel/sandbox and remove the Vercel credentials
+   if nothing else uses them.
+```
+
+### Give your agent the full reference
+
+| Resource | Use |
+| --- | --- |
+| [`docs.superserve.ai/llms-full.txt`](https://docs.superserve.ai/llms-full.txt) | The whole docs in one file for the agent context |
+| [`superserve` skill](https://github.com/superserve-ai/superserve/tree/main/skills/superserve) | Full SDK reference for Claude Code and other skill-aware agents |
+| [Superserve MCP server](/integrations/mcp) | Lets the agent create and test sandboxes while it migrates |
+
+The API mapping and the migration script are in the **Human** tab.
+
+</Tab>
+</Tabs>
+
+## Known differences
+
+| Area | What to do |
+| --- | --- |
+| Timeout behavior | Vercel stops a sandbox at its timeout, which ends its processes. Superserve pauses it, keeps memory and processes, and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
+| Commands | `commands.run` takes one shell string, not a command and an argument list. It returns `stdout` and `stderr` as strings and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. |
+| Sandbox ID | Superserve reconnects by `id`. Names label sandboxes and do not have to be unique. |
+| Home directory | Vercel sandboxes use `/vercel/sandbox`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
+| Preview ports | Publish a port with `publishPreviewPort` before you use its URL. A new port is public by default. Publish with `access: "private"` and send a preview token to keep a port protected. Serve on a port from 1024 to 65535. |
+| Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |

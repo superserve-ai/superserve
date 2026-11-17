@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Modal Sandboxes and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Modal today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -105,50 +105,7 @@ To turn a Modal image into a template, see [Create a template](/templates/create
 Build the template once. Then replace the app and image with a `name` and `from_template`, turn argument lists into shell strings, and convert timeouts to seconds.
 
 <CodeGroup>
-```python Before (Modal, Python)
-import modal
-
-app = modal.App.lookup("my-app", create_if_missing=True)
-image = modal.Image.debian_slim().pip_install("pytest")
-
-sb = modal.Sandbox.create(
-    app=app,
-    image=image,
-    timeout=600,
-    env={"MODE": "ci"},
-    encrypted_ports=[8000],
-)
-sb.exec("pytest").wait()
-url = sb.tunnels()[8000].url
-img = sb.snapshot_filesystem()
-fork = modal.Sandbox.create(app=app, image=img)
-```
-
-```python After (Superserve, Python)
-from superserve import RunStep, Sandbox, Template
-
-# Build once. Sandboxes then start from the template.
-tpl = Template.create(
-    name="my-tpl",
-    from_="python:3.11",
-    steps=[RunStep(run="pip install pytest")],
-)
-tpl.wait_until_ready()
-
-sbx = Sandbox.create(
-    name="ci-run",
-    from_template="my-tpl",
-    timeout_seconds=600,
-    env_vars={"MODE": "ci"},
-)
-sbx.commands.run("pytest")
-sbx.publish_preview_port(8000, access="public")  # a Modal tunnel is public
-url = sbx.get_preview_url(8000)
-snap = sbx.snapshot()
-fork = Sandbox.create(name="fork", from_snapshot=snap)
-```
-
-```ts Before (Modal)
+```ts Modal
 import { ModalClient } from "modal"
 
 const modal = new ModalClient()
@@ -168,7 +125,7 @@ const img = await sb.snapshotFilesystem()
 const fork = await modal.sandboxes.create(app, img)
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox, Template } from "@superserve/sdk"
 
 // Build once. Sandboxes then start from the template.
@@ -185,7 +142,8 @@ const sbx = await Sandbox.create({
   timeoutSeconds: 600,
   envVars: { MODE: "ci" },
 })
-await sbx.commands.run("pytest")
+// run() stops a command after 30 s by default
+await sbx.commands.run("pytest", { timeoutMs: 10 * 60 * 1000 })
 await sbx.publishPreviewPort(8000, { access: "public" }) // a Modal tunnel is public
 const url = sbx.getPreviewUrl(8000)
 const snap = await sbx.snapshot()
@@ -193,10 +151,56 @@ const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
 </CodeGroup>
 
+<CodeGroup>
+```python Modal
+import modal
+
+app = modal.App.lookup("my-app", create_if_missing=True)
+image = modal.Image.debian_slim().pip_install("pytest")
+
+sb = modal.Sandbox.create(
+    app=app,
+    image=image,
+    timeout=600,
+    env={"MODE": "ci"},
+    encrypted_ports=[8000],
+)
+sb.exec("pytest").wait()
+url = sb.tunnels()[8000].url
+img = sb.snapshot_filesystem()
+fork = modal.Sandbox.create(app=app, image=img)
+```
+
+```python Superserve
+from superserve import RunStep, Sandbox, Template
+
+# Build once. Sandboxes then start from the template.
+tpl = Template.create(
+    name="my-tpl",
+    from_="python:3.11",
+    steps=[RunStep(run="pip install pytest")],
+)
+tpl.wait_until_ready()
+
+sbx = Sandbox.create(
+    name="ci-run",
+    from_template="my-tpl",
+    timeout_seconds=600,
+    env_vars={"MODE": "ci"},
+)
+# run() stops a command after 30 s by default
+sbx.commands.run("pytest", timeout_seconds=10 * 60)
+sbx.publish_preview_port(8000, access="public")  # a Modal tunnel is public
+url = sbx.get_preview_url(8000)
+snap = sbx.snapshot()
+fork = Sandbox.create(name="fork", from_snapshot=snap)
+```
+</CodeGroup>
+
 </Step>
 <Step title="Move existing sandboxes with the migration script">
 
-The script copies a directory from each running sandbox of a Modal app into a new Superserve sandbox. It does not change or terminate your Modal sandboxes. Run it with your Modal credentials and `SUPERSERVE_API_KEY` set. Set `SRC` to the directory your sandboxes write to.
+The script copies a directory from each running sandbox of a Modal app into a new Superserve sandbox. It does not change or terminate your Modal sandboxes; it removes only the temporary archive. If a copy fails, the script deletes the new Superserve sandbox. Run it with your Modal credentials and `SUPERSERVE_API_KEY` set. Set `SRC` to the directory your sandboxes write to.
 
 <CodeGroup>
 ```python migrate_from_modal.py
@@ -209,31 +213,52 @@ APP = "my-app"  # the Modal app that owns your sandboxes
 SRC = "/root"  # directory to copy from each Modal sandbox
 DST = "/home/user"  # directory to copy into in Superserve
 TEMPLATE = "superserve/base"  # or the template you built from your Modal image
-TIMEOUT_SECONDS = 10 * 60  # limit for each upload and extract
+TIMEOUT_SECONDS = 10 * 60  # limit for each archive, upload and extract
 failed = False
 
 app = modal.App.lookup(APP)
 for src in modal.Sandbox.list(app_id=app.app_id):
     sid = src.object_id
-    tar = src.exec("tar", "czf", "/tmp/state.tgz", "-C", SRC, ".")
-    if tar.wait() != 0:
-        print(f"{sid}: archive failed: {tar.stderr.read()}", file=sys.stderr)
+    try:
+        tar = src.exec(
+            "tar", "czf", "/tmp/state.tgz", "-C", SRC, ".", timeout=TIMEOUT_SECONDS
+        )
+        if tar.wait() != 0:
+            raise RuntimeError(tar.stderr.read())
+        tgz = src.filesystem.read_bytes("/tmp/state.tgz")
+    except Exception as err:
+        print(f"{sid}: archive failed: {err}", file=sys.stderr)
         failed = True
         continue
-    tgz = src.filesystem.read_bytes("/tmp/state.tgz")
+    finally:
+        # Remove the temporary archive from the source, also after a failure.
+        try:
+            if src.exec("rm", "-f", "/tmp/state.tgz").wait() != 0:
+                raise RuntimeError("rm failed")
+        except Exception:
+            print(f"{sid}: remove /tmp/state.tgz by hand", file=sys.stderr)
 
     dst = Sandbox.create(
         name=f"from-modal-{sid}",
         from_template=TEMPLATE,
         metadata={**src.get_tags(), "migrated_from": sid},
     )
-    dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
-    out = dst.commands.run(
-        f"tar xzf /tmp/state.tgz -C {DST}", timeout_seconds=TIMEOUT_SECONDS
-    )
-    if out.exit_code != 0:
-        print(f"{sid}: copy failed: {out.stderr}", file=sys.stderr)
+    try:
+        dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
+        out = dst.commands.run(
+            f"tar xzf /tmp/state.tgz -C {DST} && rm /tmp/state.tgz",
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if out.exit_code != 0:
+            raise RuntimeError(out.stderr)
+    except Exception as err:
+        print(f"{sid}: copy failed: {err}", file=sys.stderr)
         failed = True
+        # Delete the new sandbox so a failed copy does not keep running.
+        try:
+            dst.kill()
+        except Exception:
+            print(f"{sid}: delete {dst.id} by hand", file=sys.stderr)
         continue
     print(f"{sid} -> {dst.id}")
 
@@ -248,32 +273,53 @@ const APP = "my-app" // the Modal app that owns your sandboxes
 const SRC = "/root" // directory to copy from each Modal sandbox
 const DST = "/home/user" // directory to copy into in Superserve
 const TEMPLATE = "superserve/base" // or the template you built from your Modal image
-const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each archive, upload and extract
 
 const modal = new ModalClient()
 const app = await modal.apps.fromName(APP)
 for await (const src of modal.sandboxes.list({ appId: app.appId })) {
   const sid = src.sandboxId
-  const tar = await src.exec(["tar", "czf", "/tmp/state.tgz", "-C", SRC, "."])
-  if ((await tar.wait()) !== 0) {
-    console.error(`${sid}: archive failed: ${await tar.stderr.readText()}`)
+  let tgz: Uint8Array
+  try {
+    const tar = await src.exec(
+      ["tar", "czf", "/tmp/state.tgz", "-C", SRC, "."],
+      { timeoutMs: TIMEOUT_MS },
+    )
+    if ((await tar.wait()) !== 0) throw new Error(await tar.stderr.readText())
+    tgz = await src.filesystem.readBytes("/tmp/state.tgz")
+  } catch (err) {
+    console.error(`${sid}: archive failed: ${err}`)
     process.exitCode = 1
     continue
+  } finally {
+    // Remove the temporary archive from the source, also after a failure.
+    await src
+      .exec(["rm", "-f", "/tmp/state.tgz"])
+      .then(async (rm) => {
+        if ((await rm.wait()) !== 0) throw new Error("rm failed")
+      })
+      .catch(() => console.error(`${sid}: remove /tmp/state.tgz by hand`))
   }
-  const tgz = await src.filesystem.readBytes("/tmp/state.tgz")
 
   const dst = await Sandbox.create({
     name: `from-modal-${sid}`,
     fromTemplate: TEMPLATE,
     metadata: { ...(await src.getTags()), migrated_from: sid },
   })
-  await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
-  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`, {
-    timeoutMs: TIMEOUT_MS,
-  })
-  if (out.exitCode !== 0) {
-    console.error(`${sid}: copy failed: ${out.stderr}`)
+  try {
+    await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(
+      `tar xzf /tmp/state.tgz -C ${DST} && rm /tmp/state.tgz`,
+      { timeoutMs: TIMEOUT_MS },
+    )
+    if (out.exitCode !== 0) throw new Error(out.stderr)
+  } catch (err) {
+    console.error(`${sid}: copy failed: ${err}`)
     process.exitCode = 1
+    // Delete the new sandbox so a failed copy does not keep running.
+    await dst
+      .kill()
+      .catch(() => console.error(`${sid}: delete ${dst.id} by hand`))
     continue
   }
   console.log(`${sid} -> ${dst.id}`)
@@ -281,7 +327,7 @@ for await (const src of modal.sandboxes.list({ appId: app.appId })) {
 ```
 </CodeGroup>
 
-Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_SECONDS` / `TIMEOUT_MS`.
+Each archive, upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_SECONDS` / `TIMEOUT_MS`.
 
 The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
 
@@ -333,6 +379,8 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
    - sb.exec("cmd", "arg") + wait() -> commands.run("cmd arg"). It takes one shell string:
      quote arguments (Python: shlex.join). It waits and returns exitCode, stdout, stderr.
      It does not throw on a nonzero exit code, so check exitCode where the code checked returncode.
+     Without timeoutMs, run() stops the command after 30 seconds. Modal exec has no default
+     timeout, so set timeoutMs on installs, builds, tests and any other command that can take longer.
    - sb.exec(...) without wait() -> commands.spawn(cmd). Python: on AsyncSandbox.
    - filesystem.write_bytes(data, path) / read_bytes(path) -> files.write(path, data) / files.read(path)
    - snapshot_filesystem() + Sandbox.create(image=img) -> snapshot() + Sandbox.create({name, fromSnapshot})
@@ -375,7 +423,7 @@ The API mapping and the migration script are in the **Human** tab.
 | Area | What to do |
 | --- | --- |
 | Timeout behavior | Modal terminates a sandbox at its timeout or idle timeout. Superserve pauses it and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
-| Commands | Modal `exec` takes an argument list. Superserve `commands.run` takes one shell string, waits for it, and does not throw on a nonzero exit code. Quote arguments and check `exitCode` / `exit_code`. |
+| Commands | Modal `exec` takes an argument list. Superserve `commands.run` takes one shell string, waits for it, and does not throw on a nonzero exit code. Quote arguments and check `exitCode` / `exit_code`. Modal `exec` has no default timeout, but `run()` stops a command after 30 seconds, so set `timeoutMs` / `timeout_seconds` on installs, builds and tests. |
 | Images | Build your image into a template once with `Template.create`. Every sandbox then starts from the built template. Set `vcpu` and `memory_mib` on the template. |
 | Grouping | Group sandboxes with `metadata` and filter `Sandbox.list` by it. |
 | Secrets | A Modal secret puts the real value in the environment. A Superserve secret keeps the real value out of the sandbox: code sees a stand-in value, and Superserve attaches the real value to outbound requests. Use `envVars` for values that are not credentials. |
