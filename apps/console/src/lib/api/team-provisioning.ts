@@ -12,11 +12,16 @@ import {
   recoverPromotionTeam,
   preparePromotionTeam,
   completePromotionTeam,
+  type PreparedPromotionTeam,
 } from "@/lib/api/promotion-device-evidence"
 import {
   publishAccountPromotion,
   publishEnterpriseAccountPromotion,
 } from "@/lib/api/promotion-publication"
+import {
+  replacementTeamName,
+  replacementTeamOperationId,
+} from "@/lib/api/replacement-team"
 import {
   listTeamMembershipsForUserDetailed,
   type MembershipDirectory,
@@ -346,6 +351,43 @@ export async function provisionHeldApplicantTeam(
   )
 }
 
+async function followRemovedAccountTeams(
+  locator: { userId: string; region: string; operationId: string },
+  prepared: PreparedPromotionTeam | null,
+  name: string,
+) {
+  const admin = cellFor(locator.region).createAdminClient()
+  const originalName = name
+  let hops = 0
+  while (prepared?.state === "completed") {
+    const { data: memberships, error } = await admin
+      .from("team_memberships")
+      .select("status")
+      .eq("user_id", locator.userId)
+      .eq("team_id", prepared.teamId)
+    if (error)
+      throw new Error(
+        `Unable to check removed team membership: ${error.message}`,
+      )
+    // Missing rows can be a committed creation whose membership writes need retrying.
+    if (
+      !memberships?.length ||
+      memberships.some((membership) => membership.status !== "inactive")
+    )
+      break
+    if (hops === 10)
+      throw new Error("Removed team replacement chain exceeds 10 hops")
+    hops += 1
+    locator = {
+      ...locator,
+      operationId: replacementTeamOperationId(locator.userId, prepared.teamId),
+    }
+    name = replacementTeamName(originalName, locator.operationId)
+    prepared = await recoverPromotionTeam(locator)
+  }
+  return { locator, prepared, name }
+}
+
 async function provisionTeamFor(
   region: string,
   user: User,
@@ -369,10 +411,17 @@ async function provisionTeamFor(
   // Explicit creations must retain a separate locator before calling this boundary.
   if (!operationId && region !== DEFAULT_REGION)
     throw new Error("Team creation requires its original operation identifier")
-  const locator = { userId, region, operationId: operationId ?? userId }
+  let locator = { userId, region, operationId: operationId ?? userId }
   let prepared = enterpriseAuthority
     ? await recoverPromotionTeamForEnterprise(locator, enterpriseAuthority)
     : await recoverPromotionTeam(locator)
+  if (operationId === undefined && !enterpriseAuthority) {
+    ;({ locator, prepared, name } = await followRemovedAccountTeams(
+      locator,
+      prepared,
+      name,
+    ))
+  }
   if (!prepared) {
     if (!operationId && !firstTeam)
       throw new Error("No initial team creation to recover")
