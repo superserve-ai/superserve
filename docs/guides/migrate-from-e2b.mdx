@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Superserve and E2B both run Firecracker microVMs and have a similar SDK, so most code moves with a find-and-replace.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on E2B today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -102,7 +102,7 @@ To rebuild an E2B template, see [Create a template](/templates/create).
 Change the import, add a `name`, and convert timeouts to seconds.
 
 <CodeGroup>
-```ts Before (E2B)
+```ts E2B
 import { Sandbox } from "e2b"
 
 const sbx = await Sandbox.create("my-tpl", {
@@ -114,7 +114,7 @@ const snap = await sbx.createSnapshot()
 const fork = await Sandbox.create(snap.snapshotId)
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox } from "@superserve/sdk"
 
 const sbx = await Sandbox.create({
@@ -123,12 +123,15 @@ const sbx = await Sandbox.create({
   timeoutSeconds: 600,
   envVars: { MODE: "ci" },
 })
-await sbx.commands.run("npm test")
+// run() stops a command after 30 s by default
+await sbx.commands.run("npm test", { timeoutMs: 10 * 60 * 1000 })
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
+</CodeGroup>
 
-```python Before (E2B, Python)
+<CodeGroup>
+```python E2B
 from e2b import Sandbox
 
 sbx = Sandbox.create("my-tpl", timeout=600, envs={"MODE": "ci"})
@@ -137,7 +140,7 @@ snap = sbx.create_snapshot()
 fork = Sandbox.create(snap.snapshot_id)
 ```
 
-```python After (Superserve, Python)
+```python Superserve
 from superserve import Sandbox
 
 sbx = Sandbox.create(
@@ -146,7 +149,8 @@ sbx = Sandbox.create(
     timeout_seconds=600,
     env_vars={"MODE": "ci"},
 )
-sbx.commands.run("pytest")
+# run() stops a command after 30 s by default
+sbx.commands.run("pytest", timeout_seconds=10 * 60)
 snap = sbx.snapshot()
 fork = Sandbox.create(name="fork", from_snapshot=snap)
 ```
@@ -155,7 +159,7 @@ fork = Sandbox.create(name="fork", from_snapshot=snap)
 </Step>
 <Step title="Move existing sandboxes with the migration script">
 
-The script copies `/home/user` from each E2B sandbox into a new Superserve sandbox. It does not change or delete your E2B sandboxes. Run it with both `E2B_API_KEY` and `SUPERSERVE_API_KEY` set.
+The script copies `/home/user` from each E2B sandbox into a new Superserve sandbox. It does not change or delete your E2B sandboxes; it removes only the temporary archive. If a copy fails, the script deletes the new Superserve sandbox. Run it with both `E2B_API_KEY` and `SUPERSERVE_API_KEY` set.
 
 <CodeGroup>
 ```ts migrate-from-e2b.ts
@@ -166,27 +170,53 @@ import { Sandbox } from "@superserve/sdk"
 // Sandboxes from other templates start from superserve/base.
 const TEMPLATES: Record<string, string> = { "my-e2b-template-id": "my-tpl" }
 const DIR = "/home/user"
-const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each archive, upload and extract
 
 const pages = E2B.list()
 while (pages.hasNext) {
   for (const info of await pages.nextItems()) {
     const src = await E2B.connect(info.sandboxId)
-    await src.commands.run(`tar czf /tmp/state.tgz -C ${DIR} .`)
-    const tgz = await src.files.read("/tmp/state.tgz", { format: "bytes" })
+    let tgz: Uint8Array
+    try {
+      // commands.run throws when tar exits with a nonzero code.
+      await src.commands.run(`tar czf /tmp/state.tgz -C ${DIR} .`, {
+        timeoutMs: TIMEOUT_MS,
+      })
+      tgz = await src.files.read("/tmp/state.tgz", { format: "bytes" })
+    } catch (err) {
+      console.error(`${info.sandboxId}: archive failed: ${err}`)
+      process.exitCode = 1
+      continue
+    } finally {
+      // Remove the temporary archive from the source, also after a failure.
+      await src.commands
+        .run("rm -f /tmp/state.tgz")
+        .catch(() =>
+          console.error(`${info.sandboxId}: remove /tmp/state.tgz by hand`),
+        )
+    }
 
     const dst = await Sandbox.create({
       name: `from-e2b-${info.sandboxId}`,
       fromTemplate: TEMPLATES[info.templateId] ?? "superserve/base",
       metadata: { ...info.metadata, migrated_from: info.sandboxId },
     })
-    await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
-    const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DIR}`, {
-      timeoutMs: TIMEOUT_MS,
-    })
-    if (out.exitCode !== 0) {
-      console.error(`${info.sandboxId}: copy failed: ${out.stderr}`)
+    try {
+      await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+      const out = await dst.commands.run(
+        `tar xzf /tmp/state.tgz -C ${DIR} && rm /tmp/state.tgz`,
+        { timeoutMs: TIMEOUT_MS },
+      )
+      if (out.exitCode !== 0) throw new Error(out.stderr)
+    } catch (err) {
+      console.error(`${info.sandboxId}: copy failed: ${err}`)
       process.exitCode = 1
+      // Delete the new sandbox so a failed copy does not keep running.
+      await dst
+        .kill()
+        .catch(() =>
+          console.error(`${info.sandboxId}: delete ${dst.id} by hand`),
+        )
       continue
     }
     console.log(`${info.sandboxId} -> ${dst.id}`)
@@ -204,28 +234,53 @@ from superserve import Sandbox
 # Sandboxes from other templates start from superserve/base.
 TEMPLATES = {"my-e2b-template-id": "my-tpl"}
 DIR = "/home/user"
-TIMEOUT_SECONDS = 10 * 60  # limit for each upload and extract
+TIMEOUT_SECONDS = 10 * 60  # limit for each archive, upload and extract
 failed = False
 
 pages = E2B.list()
 while pages.has_next:
     for info in pages.next_items():
         src = E2B.connect(info.sandbox_id)
-        src.commands.run(f"tar czf /tmp/state.tgz -C {DIR} .")
-        tgz = src.files.read("/tmp/state.tgz", format="bytes")
+        try:
+            # commands.run raises when tar exits with a nonzero code.
+            src.commands.run(
+                f"tar czf /tmp/state.tgz -C {DIR} .", timeout=TIMEOUT_SECONDS
+            )
+            tgz = src.files.read("/tmp/state.tgz", format="bytes")
+        except Exception as err:
+            print(f"{info.sandbox_id}: archive failed: {err}", file=sys.stderr)
+            failed = True
+            continue
+        finally:
+            # Remove the temporary archive from the source, also after a failure.
+            try:
+                src.commands.run("rm -f /tmp/state.tgz")
+            except Exception:
+                print(
+                    f"{info.sandbox_id}: remove /tmp/state.tgz by hand", file=sys.stderr
+                )
 
         dst = Sandbox.create(
             name=f"from-e2b-{info.sandbox_id}",
             from_template=TEMPLATES.get(info.template_id, "superserve/base"),
             metadata={**info.metadata, "migrated_from": info.sandbox_id},
         )
-        dst.files.write("/tmp/state.tgz", bytes(tgz), timeout=TIMEOUT_SECONDS)
-        out = dst.commands.run(
-            f"tar xzf /tmp/state.tgz -C {DIR}", timeout_seconds=TIMEOUT_SECONDS
-        )
-        if out.exit_code != 0:
-            print(f"{info.sandbox_id}: copy failed: {out.stderr}", file=sys.stderr)
+        try:
+            dst.files.write("/tmp/state.tgz", bytes(tgz), timeout=TIMEOUT_SECONDS)
+            out = dst.commands.run(
+                f"tar xzf /tmp/state.tgz -C {DIR} && rm /tmp/state.tgz",
+                timeout_seconds=TIMEOUT_SECONDS,
+            )
+            if out.exit_code != 0:
+                raise RuntimeError(out.stderr)
+        except Exception as err:
+            print(f"{info.sandbox_id}: copy failed: {err}", file=sys.stderr)
             failed = True
+            # Delete the new sandbox so a failed copy does not keep running.
+            try:
+                dst.kill()
+            except Exception:
+                print(f"{info.sandbox_id}: delete {dst.id} by hand", file=sys.stderr)
             continue
         print(f"{info.sandbox_id} -> {dst.id}")
 
@@ -233,7 +288,7 @@ sys.exit(1 if failed else 0)
 ```
 </CodeGroup>
 
-Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS` / `TIMEOUT_SECONDS`.
+Each archive, upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS` / `TIMEOUT_SECONDS`.
 
 <Warning>
 The script copies files only. Running processes and memory do not move. Start your services again in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to keep that state.
@@ -281,6 +336,8 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
    - Sandbox.create(tpl, {timeoutMs, envs}) -> Sandbox.create({name, fromTemplate: tpl,
      timeoutSeconds: timeoutMs/1000, envVars: envs}). name is required: derive it from context.
    - commands.run(cmd, {envs}) -> commands.run(cmd, {env})
+     Without timeoutMs, run() stops the command after 30 seconds. Set timeoutMs on installs,
+     builds, tests and any other command that can take longer.
    - commands.run(cmd, {background: true}) -> commands.spawn(cmd)
    - createSnapshot() + Sandbox.create(snapshotId) -> snapshot() + Sandbox.create({name, fromSnapshot})
    - setTimeout(ms) -> update({timeoutSeconds}). Note: Superserve pauses on timeout, E2B kills.
@@ -316,6 +373,7 @@ The API mapping and the migration script are in the **Human** tab.
 | Area | What to do |
 | --- | --- |
 | Timeout behavior | E2B kills a sandbox at its timeout by default. Superserve pauses it and stops compute billing. Call `kill()` or set `autoDeleteSeconds` if you want it gone. |
+| Commands | Without a timeout, `run()` stops a command after 30 seconds. Set `timeoutMs` / `timeout_seconds` on installs, builds and tests. |
 | Images | Build an image into a template with `Template.create` first, then create sandboxes from the template. |
 | Preview ports | New sandboxes route only published ports, and a new port is public by default. Call `publishPreviewPort` before you use a preview URL. Publish with `access: "private"` and send a preview token to keep a port protected. Ports 1024 to 65535 only: move a server on port 80 or 443 to a higher port. |
 | Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |
