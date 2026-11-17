@@ -1,5 +1,5 @@
 import { render, screen, fireEvent, waitFor } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { SIGNUP_RESTRICTED_MESSAGE } from "@/lib/auth/signup-restricted-message"
 
@@ -11,6 +11,8 @@ let reason: string | null = null
 let intent: string | null = null
 let next: string | null = null
 let account: string | null = null
+let errorCode: string | null = null
+let type: string | null = null
 vi.mock("next/navigation", () => ({
   useSearchParams: () =>
     new URLSearchParams({
@@ -18,6 +20,8 @@ vi.mock("next/navigation", () => ({
       ...(intent ? { signup_offer: intent } : {}),
       ...(next ? { next } : {}),
       ...(account ? { account } : {}),
+      ...(errorCode ? { error_code: errorCode } : {}),
+      ...(type ? { type } : {}),
     }),
 }))
 vi.mock("next/image", () => ({
@@ -27,10 +31,16 @@ vi.mock("next/link", () => ({
   default: ({
     children,
     href,
+    className,
   }: {
     children: React.ReactNode
     href: string
-  }) => <a href={href}>{children}</a>,
+    className?: string
+  }) => (
+    <a href={href} className={className}>
+      {children}
+    </a>
+  ),
 }))
 vi.mock("@superserve/ui", () => ({
   cn: (...classes: (string | undefined)[]) => classes.filter(Boolean).join(" "),
@@ -65,6 +75,165 @@ describe("auth-code-error page", () => {
     intent = null
     next = null
     account = null
+    errorCode = null
+    type = null
+    window.location.hash = ""
+  })
+
+  afterEach(() => {
+    window.location.hash = ""
+  })
+
+  it("offers a new password reset link when the query reports an expired recovery link", () => {
+    errorCode = "otp_expired"
+    type = "recovery"
+    render(<AuthCodeErrorPage />)
+
+    expect(
+      screen.getByRole("heading", { name: "Reset link expired" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        "This password reset link expired or was already used. Request a new link to reset your password.",
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Request a new reset link" }),
+    ).toHaveAttribute("href", "/auth/forgot-password")
+    expect(
+      screen.getByRole("link", { name: "Back to sign in" }),
+    ).toHaveAttribute("href", "/auth/signin")
+    expect(
+      screen.queryByRole("link", { name: "Get a new confirmation link" }),
+    ).toBeNull()
+    expect(screen.queryByRole("link", { name: "Try Again" })).toBeNull()
+  })
+
+  it("offers both new-link paths when only the fragment reports an expired link", () => {
+    window.location.hash =
+      "#error=access_denied&error_code=otp_expired&error_description=Email+link+is+invalid+or+has+expired"
+    render(<AuthCodeErrorPage />)
+
+    expect(screen.getByRole("heading", { name: "Link expired" })).toBeTruthy()
+    expect(
+      screen.getByText(
+        "This link expired or was already used. To reset your password, request a new reset link. To confirm a new account, sign up again with the same email and password to get a new confirmation link.",
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.getByRole("link", { name: "Request a new reset link" }),
+    ).toHaveAttribute("href", "/auth/forgot-password")
+    expect(
+      screen.getByRole("link", { name: "Get a new confirmation link" }),
+    ).toHaveAttribute("href", "/auth/signup?error=link_expired")
+    expect(
+      screen.getByRole("link", { name: "Back to sign in" }),
+    ).toHaveAttribute("href", "/auth/signin")
+    expect(screen.queryByRole("link", { name: "Try Again" })).toBeNull()
+  })
+
+  it("uses recovery copy when the fragment reports expiry and the query identifies recovery", () => {
+    window.location.hash = "#error_code=otp_expired"
+    type = "recovery"
+    render(<AuthCodeErrorPage />)
+
+    expect(
+      screen.getByRole("heading", { name: "Reset link expired" }),
+    ).toBeTruthy()
+    expect(
+      screen.getByText(
+        "This password reset link expired or was already used. Request a new link to reset your password.",
+      ),
+    ).toBeTruthy()
+    expect(
+      screen.queryByRole("link", { name: "Get a new confirmation link" }),
+    ).toBeNull()
+  })
+
+  it("updates the expired-link view when the fragment changes", () => {
+    render(<AuthCodeErrorPage />)
+    expect(
+      screen.getByRole("heading", { name: "Authentication Error" }),
+    ).toBeTruthy()
+
+    window.location.hash = "#error_code=otp_expired"
+    fireEvent(window, new HashChangeEvent("hashchange"))
+
+    expect(screen.getByRole("heading", { name: "Link expired" })).toBeTruthy()
+  })
+
+  it.each(["query", "fragment"])(
+    "preserves the generic error for a non-expired %s error code",
+    (source) => {
+      type = "recovery"
+      if (source === "query") errorCode = "unexpected_failure"
+      else window.location.hash = "#error_code=bad_oauth_state"
+      render(<AuthCodeErrorPage />)
+
+      expect(
+        screen.getByRole("heading", { name: "Authentication Error" }),
+      ).toBeTruthy()
+      expect(
+        screen.getByText("Something went wrong. Please try again."),
+      ).toBeTruthy()
+      expect(screen.getByRole("link", { name: "Try Again" })).toHaveAttribute(
+        "href",
+        "/auth/signin",
+      )
+      expect(
+        screen.queryByRole("link", { name: "Request a new reset link" }),
+      ).toBeNull()
+    },
+  )
+
+  it.each([
+    ["signup_blocked", SIGNUP_RESTRICTED_MESSAGE],
+    [
+      "account_changed",
+      "Sign in to the account that started checkout to continue with your selected plan.",
+    ],
+    ["pricing_unavailable", "Something went wrong. Please try again."],
+  ])("keeps the %s reason ahead of link expiry", (blocked, message) => {
+    reason = blocked
+    account = "original-owner"
+    next = "/billing-usage/buy-credit/"
+    errorCode = "otp_expired"
+    type = "recovery"
+    window.location.hash = "#error_code=otp_expired"
+    render(<AuthCodeErrorPage />)
+
+    expect(
+      screen.getByRole("heading", { name: "Authentication Error" }),
+    ).toBeTruthy()
+    expect(screen.getByText(message)).toBeTruthy()
+    expect(
+      screen.queryByRole("link", { name: "Request a new reset link" }),
+    ).toBeNull()
+  })
+
+  it("keeps an invitation on expired-link signup and sign-in links but Enterprise intent only on sign-in", () => {
+    const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+    next = invite
+    intent = "enterprise"
+    errorCode = "otp_expired"
+    type = "magiclink"
+    render(<AuthCodeErrorPage />)
+
+    expect(screen.getByRole("heading", { name: "Link expired" })).toBeTruthy()
+    const confirmation = screen.getByRole("link", {
+      name: "Get a new confirmation link",
+    })
+    expect(confirmation).toHaveAttribute(
+      "href",
+      `/auth/signup?${new URLSearchParams({ error: "link_expired", next: invite })}`,
+    )
+    expect(confirmation).toHaveClass("ph-no-capture")
+    const signin = screen.getByRole("link", { name: "Back to sign in" })
+    expect(signin).toHaveAttribute(
+      "href",
+      `/auth/signin?${new URLSearchParams({ signup_offer: "enterprise", next: invite })}`,
+    )
+    expect(signin).toHaveClass("ph-no-capture")
   })
 
   it("displays the shared signup restriction message for callback denials", () => {

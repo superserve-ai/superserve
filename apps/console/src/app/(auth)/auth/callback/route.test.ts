@@ -85,7 +85,7 @@ let googleMembershipState:
   membership: { teamId: "team-1", region: "use" },
 }
 let authExchangeError: { message: string } | null = null
-let authVerifyOtpError: { message: string } | null = null
+let authVerifyOtpError: { message: string; code?: string } | null = null
 
 const mockGetSignupPlanAction = vi.fn()
 const mockPrepareTeam = vi.fn()
@@ -654,6 +654,97 @@ describe("auth callback", () => {
       const destination = new URL(response.headers.get("location")!)
       expect(destination.pathname + destination.search).toBe(
         "/auth/auth-code-error",
+      )
+    },
+  )
+
+  it.each(["recovery", "magiclink"])(
+    "identifies an expired %s token hash on the error page",
+    async (type) => {
+      authVerifyOtpError = {
+        message: "Email link is invalid or has expired",
+        code: "otp_expired",
+      }
+
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?token_hash=expired-token&type=${type}`,
+        ),
+      )
+
+      expect(response.headers.get("location")).toBe(
+        `https://console.superserve.ai/auth/auth-code-error?error_code=otp_expired&type=${type}`,
+      )
+    },
+  )
+
+  it("keeps the generic error for a recovery token hash that failed without expiry", async () => {
+    authVerifyOtpError = {
+      message: "Unexpected failure",
+      code: "unexpected_failure",
+    }
+
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?token_hash=token&type=recovery&next=%2Fauth%2Freset-password",
+      ),
+    )
+
+    expect(response.headers.get("location")).toBe(
+      "https://console.superserve.ai/auth/auth-code-error",
+    )
+  })
+
+  it("identifies recovery for a hosted verify redirect without a code or token hash", async () => {
+    const response = await GET(
+      new Request(
+        "https://console.superserve.ai/auth/callback?next=%2Fauth%2Freset-password",
+      ),
+    )
+
+    expect(response.headers.get("location")).toBe(
+      "https://console.superserve.ai/auth/auth-code-error?type=recovery",
+    )
+  })
+
+  it("keeps the invitation alongside expiry details for a magiclink token hash", async () => {
+    authVerifyOtpError = {
+      message: "Token has expired or is invalid",
+      code: "otp_expired",
+    }
+    const invite = `/invite/ssinv_use_${"A".repeat(43)}`
+    const callback = new URL("https://console.superserve.ai/auth/callback")
+    callback.searchParams.set("token_hash", "expired-token")
+    callback.searchParams.set("type", "magiclink")
+    callback.searchParams.set("next", invite)
+
+    const response = await GET(new Request(callback))
+
+    const destination = new URL(response.headers.get("location")!)
+    expect(destination.pathname).toBe("/auth/auth-code-error")
+    expect(Object.fromEntries(destination.searchParams)).toEqual({
+      next: invite,
+      error_code: "otp_expired",
+      type: "magiclink",
+    })
+  })
+
+  it.each(["invite", "email"])(
+    "keeps the generic error for an expired %s token hash",
+    async (type) => {
+      authVerifyOtpError = {
+        message: "Email link is invalid or has expired",
+        code: "otp_expired",
+      }
+
+      const response = await GET(
+        new Request(
+          `https://console.superserve.ai/auth/callback?token_hash=expired-token&type=${type}`,
+        ),
+      )
+
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/auth-code-error",
       )
     },
   )
