@@ -174,9 +174,16 @@ const pages = E2B.list()
 while (pages.hasNext) {
   for (const info of await pages.nextItems()) {
     const src = await E2B.connect(info.sandboxId)
-    await src.commands.run(`tar czf /tmp/state.tgz -C ${DIR} .`, {
-      timeoutMs: TIMEOUT_MS,
-    })
+    try {
+      // commands.run throws when tar exits with a nonzero code.
+      await src.commands.run(`tar czf /tmp/state.tgz -C ${DIR} .`, {
+        timeoutMs: TIMEOUT_MS,
+      })
+    } catch (err) {
+      console.error(`${info.sandboxId}: archive failed: ${err}`)
+      process.exitCode = 1
+      continue
+    }
     const tgz = await src.files.read("/tmp/state.tgz", { format: "bytes" })
     await src.files.remove("/tmp/state.tgz")
 
@@ -225,7 +232,15 @@ pages = E2B.list()
 while pages.has_next:
     for info in pages.next_items():
         src = E2B.connect(info.sandbox_id)
-        src.commands.run(f"tar czf /tmp/state.tgz -C {DIR} .", timeout=TIMEOUT_SECONDS)
+        try:
+            # commands.run raises when tar exits with a nonzero code.
+            src.commands.run(
+                f"tar czf /tmp/state.tgz -C {DIR} .", timeout=TIMEOUT_SECONDS
+            )
+        except Exception as err:
+            print(f"{info.sandbox_id}: archive failed: {err}", file=sys.stderr)
+            failed = True
+            continue
         tgz = src.files.read("/tmp/state.tgz", format="bytes")
         src.files.remove("/tmp/state.tgz")
 
