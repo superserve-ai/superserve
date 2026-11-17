@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Blaxel and Superserve sandboxes do the same job: run untrusted code in an isolated Linux environment that you control from code. Most calls move one to one.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Blaxel today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -107,7 +107,7 @@ To turn your Blaxel image or Dockerfile into a template, see [Create a template]
 Replace `SandboxInstance` with `Sandbox`, use a template instead of an image, and change paths under `/blaxel` to `/home/user`.
 
 <CodeGroup>
-```ts Before (Blaxel)
+```ts Blaxel
 import { SandboxInstance } from "@blaxel/core"
 
 const sandbox = await SandboxInstance.createIfNotExists({
@@ -137,7 +137,7 @@ const url = `${preview.url}?bl_preview_token=${token.value}`
 const fork = await sandbox.fork("fork")
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox } from "@superserve/sdk"
 
 const sbx = await Sandbox.create({
@@ -162,8 +162,10 @@ const url = await sbx.getSignedPreviewUrl(3000) // opens in a browser
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
+</CodeGroup>
 
-```python Before (Blaxel, Python)
+<CodeGroup>
+```python Blaxel
 import asyncio
 from datetime import datetime, timedelta, timezone
 
@@ -209,7 +211,7 @@ async def main() -> None:
 asyncio.run(main())
 ```
 
-```python After (Superserve, Python)
+```python Superserve
 import asyncio
 
 from superserve import AsyncSandbox
