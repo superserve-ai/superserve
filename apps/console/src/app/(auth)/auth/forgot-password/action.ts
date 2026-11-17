@@ -5,6 +5,7 @@ import * as z from "zod"
 
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
+import { AUTH_MESSAGES } from "@/lib/auth/sign-in-messages"
 import { isSignupReviewBlocked } from "@/lib/auth/signup-review"
 import { sendEmail } from "@/lib/email/send"
 import { PasswordResetEmail } from "@/lib/email/templates/password-reset"
@@ -61,7 +62,7 @@ export const sendPasswordResetEmail = async (
   if (!recaptcha.verified) {
     return {
       success: false,
-      error: "We couldn't verify you're human. Please try again.",
+      error: AUTH_MESSAGES.botCheckFailed,
       errorCode: "captcha_failed",
     }
   }
@@ -70,7 +71,7 @@ export const sendPasswordResetEmail = async (
   if (recaptcha.providerOutcome === "unavailable") {
     return {
       success: false,
-      error: "We couldn't reach our bot-check. Please try again in a minute.",
+      error: AUTH_MESSAGES.botCheckUnavailable,
       errorCode: "captcha_unavailable",
     }
   }

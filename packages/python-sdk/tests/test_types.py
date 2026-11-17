@@ -35,6 +35,7 @@ def _valid_raw() -> dict:
         "memory_mib": 1024,
         "memory_max_mib": 4096,
         "memory_current_mib": 2048,
+        "memory_shrink_after_seconds": 300,
         "created_at": "2026-01-01T12:00:00",
         "timeout_seconds": 600,
         "idle_timeout_seconds": 300,
@@ -54,6 +55,7 @@ class TestToSandboxInfo:
         assert info.memory_mib == 1024
         assert info.memory_max_mib == 4096
         assert info.memory_current_mib == 2048
+        assert info.memory_shrink_after_seconds == 300
         assert info.timeout_seconds == 600
         assert info.idle_timeout_seconds == 300
         assert info.metadata == {"key": "value"}
@@ -94,6 +96,7 @@ class TestToSandboxInfo:
         assert info.memory_mib == 0
         assert info.memory_max_mib is None
         assert info.memory_current_mib is None
+        assert info.memory_shrink_after_seconds is None
         assert info.timeout_seconds is None
         assert info.idle_timeout_seconds is None
         assert info.auto_delete_seconds is None
@@ -168,6 +171,7 @@ class TestToTemplateInfo:
                 "vcpu": 2,
                 "memory_mib": 2048,
                 "memory_max_mib": 8192,
+                "memory_shrink_after_seconds": 600,
                 "disk_mib": 4096,
                 "size_bytes": 12345,
                 "created_at": "2026-01-01T00:00:00Z",
@@ -180,6 +184,7 @@ class TestToTemplateInfo:
         assert info.vcpu == 2
         assert info.memory_mib == 2048
         assert info.memory_max_mib == 8192
+        assert info.memory_shrink_after_seconds == 600
         assert info.disk_mib == 4096
         assert info.size_bytes == 12345
         assert isinstance(info.created_at, datetime)
@@ -199,6 +204,7 @@ class TestToTemplateInfo:
             }
         )
         assert info.memory_max_mib is None
+        assert info.memory_shrink_after_seconds is None
         assert info.size_bytes is None
         assert info.built_at is None
         assert info.error_message is None
