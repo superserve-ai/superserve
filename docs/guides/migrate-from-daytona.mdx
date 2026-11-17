@@ -221,19 +221,26 @@ const TIMEOUT_MS = 10 * 60 * 1000 // limit for each archive, upload and extract
 
 const daytona = new Daytona()
 for await (const src of daytona.list({ states: [SandboxState.STARTED] })) {
-  const tar = await src.process.executeCommand(
-    `tar czf /tmp/state.tgz -C ${SRC} . 2>&1`,
-    undefined,
-    undefined,
-    TIMEOUT_MS / 1000, // seconds
-  )
-  if (tar.exitCode !== 0) {
-    console.error(`${src.id}: archive failed: ${tar.result}`)
+  let tgz: Buffer
+  try {
+    const tar = await src.process.executeCommand(
+      `tar czf /tmp/state.tgz -C ${SRC} . 2>&1`,
+      undefined,
+      undefined,
+      TIMEOUT_MS / 1000, // seconds
+    )
+    if (tar.exitCode !== 0) throw new Error(tar.result)
+    tgz = await src.fs.downloadFile("/tmp/state.tgz")
+  } catch (err) {
+    console.error(`${src.id}: archive failed: ${err}`)
     process.exitCode = 1
     continue
+  } finally {
+    // Remove the temporary archive from the source, also after a failure.
+    await src.process
+      .executeCommand("rm -f /tmp/state.tgz")
+      .catch(() => console.error(`${src.id}: remove /tmp/state.tgz by hand`))
   }
-  const tgz = await src.fs.downloadFile("/tmp/state.tgz")
-  await src.fs.deleteFile("/tmp/state.tgz")
 
   const dst = await Sandbox.create({
     name: `from-daytona-${src.id}`,
@@ -274,15 +281,23 @@ failed = False
 
 daytona = Daytona()
 for src in daytona.list(ListSandboxesQuery(states=[SandboxState.STARTED])):
-    tar = src.process.exec(
-        f"tar czf /tmp/state.tgz -C {SRC} . 2>&1", timeout=TIMEOUT_SECONDS
-    )
-    if tar.exit_code != 0:
-        print(f"{src.id}: archive failed: {tar.result}", file=sys.stderr)
+    try:
+        tar = src.process.exec(
+            f"tar czf /tmp/state.tgz -C {SRC} . 2>&1", timeout=TIMEOUT_SECONDS
+        )
+        if tar.exit_code != 0:
+            raise RuntimeError(tar.result)
+        tgz = src.fs.download_file("/tmp/state.tgz")
+    except Exception as err:
+        print(f"{src.id}: archive failed: {err}", file=sys.stderr)
         failed = True
         continue
-    tgz = src.fs.download_file("/tmp/state.tgz")
-    src.fs.delete_file("/tmp/state.tgz")
+    finally:
+        # Remove the temporary archive from the source, also after a failure.
+        try:
+            src.process.exec("rm -f /tmp/state.tgz")
+        except Exception:
+            print(f"{src.id}: remove /tmp/state.tgz by hand", file=sys.stderr)
 
     dst = Sandbox.create(
         name=f"from-daytona-{src.id}",

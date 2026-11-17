@@ -174,18 +174,25 @@ const pages = E2B.list()
 while (pages.hasNext) {
   for (const info of await pages.nextItems()) {
     const src = await E2B.connect(info.sandboxId)
+    let tgz: Uint8Array
     try {
       // commands.run throws when tar exits with a nonzero code.
       await src.commands.run(`tar czf /tmp/state.tgz -C ${DIR} .`, {
         timeoutMs: TIMEOUT_MS,
       })
+      tgz = await src.files.read("/tmp/state.tgz", { format: "bytes" })
     } catch (err) {
       console.error(`${info.sandboxId}: archive failed: ${err}`)
       process.exitCode = 1
       continue
+    } finally {
+      // Remove the temporary archive from the source, also after a failure.
+      await src.commands
+        .run("rm -f /tmp/state.tgz")
+        .catch(() =>
+          console.error(`${info.sandboxId}: remove /tmp/state.tgz by hand`),
+        )
     }
-    const tgz = await src.files.read("/tmp/state.tgz", { format: "bytes" })
-    await src.files.remove("/tmp/state.tgz")
 
     const dst = await Sandbox.create({
       name: `from-e2b-${info.sandboxId}`,
@@ -237,12 +244,19 @@ while pages.has_next:
             src.commands.run(
                 f"tar czf /tmp/state.tgz -C {DIR} .", timeout=TIMEOUT_SECONDS
             )
+            tgz = src.files.read("/tmp/state.tgz", format="bytes")
         except Exception as err:
             print(f"{info.sandbox_id}: archive failed: {err}", file=sys.stderr)
             failed = True
             continue
-        tgz = src.files.read("/tmp/state.tgz", format="bytes")
-        src.files.remove("/tmp/state.tgz")
+        finally:
+            # Remove the temporary archive from the source, also after a failure.
+            try:
+                src.commands.run("rm -f /tmp/state.tgz")
+            except Exception:
+                print(
+                    f"{info.sandbox_id}: remove /tmp/state.tgz by hand", file=sys.stderr
+                )
 
         dst = Sandbox.create(
             name=f"from-e2b-{info.sandbox_id}",
