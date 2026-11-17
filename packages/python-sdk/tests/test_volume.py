@@ -64,6 +64,23 @@ async def call(method: Any, *args: Any, **kwargs: Any) -> Any:
     return await value if inspect.isawaitable(value) else value
 
 
+@pytest.mark.parametrize("resource", [Sandbox, AsyncSandbox])
+@pytest.mark.parametrize("mode", ["too many", "duplicate paths"])
+async def test_rejects_invalid_mount_batch_before_guest_creation(resource: Any, mode: str) -> None:
+    mounts = (
+        [{"volume": "data", "mount_path": f"/mnt/data-{i}"} for i in range(129)]
+        if mode == "too many"
+        else [
+            {"volume": "data", "mount_path": "/mnt/data", "idempotency_key": "repeated"},
+            {"volume": "data", "mount_path": "/mnt/data", "idempotency_key": "repeated"},
+        ]
+    )
+    with respx.mock() as router:
+        with pytest.raises(ValidationError):
+            await call(resource.create, name="example", volumes=mounts)
+        assert not router.calls
+
+
 @pytest.mark.parametrize("guest_type", [Sandbox, AsyncSandbox])
 @pytest.mark.parametrize(
     "attachment_id", [GUEST["id"], GUEST["id"].upper(), "sb-usw-" + GUEST["id"]]

@@ -54,6 +54,36 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
+it.each(["too many", "duplicate paths"])(
+  "rejects %s volume mounts before creating a guest",
+  async (mode) => {
+    const fetch = vi.fn()
+    vi.stubGlobal("fetch", fetch)
+    const volumes =
+      mode === "too many"
+        ? Array.from({ length: 129 }, (_, i) => ({
+            volume: "data",
+            mountPath: `/mnt/data-${i}`,
+          }))
+        : [
+            {
+              volume: "data",
+              mountPath: "/mnt/data",
+              idempotencyKey: "repeated",
+            },
+            {
+              volume: "data",
+              mountPath: "/mnt/data",
+              idempotencyKey: "repeated",
+            },
+          ]
+    await expect(
+      Sandbox.create({ ...config, name: "example", volumes }),
+    ).rejects.toBeInstanceOf(ValidationError)
+    expect(fetch).not.toHaveBeenCalled()
+  },
+)
+
 describe("native volumes", () => {
   it.each([sandbox.id, sandbox.id.toUpperCase(), `sb-usw-${sandbox.id}`])(
     "accepts prefixed create with attachment sandbox ID %s without deleting its new guest",

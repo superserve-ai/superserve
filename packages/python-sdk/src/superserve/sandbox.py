@@ -25,7 +25,9 @@ from ._http import (
 )
 from .commands import Commands, CommandsDeps
 from .desktop import DESKTOP_STREAM_PORT, Desktop, DesktopDeps
-from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
+from .errors import (
+    ConflictError, NotFoundError, SandboxError, SandboxTimeoutError, ValidationError,
+)
 from .snapshots import (
     DEFAULT_SNAPSHOT_POLL_S,
     DEFAULT_SNAPSHOT_TIMEOUT,
@@ -247,7 +249,14 @@ class Sandbox:
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
-        for mount in volumes or []:
+        if volumes is not None and len(volumes) > 128:
+            raise ValidationError("A new sandbox supports at most 128 volume mounts")
+        volume_mounts = tuple(mount.copy() for mount in volumes or [])
+        volume_paths: set[str] = set()
+        for mount in volume_mounts:
+            if mount["mount_path"] in volume_paths:
+                raise ValidationError("Volume mount paths must be distinct")
+            volume_paths.add(mount["mount_path"])
             if isinstance(mount["volume"], _VolumeHandle):
                 _assert_volume_connection(mount["volume"]._config, config)
         body: dict[str, Any] = {"name": name}
@@ -296,7 +305,7 @@ class Sandbox:
             )
         sandbox = cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
         try:
-            for mount in volumes or []:
+            for mount in volume_mounts:
                 sandbox.attach_volume(
                     mount["volume"],
                     mount_path=mount["mount_path"],

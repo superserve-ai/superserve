@@ -293,7 +293,20 @@ export class Sandbox {
   static async create(options: SandboxCreateOptions): Promise<Sandbox> {
     const config = resolveConfig(options)
 
-    for (const mount of options.volumes ?? []) {
+    if ((options.volumes?.length ?? 0) > 128) {
+      throw new ValidationError(
+        "A new sandbox supports at most 128 volume mounts",
+      )
+    }
+    const volumeMounts = (options.volumes ?? []).map((mount) =>
+      Object.assign({}, mount),
+    )
+    const volumePaths = new Set<string>()
+    for (const mount of volumeMounts) {
+      if (volumePaths.has(mount.mountPath)) {
+        throw new ValidationError("Volume mount paths must be distinct")
+      }
+      volumePaths.add(mount.mountPath)
       if (mount.volume instanceof Volume) mount.volume._assertConnection(config)
     }
     const body: Record<string, unknown> = { name: options.name }
@@ -347,7 +360,7 @@ export class Sandbox {
       raw.routing_hint,
     )
     try {
-      for (const mount of options.volumes ?? []) {
+      for (const mount of volumeMounts) {
         const combined =
           options.signal && mount.signal
             ? composeSignals(options.signal, mount.signal)
