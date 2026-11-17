@@ -70,56 +70,66 @@ const agent = await sandbox.commands.spawn("claude-agent-acp", {
   onStdout: (data) => toClient.enqueue(encoder.encode(data)),
   onStderr: (data) => process.stderr.write(data),
 })
+// End the stream if the adapter exits or its connection drops, so pending requests fail.
+agent.wait().then(
+  ({ exitCode }) => toClient.error(new Error(`adapter exited with code ${exitCode}`)),
+  (error) => toClient.error(error),
+)
 // Bytes that the ACP client writes go to the adapter's stdin.
 const toAgent = new WritableStream<Uint8Array>({
   write: (chunk) => agent.stdin.write(chunk),
   close: () => agent.stdin.close(),
 })
 
-const result = await acp
-  .client({ name: "my-acp-client" })
-  .onNotification(acp.methods.client.session.update, ({ params }) => {
-    const update = params.update
-    if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
-      process.stdout.write(update.content.text)
-    } else if (update.sessionUpdate === "tool_call") {
-      console.log(`\n[tool] ${update.title}`)
-    }
-  })
-  .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
-    // Approve each tool call once. A real client asks the user here.
-    const option = params.options.find((o) => o.kind === "allow_once") ?? params.options[0]
-    console.log(`[permission] ${params.toolCall.title} -> ${option.name}`)
-    return { outcome: { outcome: "selected", optionId: option.optionId } }
-  })
-  .connectWith(acp.ndJsonStream(toAgent, fromAgent), async (ctx) => {
-    await ctx.request(acp.methods.agent.initialize, {
-      protocolVersion: acp.PROTOCOL_VERSION,
-      clientCapabilities: {},
+try {
+  const result = await acp
+    .client({ name: "my-acp-client" })
+    .onNotification(acp.methods.client.session.update, ({ params }) => {
+      const update = params.update
+      if (update.sessionUpdate === "agent_message_chunk" && update.content.type === "text") {
+        process.stdout.write(update.content.text)
+      } else if (update.sessionUpdate === "tool_call") {
+        console.log(`\n[tool] ${update.title}`)
+      }
     })
-    const session = await ctx.request(acp.methods.agent.session.new, {
-      cwd: "/home/user/project",
-      mcpServers: [],
+    .onRequest(acp.methods.client.session.requestPermission, ({ params }) => {
+      // Approve each tool call once. A real client asks the user here.
+      const option = params.options.find((o) => o.kind === "allow_once") ?? params.options[0]
+      console.log(`[permission] ${params.toolCall.title} -> ${option.name}`)
+      return { outcome: { outcome: "selected", optionId: option.optionId } }
     })
-    return ctx.request(acp.methods.agent.session.prompt, {
-      sessionId: session.sessionId,
-      prompt: [
-        {
-          type: "text",
-          text: "Create hello.js that prints 'hello from superserve', then run it with node.",
-        },
-      ],
+    .connectWith(acp.ndJsonStream(toAgent, fromAgent), async (ctx) => {
+      await ctx.request(acp.methods.agent.initialize, {
+        protocolVersion: acp.PROTOCOL_VERSION,
+        clientCapabilities: {},
+      })
+      const session = await ctx.request(acp.methods.agent.session.new, {
+        cwd: "/home/user/project",
+        mcpServers: [],
+      })
+      return ctx.request(acp.methods.agent.session.prompt, {
+        sessionId: session.sessionId,
+        prompt: [
+          {
+            type: "text",
+            text: "Create hello.js that prints 'hello from superserve', then run it with node.",
+          },
+        ],
+      })
     })
-  })
 
-console.log(`\nstop reason: ${result.stopReason}`)
-await agent.close()
+  console.log(`\nstop reason: ${result.stopReason}`)
+} finally {
+  await agent.close()
+  await sandbox.kill()
+}
 ```
 
 ```python Python
 import asyncio
 import json
 import sys
+from contextlib import suppress
 from typing import Any
 
 from acp import PROTOCOL_VERSION, Client, connect_to_agent
@@ -142,6 +152,17 @@ class SandboxTransport:
         self.process: AsyncCommandSession | None = None
         self.messages: asyncio.Queue[dict[str, Any] | None] = asyncio.Queue()
         self.buffer = ""
+
+    def attach(self, process: AsyncCommandSession) -> None:
+        self.process = process
+        # End the stream if the adapter exits or its connection drops,
+        # so pending requests fail.
+        self.watcher = asyncio.create_task(self._watch(process))
+
+    async def _watch(self, process: AsyncCommandSession) -> None:
+        with suppress(Exception):
+            await process.wait()
+        self.messages.put_nowait(None)
 
     def on_stdout(self, data: str) -> None:
         # The adapter writes one JSON-RPC message per line.
@@ -197,37 +218,40 @@ async def main() -> None:
         from_template="superserve/node-22",
         secrets={"ANTHROPIC_API_KEY": "anthropic-key"},
     )
-    await sandbox.commands.run(
-        "npm install -g @agentclientprotocol/claude-agent-acp"
-        " && mkdir -p /home/user/project",
-        timeout_seconds=300,
-    )
-
     transport = SandboxTransport()
-    transport.process = await sandbox.commands.spawn(
-        "claude-agent-acp",
-        cwd="/home/user/project",
-        on_stdout=transport.on_stdout,
-        on_stderr=lambda data: print(data, end="", file=sys.stderr),
-    )
-    conn = connect_to_agent(PrintingClient(), transport)
-    await conn.initialize(protocol_version=PROTOCOL_VERSION)
-    session = await conn.new_session(cwd="/home/user/project")
-    result = await conn.prompt(
-        session_id=session.session_id,
-        prompt=[
-            TextContentBlock(
-                type="text",
-                text="Create hello.js that prints 'hello from superserve',"
-                " then run it with node.",
+    try:
+        await sandbox.commands.run(
+            "npm install -g @agentclientprotocol/claude-agent-acp"
+            " && mkdir -p /home/user/project",
+            timeout_seconds=300,
+        )
+        transport.attach(
+            await sandbox.commands.spawn(
+                "claude-agent-acp",
+                cwd="/home/user/project",
+                on_stdout=transport.on_stdout,
+                on_stderr=lambda data: print(data, end="", file=sys.stderr),
             )
-        ],
-    )
-    print(f"\nstop reason: {result.stop_reason}")
-    await conn.close()
-    await transport.process.close()
-
-    await sandbox.kill()
+        )
+        conn = connect_to_agent(PrintingClient(), transport)
+        await conn.initialize(protocol_version=PROTOCOL_VERSION)
+        session = await conn.new_session(cwd="/home/user/project")
+        result = await conn.prompt(
+            session_id=session.session_id,
+            prompt=[
+                TextContentBlock(
+                    type="text",
+                    text="Create hello.js that prints 'hello from superserve',"
+                    " then run it with node.",
+                )
+            ],
+        )
+        print(f"\nstop reason: {result.stop_reason}")
+        await conn.close()
+    finally:
+        if transport.process is not None:
+            await transport.process.close()
+        await sandbox.kill()
 
 
 asyncio.run(main())
@@ -250,7 +274,8 @@ Some points about this client:
 
 - **Files stay in the sandbox.** The client sends empty `clientCapabilities`, so the agent reads and writes files and runs commands with its own tools in the sandbox. If you advertise the `fs` or `terminal` capabilities, the agent sends those operations to your client instead.
 - **Permissions come to your client.** Before a tool call, the agent can send a `session/request_permission` request. The handler above approves each call once. A real client shows the request to the user.
-- **The session stays open.** To continue the conversation, send another `session/prompt` with the same `sessionId`. Close the process with `agent.close()` (TypeScript) or `transport.process.close()` (Python) when you are done.
+- **The session stays open until you close it.** To continue the conversation, send another `session/prompt` with the same `sessionId` before the `finally` block closes the process.
+- **The client notices when the adapter stops.** The bridge watches `wait()`. If the adapter exits or the connection drops, the stream ends and pending requests fail instead of waiting forever.
 
 <Note>
 `agent-client-protocol` 1.0.0 for Python logs `Method not found` for the `auth/status_update` notification that the Claude Code adapter sends. The error does not stop the session.
@@ -305,16 +330,6 @@ To choose the model, set `CODEX_CONFIG` in `env`, for example `CODEX_CONFIG: JSO
 
 ## Delete when finished
 
-When you no longer need the sandbox, delete it. This also deletes its files and saved state.
-
-<CodeGroup>
-```typescript TypeScript
-await sandbox.kill()
-```
-
-```python Python
-await sandbox.kill()
-```
-</CodeGroup>
+The examples delete the sandbox with `sandbox.kill()` in a `finally` block, so a failed run does not leave it running. Deleting a sandbox also deletes its files and saved state. To keep the sandbox for more sessions, remove that call and delete the sandbox later.
 
 To delete it from another process, pass its ID to `Sandbox.killById()` (TypeScript) or `Sandbox.kill_by_id()` (Python). To delete paused sandboxes automatically, see [Auto-delete](/sandbox/lifecycle#auto-delete).
