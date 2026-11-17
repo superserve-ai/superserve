@@ -1,0 +1,169 @@
+---
+title: "Droid"
+sidebarTitle: Droid
+description: Run Factory's Droid CLI in a Superserve sandbox.
+icon: "/logos/integrations/droid.svg"
+---
+
+Droid is [Factory](https://factory.ai)'s terminal coding agent. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+
+## Via the console
+
+1. On the [Secrets page](https://console.superserve.ai/secrets?utm_source=docs&utm_medium=link), click **Add secret** and pick **Custom** (there's no Factory provider shortcut). Set **Auth type** to **Bearer**, add `api.factory.ai` under **Allowed hosts**, and paste your Factory [API key](https://app.factory.ai/settings/api-keys) (it starts with `fk-`) — you only do this once, and the key never enters the sandbox.
+2. Go to [console.superserve.ai](https://console.superserve.ai?utm_source=docs&utm_medium=link) and click **Create sandbox**.
+3. Pick the **`superserve/node-22`** template.
+4. Under **Advanced Options → Secrets**, bind that secret to `FACTORY_API_KEY`.
+5. Create the sandbox, open its **Terminal**, and run:
+
+   ```bash
+   npm install -g droid && droid
+   ```
+
+## Via the SDK
+
+```bash
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+<CodeGroup>
+```typescript TypeScript
+import { Sandbox, Secret } from "@superserve/sdk"
+
+// One-time: store your key as a secret. It never enters the sandbox.
+await Secret.create({
+  name: "factory-key",
+  value: "fk-...",
+  hosts: ["api.factory.ai"],
+  auth: { type: "bearer" },
+})
+
+const sandbox = await Sandbox.create({
+  name: "droid",
+  fromTemplate: "superserve/node-22",
+  secrets: { FACTORY_API_KEY: "factory-key" },
+})
+
+await sandbox.commands.run("npm install -g droid")
+```
+
+```python Python
+from superserve import Sandbox, Secret
+
+# One-time: store your key as a secret. It never enters the sandbox.
+Secret.create(
+    name="factory-key",
+    value="fk-...",
+    hosts=["api.factory.ai"],
+    auth={"type": "bearer"},
+)
+
+sandbox = Sandbox.create(
+    name="droid",
+    from_template="superserve/node-22",
+    secrets={"FACTORY_API_KEY": "factory-key"},
+)
+
+sandbox.commands.run("npm install -g droid")
+```
+</CodeGroup>
+
+Droid reads `FACTORY_API_KEY` as usual, but its value is a [stand-in token](/secrets/overview) — the real key is attached only on requests to `api.factory.ai`, never exposed to the agent.
+
+Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `droid`.
+
+## Run headless
+
+Pass a prompt to `droid exec`. Droid runs it in the sandbox, prints its final message, and exits. Add `--auto low` so the agent can create and edit files without asking for confirmation.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'mkdir -p ~/app && cd ~/app && droid exec --auto low "Create a hello world HTTP server in Node.js"',
+  { timeoutMs: 600_000 },
+)
+
+console.log(result.stdout)
+```
+
+```python Python
+result = sandbox.commands.run(
+    'mkdir -p ~/app && cd ~/app && droid exec --auto low "Create a hello world HTTP server in Node.js"',
+    timeout_seconds=600,
+)
+
+print(result.stdout)
+```
+</CodeGroup>
+
+`droid exec` is read-only unless you pass `--auto`. Pick the lowest level the task needs:
+
+| Flag | Droid can also |
+|---|---|
+| _(none)_ | Only read files and run read-only commands like `git status` |
+| `--auto low` | Create and edit files |
+| `--auto medium` | Install packages, build, run tests, `git commit` |
+| `--auto high` | Run downloaded scripts, `git push`, deploy |
+
+If the agent tries something above its level, `droid exec` stops and exits non-zero. Edits it made before that point stay in place. See Factory's [autonomy levels](https://docs.factory.com/droid-exec/overview#autonomy-levels) for the full rules.
+
+<Note>
+Auto-approved commands stay inside the sandbox and can't touch your machine, but the sandbox can still reach the internet. Use [network rules](/sandbox/networking) to limit where it can connect.
+</Note>
+
+## Get JSON output
+
+Add `-o json` to get one JSON object when the run ends, with the final answer in `result` and the session ID in `session_id`.
+
+<CodeGroup>
+```typescript TypeScript
+const result = await sandbox.commands.run(
+  'cd ~/app && droid exec --auto medium -o json "Add a /health endpoint and a test for it"',
+  { timeoutMs: 600_000 },
+)
+
+const done = JSON.parse(result.stdout)
+console.log(done.result)
+```
+
+```python Python
+import json
+
+result = sandbox.commands.run(
+    'cd ~/app && droid exec --auto medium -o json "Add a /health endpoint and a test for it"',
+    timeout_seconds=600,
+)
+
+done = json.loads(result.stdout)
+print(done["result"])
+```
+</CodeGroup>
+
+Use `-o stream-json` instead to get one JSON event per line while the run progresses.
+
+## Continue a session
+
+Pass the session ID to `droid exec -s` to send a follow-up with the earlier context.
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  `cd ~/app && droid exec -s ${done.session_id} --auto medium "Now add a README"`,
+  { timeoutMs: 600_000 },
+)
+```
+
+```python Python
+sandbox.commands.run(
+    f'cd ~/app && droid exec -s {done["session_id"]} --auto medium "Now add a README"',
+    timeout_seconds=600,
+)
+```
+</CodeGroup>
+
+## Persist sessions
+
+```typescript
+await sandbox.pause()
+await sandbox.resume()
+```
