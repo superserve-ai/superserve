@@ -60,9 +60,9 @@ The main changes: every sandbox needs a `name` and you keep its `id`, a command 
 | --- | --- | --- |
 | Create | `Sandbox.create({ name, image, timeout, env, tags })` | `Sandbox.create({ name, fromTemplate, timeoutSeconds, envVars, metadata })`. `name` is required. Keep `sbx.id` to reconnect. |
 | Image | `image: "my-repo:v1"` or `runtime: "node24"` | `Template.create({ name, from: img, steps: [{ run }] })`, built once. Then `fromTemplate: name`. The default `superserve/base` template has Node.js, Python and Git. |
-| Source code | `source: { type: "git", url, depth, revision }` | `sbx.commands.run("git clone --depth 1 <url> /home/user/app")`, or clone in a template step |
+| Source code | `source: { type: "git", url, depth, revision }` | `sbx.commands.run("git clone --depth 1 --branch <revision> <url> /home/user/app")` for a branch or tag. For a commit, run `git fetch --depth 1 origin <sha> && git checkout FETCH_HEAD` in the clone. Or clone in a template step. |
 | Reconnect | `Sandbox.get({ name })` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
-| Run a command | `sandbox.runCommand({ cmd, args, cwd, env })`, then `await result.stdout()` | `sbx.commands.run(cmd, { cwd, env, timeoutMs })` returns `exitCode`, `stdout` and `stderr` |
+| Run a command | `sandbox.runCommand({ cmd, args, cwd, env })`, then `await result.stdout()` | `sbx.commands.run(cmd, { cwd, env, timeoutMs })` returns `exitCode`, `stdout` and `stderr`. Without `timeoutMs`, the call waits 30 seconds. |
 | Run as root | `runCommand({ cmd, args, sudo: true })` | Commands run as `root` by default. Pass `user` to run as another user. |
 | Background process | `runCommand({ cmd, args, detached: true })`, then `wait()` / `kill()` | `sbx.commands.spawn(cmd)`, then `wait()` / `kill()` |
 | Files | `sandbox.writeFiles([{ path, content }])` / `readFileToBuffer({ path })` | `sbx.files.write(path, data)` / `read(path)`, one file per call |
@@ -71,7 +71,7 @@ The main changes: every sandbox needs a `name` and you keep its `id`, a command 
 | Stop and resume | `sandbox.stop()`, then `Sandbox.get({ name })`. Running processes end. | `sbx.pause()` / `sbx.resume()`. Pause keeps memory and running processes. |
 | Timeout | `timeout` in milliseconds, `extendTimeout(ms)`. Stops the sandbox. | `timeoutSeconds`, `sbx.update({ timeoutSeconds })`. Pauses the sandbox. Also `idleTimeoutSeconds`. |
 | Resources | `resources: { vcpus }` | `vcpu` and `memoryMib` on `Template.create` |
-| Network rules | `networkPolicy: { allow: [...] }` or `"deny-all"` | `network: { allowOut: [...], denyOut: ["0.0.0.0/0"] }`. See [Network rules](/sandbox/networking). |
+| Network rules | `networkPolicy: { allow: [...] }` or `"deny-all"` | `network: { allowOut: [...hosts, "1.1.1.1/32", "8.8.8.8/32"], denyOut: ["0.0.0.0/0"] }`. Keep the two DNS resolvers in `allowOut`, or the allowed hosts do not resolve. See [Network rules](/sandbox/networking). |
 | Public URL | `ports: [3000]` on create, then `sandbox.domain(3000)` | `await sbx.publishPreviewPort(3000)`, then `sbx.getPreviewUrl(3000)`. Publish a port at any time. Pass `{ access: "private" }` to require a preview token. See [Preview URLs](/sandbox/preview-urls). |
 | List and delete | `Sandbox.list({ tags })` / `sandbox.delete()` | `Sandbox.list({ metadata })` / `sbx.kill()` |
 
@@ -82,9 +82,9 @@ The main changes: every sandbox needs a `name` and you keep its `id`, a command 
 | --- | --- | --- |
 | Create | `Sandbox.create({ name, image, timeout, env, tags })` | `Sandbox.create(name=, from_template=, timeout_seconds=, env_vars=, metadata=)`. `name` is required. Keep `sbx.id` to reconnect. |
 | Image | `image: "my-repo:v1"` or `runtime: "node24"` | `Template.create(name=, from_=img, steps=[RunStep(run=...)])`, built once. Then `from_template=name`. The default `superserve/base` template has Node.js, Python and Git. |
-| Source code | `source: { type: "git", url, depth, revision }` | `sbx.commands.run("git clone --depth 1 <url> /home/user/app")`, or clone in a template step |
+| Source code | `source: { type: "git", url, depth, revision }` | `sbx.commands.run("git clone --depth 1 --branch <revision> <url> /home/user/app")` for a branch or tag. For a commit, run `git fetch --depth 1 origin <sha> && git checkout FETCH_HEAD` in the clone. Or clone in a template step. |
 | Reconnect | `Sandbox.get({ name })` | `Sandbox.connect(id)`. Resumes a paused sandbox automatically. |
-| Run a command | `sandbox.runCommand({ cmd, args, cwd, env })`, then `await result.stdout()` | `sbx.commands.run(cmd, cwd=, env=, timeout_seconds=)` returns `exit_code`, `stdout` and `stderr` |
+| Run a command | `sandbox.runCommand({ cmd, args, cwd, env })`, then `await result.stdout()` | `sbx.commands.run(cmd, cwd=, env=, timeout_seconds=)` returns `exit_code`, `stdout` and `stderr`. Without `timeout_seconds`, the call waits 30 seconds. |
 | Run as root | `runCommand({ cmd, args, sudo: true })` | Commands run as `root` by default. Pass `user=` to run as another user. |
 | Background process | `runCommand({ cmd, args, detached: true })`, then `wait()` / `kill()` | `await sbx.commands.spawn(cmd)` on `AsyncSandbox`, then `wait()` / `kill()` |
 | Files | `sandbox.writeFiles([{ path, content }])` / `readFileToBuffer({ path })` | `sbx.files.write(path, data)` / `read(path)`, one file per call |
@@ -93,7 +93,7 @@ The main changes: every sandbox needs a `name` and you keep its `id`, a command 
 | Stop and resume | `sandbox.stop()`, then `Sandbox.get({ name })`. Running processes end. | `sbx.pause()` / `sbx.resume()`. Pause keeps memory and running processes. |
 | Timeout | `timeout` in milliseconds, `extendTimeout(ms)`. Stops the sandbox. | `timeout_seconds`, `sbx.update(timeout_seconds=)`. Pauses the sandbox. Also `idle_timeout_seconds`. |
 | Resources | `resources: { vcpus }` | `vcpu=` and `memory_mib=` on `Template.create` |
-| Network rules | `networkPolicy: { allow: [...] }` or `"deny-all"` | `network=NetworkConfig(allow_out=[...], deny_out=["0.0.0.0/0"])`. See [Network rules](/sandbox/networking). |
+| Network rules | `networkPolicy: { allow: [...] }` or `"deny-all"` | `network=NetworkConfig(allow_out=[*hosts, "1.1.1.1/32", "8.8.8.8/32"], deny_out=["0.0.0.0/0"])`. Keep the two DNS resolvers in `allow_out`, or the allowed hosts do not resolve. See [Network rules](/sandbox/networking). |
 | Public URL | `ports: [3000]` on create, then `sandbox.domain(3000)` | `sbx.publish_preview_port(3000)`, then `sbx.get_preview_url(3000)`. Publish a port at any time. Pass `access="private"` to require a preview token. See [Preview URLs](/sandbox/preview-urls). |
 | List and delete | `Sandbox.list({ tags })` / `sandbox.delete()` | `Sandbox.list(metadata=)` / `sbx.kill()` |
 
@@ -105,7 +105,7 @@ To turn a Vercel image into a template, see [Create a template](/templates/creat
 </Step>
 <Step title="Update your code">
 
-Change the import, add a `name`, convert milliseconds to seconds, and join each command and its arguments into one string.
+Change the import, add a `name`, convert milliseconds to seconds, and join each command and its arguments into one shell string. Shell-escape each argument, so that the shell does not expand `$VAR`, `*` or quotes. Set a command timeout for long commands such as installs and tests.
 
 <CodeGroup>
 ```ts Before (Vercel Sandbox)
@@ -140,9 +140,11 @@ const sbx = await Sandbox.create({
 })
 await sbx.commands.run(
   "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+  { timeoutMs: 120_000 },
 )
 const result = await sbx.commands.run("npm install && npm test", {
   cwd: "/home/user/app",
+  timeoutMs: 300_000,
 })
 console.log(result.stdout)
 await sbx.publishPreviewPort(3000)
@@ -162,9 +164,12 @@ sbx = Sandbox.create(
     metadata={"team": "infra"},
 )
 sbx.commands.run(
-    "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app"
+    "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+    timeout_seconds=120,
 )
-result = sbx.commands.run("npm install && npm test", cwd="/home/user/app")
+result = sbx.commands.run(
+    "npm install && npm test", cwd="/home/user/app", timeout_seconds=300
+)
 print(result.stdout)
 sbx.publish_preview_port(3000)
 url = sbx.get_preview_url(3000)
@@ -267,9 +272,13 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
    - image / runtime -> a template built once with Template.create({name, from, steps}).
      The default superserve/base template has Node.js, Python and Git.
      resources.vcpus -> vcpu and memoryMib on the template.
-   - source: {type: "git", url} -> commands.run("git clone --depth 1 <url> /home/user/app").
+   - source: {type: "git", url, revision} -> commands.run("git clone --depth 1 <url> /home/user/app").
+     Keep the revision: add --branch <revision> for a branch or tag. For a commit, then run
+     "git fetch --depth 1 origin <sha> && git checkout FETCH_HEAD" in /home/user/app.
    - runCommand(cmd, args) or runCommand({cmd, args, cwd, env}) -> commands.run(one shell string,
-     {cwd, env}). Quote arguments that contain spaces. await result.stdout() -> result.stdout.
+     {cwd, env}). Shell-escape every argument (single-quote it, and escape any single quote
+     inside), so the shell does not expand $VAR, globs or quotes. await result.stdout() -> result.stdout.
+     Pass timeoutMs (timeout_seconds in Python) for commands that can take more than 30 seconds.
      It does not throw on a nonzero exit code, so keep the exitCode checks.
    - sudo: true -> remove it. Commands run as root. Use the user option for another user.
    - runCommand({..., detached: true}) -> commands.spawn(cmd). Python: on AsyncSandbox.
