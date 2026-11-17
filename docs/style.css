@@ -214,34 +214,39 @@ html.dark .sidebar-group-header .sidebar-title::before {
   background: var(--ss-group, transparent);
   content: "";
 }
-html.dark .sidebar-group-header:has(+ ul > li:first-child[id="/introduction"]) {
+/*
+ * Each group is matched by a page it holds, at any position, so a new first
+ * page does not drop the color. Use a path prefix when only that group has it;
+ * otherwise use one page that anchors the group.
+ */
+html.dark .sidebar-group-header:has(+ ul > li[id="/introduction"]) {
   --ss-group: var(--ss-mint);
 }
 html.dark
   .sidebar-group-header:is(
-    :has(+ ul > li:first-child[id="/sandbox/create"]),
-    :has(+ ul > li:first-child[id="/commands/overview"]),
-    :has(+ ul > li:first-child[id="/guides/run-ci-jobs"])
+    :has(+ ul > li[id="/sandbox/create"]),
+    :has(+ ul > li[id^="/commands/"]),
+    :has(+ ul > li[id^="/guides/"]:not([id^="/guides/migrate-from-"]))
   ) {
   --ss-group: var(--ss-cyan);
 }
 html.dark
   .sidebar-group-header:is(
-    :has(+ ul > li:first-child[id="/templates/overview"]),
-    :has(+ ul > li:first-child[id="/filesystem/read-write"]),
-    :has(+ ul > li:first-child[id="/storage/archil"]),
-    :has(+ ul > li:first-child[id="/integrations/overview"])
+    :has(+ ul > li[id^="/templates/"]),
+    :has(+ ul > li[id^="/filesystem/"]),
+    :has(+ ul > li[id^="/storage/"]),
+    :has(+ ul > li[id="/integrations/overview"])
   ) {
   --ss-group: var(--ss-violet);
 }
 html.dark
   .sidebar-group-header:is(
-    :has(+ ul > li:first-child[id="/sandbox/environment-variables"]),
-    :has(+ ul > li:first-child[id="/guides/migrate-from-e2b"])
+    :has(+ ul > li[id^="/secrets/"]),
+    :has(+ ul > li[id^="/guides/migrate-from-"])
   ) {
   --ss-group: var(--ss-amber);
 }
-html.dark .sidebar-group-header:has(+ ul > li:first-child[id="/errors"]) {
+html.dark .sidebar-group-header:has(+ ul > li[id="/errors"]) {
   --ss-group: var(--ss-coral);
 }
 
@@ -268,7 +273,7 @@ html.dark:is(
 html.dark:is(
     [data-current-path^="/secrets/"],
     [data-current-path="/sandbox/environment-variables"],
-    [data-current-path="/guides/migrate-from-e2b"]
+    [data-current-path^="/guides/migrate-from-"]
   )
   #header
   .eyebrow {
