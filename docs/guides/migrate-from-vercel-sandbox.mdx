@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Vercel Sandbox and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Vercel Sandbox today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -108,7 +108,7 @@ To turn a Vercel image into a template, see [Create a template](/templates/creat
 Change the import, add a `name`, convert milliseconds to seconds, and join each command and its arguments into one shell string. Shell-escape each argument, so that the shell does not expand `$VAR`, `*` or quotes. Set a command timeout for long commands such as installs and tests.
 
 <CodeGroup>
-```ts Before (Vercel Sandbox)
+```ts Vercel Sandbox
 import { Sandbox } from "@vercel/sandbox"
 
 const sandbox = await Sandbox.create({
@@ -128,7 +128,7 @@ const fork = await Sandbox.create({
 })
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox } from "@superserve/sdk"
 
 const sbx = await Sandbox.create({
@@ -152,8 +152,31 @@ const url = sbx.getPreviewUrl(3000)
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
+</CodeGroup>
 
-```python After (Superserve, Python)
+<CodeGroup>
+```python Vercel Sandbox
+from vercel.sandbox import sync as sandbox
+
+box = sandbox.create_sandbox(
+    source=sandbox.GitSource(url="https://github.com/your-org/your-app.git"),
+    ports=[3000],
+    execution_time_limit=600,
+    env={"NODE_ENV": "test"},
+    tags={"team": "infra"},
+    destroy=False,
+)
+box.run_command("npm", ["install"])
+result = box.run_command("npm", ["test"], capture_output=True)
+print(result.stdout.decode())
+url = next(route.url for route in box.routes if route.port == 3000)
+snap = box.snapshot()
+fork = sandbox.create_sandbox(
+    source=sandbox.SnapshotSource(snapshot_id=snap.id), destroy=False
+)
+```
+
+```python Superserve
 from superserve import Sandbox
 
 sbx = Sandbox.create(
