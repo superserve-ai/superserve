@@ -22,16 +22,36 @@ export const BenchmarkComparison = ({
   // ComputeSDK results read on AS_OF.
   const AS_OF = "Nov 16, 2026"
   const DATA = {
-    tti: { superserve: 446, e2b: 1068, cloudflare: 3003, daytona: 627 },
-    dax: { superserve: 57422, e2b: 64219, cloudflare: 107110, modal: 48147 },
+    tti: {
+      superserve: 446,
+      e2b: 1068,
+      cloudflare: 3003,
+      daytona: 627,
+      vercel: 521,
+    },
+    dax: {
+      superserve: 57422,
+      e2b: 64219,
+      cloudflare: 107110,
+      modal: 48147,
+      vercel: 72265,
+    },
     snapshot: {
       superserve: 95.4,
       e2b: 84.8,
       cloudflare: 79.6,
       modal: 88.3,
       daytona: 71.1,
+      vercel: 0,
     },
-    pause: { superserve: 97.1, e2b: 91, cloudflare: 0, modal: 0, daytona: 0 },
+    pause: {
+      superserve: 97.1,
+      e2b: 91,
+      cloudflare: 0,
+      modal: 0,
+      daytona: 0,
+      vercel: 86.9,
+    },
   }
 
   // Times are in milliseconds; scores are out of 100.

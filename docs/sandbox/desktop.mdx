@@ -43,7 +43,9 @@ sandbox = Sandbox.create(name="desktop", from_template="superserve/desktop")
 ## The agent loop
 
 Your code owns the model call and the conversation. The sandbox runs the
-actions. Each turn is a screenshot in, a list of actions out:
+actions. Each turn is a screenshot in, a list of actions out. In the loop
+below, `nextActions` / `next_actions` stands for your own model call: it sends
+the frame to the model and returns the model's actions for the turn.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -86,11 +88,13 @@ request, so a turn is a single round trip. Input is delivered before the
 application has repainted, so with `waitForChange` / `wait_for_change` the
 sandbox captures the first frame whose pixels differ from the frame before
 the batch, waiting at most `settleMs` / `settle_ms` (default 1000, up to
-2000); the result's `changed` says whether a repaint arrived. A changed frame
+2000); the result's `changed` says whether a repaint arrived. `changed` is
+meaningful only with `waitForChange`: without it, `changed` is `undefined` in
+TypeScript and `False` in Python. A changed frame
 proves the display repainted, not that the application finished, so check
 the screenshot for what you expect. Without `waitForChange` the sandbox
-sleeps `settleMs` and then captures. With `quietMs` / `quiet_ms` the capture
-also waits until the display has been still for that long, so a batch that
+sleeps `settleMs` (default 0: no sleep) and then captures. With `quietMs` /
+`quiet_ms` the capture also waits until the display has been still for that long, so a batch that
 paints in steps (a focus ring, then the typed text) comes back settled rather
 than mid-way. `quietMs` requires `waitForChange` and can't exceed `settleMs`,
 so raise `settleMs` for a quiet window above 1000; otherwise `step` throws a
@@ -106,6 +110,14 @@ capture fails, since the actions that ran have already landed: check
 `screenshotError` / `screenshot_error`. Resizing to the model's native
 resolution first keeps frames small and maps its coordinates 1:1 onto the
 screen.
+
+A batch that fails validation is different: `step` and `actions` throw, and
+no action in the batch runs. The SDK rejects a negative or non-integer
+coordinate and an empty key name before it sends the request, with `Error` in
+TypeScript and `ValueError` in Python. Python also rejects an unknown action
+`type` this way. The sandbox rejects a coordinate above 65535, and an unknown
+action `type` sent from TypeScript, with `ValidationError`. Fix the batch and
+send it again.
 
 <Note>
   Everything the agent reads from the screen is untrusted input to the model:
@@ -144,22 +156,22 @@ not stop someone else from opening the same URL with control, so use a
 ```typescript TypeScript
 import fs from "node:fs/promises"
 
-const shot = await sandbox.desktop.screenshot()
-await fs.writeFile("screen.png", shot.data) // PNG bytes; shot.width, shot.height
+const frame = await sandbox.desktop.screenshot()
+await fs.writeFile("screen.png", frame.data) // PNG bytes; frame.width, frame.height
 ```
 
 ```python Python
 from pathlib import Path
 
-shot = sandbox.desktop.screenshot()
-Path("screen.png").write_bytes(shot.data)  # PNG bytes; shot.width, shot.height
+frame = sandbox.desktop.screenshot()
+Path("screen.png").write_bytes(frame.data)  # PNG bytes; frame.width, frame.height
 ```
 
 </CodeGroup>
 
 The capture includes the cursor. Coordinates in every other call are pixels in
 this image, with the origin at the top-left. `screenshot({ format: "jpeg" })` /
-`screenshot(format="jpeg")` returns a JPEG instead; `shot.format` says which
+`screenshot(format="jpeg")` returns a JPEG instead; `frame.format` says which
 encoding you got.
 
 ## Mouse
@@ -186,8 +198,15 @@ sandbox.desktop.scroll(dy=3)  # positive scrolls down; dx for horizontal
 </CodeGroup>
 
 A click moves the pointer and clicks in one request. A drag runs as one atomic
-batch (press, move, release), so no other input can land in the middle of it. Scroll moves the wheel by whole clicks and targets
-whatever is under the pointer, so move first to scroll a specific element.
+batch (press, move, release), so no other input can land in the middle of it.
+`drag` takes the same `button` option as `click`. Scroll moves the wheel by
+whole clicks and targets whatever is under the pointer, so move first to
+scroll a specific element.
+
+Coordinates are not checked against the display size. A point outside the
+screen goes to the nearest edge: a click at (5000, 5000) on a 1280x800 display
+lands at (1279, 799). The only upper limit is 65535: a larger coordinate
+throws `ValidationError`.
 
 ## Keyboard
 
@@ -207,10 +226,35 @@ sandbox.desktop.press("ctrl+shift+p")  # or press(["ctrl", "shift", "p"])
 </CodeGroup>
 
 `write` types literal text with no per-character pacing, so long strings land
-in well under a second. `press` sends a key or chord. Friendly names (`enter`,
-`esc`, `tab`, `backspace`, `delete`, `up`, `down`, `pageup`, `ctrl`, `alt`,
-`shift`, `cmd`) are accepted as written; any other key uses its X keysym name,
-so `F5`, `Return`, and `KP_Enter` work as written.
+in well under a second. `press` sends a key or chord. These friendly names work
+in any case (`enter`, `Enter`, and `ENTER` are the same key): `enter` or
+`return`, `esc` or `escape`, `tab`, `space`, `backspace`, `delete`, `insert`,
+`up`, `down`, `left`, `right`, `home`, `end`, `pageup`, `pagedown`, `ctrl` or
+`control`, `alt`, `shift`, and `cmd`, `win`, or `super`. Any other key uses its
+X keysym name, so `F5`, `Return`, and `KP_Enter` work as written.
+
+Key names are not checked. A name that is neither a friendly name nor an X
+keysym, such as `press("NotAKeysym")`, does nothing and returns without an
+error. In a batch it does not set `actionError` / `action_error` either. Check
+the next screenshot when a key press must land.
+
+`commands.run` sets no locale, so an application it starts can lose the
+non-ASCII characters that `write` types. In a terminal started that way,
+`"A é ✓ 日本 Z"` arrived as `"A    Z"`. Start desktop applications with a UTF-8
+locale:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run("xfce4-terminal >/dev/null 2>&1 &", {
+  env: { LANG: "C.UTF-8" },
+})
+```
+
+```python Python
+sandbox.commands.run("xfce4-terminal >/dev/null 2>&1 &", env={"LANG": "C.UTF-8"})
+```
+
+</CodeGroup>
 
 ## Batch actions
 
@@ -235,10 +279,12 @@ sandbox.desktop.actions([
 
 </CodeGroup>
 
-The whole batch is validated before anything runs, then runs in order and
-stops at the first failing action. `step` is the same batch followed by a
-capture in the same request, for the agent loop above; `actions` is for input
-you do not need to look at afterwards.
+The whole batch is validated before anything runs (a batch that fails
+validation throws, see [The agent loop](#the-agent-loop)), then runs in order
+and stops at the first failing action. An unknown key name in a `press` action
+is not a failing action (see [Keyboard](#keyboard)). `step` is the same batch
+followed by a capture in the same request, for the agent loop above; `actions`
+is for input you do not need to look at afterwards.
 
 | TypeScript `type`       | Python `type`             | Fields                 |
 | ----------------------- | ------------------------- | ---------------------- |
@@ -270,7 +316,9 @@ sandbox.desktop.resize(1920, 1080)
 </CodeGroup>
 
 Takes effect live, with no restart: open windows re-lay out. Width must be a
-multiple of 8 from 320 to 8192; height from 200 to 8192.
+multiple of 8 from 320 to 8192; height from 200 to 8192. At the largest sizes
+the capture can fail: a 7680x4320 display captures, but `screenshot()` on an
+8192x8192 display threw a `ServerError` after about 5 seconds.
 
 ## Pause and resume
 
@@ -284,7 +332,7 @@ The MCP server exposes the same surface as the `sandbox_computer` tool, one
 action per call (`screenshot`, `left_click`, `type`, `key`, `scroll`,
 `left_click_drag`, …) in the vocabulary computer-use models are trained on.
 Input actions return a fresh screenshot of the result by default. See
-[MCP Sandboxes](/integrations/mcp#computer-use).
+[MCP server: Computer use](/integrations/mcp#computer-use).
 
 ## Integrations
 

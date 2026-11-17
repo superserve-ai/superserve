@@ -7,7 +7,7 @@ icon: "arrow-right-arrow-left"
 
 import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
 
-Daytona and Superserve sandboxes do the same job: run untrusted code in an isolated environment that you control from an SDK. Most code moves call by call.
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Daytona today, most code moves call by call.
 
 ## How Superserve compares
 
@@ -104,7 +104,7 @@ To turn a Daytona snapshot or image into a template, see [Create a template](/te
 Build the template once. Then replace the Daytona client with `Sandbox`, add a `name`, and convert intervals from minutes to seconds.
 
 <CodeGroup>
-```ts Before (Daytona)
+```ts Daytona
 import { Daytona, Image } from "@daytona/sdk"
 
 const daytona = new Daytona()
@@ -123,7 +123,7 @@ const { url, token } = await sandbox.getPreviewLink(8000)
 const fork = await sandbox.fork({ name: "fork" })
 ```
 
-```ts After (Superserve)
+```ts Superserve
 import { Sandbox, Template } from "@superserve/sdk"
 
 // Build once. Sandboxes then start from the template.
@@ -140,15 +140,18 @@ const sbx = await Sandbox.create({
   envVars: { MODE: "ci" },
   idleTimeoutSeconds: 600,
 })
-await sbx.commands.run("pytest")
+// run() stops a command after 30 s by default
+await sbx.commands.run("pytest", { timeoutMs: 10 * 60 * 1000 })
 await sbx.publishPreviewPort(8000, { access: "private" })
 const url = sbx.getPreviewUrl(8000)
 const { header, token } = await sbx.getPreviewToken(8000) // send as a header
 const snap = await sbx.snapshot()
 const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
 ```
+</CodeGroup>
 
-```python Before (Daytona, Python)
+<CodeGroup>
+```python Daytona
 from daytona import (
     CreateSandboxFromSnapshotParams,
     CreateSnapshotParams,
@@ -176,7 +179,7 @@ preview = sandbox.get_preview_link(8000)  # preview.url, preview.token
 fork = sandbox.fork(name="fork")
 ```
 
-```python After (Superserve, Python)
+```python Superserve
 from superserve import RunStep, Sandbox, Template
 
 # Build once. Sandboxes then start from the template.
@@ -193,7 +196,8 @@ sbx = Sandbox.create(
     env_vars={"MODE": "ci"},
     idle_timeout_seconds=600,
 )
-sbx.commands.run("pytest")
+# run() stops a command after 30 s by default
+sbx.commands.run("pytest", timeout_seconds=10 * 60)
 sbx.publish_preview_port(8000, access="private")
 url = sbx.get_preview_url(8000)
 credential = sbx.get_preview_token(8000)  # send credential.token in credential.header
@@ -205,7 +209,7 @@ fork = Sandbox.create(name="fork", from_snapshot=snap)
 </Step>
 <Step title="Move existing sandboxes with the migration script">
 
-The script copies a directory from each started Daytona sandbox into a new Superserve sandbox. It does not change or delete your Daytona sandboxes. Run it with both `DAYTONA_API_KEY` and `SUPERSERVE_API_KEY` set. Start a stopped Daytona sandbox first to include it.
+The script copies a directory from each started Daytona sandbox into a new Superserve sandbox. It does not change or delete your Daytona sandboxes; it removes only the temporary archive. If a copy fails, the script deletes the new Superserve sandbox. Run it with both `DAYTONA_API_KEY` and `SUPERSERVE_API_KEY` set. Start a stopped Daytona sandbox first to include it.
 
 <CodeGroup>
 ```ts migrate-from-daytona.ts
@@ -215,32 +219,53 @@ import { Sandbox } from "@superserve/sdk"
 const SRC = "/home/daytona" // directory to copy from each Daytona sandbox
 const DST = "/home/user" // directory to copy into in Superserve
 const TEMPLATE = "superserve/base" // or the template you built from your Daytona snapshot
-const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each archive, upload and extract
 
 const daytona = new Daytona()
 for await (const src of daytona.list({ states: [SandboxState.STARTED] })) {
-  const tar = await src.process.executeCommand(
-    `tar czf /tmp/state.tgz -C ${SRC} . 2>&1`,
-  )
-  if (tar.exitCode !== 0) {
-    console.error(`${src.id}: archive failed: ${tar.result}`)
+  let tgz: Buffer
+  try {
+    const tar = await src.process.executeCommand(
+      `tar czf /tmp/state.tgz -C ${SRC} . 2>&1`,
+      undefined,
+      undefined,
+      TIMEOUT_MS / 1000, // seconds
+    )
+    if (tar.exitCode !== 0) throw new Error(tar.result)
+    tgz = await src.fs.downloadFile("/tmp/state.tgz")
+  } catch (err) {
+    console.error(`${src.id}: archive failed: ${err}`)
     process.exitCode = 1
     continue
+  } finally {
+    // Remove the temporary archive from the source, also after a failure.
+    await src.process
+      .executeCommand("rm -f /tmp/state.tgz")
+      .then((rm) => {
+        if (rm.exitCode !== 0) throw new Error(rm.result)
+      })
+      .catch(() => console.error(`${src.id}: remove /tmp/state.tgz by hand`))
   }
-  const tgz = await src.fs.downloadFile("/tmp/state.tgz")
 
   const dst = await Sandbox.create({
     name: `from-daytona-${src.id}`,
     fromTemplate: TEMPLATE,
     metadata: { ...src.labels, migrated_from: src.id },
   })
-  await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
-  const out = await dst.commands.run(`tar xzf /tmp/state.tgz -C ${DST}`, {
-    timeoutMs: TIMEOUT_MS,
-  })
-  if (out.exitCode !== 0) {
-    console.error(`${src.id}: copy failed: ${out.stderr}`)
+  try {
+    await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(
+      `tar xzf /tmp/state.tgz -C ${DST} && rm /tmp/state.tgz`,
+      { timeoutMs: TIMEOUT_MS },
+    )
+    if (out.exitCode !== 0) throw new Error(out.stderr)
+  } catch (err) {
+    console.error(`${src.id}: copy failed: ${err}`)
     process.exitCode = 1
+    // Delete the new sandbox so a failed copy does not keep running.
+    await dst
+      .kill()
+      .catch(() => console.error(`${src.id}: delete ${dst.id} by hand`))
     continue
   }
   console.log(`${src.id} -> ${dst.id}`)
@@ -256,30 +281,52 @@ from superserve import Sandbox
 SRC = "/home/daytona"  # directory to copy from each Daytona sandbox
 DST = "/home/user"  # directory to copy into in Superserve
 TEMPLATE = "superserve/base"  # or the template you built from your Daytona snapshot
-TIMEOUT_SECONDS = 10 * 60  # limit for each upload and extract
+TIMEOUT_SECONDS = 10 * 60  # limit for each archive, upload and extract
 failed = False
 
 daytona = Daytona()
 for src in daytona.list(ListSandboxesQuery(states=[SandboxState.STARTED])):
-    tar = src.process.exec(f"tar czf /tmp/state.tgz -C {SRC} . 2>&1")
-    if tar.exit_code != 0:
-        print(f"{src.id}: archive failed: {tar.result}", file=sys.stderr)
+    try:
+        tar = src.process.exec(
+            f"tar czf /tmp/state.tgz -C {SRC} . 2>&1", timeout=TIMEOUT_SECONDS
+        )
+        if tar.exit_code != 0:
+            raise RuntimeError(tar.result)
+        tgz = src.fs.download_file("/tmp/state.tgz")
+    except Exception as err:
+        print(f"{src.id}: archive failed: {err}", file=sys.stderr)
         failed = True
         continue
-    tgz = src.fs.download_file("/tmp/state.tgz")
+    finally:
+        # Remove the temporary archive from the source, also after a failure.
+        try:
+            rm = src.process.exec("rm -f /tmp/state.tgz")
+            if rm.exit_code != 0:
+                raise RuntimeError(rm.result)
+        except Exception:
+            print(f"{src.id}: remove /tmp/state.tgz by hand", file=sys.stderr)
 
     dst = Sandbox.create(
         name=f"from-daytona-{src.id}",
         from_template=TEMPLATE,
         metadata={**src.labels, "migrated_from": src.id},
     )
-    dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
-    out = dst.commands.run(
-        f"tar xzf /tmp/state.tgz -C {DST}", timeout_seconds=TIMEOUT_SECONDS
-    )
-    if out.exit_code != 0:
-        print(f"{src.id}: copy failed: {out.stderr}", file=sys.stderr)
+    try:
+        dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
+        out = dst.commands.run(
+            f"tar xzf /tmp/state.tgz -C {DST} && rm /tmp/state.tgz",
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if out.exit_code != 0:
+            raise RuntimeError(out.stderr)
+    except Exception as err:
+        print(f"{src.id}: copy failed: {err}", file=sys.stderr)
         failed = True
+        # Delete the new sandbox so a failed copy does not keep running.
+        try:
+            dst.kill()
+        except Exception:
+            print(f"{src.id}: delete {dst.id} by hand", file=sys.stderr)
         continue
     print(f"{src.id} -> {dst.id}")
 
@@ -287,7 +334,7 @@ sys.exit(1 if failed else 0)
 ```
 </CodeGroup>
 
-Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS` / `TIMEOUT_SECONDS`.
+Each archive, upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS` / `TIMEOUT_SECONDS`.
 
 The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
 
@@ -339,6 +386,8 @@ I get it from the console (https://console.superserve.ai/api-keys/). Do not crea
      Daytona stops it. autoDeleteInterval / ephemeral -> autoDeleteSeconds.
    - process.executeCommand(cmd, cwd, env, timeout) -> commands.run(cmd, {cwd, env, timeoutMs}).
      result -> stdout. It does not throw on a nonzero exit code, so keep the exitCode checks.
+     Without timeoutMs, run() stops the command after 30 seconds. Set timeoutMs on installs,
+     builds, tests and any other command that can take longer.
    - process.codeRun(code) -> files.write the code to an absolute path, then commands.run it.
    - Session commands with runAsync -> commands.spawn(cmd). Python: on AsyncSandbox.
    - fs.uploadFile(data, path) / fs.downloadFile(path) -> files.write(path, data) / files.read(path)
@@ -376,7 +425,7 @@ The API mapping and the migration script are in the **Human** tab.
 | --- | --- |
 | Snapshots | A Daytona snapshot is a base image for new sandboxes. In Superserve that is a template. A Superserve snapshot saves the memory and disk of one sandbox. |
 | Idle behavior | Daytona stops an idle sandbox after 15 minutes by default, which ends its processes. By default, a Superserve sandbox does not pause for being idle. Set `idleTimeoutSeconds` to pause an idle sandbox and keep its processes. |
-| Commands | `commands.run` returns `stdout` and `stderr` separately and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. |
+| Commands | `commands.run` returns `stdout` and `stderr` separately and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. Without a timeout, `run()` stops a command after 30 seconds, so set `timeoutMs` / `timeout_seconds` on installs, builds and tests. |
 | Resources | Set `vcpu` and `memoryMib` on the template, not on the sandbox. Memory is in MiB, not GiB. |
 | Home directory | Daytona sandboxes use `/home/daytona`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
 | Preview ports | New sandboxes route only published ports, and a new port is public by default. Publish with `access: "private"` and send a preview token to keep a port protected. Serve on a port from 1024 to 65535. |
