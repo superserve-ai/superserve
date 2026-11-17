@@ -26,6 +26,7 @@ import {
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
+import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
 import { RecaptchaScript } from "@/lib/recaptcha/script"
@@ -182,9 +183,11 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "email",
+          reason: "captcha_not_loaded",
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
       const result = await signUpWithEmail(
@@ -355,9 +358,12 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: "captcha_not_loaded",
+          complete_google: isCompleteGoogleSignup,
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
 
@@ -368,6 +374,11 @@ export default function SignUpContent() {
         fingerprintDiagnostics,
       )
       if (!proof.success) {
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: proof.errorCode,
+          complete_google: isCompleteGoogleSignup,
+        })
         setErrors({
           form:
             proof.errorCode === "captcha_failed"
