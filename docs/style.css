@@ -175,6 +175,16 @@ html.dark .ss-bench {
 .ss-bench-own .ss-bench-val {
   color: var(--ss-bench-fg);
 }
+.ss-bench-source {
+  margin: 0;
+  color: var(--ss-bench-muted);
+  font-size: 12px;
+}
+.ss-bench-source a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
 @media (max-width: 480px) {
   .ss-bench-row {
     grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr) auto;
