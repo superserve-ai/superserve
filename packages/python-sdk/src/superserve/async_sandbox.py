@@ -25,7 +25,13 @@ from ._http import (
 )
 from .commands import AsyncCommands, AsyncCommandsDeps
 from .desktop import DESKTOP_STREAM_PORT, AsyncDesktop, AsyncDesktopDeps
-from .errors import ConflictError, NotFoundError, SandboxError, SandboxTimeoutError
+from .errors import (
+    ConflictError,
+    NotFoundError,
+    SandboxError,
+    SandboxTimeoutError,
+    ValidationError,
+)
 from .async_snapshots import AsyncSnapshot
 from .snapshots import (
     DEFAULT_SNAPSHOT_POLL_S,
@@ -33,7 +39,16 @@ from .snapshots import (
     _snapshot_create_body,
 )
 from .files import AsyncFiles, AsyncFilesDeps
+from .async_volume import AsyncVolume, _get_volume_attachment, _detach_volume_attachment
+from .volume import (
+    _VolumeHandle,
+    _assert_volume_connection,
+    _same_volume_sandbox,
+    _volume_timeout,
+)
 from .types import (
+    SandboxVolumeMount,
+    VolumeAttachment,
     UNSET,
     build_update_body,
     list_query,
@@ -56,6 +71,7 @@ from .types import (
 )
 
 if TYPE_CHECKING:
+    from .volume import Volume
     from .snapshots import Snapshot
     from .async_template import AsyncTemplate
     from .template import Template
@@ -169,11 +185,56 @@ class AsyncSandbox:
                 return await self._post_and_rotate_token("activate")
             return self._access_token
 
+    async def attach_volume(
+        self,
+        volume: str | Volume | AsyncVolume,
+        *,
+        mount_path: str,
+        read_only: bool | None = None,
+        idempotency_key: str | None = None,
+        timeout: float = 180.0,
+    ) -> VolumeAttachment:
+        """Attach an existing volume and wait for the server to confirm its mount."""
+        timeout = _volume_timeout(timeout)
+        if isinstance(volume, _VolumeHandle):
+            _assert_volume_connection(self._config, volume._config)
+        resource = (
+            volume
+            if isinstance(volume, AsyncVolume)
+            else await AsyncVolume.connect(
+                volume if isinstance(volume, str) else volume.id,
+                api_key=self._config.api_key,
+                base_url=self._config.base_url,
+                timeout=timeout,
+            )
+        )
+        return await resource.attach(
+            self,
+            mount_path=mount_path,
+            read_only=read_only,
+            idempotency_key=idempotency_key,
+            timeout=timeout,
+        )
+
+    async def detach_volume(self, attachment_id: str, *, timeout: float = 30.0) -> None:
+        try:
+            attachment = await _get_volume_attachment(
+                self._config, attachment_id, timeout
+            )
+            if not _same_volume_sandbox(attachment.sandbox_id, self.id):
+                from .errors import ValidationError
+
+                raise ValidationError("Attachment belongs to a different sandbox")
+        except NotFoundError:
+            return
+        await _detach_volume_attachment(self._config, attachment_id, timeout)
+
     @classmethod
     async def create(
         cls,
         *,
         name: str,
+        volumes: Sequence[SandboxVolumeMount] | None = None,
         from_template: "str | Template | AsyncTemplate | None" = None,
         from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
         timeout_seconds: int | None = None,
@@ -200,6 +261,16 @@ class AsyncSandbox:
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
+        if volumes is not None and len(volumes) > 128:
+            raise ValidationError("A new sandbox supports at most 128 volume mounts")
+        volume_mounts = tuple(mount.copy() for mount in volumes or [])
+        volume_paths: set[str] = set()
+        for mount in volume_mounts:
+            if mount["mount_path"] in volume_paths:
+                raise ValidationError("Volume mount paths must be distinct")
+            volume_paths.add(mount["mount_path"])
+            if isinstance(mount["volume"], _VolumeHandle):
+                _assert_volume_connection(mount["volume"]._config, config)
         body: dict[str, Any] = {"name": name}
         if from_template is not None:
             if isinstance(from_template, str):
@@ -244,7 +315,56 @@ class AsyncSandbox:
             raise SandboxError(
                 "Invalid API response from POST /sandboxes: missing access_token"
             )
-        return cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
+        sandbox = cls(to_sandbox_info(raw), token, config, raw.get("routing_hint"))
+        try:
+            for mount in volume_mounts:
+                await sandbox.attach_volume(
+                    mount["volume"],
+                    mount_path=mount["mount_path"],
+                    read_only=mount.get("read_only"),
+                    idempotency_key=mount.get("idempotency_key"),
+                    timeout=mount.get("timeout", 180.0),
+                )
+        except BaseException as error:
+
+            async def cleanup_created_sandbox() -> None:
+                try:
+                    await async_api_request(
+                        "DELETE",
+                        f"{config.base_url}/sandboxes/{sandbox.id}",
+                        headers={"X-API-Key": config.api_key},
+                        timeout=30.0,
+                        budget=30.0,
+                        retry_conflict=True,
+                        client=sandbox._http_client,
+                    )
+                except NotFoundError:
+                    pass
+                finally:
+                    await sandbox._close_http_client()
+
+            cleanup = asyncio.create_task(cleanup_created_sandbox())
+            deferred_cancel: asyncio.CancelledError | None = None
+            # Shield leaves the child running when its caller is cancelled.
+            # Drain its bounded DELETE and close before propagating cancellation.
+            while not cleanup.done():
+                try:
+                    await asyncio.shield(cleanup)
+                except asyncio.CancelledError as cancelled:
+                    deferred_cancel = cancelled
+                except Exception:
+                    break
+            try:
+                cleanup.result()
+            except (Exception, asyncio.CancelledError):
+                raise SandboxError(
+                    f"Volume attachment failed and newly created sandbox {sandbox.id} could not be deleted",
+                    code="volume_cleanup_failed",
+                ) from error
+            if deferred_cancel is not None:
+                raise deferred_cancel
+            raise
+        return sandbox
 
     @classmethod
     async def connect(

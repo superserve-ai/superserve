@@ -4,10 +4,15 @@ from __future__ import annotations
 
 from datetime import datetime, timezone
 from enum import Enum
-from typing import Any, Literal, Optional, Sequence, Union
+from typing import TYPE_CHECKING, Any, Literal, Optional, Sequence, Union
 from urllib.parse import urlencode
 
 from pydantic import BaseModel, Field
+from typing_extensions import NotRequired, TypedDict
+
+if TYPE_CHECKING:
+    from .volume import Volume
+    from .async_volume import AsyncVolume
 
 from .errors import SandboxError
 
@@ -719,3 +724,52 @@ def to_network_log_page(raw: dict[str, Any]) -> NetworkLogPage:
         next_cursor=raw.get("next_cursor"),
         has_more=raw.get("has_more") or False,
     )
+
+
+VolumeStatus = Literal["creating", "ready", "deleting", "deleted", "error"]
+VolumeAttachmentStatus = Literal[
+    "preparing",
+    "mounting",
+    "mounted",
+    "suspending",
+    "suspended",
+    "detaching",
+    "revoking",
+    "revoked",
+    "error",
+]
+
+
+class VolumeInfo(BaseModel):
+    id: str
+    name: str
+    capacity_bytes: int
+    used_bytes: int
+    region: str
+    status: VolumeStatus
+    generation: int
+    error_code: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class VolumeAttachment(BaseModel):
+    id: str
+    volume_id: str
+    sandbox_id: str
+    mount_path: str
+    read_only: bool
+    status: VolumeAttachmentStatus
+    generation: int
+    lease_expires_at: datetime
+    error_code: Optional[str] = None
+    created_at: datetime
+    updated_at: datetime
+
+
+class SandboxVolumeMount(TypedDict):
+    volume: Union[str, "Volume", "AsyncVolume"]
+    mount_path: str
+    read_only: NotRequired[bool]
+    idempotency_key: NotRequired[str]
+    timeout: NotRequired[float]

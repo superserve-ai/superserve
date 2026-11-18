@@ -6,6 +6,7 @@
  */
 
 import { SandboxError } from "./errors.js"
+import type { SandboxVolumeMount } from "./Volume.js"
 
 // ---------------------------------------------------------------------------
 // Sandbox
@@ -78,6 +79,8 @@ export interface ConnectionOptions {
 
 export interface SandboxCreateOptions extends ConnectionOptions {
   name: string
+  /** Existing volumes to mount before returning; independent volumes survive failures. */
+  volumes?: SandboxVolumeMount[]
   /** Template name, UUID, or Template instance. */
   fromTemplate?: string | { name?: string; id: string }
   /**
