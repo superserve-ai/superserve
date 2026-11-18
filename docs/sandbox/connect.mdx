@@ -14,14 +14,14 @@ A sandbox outlives the process that created it. Store `sandbox.id` somewhere dur
 import { Sandbox } from "@superserve/sdk"
 
 const sandbox = await Sandbox.connect("7a3f2b8c-1234-...")
-await sandbox.commands.run("ls /app")
+await sandbox.commands.run("ls /home/user")
 ```
 
 ```python Python
 from superserve import Sandbox
 
 sandbox = Sandbox.connect("7a3f2b8c-1234-...")
-sandbox.commands.run("ls /app")
+sandbox.commands.run("ls /home/user")
 ```
 </CodeGroup>
 
