@@ -136,11 +136,11 @@ describe("plan picker", () => {
       team: "use:team-1",
     })
     render(<ChoosePlanPage />)
-    expect(
-      await screen.findByText(
-        "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Choose a plan to run sandboxes.",
-      ),
-    ).toBeTruthy()
+    const message = await screen.findByText(
+      "We couldn't confirm your free trial, maybe because a blocker stopped a sign-up check. Choose a plan to run sandboxes.",
+    )
+    // A live region, so screen readers announce the text that loads late.
+    expect(message.getAttribute("aria-live")).toBe("polite")
     expect(screen.queryByText(/used up|isn't available/)).toBeNull()
   })
 

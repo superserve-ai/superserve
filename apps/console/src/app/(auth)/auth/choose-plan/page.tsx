@@ -55,7 +55,7 @@ const TRIAL_COPY: Record<TrialOutcome, string> = {
   unavailable:
     "The free trial isn't available for this account. Choose a plan to run sandboxes.",
   check_unavailable:
-    "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Choose a plan to run sandboxes.",
+    "We couldn't confirm your free trial, maybe because a blocker stopped a sign-up check. Choose a plan to run sandboxes.",
   unknown: MESSAGES.trial_ended,
 }
 
@@ -161,7 +161,7 @@ function ChoosePlanContent() {
           <h1 className="text-center text-sm font-medium text-foreground">
             Choose a plan
           </h1>
-          <p className="mt-2 text-center text-xs text-muted">
+          <p aria-live="polite" className="mt-2 text-center text-xs text-muted">
             {reason === "trial_ended" ? (
               <TrialEndedMessage locator={locator} />
             ) : (

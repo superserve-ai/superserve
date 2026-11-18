@@ -11,6 +11,7 @@ import type { AwaitingPlanState } from "@/lib/billing/signup-checkout-paths"
 
 import {
   TrialBillingBanner,
+  TrialCheckAnnouncer,
   type TrialStage,
   trialStage,
 } from "./trial-billing-banner"
@@ -123,7 +124,7 @@ describe("TrialBillingBanner", () => {
   it.each([
     [
       "trial_check_unavailable",
-      "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Add a payment method to run sandboxes.",
+      "We couldn't confirm your free trial, maybe because a blocker stopped a sign-up check. Add a payment method to run sandboxes.",
     ],
     [
       "trial_unavailable",
@@ -532,9 +533,77 @@ describe("TrialBillingBanner for a new team's trial", () => {
     })
     mount()
     expect(banner()).toHaveTextContent(
-      "We couldn't confirm the free trial for this account because a required check didn't complete. An ad or privacy blocker can stop this check. Upgrade to run sandboxes.",
+      "We couldn't confirm your free trial, maybe because a blocker stopped a sign-up check. Upgrade to run sandboxes.",
     )
     expect(banner()).not.toHaveTextContent(/ended|used up|isn't available/)
+  })
+
+  describe("screen reader announcement", () => {
+    const message =
+      "We couldn't confirm your free trial, maybe because a blocker stopped a sign-up check. Upgrade to run sandboxes."
+    const announcer = (container: HTMLElement) =>
+      container.querySelector('p[aria-live="polite"]')!
+    const tree = () => (
+      <QueryClientProvider client={new QueryClient()}>
+        <TrialCheckAnnouncer />
+        <TrialBillingBanner />
+      </QueryClientProvider>
+    )
+
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it("fills the empty announcer when the late trial check message shows, then clears it", () => {
+      vi.useFakeTimers()
+      mocks.entry.mockReturnValue({
+        data: undefined,
+        isPending: true,
+        isError: false,
+      })
+      const { container, rerender } = render(tree())
+      // Mounted and empty while billing loads, so the later text is announced.
+      expect(announcer(container)).toHaveTextContent("")
+      entry("trial_ended")
+      mocks.summary.mockReturnValue({
+        data: summary({
+          trial: { state: "no_grant", remaining_usd: 0 },
+          trial_block: "trial_check_unavailable",
+        }),
+      })
+      rerender(tree())
+      expect(announcer(container)).toHaveTextContent(message)
+      expect(banner()).toHaveTextContent(message)
+      act(() => {
+        vi.advanceTimersByTime(7_000)
+      })
+      // Cleared, so browse mode does not read the message twice.
+      expect(announcer(container)).toHaveTextContent("")
+      expect(banner()).toHaveTextContent(message)
+    })
+
+    it("announces nothing for other trial messages", () => {
+      entry("trial")
+      mocks.summary.mockReturnValue({ data: trial(0.37) })
+      const { container } = render(tree())
+      expect(banner()).toHaveTextContent("You're on a free trial")
+      expect(announcer(container)).toHaveTextContent("")
+    })
+
+    it("clears the announcer when the message goes away", () => {
+      entry("trial_ended")
+      mocks.summary.mockReturnValue({
+        data: summary({
+          trial: { state: "no_grant", remaining_usd: 0 },
+          trial_block: "trial_check_unavailable",
+        }),
+      })
+      const { container, rerender } = render(tree())
+      expect(announcer(container)).toHaveTextContent(message)
+      mocks.summary.mockReturnValue({ data: trial(0.37) })
+      rerender(tree())
+      expect(announcer(container)).toHaveTextContent("")
+    })
   })
 
   it("says nothing about the trial while the summary is unavailable", () => {
