@@ -99,6 +99,10 @@ export function CreateKeyDialog({
 
   const handleCopy = async (target: CopyTarget, text: string) => {
     const attempt = ++copyAttempts.current[target]
+    const id = `${target}:${attempt}`
+    const activeElement = document.activeElement
+    const { anchorNode, anchorOffset, focusNode, focusOffset } =
+      window.getSelection?.() ?? {}
     try {
       await navigator.clipboard.writeText(text)
     } catch {
@@ -107,7 +111,19 @@ export function CreateKeyDialog({
       clearTimeout(copyTimers.current[target])
       setCopied((previous) => ({ ...previous, [target]: false }))
       setCopyFailed((previous) => ({ ...previous, [target]: true }))
-      selectCodeText(target === "key" ? keyCode.current : commandCode.current)
+      setCopyAnnouncement({ id, message: copyError })
+      const selection = window.getSelection?.()
+      if (
+        document.activeElement === activeElement &&
+        selection &&
+        (selection.isCollapsed ||
+          (selection.anchorNode === anchorNode &&
+            selection.anchorOffset === anchorOffset &&
+            selection.focusNode === focusNode &&
+            selection.focusOffset === focusOffset))
+      ) {
+        selectCodeText(target === "key" ? keyCode.current : commandCode.current)
+      }
       addToast(copyError, "error")
       return
     }
@@ -121,7 +137,7 @@ export function CreateKeyDialog({
     posthog.capture(API_KEY_EVENTS.COPIED, { target })
     setCopyFailed((previous) => ({ ...previous, [target]: false }))
     setCopied((previous) => ({ ...previous, [target]: true }))
-    setCopyAnnouncement({ id: `${target}:${attempt}`, message })
+    setCopyAnnouncement({ id, message })
     addToast(message, "success")
     clearTimeout(copyTimers.current[target])
     copyTimers.current[target] = setTimeout(() => {
