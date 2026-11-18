@@ -10,7 +10,7 @@ import {
   useSyncExternalStore,
 } from "react"
 
-export const SMALL_SCREEN_MEDIA_QUERY = "(max-width: 767px)"
+export const SMALL_SCREEN_MEDIA_QUERY = "(width < 48rem)"
 
 const STORAGE_KEY = "superserve-sidebar-collapsed"
 

@@ -10,6 +10,7 @@ import {
   TooltipTrigger,
 } from "@superserve/ui"
 import Image from "next/image"
+import { useSyncExternalStore } from "react"
 
 import { useUser } from "@/hooks/use-user"
 import {
@@ -31,6 +32,10 @@ import { SidebarNav } from "./sidebar-nav"
 import { SidebarUserMenu } from "./sidebar-user-menu"
 import { TeamSwitcher } from "./team-switcher"
 
+function subscribeToHydration() {
+  return () => {}
+}
+
 function openCommandPalette() {
   window.dispatchEvent(
     new KeyboardEvent("keydown", { key: "k", metaKey: true }),
@@ -38,6 +43,11 @@ function openCommandPalette() {
 }
 
 export function Sidebar() {
+  const hydrated = useSyncExternalStore(
+    subscribeToHydration,
+    () => true,
+    () => false,
+  )
   const { isCollapsed, toggle } = useSidebar()
   const { user } = useUser()
   const navItems = [
@@ -54,6 +64,7 @@ export function Sidebar() {
       className={cn(
         "absolute top-0 left-0 z-40 flex h-full flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200",
         isCollapsed ? "w-16" : "w-64",
+        !hydrated && "max-md:invisible",
       )}
     >
       {/* Logo */}

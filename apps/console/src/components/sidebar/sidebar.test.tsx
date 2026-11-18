@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
+import { renderToString } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("next/image", () => ({
@@ -50,6 +51,20 @@ vi.mock("./sidebar-nav", () => ({
 import { Sidebar } from "./sidebar"
 
 describe("Sidebar", () => {
+  it("hides the server-rendered sidebar below md", () => {
+    expect(renderToString(<Sidebar />)).toMatch(
+      /<aside\b[^>]*class="[^"]*\bmax-md:invisible\b/,
+    )
+  })
+
+  it("omits the pre-hydration visibility class on the client", () => {
+    render(<Sidebar />)
+
+    expect(screen.getByRole("complementary")).not.toHaveClass(
+      "max-md:invisible",
+    )
+  })
+
   it("shows Billing & Usage without a separate Billing nav item", () => {
     const queryClient = new QueryClient({
       defaultOptions: {

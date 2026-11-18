@@ -1,7 +1,11 @@
 import { act, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
-import { SidebarProvider, useSidebar } from "./sidebar-context"
+import {
+  SidebarProvider,
+  SMALL_SCREEN_MEDIA_QUERY,
+  useSidebar,
+} from "./sidebar-context"
 
 const navigation = vi.hoisted(() => ({ pathname: "/sandboxes" }))
 const STORAGE_KEY = "superserve-sidebar-collapsed"
@@ -114,5 +118,6 @@ it("collapses when the viewport crosses from desktop to small", () => {
   act(() => setMatches(true))
 
   expect(screen.getByRole("status")).toHaveTextContent("collapsed")
-  expect(window.matchMedia).toHaveBeenCalledWith("(max-width: 767px)")
+  expect(SMALL_SCREEN_MEDIA_QUERY).toBe("(width < 48rem)")
+  expect(window.matchMedia).toHaveBeenCalledWith(SMALL_SCREEN_MEDIA_QUERY)
 })
