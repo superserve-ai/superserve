@@ -14,12 +14,13 @@ const fixed: TemplateShape = {
   name: "python-ml",
   from: "python:3.12-slim",
   vcpu: 2,
+  vcpuMax: null,
   memoryMib: 2048,
   memoryMaxMib: null,
   memoryShrinkAfterSeconds: null,
   diskMib: 8192,
 }
-const growing: TemplateShape = { ...fixed, memoryMaxMib: 8192 }
+const growing: TemplateShape = { ...fixed, vcpuMax: 8, memoryMaxMib: 8192 }
 
 // Parses the CLI's own size syntax (packages/cli/src/commands/template.ts).
 function parseMib(input: string): number {
@@ -46,8 +47,11 @@ describe("createRequest", () => {
     })
   })
 
-  it("adds memory_max_mib only when memory can grow", () => {
-    expect(createRequest(growing)).toMatchObject({ memory_max_mib: 8192 })
+  it("adds memory_max_mib and vcpu_max only when they can grow", () => {
+    expect(createRequest(growing)).toMatchObject({
+      vcpu_max: 8,
+      memory_max_mib: 8192,
+    })
   })
 })
 
@@ -67,6 +71,9 @@ describe("cliCommand", () => {
       if (body.memory_max_mib === undefined)
         expect(flags).not.toHaveProperty("memory-max")
       else expect(parseMib(flags["memory-max"])).toBe(body.memory_max_mib)
+      if (body.vcpu_max === undefined)
+        expect(flags).not.toHaveProperty("vcpu-max")
+      else expect(Number(flags["vcpu-max"])).toBe(body.vcpu_max)
     }
   })
 
@@ -76,6 +83,7 @@ describe("cliCommand", () => {
         "superserve template create python-ml \\",
         "  --from python:3.12-slim \\",
         "  --vcpu 2 \\",
+        "  --vcpu-max 8 \\",
         "  --memory 2G \\",
         "  --memory-max 8G \\",
         "  --disk 8G",
@@ -100,6 +108,7 @@ describe("typescriptSnippet", () => {
         '  name: "python-ml",',
         '  from: "python:3.12-slim",',
         "  vcpu: 2,",
+        "  vcpuMax: 8,",
         "  memoryMib: 2048,",
         "  memoryMaxMib: 8192,",
         "  diskMib: 8192,",
@@ -109,8 +118,9 @@ describe("typescriptSnippet", () => {
     )
   })
 
-  it("leaves memoryMaxMib out for fixed memory", () => {
+  it("leaves the ceilings out for a fixed shape", () => {
     expect(typescriptSnippet(fixed)).not.toContain("memoryMaxMib")
+    expect(typescriptSnippet(fixed)).not.toContain("vcpuMax")
   })
 })
 
@@ -124,6 +134,7 @@ describe("pythonSnippet", () => {
         '    name="python-ml",',
         '    from_="python:3.12-slim",',
         "    vcpu=2,",
+        "    vcpu_max=8,",
         "    memory_mib=2048,",
         "    memory_max_mib=8192,",
         "    disk_mib=8192,",
@@ -133,8 +144,9 @@ describe("pythonSnippet", () => {
     )
   })
 
-  it("leaves memory_max_mib out for fixed memory", () => {
+  it("leaves the ceilings out for a fixed shape", () => {
     expect(pythonSnippet(fixed)).not.toContain("memory_max_mib")
+    expect(pythonSnippet(fixed)).not.toContain("vcpu_max")
   })
 })
 

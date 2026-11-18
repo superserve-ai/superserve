@@ -69,6 +69,7 @@ interface TemplateCreateArgs {
   memory_mib?: number
   memory_max_mib?: number
   memory_shrink_after_seconds?: number
+  vcpu_max?: number
   disk_mib?: number
   run_steps?: string[]
   start_cmd?: string
@@ -293,7 +294,7 @@ export function registerLifecycleTools(
           ? templates
               .map(
                 (t) =>
-                  `${t.name}\t${t.status}\t${t.vcpu} vCPU / ${memoryText(t.memoryMib, t.memoryMaxMib)}`,
+                  `${t.name}\t${t.status}\t${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}`,
               )
               .join("\n")
           : "(no templates)"
@@ -360,6 +361,16 @@ export function registerLifecycleTools(
               "it shrinks back toward memory_mib (60 to 1800). Requires memory_max_mib. Sandboxes " +
               "created from the template inherit it. Omit for the platform default.",
           ),
+        vcpu_max: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Optional ceiling sandboxes from this template can grow their vCPU count to while running; " +
+              "vcpu stays the starting count. Must exceed vcpu, be at most 4 times it and at most 32. " +
+              "Omit for a fixed vCPU count.",
+          ),
         disk_mib: z
           .number()
           .int()
@@ -399,6 +410,7 @@ export function registerLifecycleTools(
       memory_mib,
       memory_max_mib,
       memory_shrink_after_seconds,
+      vcpu_max,
       disk_mib,
       run_steps,
       start_cmd,
@@ -415,13 +427,14 @@ export function registerLifecycleTools(
           memoryMib: memory_mib,
           memoryMaxMib: memory_max_mib,
           memoryShrinkAfterSeconds: memory_shrink_after_seconds,
+          vcpuMax: vcpu_max,
           diskMib: disk_mib,
           steps,
           startCmd: start_cmd,
           readyCmd: ready_cmd,
         })
         return toolOk(
-          `building template ${t.name} (${t.vcpu} vCPU / ${memoryText(t.memoryMib, t.memoryMaxMib)}), status ${t.status}. ` +
+          `building template ${t.name} (${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}), status ${t.status}. ` +
             `Poll sandbox_template_list until status is 'ready', then use from_template: "${t.name}".`,
           { template: t },
         )
@@ -502,6 +515,9 @@ export function registerLifecycleTools(
         if (i.memoryShrinkAfterSeconds !== undefined) {
           structured.memory_shrink_after_seconds = i.memoryShrinkAfterSeconds
         }
+        if (i.vcpuMax !== undefined) {
+          structured.vcpu_max = i.vcpuMax
+        }
         if (i.timeoutSeconds !== undefined) {
           structured.timeout_seconds = i.timeoutSeconds
         }
@@ -529,7 +545,7 @@ export function registerLifecycleTools(
           }))
         }
         return toolOk(
-          `${i.id} (${i.name}) — ${i.status}, ${i.vcpuCount} vCPU / ${memoryText(i.memoryMib, i.memoryMaxMib)}`,
+          `${i.id} (${i.name}) — ${i.status}, ${cpuText(i.vcpuCount, i.vcpuMax)} / ${memoryText(i.memoryMib, i.memoryMaxMib)}`,
           structured,
         )
       } catch (e) {
@@ -862,6 +878,10 @@ export function registerLifecycleTools(
  * Guards `.toISOString()`, which throws a RangeError on an Invalid Date — a case
  * optional chaining would not catch (the value is a Date object, just NaN).
  */
+function cpuText(min: number, max: number | undefined): string {
+  return max === undefined ? `${min} vCPU` : `${min}-${max} vCPU`
+}
+
 function memoryText(min: number, max: number | undefined): string {
   return max === undefined ? `${min} MiB` : `${min}-${max} MiB`
 }

@@ -19,6 +19,8 @@ export interface SandboxListItem {
   memory_current_mib?: number | null
   /** Seconds memory must stay low after growing before it shrinks back; absent when the platform default applies. */
   memory_shrink_after_seconds?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpu_max?: number
   snapshot_id?: string
   /** The saved snapshot this sandbox was created from. */
   source_snapshot_id?: string
@@ -161,6 +163,7 @@ export interface SnapshotResponse {
     memory_mib: number
     disk_mib: number
     memory_max_mib?: number
+    vcpu_max?: number
   }
   created_at: string
   ready_at: string | null
@@ -262,6 +265,7 @@ export interface CreateTemplateRequest {
   memory_mib?: number
   memory_max_mib?: number
   memory_shrink_after_seconds?: number
+  vcpu_max?: number
   disk_mib?: number
   build_spec: BuildSpec
 }
@@ -278,6 +282,8 @@ export interface CreateTemplateResponse {
   memory_max_mib?: number
   /** Seconds memory must stay low after growing before it shrinks back; absent when the platform default applies. */
   memory_shrink_after_seconds?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpu_max?: number
   created_at: string
   build_id: string
 }
@@ -294,6 +300,8 @@ export interface TemplateResponse {
   memory_max_mib?: number
   /** Seconds memory must stay low after growing before it shrinks back; absent when the platform default applies. */
   memory_shrink_after_seconds?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpu_max?: number
   size_bytes?: number
   error_message?: string
   created_at: string
