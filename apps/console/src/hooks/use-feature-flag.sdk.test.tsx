@@ -1,10 +1,14 @@
 import { act, renderHook, waitFor } from "@testing-library/react"
 import posthog from "posthog-js"
-import { describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("posthog-js/react", () => ({ usePostHog: () => posthog }))
 
-import { trackFlagRequests, useFeatureFlagOn } from "./use-feature-flag"
+import {
+  FLAG_REQUEST_LIMIT_MS,
+  trackFlagRequests,
+  useFeatureFlagOn,
+} from "./use-feature-flag"
 
 const FLAG = "trial-runway-warning"
 // PostHog keeps a reference to fetch when it loads, so stub it first.
@@ -49,9 +53,11 @@ function initPostHog() {
     disable_session_recording: true,
     advanced_disable_toolbar_metrics: true,
     disable_external_dependency_loading: true,
+    // As in the PostHog provider.
+    loaded: (ph) => {
+      trackFlagRequests(ph)
+    },
   })
-  // As in the PostHog provider.
-  trackFlagRequests(posthog)
 }
 
 async function loadFlags(response: unknown) {
@@ -63,6 +69,19 @@ async function loadFlags(response: unknown) {
     expect(fetchMock.mock.calls.length).toBeGreaterThan(calls),
   )
 }
+
+// Each test starts after the requests of the last one are over, including a
+// request that ended without a result.
+let tests = 0
+beforeEach(() => {
+  tests += 1
+  vi.useFakeTimers({ toFake: ["Date"], shouldAdvanceTime: true })
+  vi.setSystemTime(Date.now() + tests * FLAG_REQUEST_LIMIT_MS)
+})
+
+afterEach(() => {
+  vi.useRealTimers()
+})
 
 describe("useFeatureFlagOn with the PostHog SDK", () => {
   it("turns off when PostHog fails to evaluate the flag", async () => {
@@ -103,6 +122,47 @@ describe("useFeatureFlagOn with the PostHog SDK", () => {
     expect(result.current).toBe(false)
 
     release(flags(true))
+    await waitFor(() => expect(result.current).toBe(true))
+  })
+
+  it("stays off until a queued flags request finishes", async () => {
+    await loadFlags(flags(true))
+    const { result } = renderHook(() => useFeatureFlagOn(FLAG))
+    await waitFor(() => expect(result.current).toBe(true))
+
+    let releaseFirst = (_body: unknown) => {}
+    let releaseQueued = (_body: unknown) => {}
+    await loadFlags(
+      new Promise((resolve) => {
+        releaseFirst = resolve
+      }),
+    )
+    expect(result.current).toBe(false)
+    // A reload during the request waits for it, as after identify().
+    const calls = fetchMock.mock.calls.length
+    responses.push(
+      new Promise((resolve) => {
+        releaseQueued = resolve
+      }),
+    )
+    act(() => posthog.reloadFeatureFlags())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    expect(fetchMock.mock.calls.length).toBe(calls)
+
+    releaseFirst(flags(true))
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(calls),
+    )
+    // The first result is ON, but the queued request is still running.
+    expect(posthog.isFeatureEnabled(FLAG, { fresh: true })).toBe(true)
+    expect(result.current).toBe(false)
+
+    releaseQueued(flags(false))
+    await waitFor(() =>
+      expect(posthog.isFeatureEnabled(FLAG, { fresh: true })).toBe(false),
+    )
+    expect(result.current).toBe(false)
+    await loadFlags(flags(true))
     await waitFor(() => expect(result.current).toBe(true))
   })
 })

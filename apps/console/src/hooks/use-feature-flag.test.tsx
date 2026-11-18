@@ -17,6 +17,7 @@ import type { PostHog } from "posthog-js"
 
 import {
   FLAG_ERROR_CHECK_MS,
+  FLAG_REQUEST_LIMIT_MS,
   trackFlagRequests,
   useFeatureFlagOn,
 } from "./use-feature-flag"
@@ -183,7 +184,7 @@ describe("useFeatureFlagOn", () => {
     mocks.posthog.onFeatureFlags.mockImplementation(
       (callback: (...args: unknown[]) => void) => {
         listeners.push(callback)
-        if (listeners.length > 1) callback([], {}, { errorsLoading: false })
+        if (listeners.length > 1) callback([], {})
         return () => {}
       },
     )
@@ -202,6 +203,33 @@ describe("useFeatureFlagOn", () => {
     const { result } = renderHook(() => useFeatureFlagOn("f"))
     expect(result.current).toBe(false)
     act(() => listeners[0]?.([], {}, { errorsLoading: false }))
+    expect(result.current).toBe(true)
+  })
+
+  it("follows requests again after one ends without a result", () => {
+    vi.useFakeTimers()
+    mocks.posthog = client(true)
+    let loaded = (..._args: unknown[]) => {}
+    let reloading = () => {}
+    mocks.posthog.onFeatureFlags.mockImplementation(
+      (callback: (...args: unknown[]) => void) => {
+        loaded = callback
+        return () => {}
+      },
+    )
+    mocks.posthog.on.mockImplementation(
+      (event: string, callback: () => void) => {
+        if (event === "featureFlagsReloading") reloading = callback
+        return () => {}
+      },
+    )
+    const { result } = renderHook(() => useFeatureFlagOn("f"))
+    // A request that hits the quota sends no result.
+    act(() => reloading())
+    expect(result.current).toBe(false)
+    act(() => vi.advanceTimersByTime(FLAG_REQUEST_LIMIT_MS))
+    act(() => reloading())
+    act(() => loaded([], {}, { errorsLoading: false }))
     expect(result.current).toBe(true)
   })
 

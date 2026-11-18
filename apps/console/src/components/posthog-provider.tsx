@@ -37,6 +37,7 @@ if (typeof window !== "undefined") {
           return redactInviteTokensFromEvent(event)
         },
         loaded: (ph) => {
+          trackFlagRequests(ph)
           scrubPersistedInviteTokens(ph)
           syncRecordingWithAddress(ph, window.location.href)
         },
@@ -48,7 +49,6 @@ if (typeof window !== "undefined") {
           maskCapturedNetworkRequestFn: redactCapturedRequest,
         },
       })
-      trackFlagRequests(posthog)
       // First-touch attribution: if the user landed directly on the console
       // (e.g. shared signup link with UTMs), remember the first path, the
       // referrer, and any UTM params so funnel events carry them as super

@@ -7,6 +7,9 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 // How often to look again for flag errors that PostHog records without a
 // flags callback.
 export const FLAG_ERROR_CHECK_MS = 10_000
+// PostHog stops a flags request after `feature_flag_request_timeout_ms`
+// (3 s by default), so a request is over after this long.
+export const FLAG_REQUEST_LIMIT_MS = 10_000
 
 function hasFlagErrors(client: PostHog): boolean {
   // PostHog lists the errors of the last flags request in this property.
@@ -50,12 +53,14 @@ interface Tracker {
   listeners: Set<() => void>
 }
 
-const trackers = new WeakMap<PostHog, Tracker>()
+type FlagClient = Pick<PostHog, "on" | "onFeatureFlags">
+
+const trackers = new WeakMap<FlagClient, Tracker>()
 
 // Follows the flags requests of a PostHog client for the life of the page.
-// Call it right after init: a listener added during a request gets the old
-// flags at once and can not tell them from a result.
-export function trackFlagRequests(client: PostHog): Tracker {
+// Call it from the PostHog `loaded` callback, before the first request: a
+// request that started earlier is not seen.
+export function trackFlagRequests(client: FlagClient): Tracker {
   const known = trackers.get(client)
   if (known) return known
   const tracker: Tracker = { state: IDLE, listeners: new Set() }
@@ -65,20 +70,45 @@ export function trackFlagRequests(client: PostHog): Tracker {
     tracker.state = { ...tracker.state, ...next }
     for (const listener of tracker.listeners) listener()
   }
+  // PostHog sends one flags request at a time. A reload during a request
+  // waits, and PostHog sends it after that result without a new
+  // featureFlagsReloading event.
+  let waiting = false
+  // When the request now followed started. A request that hits the quota
+  // ends without a result, so after FLAG_REQUEST_LIMIT_MS a reload starts a
+  // new request.
+  let startedAt = 0
   try {
     // A flags request that hits the PostHog quota records the error but does
     // not call onFeatureFlags. So the flag reads as off from the start of each
     // request until onFeatureFlags reports a result.
     client.on("featureFlagsReloading", () => {
+      const now = Date.now()
+      if (tracker.state.pending && now - startedAt < FLAG_REQUEST_LIMIT_MS) {
+        waiting = true
+        return
+      }
+      waiting = false
+      startedAt = now
       if (!tracker.state.pending) update({ pending: true })
     })
-    client.onFeatureFlags((_flags, _variants, context) =>
+    client.onFeatureFlags((_flags, _variants, context) => {
+      // Only the result of a flags request has `errorsLoading`. Other calls,
+      // such as the call that replays the last flags to a new listener, do
+      // not end a request.
+      if (typeof context?.errorsLoading !== "boolean") {
+        update({ loads: tracker.state.loads + 1 })
+        return
+      }
+      const pending = waiting
+      waiting = false
+      startedAt = Date.now()
       update({
-        pending: false,
-        failed: context?.errorsLoading === true,
+        pending,
+        failed: context.errorsLoading,
         loads: tracker.state.loads + 1,
-      }),
-    )
+      })
+    })
   } catch {
     // Without both listeners the flag can not follow errors, so keep it off.
     tracker.state = BROKEN
