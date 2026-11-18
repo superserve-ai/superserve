@@ -24,6 +24,8 @@ import { createPortal } from "react-dom"
 interface CommandItem {
   label: string
   icon: Icon
+  // Extra words that find the item in search, beyond its label.
+  keywords?: string[]
   onSelect: () => void
 }
 
@@ -95,6 +97,7 @@ export function CommandPalette() {
     {
       label: "Team",
       icon: UsersIcon,
+      keywords: ["members", "invite", "roles", "people"],
       onSelect: () => navigate("/team"),
     },
     {
@@ -199,6 +202,7 @@ export function CommandPalette() {
                   {filteredNavigationItems.map((item) => (
                     <Command.Item
                       key={item.label}
+                      keywords={item.keywords}
                       onSelect={item.onSelect}
                       onMouseEnter={() => setHoveredLabel(item.label)}
                       className="relative flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-sm text-foreground"
@@ -232,6 +236,7 @@ export function CommandPalette() {
                   {filteredActionItems.map((item) => (
                     <Command.Item
                       key={item.label}
+                      keywords={item.keywords}
                       onSelect={item.onSelect}
                       onMouseEnter={() => setHoveredLabel(item.label)}
                       className="relative flex cursor-pointer items-center gap-2.5 px-2.5 py-2 text-sm text-foreground"
