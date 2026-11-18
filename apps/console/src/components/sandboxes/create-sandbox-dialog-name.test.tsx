@@ -34,7 +34,7 @@ vi.mock("posthog-js/react", () => ({
   usePostHog: () => ({ capture }),
 }))
 
-const namePattern = /^sandbox-[a-z0-9]{4}$/
+const namePattern = /^sandbox-[a-z0-9]{6}$/
 const nameError = "Enter a name for this sandbox."
 
 beforeEach(() => vi.clearAllMocks())
@@ -59,12 +59,12 @@ function stubGeneratedNames() {
   vi.spyOn(crypto, "getRandomValues")
     .mockImplementationOnce((bytes) => {
       const array = bytes as Uint8Array
-      array.set([0, 1, 2, 3])
+      array.set([0, 1, 2, 3, 4, 5])
       return bytes
     })
     .mockImplementationOnce((bytes) => {
       const array = bytes as Uint8Array
-      array.set([25, 26, 35, 36])
+      array.set([25, 26, 35, 36, 37, 38])
       return bytes
     })
 }
@@ -143,11 +143,15 @@ it("updates the live region when submitting with focus already on the empty name
 
   expect(status).toHaveClass("sr-only")
   expect(status).toHaveAttribute("aria-live", "polite")
-  expect(status).toBeEmptyDOMElement()
 
   await user.click(input)
   await user.clear(input)
   expect(input).toHaveFocus()
+  expect(status).toBeEmptyDOMElement()
+  expect(
+    dialog.queryByText(nameError, { ignore: "output" }),
+  ).not.toBeInTheDocument()
+
   const onFocus = vi.fn()
   input.addEventListener("focus", onFocus, { once: true })
   fireEvent.click(dialog.getByRole("button", { name: "Create Sandbox" }))
@@ -155,6 +159,7 @@ it("updates the live region when submitting with focus already on the empty name
   expect(input).toHaveFocus()
   expect(onFocus).not.toHaveBeenCalled()
   expect(status).toHaveTextContent(nameError)
+  expect(getFieldError()).toBeVisible()
 
   await user.type(input, "dev-sandbox")
 
@@ -196,7 +201,7 @@ it("prefills a fresh name and clears validation when reopened after Cancel", asy
 
   await user.click(trigger)
   const input = getNameInput()
-  expect(input.value).toBe("sandbox-abcd")
+  expect(input.value).toBe("sandbox-abcdef")
   await user.clear(input)
   await user.type(input, "   ")
   await user.click(screen.getByRole("button", { name: "Create Sandbox" }))
@@ -205,7 +210,7 @@ it("prefills a fresh name and clears validation when reopened after Cancel", asy
   await user.click(screen.getByRole("button", { name: "Cancel" }))
   await user.click(trigger)
 
-  expect(getNameInput().value).toBe("sandbox-z09a")
+  expect(getNameInput().value).toBe("sandbox-z09abc")
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
 })
 
@@ -231,7 +236,7 @@ it("prefills a fresh name and clears validation when the parent reopens the dial
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   await user.click(launch)
   const input = getNameInput()
-  expect(input.value).toBe("sandbox-abcd")
+  expect(input.value).toBe("sandbox-abcdef")
 
   await user.clear(input)
   await user.type(input, "   ")
@@ -242,7 +247,7 @@ it("prefills a fresh name and clears validation when the parent reopens the dial
   expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
   await user.click(launch)
 
-  expect(getNameInput().value).toBe("sandbox-z09a")
+  expect(getNameInput().value).toBe("sandbox-z09abc")
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
 })
 
@@ -272,4 +277,26 @@ it("clears a name error set during the closing transition when reopened", () => 
   expect(getNameInput().value).toMatch(namePattern)
   expect(getNameInput()).not.toHaveAttribute("aria-invalid")
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
+})
+
+it("prefills a fresh name after an edit during the closing transition", () => {
+  stubGeneratedNames()
+  const { rerender } = render(<CreateSandboxDialog open hideTrigger />, {
+    wrapper: ToastProvider,
+  })
+  const dialog = screen.getByRole("dialog")
+  const input = getNameInput()
+
+  // Keep the popup mounted through the close reset and the late edit.
+  const finished = new Promise<void>(() => {})
+  Object.defineProperty(dialog, "getAnimations", {
+    value: () => [{ finished }],
+  })
+
+  rerender(<CreateSandboxDialog open={false} hideTrigger />)
+  fireEvent.change(input, { target: { value: "x" } })
+  expect(input).toHaveValue("x")
+
+  rerender(<CreateSandboxDialog open hideTrigger />)
+  expect(getNameInput()).toHaveValue("sandbox-z09abc")
 })

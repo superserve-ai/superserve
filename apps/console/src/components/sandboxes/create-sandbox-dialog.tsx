@@ -42,7 +42,7 @@ const DEFAULT_TEMPLATE = "superserve/base"
 
 export function generateSandboxName() {
   const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
-  const bytes = crypto.getRandomValues(new Uint8Array(4))
+  const bytes = crypto.getRandomValues(new Uint8Array(6))
   const suffix = Array.from(bytes, (byte) =>
     alphabet.charAt(byte % alphabet.length),
   ).join("")
@@ -479,7 +479,7 @@ export function CreateSandboxDialog({
 
   useLayoutEffect(() => {
     if (open) {
-      setName((current) => current || generateSandboxName())
+      setName(generateSandboxName())
     } else {
       setName("")
     }
