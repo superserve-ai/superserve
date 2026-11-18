@@ -99,7 +99,12 @@ export function CreateKeyDialog({
   }, [open, cancelCopyFeedback])
 
   useLayoutEffect(() => {
-    if (createdKey) keyCopyButton.current?.focus()
+    const button = keyCopyButton.current
+    if (!createdKey || !button) return
+    // Plain focus() centers the button and can scroll the one-time warning
+    // out of a short window, so scroll only as far as the button needs.
+    button.focus({ preventScroll: true })
+    button.scrollIntoView?.({ block: "nearest" })
   }, [createdKey])
 
   useLayoutEffect(() => {

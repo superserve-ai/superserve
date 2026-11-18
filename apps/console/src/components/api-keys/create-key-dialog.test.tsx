@@ -191,10 +191,19 @@ describe("CreateKeyDialog created state", () => {
     expect(link).toHaveAttribute("rel", "noreferrer")
   })
 
-  it("focuses Copy key after creating a key", async () => {
+  it("focuses Copy key after creating a key without centering it", async () => {
+    const scrollIntoView = mockScrollIntoView()
+    const focus = vi.spyOn(HTMLElement.prototype, "focus")
+    onTestFinished(() => focus.mockRestore())
+
     await createKey()
 
-    expect(screen.getByRole("button", { name: "Copy key" })).toHaveFocus()
+    const button = screen.getByRole("button", { name: "Copy key" })
+    expect(button).toHaveFocus()
+    const focusCall = focus.mock.contexts.indexOf(button)
+    expect(focus.mock.calls[focusCall]).toEqual([{ preventScroll: true }])
+    expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({ block: "nearest" })
+    expect(scrollIntoView.mock.contexts[0]).toBe(button)
   })
 
   it("keeps the created key visible when the backdrop is clicked", async () => {
@@ -235,7 +244,9 @@ describe("CreateKeyDialog created state", () => {
     expect(button).toHaveTextContent(/^Copied$/)
     expect(screen.getByText(key, { selector: "code" })).toBeVisible()
     expect(mockAddToast).toHaveBeenCalledExactlyOnceWith(toast, "success")
-    expect(mockCapture).toHaveBeenCalledWith("api_key_copied", { target })
+    expect(
+      mockCapture.mock.calls.filter(([event]) => event === "api_key_copied"),
+    ).toEqual([["api_key_copied", { target }]])
   })
 
   it.each([
