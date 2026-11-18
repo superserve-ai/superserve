@@ -233,6 +233,32 @@ describe("useFeatureFlagOn", () => {
     expect(result.current).toBe(true)
   })
 
+  it("follows the next request at once after a quota result", () => {
+    mocks.posthog = client(true)
+    let loaded = (..._args: unknown[]) => {}
+    let reloading = () => {}
+    mocks.posthog.onFeatureFlags.mockImplementation(
+      (callback: (...args: unknown[]) => void) => {
+        loaded = callback
+        return () => {}
+      },
+    )
+    mocks.posthog.on.mockImplementation(
+      (event: string, callback: () => void) => {
+        if (event === "featureFlagsReloading") reloading = callback
+        return () => {}
+      },
+    )
+    const { result } = renderHook(() => useFeatureFlagOn("f"))
+    act(() => reloading())
+    // The quota result stores its errors but sends no result.
+    mocks.posthog.get_property.mockReturnValue(["quota_limited"])
+    act(() => reloading())
+    mocks.posthog.get_property.mockReturnValue([])
+    act(() => loaded([], {}, { errorsLoading: false }))
+    expect(result.current).toBe(true)
+  })
+
   it("follows flags that load later", () => {
     mocks.posthog = client(undefined)
     let loaded = () => {}

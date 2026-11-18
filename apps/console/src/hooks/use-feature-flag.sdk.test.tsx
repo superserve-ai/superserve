@@ -107,6 +107,10 @@ describe("useFeatureFlagOn with the PostHog SDK", () => {
     // PostHog keeps the old ON value and does not call onFeatureFlags.
     expect(posthog.isFeatureEnabled(FLAG, { fresh: true })).toBe(true)
     expect(result.current).toBe(false)
+
+    // The next good result turns it on again.
+    await loadFlags(flags(true))
+    await waitFor(() => expect(result.current).toBe(true))
   })
 
   it("stays off when it mounts during a flags request", async () => {
