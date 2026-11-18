@@ -1,3 +1,5 @@
+import "server-only"
+
 // Server-only settings. `HEEDEO_SECRET_KEY` must never reach the browser.
 
 /** The workspace's secret key (`sk_...`), or undefined when unset. */

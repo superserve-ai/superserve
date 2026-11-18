@@ -42,6 +42,7 @@ const nextConfig: NextConfig = {
     // the production form must not wait for a script that cannot load.
     NEXT_PUBLIC_RECAPTCHA_SITE_KEY: "",
     NEXT_PUBLIC_CLOUDFLARE_TURNSTILE_SITE_KEY: "",
+    NEXT_PUBLIC_HEEDEO_KEY: "",
     NEXT_PUBLIC_WEBSITE_URL: "http://127.0.0.1:4173",
     SS640_FIXTURE_LOGO_SVG: readFileSync(
       resolve(sourceRoot, "../public/logo.svg"),
