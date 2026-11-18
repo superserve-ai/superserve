@@ -56,6 +56,11 @@
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "redirects": [
+    {
+      "source": "/guides/migrate-from-blaxel",
+      "destination": "/quickstart#where-to-go-next",
+      "permanent": true
+    },
     { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
     {
       "source": "/integrations/managed-agents/claude-managed-agents",
@@ -190,7 +195,6 @@
           {
             "group": "Migrate",
             "pages": [
-              "guides/migrate-from-blaxel",
               "guides/migrate-from-cloudflare",
               "guides/migrate-from-daytona",
               "guides/migrate-from-e2b",
