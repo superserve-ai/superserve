@@ -22,7 +22,10 @@ vi.mock("@/lib/api/team-provisioning", () => ({
   completedMemberships: mocks.completed,
 }))
 vi.mock("@/lib/api/signup-plan-read", () => ({ readSignupPlan: mocks.plan }))
-import { settleTeamSelection } from "./settle-active-team"
+import {
+  SETTLE_TEAM_DEADLINE_MS,
+  settleTeamSelection,
+} from "./settle-active-team"
 
 const older = { region: "usw", teamId: "team-z" }
 const newer = { region: "use", teamId: "team-a" }
@@ -192,6 +195,35 @@ it("uses the oldest when all plans are gated or throw", async () => {
   expect(await settleTeamSelection(user())).toEqual(older)
   expect(mocks.plan).toHaveBeenCalledTimes(2)
 })
+it.each([older, null])(
+  "falls back to cookie %j when a plan read hangs, without writing later",
+  async (cookie) => {
+    vi.useFakeTimers()
+    try {
+      mocks.read.mockResolvedValue(cookie)
+      let resolvePlan!: (value: { state: string }) => void
+      const hangingPlan = new Promise<{ state: string }>((resolve) => {
+        resolvePlan = resolve
+      })
+      if (cookie) mocks.plan.mockResolvedValueOnce({ state: "selecting" })
+      mocks.plan.mockReturnValueOnce(hangingPlan)
+
+      const selection = settleTeamSelection(user("use:team-a"))
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.plan).toHaveBeenLastCalledWith("user-a", newer)
+      await vi.advanceTimersByTimeAsync(SETTLE_TEAM_DEADLINE_MS)
+      expect(await selection).toEqual(cookie)
+      expect(mocks.write).not.toHaveBeenCalled()
+
+      resolvePlan({ state: "legacy" })
+      await vi.advanceTimersByTimeAsync(0)
+      expect(mocks.write).not.toHaveBeenCalled()
+    } finally {
+      vi.useRealTimers()
+    }
+  },
+)
+
 function setMemberships(count: number) {
   const memberships = Array.from({ length: count }, (_, i) => ({
     region: "use",

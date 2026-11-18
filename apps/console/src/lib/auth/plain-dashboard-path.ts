@@ -11,6 +11,11 @@ const PLAIN_DASHBOARD_SECTIONS = [
   "/billing-usage",
 ]
 
+const EXCLUDED_DASHBOARD_SECTIONS = [
+  "/billing-usage/buy-credit",
+  "/billing-usage/upgrade",
+]
+
 // These dashboard pages let sign-in choose the team they open.
 export function isPlainDashboardPath(path: string): boolean {
   if (
@@ -27,8 +32,9 @@ export function isPlainDashboardPath(path: string): boolean {
 
   const pathname = url.pathname.replace(/\/+$/, "") || "/"
   if (
-    pathname === "/billing-usage/buy-credit" ||
-    pathname.startsWith("/billing-usage/buy-credit/")
+    EXCLUDED_DASHBOARD_SECTIONS.some(
+      (section) => pathname === section || pathname.startsWith(`${section}/`),
+    )
   )
     return false
 

@@ -17,6 +17,7 @@ it.each([
   "/team",
   "/get-started",
   "/billing-usage/",
+  "/billing-usage/upgrade-details",
 ])("accepts %s", (path) => {
   expect(isPlainDashboardPath(path)).toBe(true)
 })
@@ -50,6 +51,9 @@ it.each([
   "/billing-usage/buy-credit/",
   "/billing-usage/buy-credit/details",
   "/billing-usage/buy-credit",
+  "/billing-usage/upgrade",
+  "/billing-usage/upgrade/",
+  "/billing-usage/upgrade/details?view=plans",
 ])("excludes %s", (path) => {
   expect(isPlainDashboardPath(path)).toBe(false)
 })
