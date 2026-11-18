@@ -26,7 +26,10 @@ import {
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
+import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
+import { RecaptchaScript } from "@/lib/recaptcha/script"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import {
@@ -38,35 +41,8 @@ import {
   signUpWithEmail,
 } from "./action"
 
-const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
-
-declare global {
-  interface Window {
-    grecaptcha?: {
-      enterprise: {
-        ready: (callback: () => void) => void
-        execute: (
-          siteKey: string,
-          options: { action: string },
-        ) => Promise<string>
-      }
-    }
-  }
-}
-
-const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
-  if (window.grecaptcha) return true
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    if (window.grecaptcha) return true
-  }
-  return false
-}
-
-const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
 // A failed bot-check is a retry, not a dead end: say what the user can change.
 const CAPTCHA_FAILED_MESSAGE =
@@ -95,32 +71,6 @@ const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
 const RESEND_COOLDOWN_SECONDS = 60
 const BOT_CHECK_UNAVAILABLE =
   "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
-
-const getRecaptchaToken = async (
-  action: string,
-): Promise<string | undefined> => {
-  if (!RECAPTCHA_SITE_KEY) return undefined
-  if (!(await waitForGrecaptcha())) return undefined
-  try {
-    const tokenPromise = new Promise<string>((resolve, reject) => {
-      window.grecaptcha!.enterprise.ready(() => {
-        window
-          .grecaptcha!.enterprise.execute(RECAPTCHA_SITE_KEY, { action })
-          .then(resolve)
-          .catch(reject)
-      })
-    })
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("recaptcha_execute_timeout")),
-        RECAPTCHA_EXECUTE_TIMEOUT_MS,
-      ),
-    )
-    return await Promise.race([tokenPromise, timeoutPromise])
-  } catch {
-    return undefined
-  }
-}
 
 function sanitizeNext(raw: string | null): string {
   const next = raw ?? "/"
@@ -233,9 +183,11 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "email",
+          reason: "captcha_not_loaded",
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
       const result = await signUpWithEmail(
@@ -406,9 +358,12 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: "captcha_not_loaded",
+          complete_google: isCompleteGoogleSignup,
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
 
@@ -419,6 +374,11 @@ export default function SignUpContent() {
         fingerprintDiagnostics,
       )
       if (!proof.success) {
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: proof.errorCode,
+          complete_google: isCompleteGoogleSignup,
+        })
         setErrors({
           form:
             proof.errorCode === "captcha_failed"
@@ -491,12 +451,7 @@ export default function SignUpContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      {RECAPTCHA_SITE_KEY && (
-        <Script
-          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
-        />
-      )}
+      <RecaptchaScript />
       {TURNSTILE_SITE_KEY && (
         <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}

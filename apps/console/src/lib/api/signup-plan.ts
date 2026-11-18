@@ -26,6 +26,8 @@ export interface SignupPlanContext {
   state: SignupPlanState
   offer: "free" | PaidOffer | null
   requestedOffer?: RequestedOffer
+  // Legacy teams entering paid plans never had the current free trial.
+  legacyPlanEntry?: true
   entryState?: AwaitingPlanState
   paymentSettling?: boolean
 }

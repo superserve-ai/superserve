@@ -105,7 +105,7 @@ export function ConnectSandboxDialog({
   const router = useRouter()
   const [language, setLanguage] = useState<Language>("typescript")
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
-  const createKeyMutation = useCreateApiKey()
+  const createKeyMutation = useCreateApiKey("connect_dialog_sdk_key")
   const { data: existingKeys } = useApiKeys()
   const [copiedKey, setCopiedKey] = useState(false)
 

@@ -317,23 +317,50 @@ async def janitor_loop() -> None:
 
 async def poll_loop() -> None:
     backoff = 0
+    busy = False
     async with AsyncAnthropic(auth_token=ENVIRONMENT_KEY) as client:
         log.info("polling env=%s template=%s", ENVIRONMENT_ID, TEMPLATE_NAME)
 
+        async def consume() -> None:
+            nonlocal backoff, busy
+            async for work in client.beta.environments.work.poller(
+                environment_id=ENVIRONMENT_ID,
+                environment_key=ENVIRONMENT_KEY,
+                block_ms=999,
+                reclaim_older_than_ms=2000,
+                auto_stop=False,
+            ):
+                backoff = 0
+                busy = True
+                try:
+                    await handle_work(work)
+                except Exception as e:
+                    log.error("failed work=%s: %s", work.id, e, exc_info=True)
+                finally:
+                    busy = False
+                if shutdown.is_set():
+                    return
+
         while not shutdown.is_set():
+            # The poller never returns while the queue is empty, so run it as a
+            # task and cancel it when a shutdown signal arrives. A work item
+            # that is being handled is allowed to finish first.
+            consumer = asyncio.create_task(consume())
+            stopper = asyncio.create_task(shutdown.wait())
             try:
-                async for work in client.beta.environments.work.poller(
-                    environment_id=ENVIRONMENT_ID,
-                    environment_key=ENVIRONMENT_KEY,
-                    block_ms=999,
-                    reclaim_older_than_ms=2000,
-                    auto_stop=False,
-                ):
-                    backoff = 0
-                    try:
-                        await handle_work(work)
-                    except Exception as e:
-                        log.error("failed work=%s: %s", work.id, e, exc_info=True)
+                await asyncio.wait(
+                    {consumer, stopper}, return_when=asyncio.FIRST_COMPLETED
+                )
+                if shutdown.is_set() and not consumer.done():
+                    if not busy:
+                        consumer.cancel()
+                    await asyncio.gather(consumer, return_exceptions=True)
+                    return
+                consumer.result()
+            except asyncio.CancelledError:
+                consumer.cancel()
+                await asyncio.gather(consumer, return_exceptions=True)
+                raise
             except Exception as e:
                 backoff = min(backoff + 1, 6)
                 wait = min(60.0, 2.0**backoff)
@@ -343,6 +370,8 @@ async def poll_loop() -> None:
                     return
                 except TimeoutError:
                     pass
+            finally:
+                stopper.cancel()
 
 
 def main() -> None:
