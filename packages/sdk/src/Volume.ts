@@ -226,13 +226,17 @@ export class Volume {
     nameOrId: string,
     options: ConnectionOptions & VolumeRequestOptions = {},
   ): Promise<Volume> {
+    const timeoutMs =
+      options.timeoutMs === undefined
+        ? undefined
+        : operationTimeout(options.timeoutMs)
     const config = resolveConfig(options)
     const raw = await request<ApiVolume>({
       method: "GET",
       url: `${config.baseUrl}/volumes/${encodeURIComponent(nameOrId)}`,
       headers: { "X-API-Key": config.apiKey },
       signal: options.signal,
-      timeoutMs: options.timeoutMs,
+      timeoutMs,
     })
     return new Volume(volumeInfo(raw), config)
   }

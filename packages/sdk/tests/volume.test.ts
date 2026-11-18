@@ -383,6 +383,23 @@ describe("native volumes", () => {
     expect(calls.filter((call) => call.method === "DELETE")).toHaveLength(0)
   })
 
+  it.each([0, -1, NaN, Infinity, -Infinity])(
+    "rejects invalid lookup timeout %s before making a request",
+    async (timeoutMs) => {
+      const fetcher = vi.fn(async () => json(sandbox))
+      vi.stubGlobal("fetch", fetcher)
+      const guest = await Sandbox.create({ ...config, name: "example" })
+      fetcher.mockClear()
+      await expect(
+        Volume.connect("data", { ...config, timeoutMs }),
+      ).rejects.toBeInstanceOf(ValidationError)
+      await expect(
+        guest.attachVolume("data", { mountPath: "/mnt/data", timeoutMs }),
+      ).rejects.toBeInstanceOf(ValidationError)
+      expect(fetcher).not.toHaveBeenCalled()
+    },
+  )
+
   it.each(["data", volume.id])(
     "honors a short attach timeout while looking up volume %s",
     async (nameOrId) => {

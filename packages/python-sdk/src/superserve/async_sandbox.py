@@ -40,7 +40,12 @@ from .snapshots import (
 )
 from .files import AsyncFiles, AsyncFilesDeps
 from .async_volume import AsyncVolume, _get_volume_attachment, _detach_volume_attachment
-from .volume import _VolumeHandle, _assert_volume_connection, _same_volume_sandbox
+from .volume import (
+    _VolumeHandle,
+    _assert_volume_connection,
+    _same_volume_sandbox,
+    _volume_timeout,
+)
 from .types import (
     SandboxVolumeMount,
     VolumeAttachment,
@@ -190,6 +195,7 @@ class AsyncSandbox:
         timeout: float = 180.0,
     ) -> VolumeAttachment:
         """Attach an existing volume and wait for the server to confirm its mount."""
+        timeout = _volume_timeout(timeout)
         if isinstance(volume, _VolumeHandle):
             _assert_volume_connection(self._config, volume._config)
         resource = (

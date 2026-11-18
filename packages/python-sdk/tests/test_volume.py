@@ -192,6 +192,34 @@ def test_volume_id_matching_preserves_opaque_and_explicit_region_boundaries(
 
 
 @pytest.mark.parametrize("guest_type", [Sandbox, AsyncSandbox])
+@pytest.mark.parametrize(
+    "timeout", [0.0, -1.0, float("nan"), float("inf"), -float("inf"), True, False]
+)
+async def test_attach_rejects_invalid_timeout_before_volume_lookup(
+    guest_type: Any, timeout: float
+) -> None:
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes").respond(201, json=GUEST)
+        lookup = router.get(f"{API}/volumes/data").respond(200, json=VOLUME)
+        attach = router.post(f"{API}/sandboxes/{GUEST['id']}/volumes").respond(
+            201, json=ATTACHMENT
+        )
+        guest = await call(guest_type.create, name="example")
+        try:
+            with pytest.raises(ValidationError):
+                await call(
+                    guest.attach_volume,
+                    "data",
+                    mount_path="/mnt/data",
+                    timeout=timeout,
+                )
+            assert lookup.call_count == 0
+            assert attach.call_count == 0
+        finally:
+            await call(guest._close_http_client)
+
+
+@pytest.mark.parametrize("guest_type", [Sandbox, AsyncSandbox])
 @pytest.mark.parametrize("name_or_id", ["data", VOLUME["id"]])
 async def test_attach_timeout_applies_to_volume_lookup(
     guest_type: Any, name_or_id: str
