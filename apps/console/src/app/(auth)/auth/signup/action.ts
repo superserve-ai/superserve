@@ -63,6 +63,12 @@ import {
   observeFingerprintSignup,
   resolveFingerprintSignup,
 } from "@/lib/fingerprint/observe"
+import {
+  isHeedeoObservationEnabled,
+  readHeedeoRequestContext,
+  scheduleHeedeoSignupObservation,
+  takeHeedeoSignupCapture,
+} from "@/lib/heedeo/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
@@ -512,6 +518,21 @@ export const signUpWithEmail = async (
   )
   let fingerprintObservationScheduled = false
   let observationUserId: string | null = null
+  if (isHeedeoObservationEnabled()) {
+    // Observe-only: runs after the response and reads the account this
+    // attempt created, if any. Nothing below depends on it.
+    const heedeoCapture = await takeHeedeoSignupCapture()
+    const heedeoRequest = await readHeedeoRequestContext("/auth/signup/")
+    scheduleHeedeoSignupObservation(() => ({
+      signupAttemptId,
+      signupMethod: "email",
+      email: parsed.data.email,
+      userId: observationUserId,
+      status: observationUserId ? "succeeded" : "failed",
+      capture: heedeoCapture,
+      request: heedeoRequest,
+    }))
+  }
   const emitFingerprintObservation = (userId?: string | null) => {
     if (!fingerprintEventId || fingerprintObservationScheduled) return
     fingerprintObservationScheduled = true

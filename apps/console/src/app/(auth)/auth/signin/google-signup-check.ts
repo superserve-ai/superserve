@@ -11,6 +11,7 @@ import {
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
+import { captureHeedeoSignup } from "@/lib/heedeo/client"
 import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
 
 /**
@@ -67,6 +68,13 @@ const FINGERPRINT_CAPTURE_BUDGET_MS = 3000
  * and reCAPTCHA, and this limit leaves the server call most of the deadline.
  */
 const TURNSTILE_BUDGET_MS = 2500
+
+/**
+ * The Heedeo capture is observation only too, with the same budget as
+ * Turnstile. It leaves its result in a cookie that the OAuth callback reads
+ * for a new account only; a returning account's capture is dropped unsent.
+ */
+const HEEDEO_BUDGET_MS = 2500
 
 // Only the newest call may act. See `googleSignupAttemptForSignIn`.
 let latestCheck = 0
@@ -176,13 +184,14 @@ async function runCheck(
   const recaptcha = getRecaptchaToken("signup_google")
   recaptcha.then(onRecaptchaSettled, onRecaptchaSettled)
   const turnstile = turnstileTokenWithinBudget(cancelled)
+  const heedeo = captureHeedeoSignup(HEEDEO_BUDGET_MS)
   const [budgetedCapture, recaptchaToken] = await Promise.all([
     capture.result,
     recaptcha,
   ])
   if (!isCurrent()) return undefined
   if (RECAPTCHA_SITE_KEY && !recaptchaToken) return undefined
-  const turnstileToken = await turnstile
+  const [turnstileToken] = await Promise.all([turnstile, heedeo])
   // The last point where the check can be stopped: the server call below
   // replaces the evidence cookie and issues the proof cookie.
   if (!isCurrent()) return undefined

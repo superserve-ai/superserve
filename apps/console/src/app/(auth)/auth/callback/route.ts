@@ -83,6 +83,12 @@ import { DEFAULT_REGION } from "@/lib/cells"
 import { validSignupDeviceBinding } from "@/lib/fingerprint/binding-proof"
 import { fingerprintDiagnostics } from "@/lib/fingerprint/diagnostics-server"
 import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
+import {
+  heedeoRequestContext,
+  isHeedeoObservationEnabled,
+  scheduleHeedeoSignupObservation,
+  takeHeedeoSignupCapture,
+} from "@/lib/heedeo/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { normalizeSignupEligibilitySnapshot } from "@/lib/slack/signup-eligibility"
@@ -670,6 +676,29 @@ export async function GET(request: Request) {
                 observed_at: new Date().toISOString(),
               })
             }
+          }
+          if (isHeedeoObservationEnabled()) {
+            // Observe-only, after the response. A returning Google account
+            // is a sign-in, not a sign-up: its capture is dropped unsent.
+            const heedeoCapture = await takeHeedeoSignupCapture()
+            const emailVerified = user.user_metadata?.email_verified
+            if (isNewUser)
+              scheduleHeedeoSignupObservation({
+                signupAttemptId,
+                signupMethod: "google",
+                email: user.email ?? null,
+                userId: user.id,
+                status: "succeeded",
+                capture: heedeoCapture,
+                request: heedeoRequestContext(
+                  request.headers,
+                  "GET",
+                  "/auth/callback/",
+                ),
+                ...(typeof emailVerified === "boolean"
+                  ? { oauthEmailVerified: emailVerified }
+                  : {}),
+              })
           }
         } else {
           const createdAt = new Date(user.created_at)

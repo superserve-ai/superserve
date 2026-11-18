@@ -25,6 +25,8 @@ import {
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
+import { captureHeedeoSignup } from "@/lib/heedeo/client"
+import { HeedeoScript } from "@/lib/heedeo/script"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -175,6 +177,8 @@ export default function SignUpContent() {
     }
     setIsLoading(true)
     try {
+      // Observe-only, beside the other checks; never fails the sign-up.
+      const heedeo = captureHeedeoSignup()
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
       const recaptchaToken = await getRecaptchaToken("signup")
@@ -190,6 +194,7 @@ export default function SignUpContent() {
         setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
+      await heedeo
       const result = await signUpWithEmail(
         email,
         password,
@@ -350,6 +355,8 @@ export default function SignUpContent() {
     setIsGoogleLoading(true)
     setErrors({})
     try {
+      // Observe-only, beside the other checks; never fails the sign-up.
+      const heedeo = captureHeedeoSignup()
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
       const recaptchaToken = await getRecaptchaToken("signup_google")
@@ -366,6 +373,7 @@ export default function SignUpContent() {
         setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
+      await heedeo
 
       const proof = await beginGoogleSignup(
         recaptchaToken,
@@ -452,6 +460,7 @@ export default function SignUpContent() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       <RecaptchaScript />
+      <HeedeoScript />
       {TURNSTILE_SITE_KEY && (
         <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}

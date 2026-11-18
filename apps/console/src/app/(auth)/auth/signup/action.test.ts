@@ -161,6 +161,21 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+// Heedeo is observe-only and off unless a test turns it on.
+const mockHeedeoEnabled = vi.fn(() => false)
+const mockTakeHeedeoCapture = vi.fn()
+const mockReadHeedeoRequestContext = vi.fn()
+const mockScheduleHeedeo = vi.fn()
+vi.mock("@/lib/heedeo/observe", () => ({
+  isHeedeoObservationEnabled: () => mockHeedeoEnabled(),
+  takeHeedeoSignupCapture: (...args: unknown[]) =>
+    mockTakeHeedeoCapture(...args),
+  readHeedeoRequestContext: (...args: unknown[]) =>
+    mockReadHeedeoRequestContext(...args),
+  scheduleHeedeoSignupObservation: (...args: unknown[]) =>
+    mockScheduleHeedeo(...args),
+}))
+
 const mockAfter = vi.fn()
 vi.mock("next/server", () => ({
   after: (callback: () => void | Promise<void>) => mockAfter(callback),
@@ -1009,6 +1024,86 @@ describe("signUpWithEmail", () => {
       expect(mockSendEmail).toHaveBeenCalledTimes(sent)
     },
   )
+
+  describe("Heedeo observation", () => {
+    const capture = { status: "ok", token: "ct1.t", latencyMs: 5 }
+    const context = {
+      clientIp: "203.0.113.7",
+      headers: { ":path": "/auth/signup/" },
+    }
+    beforeEach(() => {
+      mockHeedeoEnabled.mockReset().mockReturnValue(true)
+      mockTakeHeedeoCapture.mockReset().mockResolvedValue(capture)
+      mockReadHeedeoRequestContext.mockReset().mockResolvedValue(context)
+      mockScheduleHeedeo.mockReset()
+    })
+
+    const scheduled = () => {
+      expect(mockScheduleHeedeo).toHaveBeenCalledTimes(1)
+      const observation = mockScheduleHeedeo.mock.calls[0]![0]
+      return typeof observation === "function" ? observation() : observation
+    }
+
+    it("sends the account this attempt created, read after the response", async () => {
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: { id: "user-1", created_at: new Date().toISOString() },
+          properties: { hashed_token: "abc123" },
+        },
+        error: null,
+      })
+
+      const result = await signUpWithEmail(
+        "new@test.com",
+        "password123",
+        "Test User",
+      )
+
+      expect(result).toEqual({ success: true })
+      expect(mockReadHeedeoRequestContext).toHaveBeenCalledWith("/auth/signup/")
+      expect(scheduled()).toEqual({
+        signupAttemptId: expect.any(String),
+        signupMethod: "email",
+        email: "new@test.com",
+        userId: "user-1",
+        status: "succeeded",
+        capture,
+        request: context,
+      })
+    })
+
+    it("sends a refused attempt as failed and leaves the result unchanged", async () => {
+      mockGenerateLink.mockResolvedValue({
+        data: null,
+        error: { message: "User already registered" },
+      })
+
+      const result = await signUpWithEmail(
+        "existing@test.com",
+        "password123",
+        "Test User",
+      )
+
+      expect(result).toEqual({
+        success: false,
+        error: "An account with this email already exists.",
+      })
+      expect(scheduled()).toMatchObject({ userId: null, status: "failed" })
+    })
+
+    it("reads nothing when off", async () => {
+      mockHeedeoEnabled.mockReturnValue(false)
+      mockGenerateLink.mockResolvedValue({
+        data: { properties: { hashed_token: "abc123" } },
+        error: null,
+      })
+
+      await signUpWithEmail("new@test.com", "password123", "Test User")
+
+      expect(mockTakeHeedeoCapture).not.toHaveBeenCalled()
+      expect(mockScheduleHeedeo).not.toHaveBeenCalled()
+    })
+  })
 
   it("returns error when email is already registered", async () => {
     mockGenerateLink.mockResolvedValue({

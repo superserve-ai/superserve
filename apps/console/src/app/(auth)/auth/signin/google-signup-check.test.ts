@@ -9,6 +9,7 @@ const mocks = vi.hoisted(() => ({
   diagnostics: vi.fn(),
   getRecaptchaToken: vi.fn(),
   siteKey: { value: "site-key" as string | undefined },
+  heedeoCapture: vi.fn(),
 }))
 
 vi.mock("@/app/(auth)/auth/signup/action", () => ({
@@ -24,6 +25,9 @@ vi.mock("@/lib/cloudflare/turnstile-client", () => ({
 vi.mock("@/lib/fingerprint/client", () => ({
   ensureFingerprintSignupCapture: () => mocks.ensureCapture(),
   getFingerprintSignupDiagnostics: () => mocks.diagnostics(),
+}))
+vi.mock("@/lib/heedeo/client", () => ({
+  captureHeedeoSignup: (budgetMs?: number) => mocks.heedeoCapture(budgetMs),
 }))
 vi.mock("@/lib/recaptcha/client", () => ({
   get RECAPTCHA_SITE_KEY() {
@@ -52,6 +56,7 @@ describe("googleSignupAttemptForSignIn", () => {
     mocks.ensureCapture.mockReset().mockResolvedValue(capture)
     mocks.diagnostics.mockReset().mockReturnValue(diagnostics)
     mocks.getRecaptchaToken.mockReset().mockResolvedValue("token")
+    mocks.heedeoCapture.mockReset().mockResolvedValue(undefined)
     mocks.beginGoogleSignup
       .mockReset()
       .mockResolvedValue({ success: true, signupAttemptId: "attempt-1" })
@@ -73,6 +78,22 @@ describe("googleSignupAttemptForSignIn", () => {
       diagnostics,
       "signin",
     )
+  })
+
+  it("waits for the Heedeo capture, within its own budget, before the server call", async () => {
+    let finish: () => void = () => {}
+    mocks.heedeoCapture.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+    )
+    const result = googleSignupAttemptForSignIn()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mocks.heedeoCapture).toHaveBeenCalledExactlyOnceWith(2500)
+    expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
+    finish()
+    await expect(result).resolves.toBe("attempt-1")
+    expect(mocks.beginGoogleSignup).toHaveBeenCalledTimes(1)
   })
 
   it("asks for no proof when reCAPTCHA gives no token", async () => {

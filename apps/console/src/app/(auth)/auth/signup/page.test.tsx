@@ -77,6 +77,15 @@ vi.mock("@/lib/fingerprint/client", () => ({
   getFingerprintSignupDiagnostics: () => ({ schema_version: 1, events: [] }),
 }))
 
+const mockCaptureHeedeoSignup = vi.fn<() => Promise<void>>(() =>
+  Promise.resolve(),
+)
+vi.mock("@/lib/heedeo/client", () => ({
+  HEEDEO_SCRIPT_SRC: undefined,
+  markHeedeoScriptFailed: vi.fn(),
+  captureHeedeoSignup: () => mockCaptureHeedeoSignup(),
+}))
+
 const mockSignUpWithEmail = vi.fn()
 const mockResendSignupConfirmation = vi.fn()
 const mockBeginGoogleSignup = vi.fn<
@@ -164,6 +173,7 @@ describe("SignUpPage", () => {
 
   beforeEach(async () => {
     mockSignUpWithEmail.mockReset()
+    mockCaptureHeedeoSignup.mockReset().mockResolvedValue(undefined)
     mockResendSignupConfirmation.mockReset()
     mockBeginGoogleSignup.mockReset()
     mockBeginGoogleSignup.mockResolvedValue({
@@ -476,6 +486,57 @@ describe("SignUpPage", () => {
         "/",
       )
     })
+  })
+
+  it("waits for the Heedeo capture before submitting email signup", async () => {
+    let finish!: () => void
+    mockCaptureHeedeoSignup.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+    )
+    mockSignUpWithEmail.mockResolvedValue({ success: true })
+    render(<SignUpPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Full Name"),
+      "Test User",
+    )
+    await user.type(screen.getByPlaceholderText("Email"), "test@test.com")
+    await user.type(screen.getByPlaceholderText("Password"), "Password123")
+    await user.type(
+      screen.getByPlaceholderText("Confirm Password"),
+      "Password123",
+    )
+    await user.click(screen.getByRole("button", { name: "Sign Up" }))
+
+    await waitFor(() =>
+      expect(mockCaptureHeedeoSignup).toHaveBeenCalledTimes(1),
+    )
+    expect(mockSignUpWithEmail).not.toHaveBeenCalled()
+    finish()
+    await waitFor(() => expect(mockSignUpWithEmail).toHaveBeenCalledTimes(1))
+  })
+
+  it("waits for the Heedeo capture before the Google sign-up check", async () => {
+    let finish!: () => void
+    mockCaptureHeedeoSignup.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+    )
+    render(<SignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+
+    await waitFor(() =>
+      expect(mockCaptureHeedeoSignup).toHaveBeenCalledTimes(1),
+    )
+    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
+    finish()
+    await waitFor(() => expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1))
   })
 
   it("shows inline form error when signUpWithEmail returns an error", async () => {
