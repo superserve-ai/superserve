@@ -897,6 +897,30 @@ describe("active team", () => {
       data: { active_team: "usw:team-w" },
     })
   })
+  it("allows switching when the metadata write times out", async () => {
+    vi.useFakeTimers()
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      mockUpdateUser.mockImplementationOnce(() => new Promise(() => {}))
+      const resolved = vi.fn()
+      const switched = setActiveTeamAction("team-w", "usw").then(resolved)
+
+      await vi.advanceTimersByTimeAsync(2999)
+      expect(cookieSets).toEqual([
+        { name: "ss-active-team", value: "usw:team-w" },
+      ])
+      expect(resolved).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(resolved).toHaveBeenCalledOnce()
+      await expect(switched).resolves.toBeUndefined()
+      expect(log).toHaveBeenCalledWith("Could not save active team preference")
+    } finally {
+      vi.useRealTimers()
+      log.mockRestore()
+    }
+  })
+
   it("skips unchanged metadata", async () => {
     currentUser = {
       id: "u1",

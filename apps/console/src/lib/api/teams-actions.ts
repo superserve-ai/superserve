@@ -125,13 +125,24 @@ export async function setActiveTeamAction(
   await writeTeamSelection({ region, teamId })
   const value = serializeTeamSelection({ region, teamId })
   if (user.user_metadata?.[ACTIVE_TEAM_METADATA_KEY] !== value) {
+    let timer: ReturnType<typeof setTimeout> | undefined
     try {
-      const { error } = await supabase.auth.updateUser({
-        data: { [ACTIVE_TEAM_METADATA_KEY]: value },
-      })
+      const { error } = await Promise.race([
+        supabase.auth.updateUser({
+          data: { [ACTIVE_TEAM_METADATA_KEY]: value },
+        }),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(
+            () => reject(new Error("Metadata write timed out")),
+            3000,
+          )
+        }),
+      ])
       if (error) console.error("Could not save active team preference")
     } catch {
       console.error("Could not save active team preference")
+    } finally {
+      clearTimeout(timer)
     }
   }
 }
