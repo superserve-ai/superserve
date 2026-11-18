@@ -166,6 +166,7 @@ vi.mock("next/server", () => ({
   after: (callback: () => void | Promise<void>) => mockAfter(callback),
 }))
 
+import { SIGN_UP_MESSAGES } from "@/lib/auth/sign-up-messages"
 import { SignupRestrictedError } from "@/lib/auth/signup-restrictions"
 
 import {
@@ -1024,7 +1025,8 @@ describe("signUpWithEmail", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "An account with this email already exists.",
+      error: SIGN_UP_MESSAGES.emailExists,
+      errorCode: "email_exists",
     })
     expect(mockSendEmail).not.toHaveBeenCalled()
   })
@@ -1043,7 +1045,9 @@ describe("signUpWithEmail", () => {
 
     expect(result).toEqual({
       success: false,
-      error: "Rate limit exceeded",
+      error: SIGN_UP_MESSAGES.signUpFailed,
+      errorCode: "auth_error",
+      authErrorCode: null,
     })
   })
 
@@ -1152,6 +1156,90 @@ describe("signUpWithEmail", () => {
       "email",
       { kind: "blocked" },
       undefined,
+    )
+  })
+  describe("Auth error responses", () => {
+    it.each(["signup", "enterprise"])(
+      "recognizes the real admin email_exists error for %s",
+      async (path) => {
+        const rejection = {
+          data: null,
+          error: {
+            message:
+              "A user with this email address has already been registered",
+            code: "email_exists",
+            status: 422,
+          },
+        }
+        if (path === "enterprise") {
+          mockPricingVersion.mockResolvedValue("v2")
+          mockCreateUser.mockResolvedValue(rejection)
+        } else mockGenerateLink.mockResolvedValue(rejection)
+
+        const result = await signUpWithEmail(
+          "existing@test.com",
+          "Password123",
+          "Test User",
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          undefined,
+          path === "enterprise" ? "enterprise" : undefined,
+        )
+
+        expect(result).toEqual({
+          success: false,
+          error: SIGN_UP_MESSAGES.emailExists,
+          errorCode: "email_exists",
+        })
+        expect(mockSendEmail).not.toHaveBeenCalled()
+        if (path === "enterprise") {
+          expect(mockCreateUser).toHaveBeenCalledTimes(1)
+          expect(mockGenerateLink).not.toHaveBeenCalled()
+        } else expect(mockGenerateLink).toHaveBeenCalledTimes(1)
+      },
+    )
+
+    it.each([
+      ["over_email_send_rate_limit", "over_email_send_rate_limit"],
+      ["unsafe-code@example.com", null],
+      ["x".repeat(65), null],
+      [422, null],
+    ])(
+      "returns safe copy and a sanitized Auth code for %j",
+      async (code, expectedCode) => {
+        const message = "Raw Auth rejection details"
+        mockGenerateLink.mockResolvedValue({
+          data: null,
+          error: { message, code, status: 429 },
+        })
+        const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+        try {
+          const result = await signUpWithEmail(
+            "user@test.com",
+            "Password123",
+            "Test User",
+          )
+
+          expect(result).toEqual({
+            success: false,
+            error: SIGN_UP_MESSAGES.signUpFailed,
+            errorCode: "auth_error",
+            authErrorCode: expectedCode,
+          })
+          expect(JSON.stringify(result)).not.toContain(message)
+          expect(warn).toHaveBeenCalledWith("Signup rejected by Auth", {
+            code,
+            status: 429,
+            message,
+          })
+          expect(mockSendEmail).not.toHaveBeenCalled()
+        } finally {
+          warn.mockRestore()
+        }
+      },
     )
   })
 })
@@ -1511,6 +1599,26 @@ describe("confirmation email delivery", () => {
         success: false,
         errorCode: "email_not_sent",
       })
+      expect(mockSendEmail).not.toHaveBeenCalled()
+    })
+  })
+  describe("resend Auth error responses", () => {
+    it("clears the ticket when Auth reports email_exists for an unconfirmed-looking user", async () => {
+      mockGenerateLink.mockResolvedValue({
+        data: null,
+        error: {
+          message: "A user with this email address has already been registered",
+          code: "email_exists",
+          status: 422,
+        },
+      })
+
+      expect(await resendSignupConfirmation(undefined, SHOWN_EMAIL)).toEqual({
+        success: false,
+        error: "Your email is already confirmed. Sign in to continue.",
+        errorCode: "already_confirmed",
+      })
+      expect(mockClearResendTicket).toHaveBeenCalledTimes(1)
       expect(mockSendEmail).not.toHaveBeenCalled()
     })
   })
