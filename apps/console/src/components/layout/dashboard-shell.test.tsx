@@ -1,5 +1,13 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { RouterContext } from "next/dist/shared/lib/router-context.shared-runtime"
+import type { NextRouter } from "next/router"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import { DashboardShell } from "./dashboard-shell"
@@ -41,6 +49,27 @@ vi.mock("@/hooks/use-favicon-status", () => ({ useFaviconStatus: () => {} }))
 vi.mock("@/hooks/use-posthog-identify", () => ({
   usePostHogIdentify: () => {},
 }))
+
+const push = vi.fn<NextRouter["push"]>().mockResolvedValue(true)
+const router: NextRouter = {
+  route: "/sandboxes",
+  pathname: "/sandboxes",
+  asPath: "/sandboxes",
+  query: {},
+  basePath: "",
+  isLocaleDomain: false,
+  isFallback: false,
+  isReady: true,
+  isPreview: false,
+  push,
+  replace: vi.fn().mockResolvedValue(true),
+  reload: vi.fn(),
+  back: vi.fn(),
+  forward: vi.fn(),
+  prefetch: vi.fn().mockResolvedValue(undefined),
+  beforePopState: vi.fn(),
+  events: { on: vi.fn(), off: vi.fn(), emit: vi.fn() },
+}
 
 function mockMatchMedia(matches: boolean) {
   vi.stubGlobal(
@@ -143,6 +172,43 @@ it("makes main inert only while the phone overlay is open", () => {
 
   expect(main).not.toHaveAttribute("inert")
 })
+
+it.each([
+  { screenSize: "phone", isSmallScreen: true, toggleLabel: "Expand sidebar" },
+  {
+    screenSize: "desktop",
+    isSmallScreen: false,
+    toggleLabel: "Collapse sidebar",
+  },
+])(
+  "keeps main interactive after clicking the active link on $screenSize",
+  ({ isSmallScreen, toggleLabel }) => {
+    mockMatchMedia(isSmallScreen)
+    push.mockClear()
+    render(
+      <RouterContext.Provider value={router}>
+        <DashboardShell>Page</DashboardShell>
+      </RouterContext.Provider>,
+    )
+    const main = screen.getByRole("main")
+
+    if (isSmallScreen) {
+      fireEvent.click(screen.getByRole("button", { name: "Expand sidebar" }))
+      expect(main).toHaveAttribute("inert")
+    }
+
+    const toggle = screen.getByRole("button", { name: "Collapse sidebar" })
+    const activeLink = screen.getByRole("link", {
+      name: "Sandboxes",
+      current: "page",
+    })
+    fireEvent.click(within(activeLink).getByText("Sandboxes"))
+
+    expect(push).toHaveBeenCalledOnce()
+    expect.soft(toggle).toHaveAccessibleName(toggleLabel)
+    expect(main).not.toHaveAttribute("inert")
+  },
+)
 
 it("closes the phone overlay on Escape and returns focus to the toggle", () => {
   openSmallScreenSidebar()

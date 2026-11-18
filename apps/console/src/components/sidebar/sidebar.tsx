@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@superserve/ui"
 import Image from "next/image"
-import { useEffect, useRef, useSyncExternalStore } from "react"
+import { startTransition, useEffect, useRef, useSyncExternalStore } from "react"
 
 import { useUser } from "@/hooks/use-user"
 import {
@@ -83,6 +83,21 @@ export function Sidebar() {
 
   return (
     <aside
+      onClickCapture={(event) => {
+        // Check before Next.js Link prevents the browser default for routing.
+        if (
+          !isOverlayOpen ||
+          event.defaultPrevented ||
+          !(event.target instanceof Element)
+        )
+          return
+
+        const link = event.target.closest("a[href]")
+        if (link && event.currentTarget.contains(link)) {
+          // Keep the expanded link mounted through its click handler.
+          startTransition(() => setCollapsed(true))
+        }
+      }}
       className={cn(
         "absolute top-0 left-0 z-40 flex h-full flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200 motion-reduce:transition-none",
         "max-md:[&_a]:min-h-11 max-md:[&_button]:min-h-11",
