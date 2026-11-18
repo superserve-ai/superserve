@@ -3531,6 +3531,7 @@ describe("auth callback", () => {
 
   it.each([
     [false, "/sandboxes", true],
+    [false, "/sandboxes/abc", false],
     [false, "/invite/ssinv_use_" + "a".repeat(43), false],
     [false, "/admin", false],
     [true, "/sandboxes", false],

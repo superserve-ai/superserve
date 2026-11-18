@@ -275,6 +275,33 @@ it("does not read later batches after finding an able team", async () => {
     memberships.slice(0, 5),
   )
 })
+it("does not start later batches after the deadline", async () => {
+  vi.useFakeTimers()
+  try {
+    const memberships = setMemberships(7)
+    let resolveBatch!: (value: { state: string }) => void
+    const pendingBatch = new Promise<{ state: string }>((resolve) => {
+      resolveBatch = resolve
+    })
+    mocks.plan.mockReturnValue(pendingBatch)
+
+    const selection = settleTeamSelection(user())
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.plan.mock.calls.map((call) => call[1])).toEqual(
+      memberships.slice(0, 5),
+    )
+
+    await vi.advanceTimersByTimeAsync(SETTLE_TEAM_DEADLINE_MS)
+    expect(await selection).toBeNull()
+    resolveBatch({ state: "selecting" })
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(mocks.plan).toHaveBeenCalledTimes(5)
+    expect(mocks.write).not.toHaveBeenCalled()
+  } finally {
+    vi.useRealTimers()
+  }
+})
 it("does not choose on a degraded directory", async () => {
   mocks.directory.mockResolvedValue({
     memberships: [older],

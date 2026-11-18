@@ -1,4 +1,4 @@
-const PLAIN_DASHBOARD_SECTIONS = [
+const PLAIN_DASHBOARD_SECTIONS = new Set([
   "/sandboxes",
   "/templates",
   "/secrets",
@@ -9,12 +9,7 @@ const PLAIN_DASHBOARD_SECTIONS = [
   "/team",
   "/get-started",
   "/billing-usage",
-]
-
-const EXCLUDED_DASHBOARD_SECTIONS = [
-  "/billing-usage/buy-credit",
-  "/billing-usage/upgrade",
-]
+])
 
 // These dashboard pages let sign-in choose the team they open.
 export function isPlainDashboardPath(path: string): boolean {
@@ -31,17 +26,5 @@ export function isPlainDashboardPath(path: string): boolean {
     return false
 
   const pathname = url.pathname.replace(/\/+$/, "") || "/"
-  if (
-    EXCLUDED_DASHBOARD_SECTIONS.some(
-      (section) => pathname === section || pathname.startsWith(`${section}/`),
-    )
-  )
-    return false
-
-  return (
-    pathname === "/" ||
-    PLAIN_DASHBOARD_SECTIONS.some(
-      (section) => pathname === section || pathname.startsWith(`${section}/`),
-    )
-  )
+  return pathname === "/" || PLAIN_DASHBOARD_SECTIONS.has(pathname)
 }

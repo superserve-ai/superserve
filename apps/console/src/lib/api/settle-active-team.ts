@@ -31,6 +31,7 @@ export async function settleTeamSelection(
 ): Promise<TeamMembership | null> {
   try {
     let current: TeamMembership | undefined
+    let expired = false
     const chooseTeam = async () => {
       const directory = await listTeamMembershipsForUserDetailed(user.id, {
         maxAgeMs: 0,
@@ -46,6 +47,7 @@ export async function settleTeamSelection(
             team.teamId === selection.teamId,
         )
       current = match(await readTeamSelection())
+      if (expired) return { current }
       const plans = new Map<string, Promise<boolean | null>>()
       const isGated = (team: TeamMembership) => {
         const key = serializeTeamSelection(team)
@@ -76,6 +78,7 @@ export async function settleTeamSelection(
         return { current }
       if (!memberships.length) return { current }
 
+      if (expired) return { current }
       const saved =
         memberships.length > 1 ? match(savedTeamSelection(user)) : undefined
       let chosen = memberships.length === 1 ? memberships[0] : undefined
@@ -84,11 +87,13 @@ export async function settleTeamSelection(
         if (gated === false || (!current && gated === null)) chosen = saved
       }
       if (!chosen) {
+        if (expired) return { current }
         const ordered = orderTeamsOldestFirst(
           memberships,
           await readTeamCreationDates(memberships),
         )
         for (let start = 0; start < ordered.length; start += 5) {
+          if (expired) return { current }
           const batch = ordered.slice(start, start + 5)
           const batchPlans = batch.map(isGated)
           for (const [index, plan] of batchPlans.entries()) {
@@ -110,10 +115,10 @@ export async function settleTeamSelection(
       current: TeamMembership | undefined
       chosen?: TeamMembership
     }>((resolve) => {
-      const timer = setTimeout(
-        () => resolve({ current }),
-        SETTLE_TEAM_DEADLINE_MS,
-      )
+      const timer = setTimeout(() => {
+        expired = true
+        resolve({ current })
+      }, SETTLE_TEAM_DEADLINE_MS)
       cancelDeadline = () => clearTimeout(timer)
     })
     const result = await Promise.race([chooseTeam(), deadline]).finally(() =>

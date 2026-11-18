@@ -6,7 +6,6 @@ it.each([
   "/",
   "/sandboxes",
   "/sandboxes/",
-  "/sandboxes/abc",
   "/sandboxes?view=active#list",
   "/settings?tab=general",
   "/templates",
@@ -17,7 +16,6 @@ it.each([
   "/team",
   "/get-started",
   "/billing-usage/",
-  "/billing-usage/upgrade-details",
 ])("accepts %s", (path) => {
   expect(isPlainDashboardPath(path)).toBe(true)
 })
@@ -34,6 +32,10 @@ it.each([
   "/admin",
   "/%61uth/signin",
   "/sandboxesx",
+  "/sandboxes/abc",
+  "/templates/abc/",
+  "/settings/general",
+  "/billing-usage/upgrade-details",
   "/unknown",
   "/sandboxes?team=use:x",
   "/sandboxes?account=example",
