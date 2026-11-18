@@ -81,6 +81,11 @@ function hasScriptFailed(): boolean {
   return scriptFailed
 }
 
+// Same for the capture counter that `settleHeedeoSignup` moves on.
+function isCurrentCapture(run: number): boolean {
+  return run === latestCapture
+}
+
 function writeCookie(value: string, maxAge: number): void {
   try {
     const secure = window.location.protocol === "https:" ? "; Secure" : ""
@@ -111,14 +116,14 @@ async function identifyWithin(
   while (
     !window.heedeo &&
     !hasScriptFailed() &&
-    run === latestCapture &&
+    isCurrentCapture(run) &&
     Date.now() - start < budgetMs
   )
     await new Promise((resolve) => setTimeout(resolve, 100))
   const heedeo = window.heedeo
   // A capture that `settleHeedeoSignup` gave up on must not start a billed
   // `identify()` whose result nobody reads.
-  if (!heedeo || run !== latestCapture)
+  if (!heedeo || !isCurrentCapture(run))
     return {
       status: hasScriptFailed() ? "script_failed" : "script_timeout",
       token: null,
