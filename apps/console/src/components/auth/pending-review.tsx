@@ -108,7 +108,8 @@ export function PendingReview({
   }, [])
 
   return (
-    <main className="min-h-dvh bg-background text-foreground">
+    // The auth layout provides the <main> landmark.
+    <div className="min-h-dvh bg-background text-foreground">
       <div className="mx-auto w-full max-w-[1120px] px-5 py-8 sm:px-10">
         <Link href="/" className="inline-block">
           <Image
@@ -139,6 +140,6 @@ export function PendingReview({
         </div>
         <CalendlyEmbed url={calendlyBookingUrl(name, email)} />
       </div>
-    </main>
+    </div>
   )
 }

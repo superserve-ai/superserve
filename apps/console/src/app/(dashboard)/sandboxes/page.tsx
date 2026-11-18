@@ -23,7 +23,7 @@ import {
 } from "@superserve/ui"
 import { useRouter, useSearchParams } from "next/navigation"
 import { usePostHog } from "posthog-js/react"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { EmptyState } from "@/components/empty-state"
 import { ErrorState } from "@/components/error-state"
@@ -60,6 +60,9 @@ function SandboxesPageContent() {
   const router = useRouter()
   const searchParams = useSearchParams()
   const posthog = usePostHog()
+  const searchInputRef = useRef<HTMLInputElement>(null)
+  const createButtonRef = useRef<HTMLButtonElement>(null)
+  const clearFiltersRef = useRef(false)
 
   const {
     page,
@@ -160,12 +163,32 @@ function SandboxesPageContent() {
   // zero-result search would otherwise flash the account-level empty state for
   // the 300ms until the unfiltered refetch lands.
   const hasFilters = statusTab !== "all" || debouncedQ !== ""
+  // Uses q, not debouncedQ, so "Clear filters" also clears a search still in
+  // its debounce window.
+  const canClearFilters = statusTab !== "all" || q !== ""
   // A truly empty account (no sandboxes at all) gets the create call-to-action.
   // A zero-result filter/search keeps the toolbar so the user can clear it.
   // Placeholder data is a stale page shown during a params change — never treat
   // its total as proof the account is empty.
   const isEmpty =
     !isPending && !error && !isPlaceholderData && total === 0 && !hasFilters
+
+  useEffect(() => {
+    if (
+      !clearFiltersRef.current ||
+      hasFilters ||
+      isPending ||
+      isPlaceholderData
+    )
+      return
+    clearFiltersRef.current = false
+    if (
+      isEmpty &&
+      (document.activeElement === null ||
+        document.activeElement === document.body)
+    )
+      createButtonRef.current?.focus()
+  }, [hasFilters, isPending, isPlaceholderData, isEmpty])
 
   return (
     <div className="flex h-full flex-col">
@@ -196,6 +219,7 @@ function SandboxesPageContent() {
           title="No Sandboxes"
           description="Create a sandbox to run code in an isolated cloud environment."
           actionLabel="Create Sandbox"
+          actionRef={createButtonRef}
           onAction={() => setCreateOpen(true)}
         />
       ) : (
@@ -205,6 +229,7 @@ function SandboxesPageContent() {
             activeTab={statusTab}
             onTabChange={(v) => setParam({ status: v === "all" ? null : v })}
             searchPlaceholder="Search sandboxes..."
+            searchInputRef={searchInputRef}
             searchValue={q}
             onSearchChange={setSearch}
             selectedCount={selected.size}
@@ -222,7 +247,17 @@ function SandboxesPageContent() {
               <EmptyState
                 icon={CubeIcon}
                 title="No sandboxes match"
-                description="Try a different search term or status filter."
+                description={
+                  canClearFilters
+                    ? "No sandbox matches this search or status. Clear the filters to see all sandboxes."
+                    : "Try a different search term or status filter."
+                }
+                actionLabel={canClearFilters ? "Clear filters" : undefined}
+                onAction={() => {
+                  clearFiltersRef.current = true
+                  setParam({ status: null, q: null })
+                  searchInputRef.current?.focus()
+                }}
               />
             ) : (
               <Table>

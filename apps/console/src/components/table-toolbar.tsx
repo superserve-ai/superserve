@@ -20,6 +20,7 @@ interface TableToolbarProps {
   onTabChange?: (value: string) => void
   filters?: React.ReactNode
   searchPlaceholder?: string
+  searchInputRef?: React.Ref<HTMLInputElement>
   searchValue?: string
   onSearchChange?: (value: string) => void
   selectedCount?: number
@@ -35,6 +36,7 @@ export function TableToolbar({
   onTabChange,
   filters,
   searchPlaceholder = "Search...",
+  searchInputRef,
   searchValue = "",
   onSearchChange,
   selectedCount = 0,
@@ -140,6 +142,7 @@ export function TableToolbar({
       <div className="flex items-center gap-2">
         {filters}
         <Input
+          ref={searchInputRef}
           type="text"
           placeholder={searchPlaceholder}
           aria-label={searchPlaceholder}
