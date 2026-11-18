@@ -2,7 +2,14 @@ const mockSettle = vi.fn().mockResolvedValue(null)
 vi.mock("@/lib/api/teams-actions", () => ({
   settleActiveTeamAction: (...args: unknown[]) => mockSettle(...args),
 }))
-import { render, screen, waitFor, within } from "@testing-library/react"
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -370,6 +377,35 @@ describe("SignInPage", () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith("/sandboxes?view=active#list")
     })
+  })
+
+  it("redirects after five seconds when settling the active team stalls", async () => {
+    searchParamsMap = { next: "/sandboxes?view=active#list" }
+    mockSignInWithPassword.mockResolvedValue({ error: null })
+    mockSettle.mockReturnValueOnce(new Promise(() => {}))
+    render(<SignInPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Sign In" }))
+      })
+      expect(mockSettle).toHaveBeenCalledTimes(1)
+
+      await act(() => vi.advanceTimersByTimeAsync(4999))
+      expect(mockReplace).not.toHaveBeenCalled()
+
+      await act(() => vi.advanceTimersByTimeAsync(1))
+      expect(mockReplace).toHaveBeenCalledWith("/sandboxes?view=active#list")
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it.each([

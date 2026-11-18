@@ -42,6 +42,9 @@ import {
 } from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
 
+// Allow time for the server action to respond after its 3-second deadline.
+const SETTLE_TEAM_CLIENT_WAIT_MS = 5000
+
 type RecoveryOption = "magic_link" | "google" | "forgot_password"
 
 /**
@@ -194,7 +197,10 @@ function SignInContent() {
           : nextUrl
       if (isPlainDashboardPath(dest)) {
         try {
-          await settleActiveTeamAction()
+          await withinDeadline(
+            settleActiveTeamAction(),
+            SETTLE_TEAM_CLIENT_WAIT_MS,
+          )
         } catch {
           // Continue sign-in if the preference cannot be settled.
         }
