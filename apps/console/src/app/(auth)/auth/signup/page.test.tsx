@@ -77,14 +77,16 @@ vi.mock("@/lib/fingerprint/client", () => ({
   getFingerprintSignupDiagnostics: () => ({ schema_version: 1, events: [] }),
 }))
 
-const mockCaptureHeedeoSignup = vi.fn<() => Promise<void>>(() =>
-  Promise.resolve(),
+const mockCaptureHeedeoSignup = vi.fn<(signal?: AbortSignal) => Promise<void>>(
+  () => Promise.resolve(),
 )
+const heedeoSignal = () => mockCaptureHeedeoSignup.mock.calls[0]?.[0]
 vi.mock("@/lib/heedeo/client", () => ({
   HEEDEO_SCRIPT_SRC: undefined,
   markHeedeoScriptFailed: vi.fn(),
   heedeoPreloadProps: {},
-  captureHeedeoSignup: () => mockCaptureHeedeoSignup(),
+  captureHeedeoSignup: (_budgetMs?: number, signal?: AbortSignal) =>
+    mockCaptureHeedeoSignup(signal),
   settleHeedeoSignup: (capture: Promise<void>) => capture,
 }))
 
@@ -539,6 +541,36 @@ describe("SignUpPage", () => {
     expect(mockSignInWithOAuth).not.toHaveBeenCalled()
     finish()
     await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+  })
+
+  it("stops the Heedeo capture when the Google proof is refused", async () => {
+    mockCaptureHeedeoSignup.mockReturnValueOnce(new Promise<void>(() => {}))
+    mockBeginGoogleSignup.mockResolvedValueOnce({
+      success: false,
+      errorCode: "captcha_failed",
+    })
+    render(<SignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+
+    await waitFor(() => expect(heedeoSignal()?.aborted).toBe(true))
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+  })
+
+  it("stops the Heedeo capture when the page unmounts during the check", async () => {
+    mockCaptureHeedeoSignup.mockReturnValueOnce(new Promise<void>(() => {}))
+    mockBeginGoogleSignup.mockReturnValueOnce(new Promise(() => {}))
+    const { unmount } = render(<SignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1))
+    expect(heedeoSignal()?.aborted).toBe(false)
+    unmount()
+    expect(heedeoSignal()?.aborted).toBe(true)
   })
 
   it("shows inline form error when signUpWithEmail returns an error", async () => {
@@ -1272,6 +1304,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       method: "email",
       reason: "captcha_not_loaded",
     })
+    expect(heedeoSignal()?.aborted).toBe(true)
   })
 
   it("records a recovery Google click that the bot-check blocks", async () => {
@@ -1300,6 +1333,7 @@ describe("SignUpPage with reCAPTCHA configured", () => {
       reason: "captcha_not_loaded",
       complete_google: true,
     })
+    expect(heedeoSignal()?.aborted).toBe(true)
   })
 
   it("keeps the bot-check message when recording the failure throws", async () => {

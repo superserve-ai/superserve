@@ -87,6 +87,28 @@ function sanitizeNext(raw: string | null): string {
 export default function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  // One per running sign-up attempt. An attempt aborts its own when it ends,
+  // so a Heedeo capture it no longer waits for starts no identify and writes
+  // no cookie; unmounting aborts them all.
+  const heedeoAttempts = useRef(new Set<AbortController>())
+  useEffect(() => {
+    const attempts = heedeoAttempts.current
+    return () => {
+      for (const attempt of attempts) attempt.abort()
+      attempts.clear()
+    }
+  }, [])
+  const startHeedeoCapture = () => {
+    const attempt = new AbortController()
+    heedeoAttempts.current.add(attempt)
+    return {
+      capture: captureHeedeoSignup(undefined, attempt.signal),
+      end: () => {
+        attempt.abort()
+        heedeoAttempts.current.delete(attempt)
+      },
+    }
+  }
   const [formValues, setFormValues] = useState({
     fullName: "",
     email: "",
@@ -179,9 +201,9 @@ export default function SignUpContent() {
       return
     }
     setIsLoading(true)
+    // Observe-only, beside the other checks; never fails the sign-up.
+    const heedeo = startHeedeoCapture()
     try {
-      // Observe-only, beside the other checks; never fails the sign-up.
-      const heedeo = captureHeedeoSignup()
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
       const recaptchaToken = await getRecaptchaToken("signup")
@@ -197,7 +219,7 @@ export default function SignUpContent() {
         setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
-      await settleHeedeoSignup(heedeo)
+      await settleHeedeoSignup(heedeo.capture)
       const result = await signUpWithEmail(
         email,
         password,
@@ -241,6 +263,7 @@ export default function SignUpContent() {
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
     } finally {
+      heedeo.end()
       setIsLoading(false)
     }
   }
@@ -357,9 +380,9 @@ export default function SignUpContent() {
   const handleGoogleSignIn = async (chooseAccount = false) => {
     setIsGoogleLoading(true)
     setErrors({})
+    // Observe-only, beside the other checks; never fails the sign-up.
+    const heedeo = startHeedeoCapture()
     try {
-      // Observe-only, beside the other checks; never fails the sign-up.
-      const heedeo = captureHeedeoSignup()
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
       const recaptchaToken = await getRecaptchaToken("signup_google")
@@ -398,7 +421,7 @@ export default function SignUpContent() {
         return
       }
       // Only the callback reads Heedeo's cookie, so the proof does not wait.
-      await heedeo
+      await heedeo.capture
       const loginHint =
         isCompleteGoogleSignup && !chooseAccount
           ? await loadRecoveryAccount()
@@ -430,6 +453,7 @@ export default function SignUpContent() {
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
     } finally {
+      heedeo.end()
       setIsGoogleLoading(false)
     }
   }

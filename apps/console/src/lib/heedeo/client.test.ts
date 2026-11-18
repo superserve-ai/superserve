@@ -244,4 +244,67 @@ describe("Heedeo browser capture", () => {
     expect(identify).not.toHaveBeenCalled()
     expect(captured()).toMatchObject({ status: "script_timeout", token: null })
   })
+
+  it("does not identify for a capture whose attempt was aborted", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const attempt = new AbortController()
+    const capture = client.captureHeedeoSignup(2500, attempt.signal)
+    await vi.advanceTimersByTimeAsync(100)
+    attempt.abort()
+    const identify = vi.fn(async () => ({
+      token: "ct1.late",
+      visitor_id: "v",
+      confidence: 1,
+    }))
+    window.heedeo = { identify }
+    await vi.advanceTimersByTimeAsync(3000)
+    await capture
+    expect(identify).not.toHaveBeenCalled()
+    expect(captured()).toBeNull()
+  })
+
+  it("writes no cookie for an identify that answers after its attempt was aborted", async () => {
+    const client = await load("pk_live_123")
+    let answer!: (value: {
+      token: string
+      visitor_id: string
+      confidence: number
+    }) => void
+    window.heedeo = {
+      identify: () =>
+        new Promise((resolve) => {
+          answer = resolve
+        }),
+    }
+    const attempt = new AbortController()
+    const capture = client.captureHeedeoSignup(2500, attempt.signal)
+    await vi.waitFor(() => expect(answer).toBeDefined())
+    attempt.abort()
+    answer({ token: "ct1.late", visitor_id: "v", confidence: 1 })
+    await capture
+    expect(captured()).toBeNull()
+  })
+
+  it("keeps a newer capture when an older attempt is aborted", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const older = new AbortController()
+    const first = client.captureHeedeoSignup(2500, older.signal)
+    const second = client.captureHeedeoSignup(
+      2500,
+      new AbortController().signal,
+    )
+    older.abort()
+    const identify = vi.fn(async () => ({
+      token: "ct1.newer",
+      visitor_id: "v",
+      confidence: 1,
+    }))
+    window.heedeo = { identify }
+    await vi.advanceTimersByTimeAsync(200)
+    await Promise.all([first, second])
+    expect(identify).toHaveBeenCalledTimes(1)
+    expect(captured()).toMatchObject({ status: "ok", token: "ct1.newer" })
+  })
 })

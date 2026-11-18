@@ -81,9 +81,10 @@ function hasScriptFailed(): boolean {
   return scriptFailed
 }
 
-// Same for the capture counter that `settleHeedeoSignup` moves on.
-function isCurrentCapture(run: number): boolean {
-  return run === latestCapture
+// Same for the capture counter that `settleHeedeoSignup` moves on, and for
+// the attempt's signal, which its caller aborts once it has given up.
+function isLiveCapture(run: number, signal: AbortSignal | undefined): boolean {
+  return run === latestCapture && !signal?.aborted
 }
 
 function writeCookie(value: string, maxAge: number): void {
@@ -111,19 +112,20 @@ function clearHeedeoTokenCookie(): void {
 async function identifyWithin(
   budgetMs: number,
   run: number,
+  signal: AbortSignal | undefined,
 ): Promise<Omit<HeedeoCapture, "latencyMs">> {
   const start = Date.now()
   while (
     !window.heedeo &&
     !hasScriptFailed() &&
-    isCurrentCapture(run) &&
+    isLiveCapture(run, signal) &&
     Date.now() - start < budgetMs
   )
     await new Promise((resolve) => setTimeout(resolve, 100))
   const heedeo = window.heedeo
-  // A capture that `settleHeedeoSignup` gave up on must not start a billed
-  // `identify()` whose result nobody reads.
-  if (!heedeo || !isCurrentCapture(run))
+  // A capture that `settleHeedeoSignup` or its attempt gave up on must not
+  // start a billed `identify()` whose result nobody reads.
+  if (!heedeo || !isLiveCapture(run, signal))
     return {
       status: hasScriptFailed() ? "script_failed" : "script_timeout",
       token: null,
@@ -166,9 +168,15 @@ async function identifyWithin(
  * Observation only: nothing in the sign-up depends on it. When the script is
  * blocked or slow, the cookie records why, and the server still sends the
  * event without a token.
+ *
+ * Abort `signal` when the attempt stops before its server call or the trip
+ * to Google (a failed check, an error, a page that unmounts): the capture
+ * then starts no `identify()` and writes no cookie. Aborting it does not
+ * touch a newer capture.
  */
 export async function captureHeedeoSignup(
   budgetMs: number = HEEDEO_CAPTURE_BUDGET_MS,
+  signal?: AbortSignal,
 ): Promise<void> {
   if (!HEEDEO_PUBLISHABLE_KEY) return
   const run = ++latestCapture
@@ -177,9 +185,9 @@ export async function captureHeedeoSignup(
     clearHeedeoSignupCapture()
     const start = Date.now()
     captureStartedAt = start
-    const result = await identifyWithin(budgetMs, run)
-    // A newer capture owns the cookie now.
-    if (run !== latestCapture) return
+    const result = await identifyWithin(budgetMs, run, signal)
+    // A newer capture owns the cookie now, or nobody reads this one.
+    if (!isLiveCapture(run, signal)) return
     writeCookie(
       encodeHeedeoCapture({ ...result, latencyMs: Date.now() - start }),
       HEEDEO_SIGNUP_COOKIE_MAX_AGE_SECONDS,

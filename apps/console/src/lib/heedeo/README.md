@@ -27,7 +27,11 @@ authentication decision depends on it, and every failure fails open.
    read the cookie, so it waits for the capture, but at most 1 s
    (`HEEDEO_SIGNUP_TAIL_MS`) after the other checks finish; past that,
    `settleHeedeoSignup` records `identify_timeout` (or the script status) and
-   drops the late token. Password sign-in captures nothing.
+   drops the late token. An attempt that stops before its server call or the
+   trip to Google (a missing or refused bot-check, an error, a cancelled
+   check, a page that unmounts) aborts its capture: if `identify()` has not
+   started, it does not start, and no cookie is written. Password sign-in
+   captures nothing.
 3. The server reads and deletes that cookie and, after the response is sent,
    sends one `signup` event to `POST https://app.heedeo.com/v1/evaluations`:
    - email: from `signUpWithEmail`, with the email and `status` `succeeded`

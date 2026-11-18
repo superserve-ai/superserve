@@ -184,7 +184,9 @@ async function runCheck(
   const recaptcha = getRecaptchaToken("signup_google")
   recaptcha.then(onRecaptchaSettled, onRecaptchaSettled)
   const turnstile = turnstileTokenWithinBudget(cancelled)
-  const heedeo = captureHeedeoSignup(HEEDEO_BUDGET_MS)
+  // The caller aborts `cancelled` whenever the check ends, so a capture this
+  // check no longer waits for starts no identify and writes no cookie.
+  const heedeo = captureHeedeoSignup(HEEDEO_BUDGET_MS, cancelled)
   const [budgetedCapture, recaptchaToken] = await Promise.all([
     capture.result,
     recaptcha,
