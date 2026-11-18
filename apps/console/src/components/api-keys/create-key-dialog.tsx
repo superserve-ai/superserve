@@ -329,7 +329,7 @@ export function CreateKeyDialog({
                   target="_blank"
                   rel="noreferrer"
                   aria-label="Quickstart (opens in a new tab)"
-                  className="font-medium text-foreground underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                  className="font-medium text-foreground underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-hidden"
                 >
                   Quickstart
                 </a>{" "}

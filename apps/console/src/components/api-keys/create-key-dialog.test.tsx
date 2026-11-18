@@ -629,18 +629,28 @@ describe("CreateKeyDialog created state", () => {
     },
   )
 
-  it("ignores a clipboard rejection after unmounting", async () => {
+  it.each([
+    ["Copy key", "rejection"],
+    ["Copy key", "success"],
+    ["Copy command", "rejection"],
+    ["Copy command", "success"],
+  ])("ignores a %s %s after unmounting", async (label, settlement) => {
     const { unmount } = await createKey()
     const pending = deferredCopy()
     writeText.mockReturnValueOnce(pending.promise)
 
-    await userEvent.click(screen.getByRole("button", { name: "Copy key" }))
+    await userEvent.click(screen.getByRole("button", { name: label }))
     unmount()
     await act(async () =>
-      pending.reject(new Error("Clipboard permission denied")),
+      settlement === "success"
+        ? pending.resolve()
+        : pending.reject(new Error("Clipboard permission denied")),
     )
 
     expect(mockAddToast).not.toHaveBeenCalled()
+    expect(mockCapture.mock.calls.map(([event]) => event)).not.toContain(
+      "api_key_copied",
+    )
   })
 
   it.each(["rejection", "success"])(
@@ -706,26 +716,29 @@ describe("CreateKeyDialog created state", () => {
     expect(commandButton).toHaveAccessibleName("Copy command")
   })
 
-  it("restarts the two-second feedback timer when copying again", async () => {
-    await createKey()
-    vi.useFakeTimers()
+  it.each(["Copy key", "Copy command"])(
+    "restarts the two-second feedback timer when %s is pressed again",
+    async (label) => {
+      await createKey()
+      vi.useFakeTimers()
 
-    const button = screen.getByRole("button", { name: "Copy key" })
-    await act(async () => {
-      fireEvent.click(button)
-    })
-    act(() => vi.advanceTimersByTime(1500))
-    await act(async () => {
-      fireEvent.click(button)
-    })
+      const button = screen.getByRole("button", { name: label })
+      await act(async () => {
+        fireEvent.click(button)
+      })
+      act(() => vi.advanceTimersByTime(1500))
+      await act(async () => {
+        fireEvent.click(button)
+      })
 
-    act(() => vi.advanceTimersByTime(600))
-    expect(button).toHaveTextContent(/^Copied$/)
-    act(() => vi.advanceTimersByTime(1399))
-    expect(button).toHaveTextContent(/^Copied$/)
-    act(() => vi.advanceTimersByTime(1))
-    expect(button).toHaveTextContent(/^Copy key$/)
-  })
+      act(() => vi.advanceTimersByTime(600))
+      expect(button).toHaveTextContent(/^Copied$/)
+      act(() => vi.advanceTimersByTime(1399))
+      expect(button).toHaveTextContent(/^Copied$/)
+      act(() => vi.advanceTimersByTime(1))
+      expect(button).toHaveTextContent(new RegExp(`^${label}$`))
+    },
+  )
 
   it.each([
     ["Copy key", newKey],
