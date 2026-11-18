@@ -20,6 +20,8 @@ import { useCallback, useLayoutEffect, useRef, useState } from "react"
 import { useCreateApiKey } from "@/hooks/use-api-keys"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
+const QUICKSTART_DOCS_URL = "https://docs.superserve.ai/quickstart"
+
 type CopyTarget = "key" | "export_command"
 type CopyFailure = { attempt: number; scroll: boolean }
 
@@ -62,6 +64,7 @@ export function CreateKeyDialog({
     target: CopyTarget
     message: string
   } | null>(null)
+  const keyCopyButton = useRef<HTMLButtonElement>(null)
   const keyCode = useRef<HTMLElement>(null)
   const commandCode = useRef<HTMLElement>(null)
   const keyAlert = useRef<HTMLParagraphElement>(null)
@@ -94,6 +97,10 @@ export function CreateKeyDialog({
     }
     return cancelCopyFeedback
   }, [open, cancelCopyFeedback])
+
+  useLayoutEffect(() => {
+    if (createdKey) keyCopyButton.current?.focus()
+  }, [createdKey])
 
   useLayoutEffect(() => {
     if (keyFailure?.scroll) {
@@ -184,6 +191,7 @@ export function CreateKeyDialog({
 
   return (
     <Dialog
+      disablePointerDismissal={!!createdKey}
       open={open}
       onOpenChange={(v) => (v ? setOpen(true) : handleClose())}
     >
@@ -231,6 +239,7 @@ export function CreateKeyDialog({
                   {createdKey.full}
                 </code>
                 <Button
+                  ref={keyCopyButton}
                   size="sm"
                   aria-label={copied.key ? "Copied API key" : undefined}
                   onClick={() => handleCopy("key", createdKey.full)}
@@ -251,9 +260,7 @@ export function CreateKeyDialog({
               </Field>
 
               <div className="space-y-1.5">
-                <p className="text-sm">
-                  Set the key in your shell, then create a sandbox:
-                </p>
+                <p className="text-sm">Set the key in your shell:</p>
                 <code
                   ref={commandCode}
                   // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the group role lets the code block carry a name
@@ -289,6 +296,19 @@ export function CreateKeyDialog({
                   </p>
                 )}
               </div>
+              <p className="text-sm">
+                Then follow the{" "}
+                <a
+                  href={QUICKSTART_DOCS_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label="Quickstart (opens in a new tab)"
+                  className="font-medium text-foreground underline underline-offset-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                >
+                  Quickstart
+                </a>{" "}
+                to create your first sandbox.
+              </p>
             </div>
           ) : (
             <Field label="Key Name" required>

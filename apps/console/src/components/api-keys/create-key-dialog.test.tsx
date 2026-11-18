@@ -62,6 +62,13 @@ function ControlledCreateKeyDialog() {
   )
 }
 
+function clickBackdrop() {
+  const backdrop = document.querySelector(".ss-dialog-backdrop")!
+  fireEvent.pointerDown(backdrop, { pointerType: "mouse" })
+  fireEvent.mouseDown(backdrop)
+  fireEvent.click(backdrop)
+}
+
 function deferredCopy() {
   let resolve!: () => void
   let reject!: (error: Error) => void
@@ -92,6 +99,15 @@ function mockScrollIntoView() {
   })
   return scrollIntoView
 }
+
+it("closes the create form when the backdrop is clicked", () => {
+  render(<ControlledCreateKeyDialog />)
+  expect(screen.getByRole("dialog")).toBeVisible()
+
+  clickBackdrop()
+
+  expect(screen.queryByRole("dialog")).toBeNull()
+})
 
 describe("CreateKeyDialog created state", () => {
   const key = "ss_live_test_key_123"
@@ -151,13 +167,59 @@ describe("CreateKeyDialog created state", () => {
     expect(keyCode).toBeVisible()
     expect(keyCode).toHaveAttribute("data-mask")
     expect(keyCode).toHaveClass("ph-no-capture")
-    expect(
-      screen.getByText("Set the key in your shell, then create a sandbox:"),
-    ).toBeVisible()
+    expect(screen.getByText("Set the key in your shell:")).toBeVisible()
     const commandCode = screen.getByText(command, { selector: "code" })
     expect(commandCode).toBeVisible()
     expect(commandCode).toHaveAttribute("data-mask")
     expect(commandCode).toHaveClass("ph-no-capture")
+  })
+
+  it("links to the Quickstart as the next step", async () => {
+    await createKey()
+
+    const link = screen.getByRole("link", {
+      name: "Quickstart (opens in a new tab)",
+    })
+    expect(link.parentElement).toHaveTextContent(
+      /^Then follow the Quickstart to create your first sandbox\.$/,
+    )
+    expect(link).toHaveAttribute(
+      "href",
+      "https://docs.superserve.ai/quickstart",
+    )
+    expect(link).toHaveAttribute("target", "_blank")
+    expect(link).toHaveAttribute("rel", "noreferrer")
+  })
+
+  it("focuses Copy key after creating a key", async () => {
+    await createKey()
+
+    expect(screen.getByRole("button", { name: "Copy key" })).toHaveFocus()
+  })
+
+  it("keeps the created key visible when the backdrop is clicked", async () => {
+    await createKey()
+
+    clickBackdrop()
+
+    expect(screen.getByRole("dialog")).toBeVisible()
+    expect(screen.getByText(key, { selector: "code" })).toBeVisible()
+  })
+
+  it.each([
+    ["Escape", () => userEvent.keyboard("{Escape}")],
+    [
+      "Close",
+      () => userEvent.click(screen.getByRole("button", { name: "Close" })),
+    ],
+  ])("closes and clears the created key with %s", async (_label, close) => {
+    await createKey()
+
+    await close()
+
+    expect(screen.queryByRole("dialog")).toBeNull()
+    await userEvent.click(screen.getByRole("button", { name: "Open dialog" }))
+    expect(screen.queryByText(key, { selector: "code" })).toBeNull()
   })
 
   it.each([

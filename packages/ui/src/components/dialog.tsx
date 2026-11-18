@@ -16,6 +16,8 @@ interface DialogProps {
   open?: boolean
   onOpenChange?: (open: boolean) => void
   defaultOpen?: boolean
+  /** Prevents pointer presses outside the dialog from closing it. */
+  disablePointerDismissal?: boolean
 }
 
 function Dialog({
