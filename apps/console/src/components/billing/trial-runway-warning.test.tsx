@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
   posthog: {
     isFeatureEnabled: vi.fn(),
     onFeatureFlags: vi.fn(() => () => {}),
+    get_property: vi.fn(() => undefined),
     capture: vi.fn(),
   },
 }))

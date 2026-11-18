@@ -6,6 +6,7 @@ const mocks = vi.hoisted(() => ({
     | {
         isFeatureEnabled: ReturnType<typeof vi.fn>
         onFeatureFlags: ReturnType<typeof vi.fn>
+        get_property: ReturnType<typeof vi.fn>
       }
     | undefined,
 }))
@@ -17,6 +18,7 @@ function client(value: unknown) {
   return {
     isFeatureEnabled: vi.fn(() => value),
     onFeatureFlags: vi.fn(() => () => {}),
+    get_property: vi.fn(() => undefined),
   }
 }
 

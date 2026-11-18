@@ -6,6 +6,10 @@ import { useEffect, useState } from "react"
 
 function flagOn(client: PostHog, flag: string): boolean {
   try {
+    // PostHog keeps the last value of a flag that failed to evaluate, and
+    // lists the errors of the last flags request in this property.
+    const errors: unknown = client.get_property("$feature_flag_errors")
+    if (Array.isArray(errors) && errors.length > 0) return false
     // `fresh` skips values cached from an earlier page load, so a failed
     // flags request reads as off.
     return client.isFeatureEnabled(flag, { fresh: true }) === true
