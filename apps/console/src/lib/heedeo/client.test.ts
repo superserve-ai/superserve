@@ -182,4 +182,47 @@ describe("Heedeo browser capture", () => {
     await first
     expect(captured()).toMatchObject({ token: "ct1.second" })
   })
+
+  it("stops the email wait at the tail and drops the late result", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    let resolveIdentify: (value: {
+      token: string
+      visitor_id: string
+      confidence: number
+    }) => void = () => {}
+    window.heedeo = {
+      identify: () =>
+        new Promise((resolve) => {
+          resolveIdentify = resolve
+        }),
+    }
+    const capture = client.captureHeedeoSignup()
+    const settled = client.settleHeedeoSignup(capture, 1000)
+    await vi.advanceTimersByTimeAsync(1000)
+    await settled
+    expect(captured()).toMatchObject({
+      status: "identify_timeout",
+      token: null,
+    })
+    resolveIdentify({ token: "ct1.late", visitor_id: "v", confidence: 1 })
+    await capture
+    expect(captured()).toMatchObject({
+      status: "identify_timeout",
+      token: null,
+    })
+  })
+
+  it("keeps a capture that finishes within the tail", async () => {
+    const client = await load("pk_live_123")
+    window.heedeo = {
+      identify: async () => ({
+        token: "ct1.ok",
+        visitor_id: "v",
+        confidence: 1,
+      }),
+    }
+    await client.settleHeedeoSignup(client.captureHeedeoSignup(), 1000)
+    expect(captured()).toMatchObject({ status: "ok", token: "ct1.ok" })
+  })
 })

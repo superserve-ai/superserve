@@ -25,7 +25,11 @@ import {
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
-import { captureHeedeoSignup, heedeoPreloadProps } from "@/lib/heedeo/client"
+import {
+  captureHeedeoSignup,
+  heedeoPreloadProps,
+  settleHeedeoSignup,
+} from "@/lib/heedeo/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -193,7 +197,7 @@ export default function SignUpContent() {
         setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
-      await heedeo
+      await settleHeedeoSignup(heedeo)
       const result = await signUpWithEmail(
         email,
         password,

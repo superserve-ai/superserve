@@ -38,6 +38,7 @@ const HEEDEO_TOKEN_COOKIE = "_idt"
 let scriptRequested = false
 let scriptFailed = false
 let latestCapture = 0
+let captureStartedAt = 0
 
 /** Called when the script cannot load. */
 export function markHeedeoScriptFailed(): void {
@@ -162,6 +163,7 @@ export async function captureHeedeoSignup(
     loadHeedeoScript()
     clearHeedeoSignupCapture()
     const start = Date.now()
+    captureStartedAt = start
     const result = await identifyWithin(budgetMs)
     // A newer capture owns the cookie now.
     if (run !== latestCapture) return
@@ -171,5 +173,55 @@ export async function captureHeedeoSignup(
     )
   } catch {
     // Observation only.
+  }
+}
+
+/**
+ * How long the email sign-up still waits for Heedeo once its other checks are
+ * done. The email action reads the cookie, so unlike the Google paths it
+ * cannot overlap the server call; a slow Heedeo costs it at most this much.
+ */
+export const HEEDEO_SIGNUP_TAIL_MS = 1000
+
+/**
+ * Waits for a running `captureHeedeoSignup` for at most `tailMs` more. When
+ * it is still running, records the timeout for the server at once and drops
+ * the late result. Never throws.
+ */
+export async function settleHeedeoSignup(
+  capture: Promise<void>,
+  tailMs: number = HEEDEO_SIGNUP_TAIL_MS,
+): Promise<void> {
+  if (!HEEDEO_PUBLISHABLE_KEY) return
+  const run = latestCapture
+  let timer: ReturnType<typeof setTimeout> | undefined
+  try {
+    const finished = await Promise.race([
+      capture.then(
+        () => true,
+        () => true,
+      ),
+      new Promise<false>((resolve) => {
+        timer = setTimeout(() => resolve(false), tailMs)
+      }),
+    ])
+    if (finished || run !== latestCapture) return
+    latestCapture++
+    writeCookie(
+      encodeHeedeoCapture({
+        status: window.heedeo
+          ? "identify_timeout"
+          : hasScriptFailed()
+            ? "script_failed"
+            : "script_timeout",
+        token: null,
+        latencyMs: Date.now() - captureStartedAt,
+      }),
+      HEEDEO_SIGNUP_COOKIE_MAX_AGE_SECONDS,
+    )
+  } catch {
+    // Observation only.
+  } finally {
+    clearTimeout(timer)
   }
 }

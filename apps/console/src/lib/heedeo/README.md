@@ -23,7 +23,11 @@ authentication decision depends on it, and every failure fails open.
    or why there is none, to the `superserve-heedeo-signup` cookie (`Path=/auth`,
    5 minutes, the token's lifetime). Both pages send the Google proof request
    without waiting for the capture, and wait for it only after the proof
-   succeeds, before the trip to Google. Password sign-in captures nothing.
+   succeeds, before the trip to Google. The email sign-up server call has to
+   read the cookie, so it waits for the capture, but at most 1 s
+   (`HEEDEO_SIGNUP_TAIL_MS`) after the other checks finish; past that,
+   `settleHeedeoSignup` records `identify_timeout` (or the script status) and
+   drops the late token. Password sign-in captures nothing.
 3. The server reads and deletes that cookie and, after the response is sent,
    sends one `signup` event to `POST https://app.heedeo.com/v1/evaluations`:
    - email: from `signUpWithEmail`, with the email and `status` `succeeded`
@@ -82,7 +86,9 @@ are free. They do not say whether the script's background identification
 - Compare Heedeo's usage (dashboard, or `get_usage` on its MCP server)
   with unique `signup_attempt_id`s and new accounts, not with
   `auth_heedeo_signup_observed` alone: add `auth_heedeo_capture_discarded`
-  for returning accounts. The rest of the gap is Google trips that were
+  for returning accounts. Count only events whose `capture_status` is not
+  `script_failed` or `script_timeout`: with those, `identify()` never ran.
+  The rest of the gap is Google trips that were
   never finished and background identification, if it is billed.
 - Heedeo documents no spend cap or usage alert, only rate limits (120 a
   minute per end-user address, 6,000 a minute per workspace). Over quota,
@@ -147,6 +153,32 @@ not fall back after a 403, so the kill switch answers 403 rather than 404.
 
 Use a separate Heedeo workspace for preview and staging deployments: test
 sign-ups become history that later sign-ups are scored against.
+
+### Where the variables are set
+
+| Place                                     | `NEXT_PUBLIC_HEEDEO_KEY` | `HEEDEO_SECRET_KEY` | `HEEDEO_SIGNUP_OBSERVATION` |
+| ----------------------------------------- | ------------------------ | ------------------- | --------------------------- |
+| Vercel project environment variables      | yes                      | yes (sensitive)     | only to turn it off         |
+| `turbo.json` `build.env`                  | yes                      | yes                 | yes                         |
+| `apps/console/.env.example` (local)       | yes                      | yes                 | yes                         |
+| `src/test/ui/ss640/next.config.ts` (test) | empty                    | no                  | no                          |
+
+- Vercel builds the console with `turbo run build`. Turbo runs in strict env
+  mode, so `next build` sees only the variables that `turbo.json` declares
+  (and the `NEXT_PUBLIC_*` names that Turbo infers for Next.js). Declare every
+  new variable there, as for the Fingerprint, Turnstile and reCAPTCHA keys.
+- `NEXT_PUBLIC_HEEDEO_KEY` is inlined into the browser bundle by `next build`.
+  Set it for each Vercel environment (Production, Preview, Development) and
+  redeploy after a change: a running deployment keeps the old value.
+- `HEEDEO_SECRET_KEY` and `HEEDEO_SIGNUP_OBSERVATION` are read at request time
+  in `config.ts`, which imports `server-only`, so a client import fails the
+  build. The secret key never has a `NEXT_PUBLIC_` name. A change applies to the
+  next deployment.
+- CI builds and tests without any provider key, as for the other sign-up
+  signals, so `.github/workflows` sets none. The repository has no Dockerfile,
+  docker-compose, Helm, Terraform or Fly manifest and no `vercel.json` for the
+  console, and the console reads these values from `process.env` directly,
+  without a schema, as the other providers do.
 
 Before production, with a live staging workspace:
 
