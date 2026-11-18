@@ -33,7 +33,7 @@ function DashboardContent({
         <main
           className={cn(
             "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-all duration-200",
-            isCollapsed ? "ml-16" : "ml-64",
+            isCollapsed ? "ml-16" : "ml-16 md:ml-64",
           )}
         >
           {banner}

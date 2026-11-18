@@ -1,14 +1,42 @@
 "use client"
 
+import { usePathname } from "next/navigation"
 import {
   createContext,
   useCallback,
   useContext,
   useMemo,
   useState,
+  useSyncExternalStore,
 } from "react"
 
+export const SMALL_SCREEN_MEDIA_QUERY = "(max-width: 767px)"
+
 const STORAGE_KEY = "superserve-sidebar-collapsed"
+
+function getSmallScreenMediaQuery() {
+  if (
+    typeof window === "undefined" ||
+    typeof window.matchMedia !== "function"
+  ) {
+    return undefined
+  }
+  return window.matchMedia(SMALL_SCREEN_MEDIA_QUERY)
+}
+
+function subscribeToSmallScreen(onChange: () => void) {
+  const mediaQuery = getSmallScreenMediaQuery()
+  mediaQuery?.addEventListener("change", onChange)
+  return () => mediaQuery?.removeEventListener("change", onChange)
+}
+
+function useIsSmallScreen() {
+  return useSyncExternalStore(
+    subscribeToSmallScreen,
+    () => getSmallScreenMediaQuery()?.matches ?? false,
+    () => false,
+  )
+}
 
 interface SidebarContextValue {
   isCollapsed: boolean
@@ -19,15 +47,33 @@ interface SidebarContextValue {
 const SidebarContext = createContext<SidebarContextValue | null>(null)
 
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
-  const [isCollapsed, setIsCollapsed] = useState(() => {
+  const isSmallScreen = useIsSmallScreen()
+  const pathname = usePathname()
+  const [previousPathname, setPreviousPathname] = useState(pathname)
+  const [mobileExpanded, setMobileExpanded] = useState(false)
+  const [storedCollapsed, setStoredCollapsed] = useState(() => {
     if (typeof window === "undefined") return false
     return localStorage.getItem(STORAGE_KEY) === "true"
   })
 
-  const setCollapsed = useCallback((value: boolean) => {
-    setIsCollapsed(value)
-    localStorage.setItem(STORAGE_KEY, String(value))
-  }, [])
+  if (pathname !== previousPathname) {
+    setPreviousPathname(pathname)
+    setMobileExpanded(false)
+  }
+
+  const isCollapsed = isSmallScreen ? !mobileExpanded : storedCollapsed
+
+  const setCollapsed = useCallback(
+    (value: boolean) => {
+      if (isSmallScreen) {
+        setMobileExpanded(!value)
+        return
+      }
+      setStoredCollapsed(value)
+      localStorage.setItem(STORAGE_KEY, String(value))
+    },
+    [isSmallScreen],
+  )
 
   const toggle = useCallback(
     () => setCollapsed(!isCollapsed),

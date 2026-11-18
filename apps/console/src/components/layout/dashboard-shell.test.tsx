@@ -1,7 +1,9 @@
 import { render, screen } from "@testing-library/react"
-import { expect, it, vi } from "vitest"
+import { beforeEach, expect, it, vi } from "vitest"
 
 import { DashboardShell } from "./dashboard-shell"
+
+const sidebar = vi.hoisted(() => ({ isCollapsed: false }))
 
 vi.mock("@/components/sidebar/sidebar", () => ({
   Sidebar: () => <aside>Sidebar</aside>,
@@ -9,12 +11,16 @@ vi.mock("@/components/sidebar/sidebar", () => ({
 vi.mock("@/components/command-palette", () => ({ CommandPalette: () => null }))
 vi.mock("@/components/sidebar/sidebar-context", () => ({
   SidebarProvider: ({ children }: { children: React.ReactNode }) => children,
-  useSidebar: () => ({ isCollapsed: false }),
+  useSidebar: () => sidebar,
 }))
 vi.mock("@/hooks/use-favicon-status", () => ({ useFaviconStatus: () => {} }))
 vi.mock("@/hooks/use-posthog-identify", () => ({
   usePostHogIdentify: () => {},
 }))
+
+beforeEach(() => {
+  sidebar.isCollapsed = false
+})
 
 it("places one global banner above the positioned sidebar row and preserves impersonation", () => {
   render(
@@ -34,4 +40,17 @@ it("places one global banner above the positioned sidebar row and preserves impe
   expect(main).toContainElement(screen.getByText("Impersonation"))
   expect(main).toContainElement(screen.getByText("Page"))
   expect(screen.getAllByText("Trial")).toHaveLength(1)
+})
+
+it("uses the rail margin on small screens and the wider desktop margin only when expanded", () => {
+  const { rerender } = render(<DashboardShell>Page</DashboardShell>)
+
+  expect(screen.getByRole("main")).toHaveClass("ml-16", "md:ml-64")
+  expect(screen.getByRole("main")).not.toHaveClass("ml-64")
+
+  sidebar.isCollapsed = true
+  rerender(<DashboardShell>Page</DashboardShell>)
+
+  expect(screen.getByRole("main")).toHaveClass("ml-16")
+  expect(screen.getByRole("main")).not.toHaveClass("md:ml-64")
 })
