@@ -133,6 +133,8 @@ export function CreateKeyDialog({
   const handleCopy = async (target: CopyTarget, text: string) => {
     const attempt = ++copyAttempts.current[target]
     const activeElement = document.activeElement
+    // Where the pressed button sits now, to tell later whether the user scrolled.
+    const startTop = activeElement?.getBoundingClientRect().top
     const { anchorNode, anchorOffset, focusNode, focusOffset } =
       window.getSelection?.() ?? {}
     try {
@@ -141,11 +143,13 @@ export function CreateKeyDialog({
       if (attempt !== copyAttempts.current[target]) return
 
       const focusUnchanged = document.activeElement === activeElement
+      const scrollUnchanged =
+        activeElement?.getBoundingClientRect().top === startTop
       clearTimeout(copyTimers.current[target])
       setCopied((previous) => ({ ...previous, [target]: false }))
       setCopyFailures((previous) => ({
         ...previous,
-        [target]: { attempt, scroll: focusUnchanged },
+        [target]: { attempt, scroll: focusUnchanged && scrollUnchanged },
       }))
       setCopyAnnouncement((previous) =>
         previous?.target === target ? null : previous,
@@ -247,6 +251,13 @@ export function CreateKeyDialog({
                   ref={keyCopyButton}
                   size="sm"
                   aria-label={copied.key ? "Copied API key" : undefined}
+                  onKeyDown={(event) => {
+                    // Focus lands here after Enter creates the key, so a held
+                    // Enter must not copy the key without a new key press.
+                    if (event.key === "Enter" && event.repeat) {
+                      event.preventDefault()
+                    }
+                  }}
                   onClick={() => handleCopy("key", createdKey.full)}
                 >
                   <KeyCopyIcon className="size-3.5" weight="light" />

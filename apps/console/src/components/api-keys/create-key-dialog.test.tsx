@@ -425,6 +425,46 @@ describe("CreateKeyDialog created state", () => {
   })
 
   it.each(["Copy key", "Copy command"])(
+    "restores the %s label when a retry fails after a successful copy",
+    async (label) => {
+      await createKey()
+      const button = screen.getByRole("button", { name: label })
+
+      await userEvent.click(button)
+      expect(button).toHaveTextContent(/^Copied$/)
+
+      writeText.mockRejectedValueOnce(new Error("Clipboard permission denied"))
+      await userEvent.click(button)
+
+      expect(button).toHaveAccessibleName(label)
+      expect(button).toHaveTextContent(new RegExp(`^${label}$`))
+    },
+  )
+
+  it("does not copy the key on a held Enter after creating it", async () => {
+    await createKey()
+    const button = screen.getByRole("button", { name: "Copy key" })
+    expect(button).toHaveFocus()
+
+    const repeated = new KeyboardEvent("keydown", {
+      key: "Enter",
+      repeat: true,
+      bubbles: true,
+      cancelable: true,
+    })
+    button.dispatchEvent(repeated)
+    expect(repeated.defaultPrevented).toBe(true)
+
+    const fresh = new KeyboardEvent("keydown", {
+      key: "Enter",
+      bubbles: true,
+      cancelable: true,
+    })
+    button.dispatchEvent(fresh)
+    expect(fresh.defaultPrevented).toBe(false)
+  })
+
+  it.each(["Copy key", "Copy command"])(
     "remounts the alert for consecutive failures of %s",
     async (label) => {
       await createKey()
@@ -460,6 +500,28 @@ describe("CreateKeyDialog created state", () => {
       })
       expect(scrollIntoView.mock.contexts[0]).toBe(alert)
     }
+  })
+
+  it("does not scroll to a copy error when the user scrolled during the copy", async () => {
+    await createKey()
+    const scrollIntoView = mockScrollIntoView()
+    const pending = deferredCopy()
+    writeText.mockReturnValueOnce(pending.promise)
+    const button = screen.getByRole("button", { name: "Copy command" })
+    let top = 300
+    vi.spyOn(button, "getBoundingClientRect").mockImplementation(
+      () => ({ top }) as DOMRect,
+    )
+
+    await userEvent.click(button)
+    expect(button).toHaveFocus()
+    top = 460
+    await act(async () =>
+      pending.reject(new Error("Clipboard permission denied")),
+    )
+
+    expect(within(button.parentElement!).getByRole("alert")).toBeVisible()
+    expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it("gives both copied buttons distinct accessible names", async () => {
