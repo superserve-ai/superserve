@@ -98,8 +98,155 @@
     {
       "source": "/integrations/virtual-filesystems/archil",
       "destination": "/storage/archil"
+    },
+    {
+      "source": "/api-reference/sandboxes/ensure-the-sandbox-is-active-and-return-a-fresh-access-token",
+      "destination": "/api-reference/sandboxes/activate-a-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/sandboxes/partially-update-a-sandbox",
+      "destination": "/api-reference/sandboxes/partially-update-a-running-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/sandboxes/publish-a-public-preview-port",
+      "destination": "/api-reference/sandboxes/publish-or-update-a-preview-port",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/sandboxes/mint-a-header-token-for-a-private-preview-port",
+      "destination": "/api-reference/sandboxes/mint-a-token-for-a-private-preview-port",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/templates/soft-delete-a-template",
+      "destination": "/api-reference/templates/delete-a-template",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/exec/execute-a-command-inside-a-sandbox",
+      "destination": "/api-reference/exec/run-a-command-and-wait-for-it-to-finish",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/exec/execute-a-command-and-stream-output-via-sse",
+      "destination": "/api-reference/exec/run-a-command-and-stream-output-over-sse",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/sandboxes/list-sandboxes",
+      "destination": "/api-reference/sandboxes/list-all-sandboxes",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/sandboxes/get-a-sandbox",
+      "destination": "/api-reference/sandboxes/get-a-sandbox-by-id",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/sandboxes/run-command-in-a-sandbox",
+      "destination": "/api-reference/exec/run-a-command-and-wait-for-it-to-finish",
+      "permanent": true
+    },
+    {
+      "source": "/api-reference/sandboxes/upload-file-to-a-sandbox",
+      "destination": "/api-reference/files/write-a-file-to-a-sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/sdk",
+      "destination": "/sdk-reference/sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/sdk/typescript",
+      "destination": "/sdk-reference/sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/sdk/python",
+      "destination": "/sdk-reference/sandbox",
+      "permanent": true
+    },
+    {
+      "source": "/sdk/typescript/:slug*",
+      "destination": "/sdk-reference/:slug*",
+      "permanent": true
+    },
+    {
+      "source": "/sdk/python/:slug*",
+      "destination": "/sdk-reference/:slug*",
+      "permanent": true
+    },
+    {
+      "source": "/getting-started/introduction",
+      "destination": "/introduction",
+      "permanent": true
+    },
+    {
+      "source": "/getting-started/typescript-quickstart",
+      "destination": "/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/getting-started/python-quickstart",
+      "destination": "/quickstart",
+      "permanent": true
+    },
+    {
+      "source": "/authentication",
+      "destination": "/cli#authenticate",
+      "permanent": true
+    },
+    {
+      "source": "/templates/buildspec",
+      "destination": "/templates/build-spec",
+      "permanent": true
+    },
+    {
+      "source": "/frameworks/agno",
+      "destination": "/integrations/agent-harnesses/agno",
+      "permanent": true
+    },
+    {
+      "source": "/frameworks/claude-agent-sdk",
+      "destination": "/integrations/agent-harnesses/claude-agent-sdk",
+      "permanent": true
+    },
+    {
+      "source": "/frameworks/langchain",
+      "destination": "/integrations/agent-harnesses/langchain",
+      "permanent": true
+    },
+    {
+      "source": "/frameworks/mastra",
+      "destination": "/integrations/agent-harnesses/mastra",
+      "permanent": true
+    },
+    {
+      "source": "/frameworks/openai-agents-sdk",
+      "destination": "/integrations/agent-harnesses/openai-agents-sdk",
+      "permanent": true
+    },
+    {
+      "source": "/frameworks/pydantic-ai",
+      "destination": "/integrations/agent-harnesses/pydantic-ai",
+      "permanent": true
+    },
+    {
+      "source": "/frameworks/pydantic",
+      "destination": "/integrations/agent-harnesses/pydantic-ai",
+      "permanent": true
     }
   ],
+  "errors": {
+    "404": {
+      "redirect": false,
+      "title": "Page not found",
+      "description": "This page moved or no longer exists. Start with the [Quickstart](/quickstart), the [SDK reference](/sdk-reference/sandbox), or the [REST API reference](/api-reference/sandboxes/list-all-sandboxes)."
+    }
+  },
   "navigation": {
     "tabs": [
       {
