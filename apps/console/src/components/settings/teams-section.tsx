@@ -100,7 +100,7 @@ export function TeamsSection() {
                   key={`${team.region}:${team.id}`}
                   className="flex items-center justify-between gap-3 border-b border-dashed border-border px-4 py-3 last:border-b-0"
                 >
-                  <span className="min-w-0 text-sm break-all text-foreground">
+                  <span className="min-w-0 text-sm wrap-anywhere text-foreground">
                     {team.name}
                   </span>
                   <span className="flex shrink-0 items-center gap-3">

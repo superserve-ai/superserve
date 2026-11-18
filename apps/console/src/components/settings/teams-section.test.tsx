@@ -258,7 +258,7 @@ describe("TeamsSection", () => {
     }
     render(<TeamsSection />)
 
-    expect(screen.getByText(name)).toHaveClass("min-w-0", "break-all")
+    expect(screen.getByText(name)).toHaveClass("min-w-0", "wrap-anywhere")
     const labels = screen.getByText("Active").parentElement
     expect(labels).toHaveClass("shrink-0")
     expect(labels).toHaveTextContent("US West")

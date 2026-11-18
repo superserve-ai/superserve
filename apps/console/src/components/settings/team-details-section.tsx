@@ -135,7 +135,7 @@ function TeamDetailsForm({ team }: { team: ActiveTeam }) {
       <dl className="border border-dashed border-border">
         {!canRename && (
           <DetailRow label="Name">
-            <span className="break-all">{team.name}</span>
+            <span className="wrap-anywhere">{team.name}</span>
           </DetailRow>
         )}
         <DetailRow label="Region">{regionLabel(team.region)}</DetailRow>

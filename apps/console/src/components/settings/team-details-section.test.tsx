@@ -117,7 +117,7 @@ describe("TeamDetailsSection", () => {
 
     expect(screen.queryByLabelText("Team Name")).toBeNull()
     expect(screen.queryByRole("button", { name: "Save Name" })).toBeNull()
-    expect(screen.getByText(teamName)).toHaveClass("break-all")
+    expect(screen.getByText(teamName)).toHaveClass("wrap-anywhere")
     expect(screen.getByText("team-1")).toBeTruthy()
   })
 
