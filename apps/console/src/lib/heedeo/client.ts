@@ -105,12 +105,20 @@ function clearHeedeoTokenCookie(): void {
 
 async function identifyWithin(
   budgetMs: number,
+  run: number,
 ): Promise<Omit<HeedeoCapture, "latencyMs">> {
   const start = Date.now()
-  while (!window.heedeo && !hasScriptFailed() && Date.now() - start < budgetMs)
+  while (
+    !window.heedeo &&
+    !hasScriptFailed() &&
+    run === latestCapture &&
+    Date.now() - start < budgetMs
+  )
     await new Promise((resolve) => setTimeout(resolve, 100))
   const heedeo = window.heedeo
-  if (!heedeo)
+  // A capture that `settleHeedeoSignup` gave up on must not start a billed
+  // `identify()` whose result nobody reads.
+  if (!heedeo || run !== latestCapture)
     return {
       status: hasScriptFailed() ? "script_failed" : "script_timeout",
       token: null,
@@ -164,7 +172,7 @@ export async function captureHeedeoSignup(
     clearHeedeoSignupCapture()
     const start = Date.now()
     captureStartedAt = start
-    const result = await identifyWithin(budgetMs)
+    const result = await identifyWithin(budgetMs, run)
     // A newer capture owns the cookie now.
     if (run !== latestCapture) return
     writeCookie(

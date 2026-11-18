@@ -225,4 +225,23 @@ describe("Heedeo browser capture", () => {
     await client.settleHeedeoSignup(client.captureHeedeoSignup(), 1000)
     expect(captured()).toMatchObject({ status: "ok", token: "ct1.ok" })
   })
+
+  it("does not identify for a capture the email wait gave up on", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const capture = client.captureHeedeoSignup()
+    const settled = client.settleHeedeoSignup(capture, 1000)
+    await vi.advanceTimersByTimeAsync(1000)
+    await settled
+    const identify = vi.fn(async () => ({
+      token: "ct1.late",
+      visitor_id: "v",
+      confidence: 1,
+    }))
+    window.heedeo = { identify }
+    await vi.advanceTimersByTimeAsync(3000)
+    await capture
+    expect(identify).not.toHaveBeenCalled()
+    expect(captured()).toMatchObject({ status: "script_timeout", token: null })
+  })
 })

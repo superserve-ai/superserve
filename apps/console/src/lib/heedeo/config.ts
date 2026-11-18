@@ -11,7 +11,7 @@ export function heedeoSecretKey(): string | undefined {
 /**
  * True when the observation runs: a secret key is set and the kill switch
  * `HEEDEO_SIGNUP_OBSERVATION=off` is not. With it off, the first-party route
- * answers 404, so the script does not load and no identification is billed,
+ * answers 403, so the script does not load and no identification is billed,
  * and the server sends no event.
  */
 export function heedeoObservationEnabled(): boolean {
