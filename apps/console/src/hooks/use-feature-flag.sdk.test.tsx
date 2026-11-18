@@ -129,6 +129,47 @@ describe("useFeatureFlagOn with the PostHog SDK", () => {
     await waitFor(() => expect(result.current).toBe(true))
   })
 
+  it("stays off for a queued flags request kept after a quota error", async () => {
+    await loadFlags(flags(true))
+    const { result } = renderHook(() => useFeatureFlagOn(FLAG))
+    await waitFor(() => expect(result.current).toBe(true))
+
+    let releaseQuota = (_body: unknown) => {}
+    await loadFlags(
+      new Promise((resolve) => {
+        releaseQuota = resolve
+      }),
+    )
+    // This reload waits for the request above.
+    act(() => posthog.reloadFeatureFlags())
+    await act(() => new Promise((resolve) => setTimeout(resolve, 20)))
+    releaseQuota({ quotaLimited: ["feature_flags"] })
+    await waitFor(() =>
+      expect(posthog.get_property("$feature_flag_errors")).toContain(
+        "quota_limited",
+      ),
+    )
+
+    // PostHog sends the waiting reload after the next result.
+    let releaseQueued = (_body: unknown) => {}
+    responses.push(
+      flags(true),
+      new Promise((resolve) => {
+        releaseQueued = resolve
+      }),
+    )
+    const calls = fetchMock.mock.calls.length
+    act(() => posthog.reloadFeatureFlags())
+    await waitFor(() =>
+      expect(fetchMock.mock.calls.length).toBeGreaterThan(calls + 1),
+    )
+    expect(posthog.isFeatureEnabled(FLAG, { fresh: true })).toBe(true)
+    expect(result.current).toBe(false)
+
+    releaseQueued(flags(true))
+    await waitFor(() => expect(result.current).toBe(true))
+  })
+
   it("stays off until a queued flags request finishes", async () => {
     await loadFlags(flags(true))
     const { result } = renderHook(() => useFeatureFlagOn(FLAG))

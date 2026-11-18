@@ -77,6 +77,8 @@ function captured(event: string) {
 
 let team = 0
 beforeEach(() => {
+  // The browser clock matches the summary times unless a test moves it.
+  vi.useFakeTimers({ now: T0, toFake: ["Date"] })
   // A new team per test keeps the once-per-session dedupe apart.
   team += 1
   mocks.teamKey = `use:team-${team}`
@@ -91,7 +93,10 @@ beforeEach(() => {
   mocks.posthog.capture.mockReset()
   window.sessionStorage.clear()
 })
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  vi.useRealTimers()
+})
 
 describe("TrialRunwayWarning with the flag off", () => {
   it.each([
@@ -181,6 +186,25 @@ describe("TrialRunwayWarning with the flag on", () => {
       minutes_left: 9,
       burn_usd_per_minute: 0.002,
     })
+  })
+
+  it("counts the time since the server read the balance", () => {
+    mocks.summary.mockReturnValue({
+      data: summary(0.022),
+      isError: false,
+      dataUpdatedAt: Date.now(),
+    })
+    const { rerender } = render(view())
+    // $0.002 a minute leaves 9 minutes at the reading, which arrives a
+    // minute late.
+    vi.setSystemTime(T0 + 180_000)
+    mocks.summary.mockReturnValue({
+      data: summary(0.018, T0 + 120_000),
+      isError: false,
+      dataUpdatedAt: T0 + 180_000,
+    })
+    rerender(view())
+    expect(screen.getByText(/runs out in/)).toHaveTextContent("about 8 minutes")
   })
 
   it("drops an old burn rate until the summary is read again", () => {

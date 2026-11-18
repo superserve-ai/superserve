@@ -25,6 +25,9 @@ import { captureBestEffort } from "@/lib/posthog/capture"
 import { TRIAL_RUNWAY_EVENTS } from "@/lib/posthog/events"
 
 export const TRIAL_RUNWAY_WARNING_FLAG = "trial-runway-warning"
+// The summary poll interval. A summary older than this when it arrives is
+// more likely a clock difference than a slow response.
+const MAX_READING_AGE_MS = 60_000
 
 const SHOWN_KEY_PREFIX = "trial_runway_warning_shown:"
 const shownTeams = new Set<string>()
@@ -81,9 +84,15 @@ export function TrialRunwayWarning({
   const decision = reading ? runwayDecision(reading.remainingUsd, burn) : null
   // The estimate is from the last reading. After the time it predicts, show
   // no countdown until a new summary confirms the balance.
+  // The balance is from calculated_at, so the time since then is already
+  // used. The server and browser clocks can differ, so count at most
+  // MAX_READING_AGE_MS of it.
+  const readingAge = reading
+    ? Math.min(Math.max(updatedAt - reading.at, 0), MAX_READING_AGE_MS)
+    : 0
   const countdownUntil =
     decision?.minutesLeft != null
-      ? updatedAt + decision.minutesLeft * 60_000
+      ? updatedAt - readingAge + decision.minutesLeft * 60_000
       : null
   const countdown = countdownUntil !== null && now < countdownUntil
   // Polls can be late, so also move the clock when the shown minutes change.

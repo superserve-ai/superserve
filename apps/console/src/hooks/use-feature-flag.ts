@@ -75,8 +75,9 @@ export function trackFlagRequests(client: FlagClient): Tracker {
     for (const listener of tracker.listeners) listener()
   }
   // PostHog sends one flags request at a time. A reload during a request
-  // waits, and PostHog sends it after that result without a new
-  // featureFlagsReloading event.
+  // waits, and PostHog sends it after the next result without a new
+  // featureFlagsReloading event. A request that ends with a quota error keeps
+  // the waiting reload for the request after it.
   let waiting = false
   // When the request now followed started, and the flag errors then.
   // PostHog stores a new errors list at the end of every request, also for a
@@ -109,7 +110,6 @@ export function trackFlagRequests(client: FlagClient): Tracker {
         waiting = true
         return
       }
-      waiting = false
       start()
       if (!tracker.state.pending) update({ pending: true })
     })
