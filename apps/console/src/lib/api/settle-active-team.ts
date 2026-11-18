@@ -17,9 +17,10 @@ import {
   type TeamMembership,
 } from "@/lib/api/team-directory"
 import { completedMemberships } from "@/lib/api/team-provisioning"
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
 import { awaitingPlanRedirect } from "@/lib/billing/signup-checkout-paths"
 
-export const SETTLE_TEAM_DEADLINE_MS = 3000
+export const SETTLE_TEAM_DEADLINE_MS = TEAM_SELECTION_DEADLINE_MS
 
 // At sign-in, keep the cookie team if it can open the dashboard or its plan
 // is unknown. Otherwise try the last switched team, then the oldest team

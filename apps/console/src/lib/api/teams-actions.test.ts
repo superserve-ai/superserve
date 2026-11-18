@@ -317,6 +317,7 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
   SignupRestrictedError,
@@ -905,7 +906,7 @@ describe("active team", () => {
       const resolved = vi.fn()
       const switched = setActiveTeamAction("team-w", "usw").then(resolved)
 
-      await vi.advanceTimersByTimeAsync(2999)
+      await vi.advanceTimersByTimeAsync(TEAM_SELECTION_DEADLINE_MS - 1)
       expect(cookieSets).toEqual([
         { name: "ss-active-team", value: "usw:team-w" },
       ])

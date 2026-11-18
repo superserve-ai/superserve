@@ -12,6 +12,7 @@ import { Suspense, useEffect, useRef, useState } from "react"
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
 import { settleActiveTeamAction } from "@/lib/api/teams-actions"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { isPlainDashboardPath } from "@/lib/auth/plain-dashboard-path"
@@ -42,8 +43,11 @@ import {
 } from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
 
-// Allow time for the server action to respond after its 3-second deadline.
-const SETTLE_TEAM_CLIENT_WAIT_MS = 5000
+const SERVER_ACTION_ROUND_TRIP_MS = 1500
+// The server gives up after TEAM_SELECTION_DEADLINE_MS. The extra time covers
+// the server action request, the cookie write, and the response.
+const SETTLE_TEAM_CLIENT_WAIT_MS =
+  TEAM_SELECTION_DEADLINE_MS + SERVER_ACTION_ROUND_TRIP_MS
 
 type RecoveryOption = "magic_link" | "google" | "forgot_password"
 

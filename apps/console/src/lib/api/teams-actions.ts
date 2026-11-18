@@ -20,6 +20,7 @@ import {
   provisionTeam,
   type ProvisionedTeam,
 } from "@/lib/api/team-provisioning"
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
   SignupRestrictedError,
@@ -134,7 +135,7 @@ export async function setActiveTeamAction(
         new Promise<never>((_, reject) => {
           timer = setTimeout(
             () => reject(new Error("Metadata write timed out")),
-            3000,
+            TEAM_SELECTION_DEADLINE_MS,
           )
         }),
       ])

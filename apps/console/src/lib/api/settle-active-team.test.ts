@@ -54,6 +54,11 @@ beforeEach(() => {
   )
   mocks.plan.mockResolvedValue({ state: "legacy" })
 })
+
+it("limits team settlement to 1.5 seconds", () => {
+  expect(SETTLE_TEAM_DEADLINE_MS).toBe(1500)
+})
+
 it("keeps an active cookie without reading metadata or other plans", async () => {
   mocks.read.mockResolvedValue(newer)
   gateTeam(older)
@@ -350,8 +355,14 @@ it("times out a hanging directory lookup without writing after it resolves", asy
     })
     mocks.directory.mockReturnValue(pending)
 
+    const settled = vi.fn()
     const selection = settleTeamSelection(user())
-    await vi.advanceTimersByTimeAsync(SETTLE_TEAM_DEADLINE_MS)
+    void selection.then(settled)
+    await vi.advanceTimersByTimeAsync(SETTLE_TEAM_DEADLINE_MS - 1)
+    expect(settled).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(1)
+    expect(settled).toHaveBeenCalledOnce()
     expect(await selection).toBeNull()
     expect(mocks.write).not.toHaveBeenCalled()
 

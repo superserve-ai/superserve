@@ -13,6 +13,7 @@ import {
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
 import { AUTH_MESSAGES } from "@/lib/auth/sign-in-messages"
 
 // --- Mocks ---
@@ -379,7 +380,7 @@ describe("SignInPage", () => {
     })
   })
 
-  it("redirects after five seconds when settling the active team stalls", async () => {
+  it("redirects after three seconds when settling the active team stalls", async () => {
     searchParamsMap = { next: "/sandboxes?view=active#list" }
     mockSignInWithPassword.mockResolvedValue({ error: null })
     mockSettle.mockReturnValueOnce(new Promise(() => {}))
@@ -398,7 +399,9 @@ describe("SignInPage", () => {
       })
       expect(mockSettle).toHaveBeenCalledTimes(1)
 
-      await act(() => vi.advanceTimersByTimeAsync(4999))
+      await act(() =>
+        vi.advanceTimersByTimeAsync(TEAM_SELECTION_DEADLINE_MS + 1500 - 1),
+      )
       expect(mockReplace).not.toHaveBeenCalled()
 
       await act(() => vi.advanceTimersByTimeAsync(1))
