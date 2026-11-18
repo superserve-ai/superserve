@@ -41,6 +41,24 @@ beforeEach(() => {
 })
 
 describe("TeamDetailsSection", () => {
+  it("only enables two columns inside a wide Settings container", () => {
+    render(<TeamDetailsSection />)
+
+    const section = screen
+      .getByRole("heading", { name: "Team" })
+      .closest(".grid")
+    expect(section).toHaveClass("@2xl:grid-cols-[240px_minmax(0,1fr)]")
+    expect(section).not.toHaveClass("grid-cols-[240px_1fr]")
+  })
+
+  it("constrains the copy team ID button to its available width", () => {
+    render(<TeamDetailsSection />)
+
+    expect(screen.getByRole("button", { name: "Copy team ID" })).toHaveClass(
+      "max-w-full",
+    )
+  })
+
   it("shows the conflict message returned for a taken name", async () => {
     mutate.mockImplementation((_vars, opts) =>
       opts.onError(new Error("That name is unavailable. Try another.")),

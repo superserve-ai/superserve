@@ -33,7 +33,7 @@ function CopyableId({ value }: { value: string }) {
       type="button"
       onClick={copy}
       aria-label={copied ? "Copied" : "Copy team ID"}
-      className="flex min-w-0 items-center gap-1.5 font-mono text-xs text-foreground transition-colors hover:text-brand"
+      className="flex max-w-full min-w-0 items-center gap-1.5 font-mono text-xs text-foreground transition-colors hover:text-brand"
     >
       <span className="truncate">{value}</span>
       {copied ? (
@@ -162,7 +162,7 @@ export function TeamDetailsSection() {
 
   return (
     <>
-      <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
+      <div className="grid gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
         <div>
           <h2 className="text-base font-medium text-foreground">Team</h2>
           <p className="mt-1 text-xs text-muted">
