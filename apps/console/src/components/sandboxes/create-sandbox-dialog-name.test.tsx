@@ -282,6 +282,28 @@ it("ignores Create during the closing transition", () => {
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
 })
 
+it("does not submit a name typed during the closing transition", () => {
+  const { rerender } = render(<CreateSandboxDialog open hideTrigger />, {
+    wrapper: ToastProvider,
+  })
+  const dialog = screen.getByRole("dialog")
+  const input = getNameInput()
+  const create = within(dialog).getByRole("button", { name: "Create Sandbox" })
+
+  // Keep the popup mounted through the close reset and the late edit.
+  const finished = new Promise<void>(() => {})
+  Object.defineProperty(dialog, "getAnimations", {
+    value: () => [{ finished }],
+  })
+
+  rerender(<CreateSandboxDialog open={false} hideTrigger />)
+  fireEvent.change(input, { target: { value: "late-name" } })
+  fireEvent.click(create)
+
+  expect(mutate).not.toHaveBeenCalled()
+  expect(capture).not.toHaveBeenCalled()
+})
+
 it("prefills a fresh name after an edit during the closing transition", () => {
   stubGeneratedNames()
   const { rerender } = render(<CreateSandboxDialog open hideTrigger />, {
