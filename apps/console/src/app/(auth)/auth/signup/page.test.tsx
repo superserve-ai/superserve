@@ -573,6 +573,26 @@ describe("SignUpPage", () => {
     expect(heedeoSignal()?.aborted).toBe(true)
   })
 
+  it("does not go to Google when the page unmounts during the Heedeo wait", async () => {
+    let finish!: () => void
+    mockCaptureHeedeoSignup.mockReturnValueOnce(
+      new Promise<void>((resolve) => {
+        finish = resolve
+      }),
+    )
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    const { unmount } = render(<SignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", { name: /Continue with Google/ }),
+    )
+    await waitFor(() => expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1))
+    unmount()
+    finish()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+  })
+
   it("shows inline form error when signUpWithEmail returns an error", async () => {
     mockSignUpWithEmail.mockResolvedValue({
       success: false,

@@ -103,6 +103,8 @@ export default function SignUpContent() {
     heedeoAttempts.current.add(attempt)
     return {
       capture: captureHeedeoSignup(undefined, attempt.signal),
+      // The page unmounted, so the attempt starts no sign-up or redirect.
+      gone: () => attempt.signal.aborted,
       end: () => {
         attempt.abort()
         heedeoAttempts.current.delete(attempt)
@@ -220,6 +222,7 @@ export default function SignUpContent() {
         return
       }
       await settleHeedeoSignup(heedeo.capture)
+      if (heedeo.gone()) return
       const result = await signUpWithEmail(
         email,
         password,
@@ -422,6 +425,7 @@ export default function SignUpContent() {
       }
       // Only the callback reads Heedeo's cookie, so the proof does not wait.
       await heedeo.capture
+      if (heedeo.gone()) return
       const loginHint =
         isCompleteGoogleSignup && !chooseAccount
           ? await loadRecoveryAccount()

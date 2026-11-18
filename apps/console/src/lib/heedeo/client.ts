@@ -39,7 +39,8 @@ let scriptRequested = false
 let scriptFailed = false
 let latestCapture = 0
 // Each capture's own run, so `settleHeedeoSignup` acts only on its capture.
-const captureRuns = new WeakMap<Promise<void>, { run: number; start: number }>()
+type CaptureRun = { run: number; start: number; identifyStarted: boolean }
+const captureRuns = new WeakMap<Promise<void>, CaptureRun>()
 
 /** Called when the script cannot load. */
 export function markHeedeoScriptFailed(): void {
@@ -112,10 +113,10 @@ function clearHeedeoTokenCookie(): void {
 
 async function identifyWithin(
   budgetMs: number,
-  run: number,
+  own: CaptureRun,
   signal: AbortSignal | undefined,
 ): Promise<Omit<HeedeoCapture, "latencyMs">> {
-  const start = Date.now()
+  const { run, start } = own
   while (
     !window.heedeo &&
     !hasScriptFailed() &&
@@ -133,6 +134,7 @@ async function identifyWithin(
     }
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
+    own.identifyStarted = true
     const identify = Promise.resolve(heedeo.identify())
     // The script also leaves the token in its own `_idt` cookie (Path=/).
     // The server reads the token from our `/auth` cookie, so drop `_idt`
@@ -180,27 +182,29 @@ export function captureHeedeoSignup(
   signal?: AbortSignal,
 ): Promise<void> {
   if (!HEEDEO_PUBLISHABLE_KEY) return Promise.resolve()
-  const run = ++latestCapture
-  const start = Date.now()
-  const capture = runCapture(budgetMs, run, start, signal)
-  captureRuns.set(capture, { run, start })
+  const own = {
+    run: ++latestCapture,
+    start: Date.now(),
+    identifyStarted: false,
+  }
+  const capture = runCapture(budgetMs, own, signal)
+  captureRuns.set(capture, own)
   return capture
 }
 
 async function runCapture(
   budgetMs: number,
-  run: number,
-  start: number,
+  own: CaptureRun,
   signal: AbortSignal | undefined,
 ): Promise<void> {
   try {
     loadHeedeoScript()
     clearHeedeoSignupCapture()
-    const result = await identifyWithin(budgetMs, run, signal)
+    const result = await identifyWithin(budgetMs, own, signal)
     // A newer capture owns the cookie now, or nobody reads this one.
-    if (!isLiveCapture(run, signal)) return
+    if (!isLiveCapture(own.run, signal)) return
     writeCookie(
-      encodeHeedeoCapture({ ...result, latencyMs: Date.now() - start }),
+      encodeHeedeoCapture({ ...result, latencyMs: Date.now() - own.start }),
       HEEDEO_SIGNUP_COOKIE_MAX_AGE_SECONDS,
     )
   } catch {
@@ -242,7 +246,7 @@ export async function settleHeedeoSignup(
     latestCapture++
     writeCookie(
       encodeHeedeoCapture({
-        status: window.heedeo
+        status: own.identifyStarted
           ? "identify_timeout"
           : hasScriptFailed()
             ? "script_failed"

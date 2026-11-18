@@ -310,6 +310,24 @@ describe("Heedeo browser capture", () => {
     expect(captured()).toMatchObject({ status: "ok", token: "ct1.newer" })
   })
 
+  it("records script_timeout when the email wait ends before identify starts", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const capture = client.captureHeedeoSignup(3000)
+    const settled = client.settleHeedeoSignup(capture, 1050)
+    await vi.advanceTimersByTimeAsync(1020)
+    const identify = vi.fn(async () => ({
+      token: "ct1.late",
+      visitor_id: "v",
+      confidence: 1,
+    }))
+    window.heedeo = { identify }
+    await vi.advanceTimersByTimeAsync(100)
+    await Promise.all([settled, capture])
+    expect(identify).not.toHaveBeenCalled()
+    expect(captured()).toMatchObject({ status: "script_timeout", token: null })
+  })
+
   it("does not identify once the budget is spent", async () => {
     vi.useFakeTimers()
     const client = await load("pk_live_123")
