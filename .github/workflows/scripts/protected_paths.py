@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Report protected changes using the base branch's CODEOWNERS.
+"""Report protected changes using the base branch's protected-path list.
 
 A read-only diagnostic: it does not require reviews or authorize merges. A
 protected change needs a human merge decision; GitHub rulesets and required
@@ -14,7 +14,7 @@ import sys
 import urllib.error
 import urllib.request
 
-CODEOWNERS = ".github/CODEOWNERS"
+PROTECTED_PATHS = ".github/protected-paths"
 
 
 def pattern_regex(pattern):
@@ -44,7 +44,7 @@ def pattern_regex(pattern):
     return re.compile("(?s)^" + "".join(out) + ("/.*$" if directory else "(?:/.*)?$"))
 
 
-def parse_codeowners(text):
+def parse_rules(text):
     rules = []
     for number, raw in enumerate(text.splitlines(), 1):
         line = raw.strip()
@@ -53,11 +53,11 @@ def parse_codeowners(text):
         pattern, *owners = line.split()
         for owner in owners:
             if not owner.startswith("@") or "/" in owner:
-                raise ValueError(f"{CODEOWNERS}:{number}: {owner}: list individual @users, not teams or emails")
+                raise ValueError(f"{PROTECTED_PATHS}:{number}: {owner}: list individual @users, not teams or emails")
         try:
             regex = pattern_regex(pattern)
         except ValueError as err:
-            raise ValueError(f"{CODEOWNERS}:{number}: {err}") from None
+            raise ValueError(f"{PROTECTED_PATHS}:{number}: {err}") from None
         rules.append((regex, pattern, {owner[1:] for owner in owners}))
     return rules
 
@@ -99,9 +99,9 @@ def paginate(path):
         page += 1
 
 
-def base_codeowners(repo, base_sha):
+def base_rules(repo, base_sha):
     try:
-        content = api(f"/repos/{repo}/contents/{CODEOWNERS}?ref={base_sha}")
+        content = api(f"/repos/{repo}/contents/{PROTECTED_PATHS}?ref={base_sha}")
     except urllib.error.HTTPError as err:
         if err.code == 404:
             return ""
@@ -112,7 +112,7 @@ def base_codeowners(repo, base_sha):
 def main():
     repo = os.environ["GITHUB_REPOSITORY"]
     number = os.environ["PR_NUMBER"]
-    rules = parse_codeowners(base_codeowners(repo, os.environ["BASE_SHA"]))
+    rules = parse_rules(base_rules(repo, os.environ["BASE_SHA"]))
 
     files = paginate(f"/repos/{repo}/pulls/{number}/files")
     # The files API stops at 3000 entries; anything past that is unseen.
@@ -124,7 +124,7 @@ def main():
     protected = evaluate(rules, paths)
     summary = ["## Protected paths", ""]
     if not protected:
-        summary.append("This PR changes no protected path in the base CODEOWNERS. "
+        summary.append("This PR changes no protected path in the base protected-path list. "
                        "Independent automated approval is allowed; GitHub rulesets and required reviews still apply.")
     for path, owners in protected.items():
         summary.append(f"- `{path}`: human merge decision required "

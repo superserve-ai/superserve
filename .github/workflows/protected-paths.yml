@@ -1,7 +1,7 @@
 name: Protected Paths
 
-# Diagnostic only: lists the paths in the base branch's .github/CODEOWNERS that a
-# PR changes. It never fails on review state, and it is not the human merge gate.
+# Diagnostic only: lists the paths in the base branch's .github/protected-paths
+# that a PR changes. It never fails on review state, and it is not the human merge gate.
 # GitHub rulesets and required reviews still apply.
 on:
   # edited covers a change of base branch, which changes the diff and the rules.
@@ -22,7 +22,8 @@ jobs:
       - uses: actions/checkout@v4
         if: github.event_name != 'merge_group'
 
-      # Also fails on a CODEOWNERS pattern that matches no file.
+      # Also fails on a protected-path pattern that matches no file, and if a
+      # CODEOWNERS file exists.
       - name: Test the check
         if: github.event_name != 'merge_group'
         run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_protected_paths.py'

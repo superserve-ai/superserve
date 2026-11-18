@@ -99,9 +99,9 @@ An ordinary PR changes no protected path. Once its required reviews and CI pass 
 
 ## Protected paths
 
-`.github/CODEOWNERS` lists the paths that automation must not merge to `main` without a human. It is the only source of this list, but it is not the only human-review rule: the repository rulesets on `main` also require human reviews for other paths, and GitHub applies all of them. Today the list covers:
+`.github/protected-paths` lists the paths that automation must not merge to `main` without a human. It uses CODEOWNERS syntax, but GitHub does not read it, so it adds no code-owner approval requirement. Do not add a `CODEOWNERS` file: code-owner review is on in the rulesets for `main`, so such a file would make every owned path need an owner approval. The list is the only source of protected paths, but it is not the only human-review rule: the repository rulesets on `main` also require human reviews for other paths, and GitHub applies all of them. Today the list covers:
 
-- CODEOWNERS, `CLAUDE.md`, and the executable CI and npm, PyPI and docs release workflows with their scripts. PR templates are not protected.
+- The protected-path list, `CLAUDE.md`, and the executable CI and npm, PyPI and docs release workflows with their scripts. PR templates are not protected.
 - Console request authentication, the sign-in and sign-up reCAPTCHA and Turnstile checks, security headers, env config, and the Supabase admin and regional service-role clients
 - Every console server action and route handler, the `lib/api` server actions, and staff admin
 - Team permissions, invitations, API keys, and secrets
