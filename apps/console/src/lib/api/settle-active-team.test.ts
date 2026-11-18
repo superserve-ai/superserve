@@ -51,8 +51,9 @@ beforeEach(() => {
   )
   mocks.plan.mockResolvedValue({ state: "legacy" })
 })
-it("keeps a live cookie without reading plans or metadata", async () => {
+it("keeps an active cookie without reading metadata or other plans", async () => {
   mocks.read.mockResolvedValue(newer)
+  gateTeam(older)
   const input = user()
   Object.defineProperty(input, "user_metadata", {
     get: () => {
@@ -61,13 +62,110 @@ it("keeps a live cookie without reading plans or metadata", async () => {
   })
   expect(await settleTeamSelection(input)).toEqual(newer)
   expect(mocks.write).not.toHaveBeenCalled()
-  expect(mocks.plan).not.toHaveBeenCalled()
+  expect(mocks.plan.mock.calls).toEqual([["user-a", newer]])
 })
-it("writes a saved live team", async () => {
+it("writes a saved active team when another team is gated", async () => {
+  gateTeam(older)
   expect(await settleTeamSelection(user("use:team-a"))).toEqual(newer)
   expect(mocks.write).toHaveBeenCalledWith(newer)
-  expect(mocks.plan).not.toHaveBeenCalled()
+  expect(mocks.plan.mock.calls).toEqual([["user-a", newer]])
 })
+function gateTeam(gated: typeof older) {
+  mocks.plan.mockImplementation(async (_id, team) => ({
+    state: team === gated ? "selecting" : "legacy",
+  }))
+}
+
+it.each(["cookie", "metadata"])(
+  "skips a gated %s team at sign-in",
+  async (source) => {
+    if (source === "cookie") mocks.read.mockResolvedValue(older)
+    gateTeam(older)
+    expect(await settleTeamSelection(user("usw:team-z"))).toEqual(newer)
+    expect(mocks.write.mock.calls).toEqual([[newer]])
+    expect(mocks.plan.mock.calls).toEqual([
+      ["user-a", older],
+      ["user-a", newer],
+    ])
+  },
+)
+
+it("prefers the active saved team over an older active team", async () => {
+  const [oldest, saved, cookie] = setMemberships(3)
+  mocks.read.mockResolvedValue(cookie)
+  gateTeam(cookie)
+  expect(await settleTeamSelection(user("use:1"))).toEqual(saved)
+  expect(mocks.write.mock.calls).toEqual([[saved]])
+  expect(mocks.plan.mock.calls).toEqual([
+    ["user-a", cookie],
+    ["user-a", saved],
+  ])
+  expect(mocks.plan).not.toHaveBeenCalledWith("user-a", oldest)
+})
+
+it.each(["cookie", "metadata"])(
+  "keeps the remembered %s team when all teams are gated",
+  async (source) => {
+    if (source === "cookie") mocks.read.mockResolvedValue(newer)
+    mocks.plan.mockResolvedValue({ state: "selecting" })
+    expect(
+      await settleTeamSelection(
+        user(source === "cookie" ? "usw:team-z" : "use:team-a"),
+      ),
+    ).toEqual(newer)
+    expect(mocks.write.mock.calls).toEqual(source === "cookie" ? [] : [[newer]])
+    expect(mocks.plan.mock.calls).toEqual([
+      ["user-a", newer],
+      ["user-a", older],
+    ])
+  },
+)
+
+it("keeps the cookie team when its plan read throws", async () => {
+  mocks.read.mockResolvedValue(newer)
+  mocks.plan.mockRejectedValueOnce(Error("unavailable"))
+  expect(await settleTeamSelection(user("usw:team-z"))).toEqual(newer)
+  expect(mocks.write).not.toHaveBeenCalled()
+  expect(mocks.plan.mock.calls).toEqual([["user-a", newer]])
+})
+
+it("writes the saved team when its plan read throws and there is no cookie", async () => {
+  mocks.plan.mockRejectedValueOnce(Error("unavailable"))
+  expect(await settleTeamSelection(user("use:team-a"))).toEqual(newer)
+  expect(mocks.write.mock.calls).toEqual([[newer]])
+  expect(mocks.plan.mock.calls).toEqual([["user-a", newer]])
+})
+
+it("skips a saved team whose plan read throws when the cookie team is gated", async () => {
+  const [active, saved, cookie] = setMemberships(3)
+  mocks.read.mockResolvedValue(cookie)
+  mocks.plan
+    .mockResolvedValueOnce({ state: "selecting" })
+    .mockRejectedValueOnce(Error("unavailable"))
+  expect(await settleTeamSelection(user("use:1"))).toEqual(active)
+  expect(mocks.write.mock.calls).toEqual([[active]])
+  expect(mocks.plan.mock.calls).toEqual([
+    ["user-a", cookie],
+    ["user-a", saved],
+    ["user-a", active],
+  ])
+})
+
+it.each(["directory", "completed"] as const)(
+  "keeps a gated cookie team when %s memberships are degraded",
+  async (source) => {
+    mocks[source].mockResolvedValue({
+      memberships: [older, newer],
+      degradedRegions: ["third"],
+    })
+    mocks.read.mockResolvedValue(older)
+    gateTeam(older)
+    expect(await settleTeamSelection(user("use:team-a"))).toEqual(older)
+    expect(mocks.write).not.toHaveBeenCalled()
+    expect(mocks.plan.mock.calls).toEqual([["user-a", older]])
+  },
+)
+
 it("ignores removed saved and cookie teams", async () => {
   mocks.read.mockResolvedValue({ region: "use", teamId: "removed" })
   expect(await settleTeamSelection(user("use:removed"))).toEqual(older)
@@ -162,15 +260,19 @@ it("keeps a live cookie during degradation", async () => {
   expect(await settleTeamSelection(user())).toEqual(older)
   expect(mocks.write).not.toHaveBeenCalled()
 })
-it("avoids plan reads for a single membership", async () => {
-  mocks.directory.mockResolvedValue({
-    memberships: [older],
-    degradedRegions: [],
-  })
-  expect(await settleTeamSelection(user())).toEqual(older)
-  expect(mocks.write).toHaveBeenCalledWith(older)
-  expect(mocks.plan).not.toHaveBeenCalled()
-})
+it.each([false, true])(
+  "avoids plan reads for a single membership (cookie: %s)",
+  async (withCookie) => {
+    if (withCookie) mocks.read.mockResolvedValue(older)
+    mocks.directory.mockResolvedValue({
+      memberships: [older],
+      degradedRegions: [],
+    })
+    expect(await settleTeamSelection(user())).toEqual(older)
+    expect(mocks.write.mock.calls).toEqual(withCookie ? [] : [[older]])
+    expect(mocks.plan).not.toHaveBeenCalled()
+  },
+)
 it("does nothing for zero memberships or read failures", async () => {
   mocks.directory.mockResolvedValue({ memberships: [], degradedRegions: [] })
   expect(await settleTeamSelection(user())).toBeNull()

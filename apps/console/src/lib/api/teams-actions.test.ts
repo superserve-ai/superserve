@@ -4,6 +4,11 @@ vi.mock("@/lib/api/settle-active-team", () => ({
 }))
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const mockReadSignupPlan = vi.fn()
+vi.mock("@/lib/api/signup-plan-read", () => ({
+  readSignupPlan: (...args: unknown[]) => mockReadSignupPlan(...args),
+}))
+
 const mockUpdateUser = vi.fn().mockResolvedValue({ error: null })
 const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let currentUser: {
@@ -865,6 +870,18 @@ describe("active team", () => {
     expect(cookieSets).toEqual([
       { name: "ss-active-team", value: "usw:team-w" },
     ])
+  })
+
+  it("explicitly switches to a team that still needs a plan", async () => {
+    mockReadSignupPlan.mockResolvedValue({ state: "selecting" })
+    await setActiveTeamAction("team-w", "usw")
+    expect(cookieSets).toEqual([
+      { name: "ss-active-team", value: "usw:team-w" },
+    ])
+    expect(mockUpdateUser).toHaveBeenLastCalledWith({
+      data: { active_team: "usw:team-w" },
+    })
+    expect(mockReadSignupPlan).not.toHaveBeenCalled()
   })
 
   it("saves metadata after the cookie", async () => {
