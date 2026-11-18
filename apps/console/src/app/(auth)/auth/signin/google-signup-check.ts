@@ -191,7 +191,7 @@ async function runCheck(
   ])
   if (!isCurrent()) return undefined
   if (RECAPTCHA_SITE_KEY && !recaptchaToken) return undefined
-  const [turnstileToken] = await Promise.all([turnstile, heedeo])
+  const turnstileToken = await turnstile
   // The last point where the check can be stopped: the server call below
   // replaces the evidence cookie and issues the proof cookie.
   if (!isCurrent()) return undefined
@@ -200,13 +200,18 @@ async function runCheck(
   const captureResult = capture.latest() ?? budgetedCapture
   const diagnostics = getFingerprintSignupDiagnostics()
   onSend()
-  const proof = await beginGoogleSignup(
-    recaptchaToken,
-    turnstileToken,
-    captureResult,
-    diagnostics,
-    "signin",
-  )
+  // The proof call does not wait for Heedeo: only the callback reads its
+  // cookie, so the capture only has to finish before the trip to Google.
+  const [proof] = await Promise.all([
+    beginGoogleSignup(
+      recaptchaToken,
+      turnstileToken,
+      captureResult,
+      diagnostics,
+      "signin",
+    ),
+    heedeo,
+  ])
   return proof.success ? proof.signupAttemptId : undefined
 }
 

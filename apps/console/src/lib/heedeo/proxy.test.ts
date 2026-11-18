@@ -59,6 +59,7 @@ describe("forwardHeedeoRequest", () => {
     expect(await response.text()).toBe("(()=>{})()")
     expect(response.headers.get("content-type")).toBe("text/javascript")
     expect(response.headers.get("x-railway-request-id")).toBeNull()
+    expect(response.headers.get("cache-control")).toBe("no-cache")
     const [target, init] = upstream.mock.calls[0]!
     expect(String(target)).toBe("https://app.heedeo.com/i.js?key=pk_live_1")
     const sent = new Headers(init?.headers)
@@ -158,16 +159,19 @@ describe("forwardHeedeoRequest", () => {
   it.each([
     ["disabled", { enabled: false }],
     ["without a secret key", { secretKey: undefined }],
-  ])("answers 404 when %s", async (_label, overrides) => {
-    const upstream = ok()
-    const response = await forwardHeedeoRequest(
-      new Request(`${BASE}/i.js?key=pk`),
-      ["i.js"],
-      options(upstream, overrides),
-    )
-    expect(response.status).toBe(404)
-    expect(upstream).not.toHaveBeenCalled()
-  })
+  ])(
+    "answers 403, which the script does not retry elsewhere, when %s",
+    async (_label, overrides) => {
+      const upstream = ok()
+      const response = await forwardHeedeoRequest(
+        new Request(`${BASE}/i.js?key=pk`),
+        ["i.js"],
+        options(upstream, overrides),
+      )
+      expect(response.status).toBe(403)
+      expect(upstream).not.toHaveBeenCalled()
+    },
+  )
 
   it("answers 503 without a trusted client IP", async () => {
     const upstream = ok()
@@ -235,6 +239,22 @@ describe("forwardHeedeoRequest", () => {
     expect(
       new Headers(upstream.mock.calls[0]![1]?.headers).get("if-none-match"),
     ).toBe('"a"')
+  })
+
+  it("passes a 204 preflight answer back with no body", async () => {
+    const upstream = ok(null as unknown as string, {
+      status: 204,
+      headers: { "access-control-allow-origin": "https://console.example.com" },
+    })
+    const response = await forwardHeedeoRequest(
+      new Request(`${BASE}/v1/identify?key=pk`, { method: "OPTIONS" }),
+      ["v1", "identify"],
+      options(upstream),
+    )
+    expect(response.status).toBe(204)
+    expect(response.headers.get("access-control-allow-origin")).toBe(
+      "https://console.example.com",
+    )
   })
 
   it("fails open with 502 on a network error", async () => {

@@ -63,6 +63,7 @@ describe("Heedeo browser capture", () => {
     expect(writes.at(-1)).toContain("Max-Age=300")
     expect(writes.at(-1)).toContain("SameSite=Lax")
     expect(captured()).toMatchObject({ status: "ok", token: "ct1.tok" })
+    expect(writes).toContain("_idt=; Path=/; Max-Age=0")
   })
 
   it("records an identify error without failing", async () => {

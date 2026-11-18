@@ -33,6 +33,8 @@ declare global {
   }
 }
 
+const HEEDEO_TOKEN_COOKIE = "_idt"
+
 let scriptFailed = false
 let latestCapture = 0
 
@@ -60,6 +62,14 @@ export function clearHeedeoSignupCapture(): void {
   writeCookie("", 0)
 }
 
+function clearHeedeoTokenCookie(): void {
+  try {
+    document.cookie = `${HEEDEO_TOKEN_COOKIE}=; Path=/; Max-Age=0`
+  } catch {
+    // Observation only.
+  }
+}
+
 async function identifyWithin(
   budgetMs: number,
 ): Promise<Omit<HeedeoCapture, "latencyMs">> {
@@ -74,8 +84,14 @@ async function identifyWithin(
     }
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
+    const identify = Promise.resolve(heedeo.identify())
+    // The script also leaves the token in its own `_idt` cookie (Path=/),
+    // which every console request would then carry, analytics included.
+    // The server reads the token from our `/auth` cookie, so drop `_idt`
+    // when identify settles, even after the budget ran out.
+    identify.then(clearHeedeoTokenCookie, clearHeedeoTokenCookie)
     const answer = await Promise.race([
-      heedeo.identify(),
+      identify,
       new Promise<"timeout">((resolve) => {
         timer = setTimeout(
           () => resolve("timeout"),

@@ -2,7 +2,7 @@
 // documents for "your own server" (docs.heedeo.com, section 2). It mirrors the
 // `heedeo.proxy` of `@heedeo/sdk` 0.2.0-beta.1 with tighter limits:
 // - one fixed upstream origin and two fixed paths; anything else is a 404
-//   that never leaves the console;
+//   that never leaves the console, and both paths answer 403 when off;
 // - only the request headers identify reads, and only Heedeo's own `_idd`
 //   cookie, go up; console session cookies never do;
 // - only the response headers the browser needs, and only an `_idd`
@@ -167,8 +167,10 @@ export async function forwardHeedeoRequest(
 ): Promise<Response> {
   const path = `/${segments.join("/")}`
   const methods = Object.hasOwn(ROUTES, path) ? ROUTES[path] : undefined
-  if (!options.enabled || !options.secretKey || !methods)
-    return refuse(404, "not_found")
+  if (!methods) return refuse(404, "not_found")
+  // 403, not 404: the script retries identify directly against Heedeo's own
+  // host after a 404 or 5xx, which would bypass the kill switch.
+  if (!options.enabled || !options.secretKey) return refuse(403, "disabled")
   if (!methods.includes(request.method))
     return refuse(405, "method_not_allowed", { allow: methods.join(", ") })
   if (!options.clientIp) return refuse(503, "not_configured")
@@ -225,13 +227,17 @@ export async function forwardHeedeoRequest(
     for (const [name, value] of upstream.headers)
       if (BACK_HEADERS.has(name) || name.startsWith(BACK_PREFIX))
         back.set(name, value)
+    // The browser revalidates the script on every page load, so a cached
+    // copy stops running as soon as the kill switch answers 403.
+    if (path === "/i.js") back.set("cache-control", "no-cache")
     for (const value of upstream.headers.getSetCookie()) {
       const kept = visitorSetCookie(value)
       if (kept) back.append("set-cookie", kept)
     }
-    if (notModified) {
+    // These statuses must not carry a body, even an empty one.
+    if ([204, 205, 304].includes(upstream.status)) {
       await upstream.body?.cancel().catch(() => {})
-      return new Response(null, { status: 304, headers: back })
+      return new Response(null, { status: upstream.status, headers: back })
     }
     const payload = await readCapped(
       upstream.body,

@@ -463,6 +463,9 @@ export async function GET(request: Request) {
           : "email"
         let isNewUser = false
         let signupEligibilitySnapshot: unknown
+        // Read after the response by the Heedeo observation (observe-only).
+        let heedeoSignupBlocked = false
+        let heedeoOriginalSignup: boolean | undefined
 
         if (code && isGoogleUser(user)) {
           const originIntent = searchParams.get("google_signin_intent")
@@ -589,6 +592,7 @@ export async function GET(request: Request) {
               user.id,
               user.created_at,
             )
+            heedeoOriginalSignup = original?.originalSignup
             if (!original || !original.originalSignup) {
               fingerprintDiagnostics({
                 userId: user.id,
@@ -678,27 +682,33 @@ export async function GET(request: Request) {
             }
           }
           if (isHeedeoObservationEnabled()) {
-            // Observe-only, after the response. A returning Google account
-            // is a sign-in, not a sign-up: its capture is dropped unsent.
+            // Observe-only, after the response. Only the attempt that created
+            // the account is a sign-up: a returning account, or one that comes
+            // back before its team exists, has its capture dropped unsent.
             const heedeoCapture = await takeHeedeoSignupCapture()
             const emailVerified = user.user_metadata?.email_verified
-            if (isNewUser)
-              scheduleHeedeoSignupObservation({
+            const createdNow =
+              heedeoOriginalSignup ??
+              Date.now() - Date.parse(user.created_at) < 30000
+            if (isNewUser && createdNow) {
+              const heedeoRequest = heedeoRequestContext(
+                request.headers,
+                "GET",
+                "/auth/callback/",
+              )
+              scheduleHeedeoSignupObservation(() => ({
                 signupAttemptId,
                 signupMethod: "google",
                 email: user.email ?? null,
                 userId: user.id,
-                status: "succeeded",
+                status: heedeoSignupBlocked ? "failed" : "succeeded",
                 capture: heedeoCapture,
-                request: heedeoRequestContext(
-                  request.headers,
-                  "GET",
-                  "/auth/callback/",
-                ),
+                request: heedeoRequest,
                 ...(typeof emailVerified === "boolean"
                   ? { oauthEmailVerified: emailVerified }
                   : {}),
-              })
+              }))
+            }
           }
         } else {
           const createdAt = new Date(user.created_at)
@@ -763,6 +773,7 @@ export async function GET(request: Request) {
                 )
             } catch (error) {
               if (error instanceof SignupRestrictedError) {
+                heedeoSignupBlocked = true
                 await notifySlackOfNewUser(
                   user.email || "",
                   user.user_metadata?.full_name || null,

@@ -518,6 +518,11 @@ export const signUpWithEmail = async (
   )
   let fingerprintObservationScheduled = false
   let observationUserId: string | null = null
+  // The account this attempt created, if any. A retry for an older
+  // unconfirmed account returns that account, which is not a new sign-up; an
+  // Enterprise account exists once `createUser` succeeds, even when the link
+  // fails afterwards.
+  let heedeoCreatedUserId: string | null = null
   if (isHeedeoObservationEnabled()) {
     // Observe-only: runs after the response and reads the account this
     // attempt created, if any. Nothing below depends on it.
@@ -527,8 +532,8 @@ export const signUpWithEmail = async (
       signupAttemptId,
       signupMethod: "email",
       email: parsed.data.email,
-      userId: observationUserId,
-      status: observationUserId ? "succeeded" : "failed",
+      userId: heedeoCreatedUserId ?? observationUserId,
+      status: heedeoCreatedUserId ? "succeeded" : "failed",
       capture: heedeoCapture,
       request: heedeoRequest,
     }))
@@ -671,6 +676,7 @@ export const signUpWithEmail = async (
           app_metadata: { signup_review: "pending" },
         })
       : null
+    heedeoCreatedUserId = created?.data?.user?.id ?? null
     const { data, error } = created?.error
       ? { data: { user: null, properties: null }, error: created.error }
       : await supabase.auth.admin.generateLink(
@@ -728,6 +734,7 @@ export const signUpWithEmail = async (
 
     const originalSignup =
       data?.user && Date.parse(data.user.created_at) >= signupStartedAt
+    if (originalSignup) heedeoCreatedUserId = data.user.id
     let signupEligibilitySnapshot: unknown
     if (originalSignup) {
       try {

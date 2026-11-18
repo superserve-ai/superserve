@@ -80,20 +80,25 @@ describe("googleSignupAttemptForSignIn", () => {
     )
   })
 
-  it("waits for the Heedeo capture, within its own budget, before the server call", async () => {
+  it("sends the server call without waiting for Heedeo, and returns once its capture is done", async () => {
     let finish: () => void = () => {}
     mocks.heedeoCapture.mockReturnValue(
       new Promise<void>((resolve) => {
         finish = resolve
       }),
     )
-    const result = googleSignupAttemptForSignIn()
-    await new Promise((resolve) => setTimeout(resolve, 0))
+    let settled = false
+    const result = googleSignupAttemptForSignIn().finally(() => {
+      settled = true
+    })
+    await vi.waitFor(() =>
+      expect(mocks.beginGoogleSignup).toHaveBeenCalledTimes(1),
+    )
     expect(mocks.heedeoCapture).toHaveBeenCalledExactlyOnceWith(2500)
-    expect(mocks.beginGoogleSignup).not.toHaveBeenCalled()
+    await new Promise((resolve) => setTimeout(resolve, 0))
+    expect(settled).toBe(false)
     finish()
     await expect(result).resolves.toBe("attempt-1")
-    expect(mocks.beginGoogleSignup).toHaveBeenCalledTimes(1)
   })
 
   it("asks for no proof when reCAPTCHA gives no token", async () => {

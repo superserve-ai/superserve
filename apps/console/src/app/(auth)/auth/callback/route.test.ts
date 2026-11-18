@@ -2919,6 +2919,13 @@ describe("auth callback", () => {
       mockScheduleHeedeo.mockReset()
     })
 
+    // The observation is read after the response, as `after()` would.
+    const scheduled = () => {
+      expect(mockScheduleHeedeo).toHaveBeenCalledTimes(1)
+      const observation = mockScheduleHeedeo.mock.calls[0]![0]
+      return typeof observation === "function" ? observation() : observation
+    }
+
     it("sends a first-time Google account as a sign-up", async () => {
       googleMembershipState = { kind: "first_time" }
       mockHasValidGoogleSignupProof.mockResolvedValue(true)
@@ -2942,7 +2949,7 @@ describe("auth callback", () => {
 
       expect(response.headers.get("location")).toContain("/sandboxes")
       expect(mockTakeHeedeoCapture).toHaveBeenCalledTimes(1)
-      expect(mockScheduleHeedeo).toHaveBeenCalledExactlyOnceWith({
+      expect(scheduled()).toEqual({
         signupAttemptId: "attempt-1",
         signupMethod: "google",
         email: "user@example.com",
@@ -2959,8 +2966,43 @@ describe("auth callback", () => {
         },
         oauthEmailVerified: true,
       })
-      const request = mockScheduleHeedeo.mock.calls[0]![0].request
-      expect(request.headers).not.toHaveProperty("cookie")
+      expect(scheduled().request.headers).not.toHaveProperty("cookie")
+    })
+
+    const firstTimeGoogle = async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockHasValidGoogleSignupProof.mockResolvedValue(true)
+      return GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+        ),
+      )
+    }
+
+    it("sends a sign-up that the restriction check refuses as failed", async () => {
+      mockEvaluateSignupRestriction.mockRejectedValue(
+        new SignupRestrictedError(),
+      )
+
+      const response = await firstTimeGoogle()
+
+      expect(response.headers.get("location")).toContain(
+        "reason=signup_blocked",
+      )
+      expect(scheduled()).toMatchObject({ status: "failed" })
+    })
+
+    it("drops the capture of an older account that comes back before its team exists", async () => {
+      mockReadGooglePromotionEvidence.mockResolvedValue({
+        originalSignup: false,
+        attemptId: "attempt-1",
+        routineMissing: false,
+      })
+
+      await firstTimeGoogle()
+
+      expect(mockTakeHeedeoCapture).toHaveBeenCalledTimes(1)
+      expect(mockScheduleHeedeo).not.toHaveBeenCalled()
     })
 
     it("drops a returning Google account's capture without sending it", async () => {

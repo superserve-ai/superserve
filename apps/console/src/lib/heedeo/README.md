@@ -16,20 +16,30 @@ authentication decision depends on it, and every failure fails open.
    the Google sign-up check on the sign-in page. It calls `identify()` (billed
    per call) with a 3 s budget (2.5 s on the sign-in page) and writes the token,
    or why there is none, to the `superserve-heedeo-signup` cookie (`Path=/auth`,
-   5 minutes, the token's lifetime). Password sign-in captures nothing.
+   5 minutes, the token's lifetime). The sign-in page sends its proof request
+   without waiting for the capture, and waits for it only before the trip to
+   Google. Password sign-in captures nothing.
 3. The server reads and deletes that cookie and, after the response is sent,
    sends one `signup` event to `POST https://app.heedeo.com/v1/evaluations`:
-   - email: from `signUpWithEmail`, with the email, the new user ID and
-     `status` `succeeded` when this attempt created the account (else `failed`);
-   - Google: from `/auth/callback` for a first-time Google account that passed
-     the sign-up proof only, with `evidence.oauth.email_verified`. A returning
-     account's capture is deleted unsent.
+   - email: from `signUpWithEmail`, with the email, the user ID and `status`
+     `succeeded` only when this attempt created the account (a held Enterprise
+     account counts). A refusal, an error, or a retry for an older unconfirmed
+     account is `failed`;
+   - Google: from `/auth/callback` for a Google account that passed the
+     sign-up proof and was created by this attempt, with
+     `evidence.oauth.email_verified`. `status` is `failed` when the sign-up
+     restriction check refuses it. A returning account's capture, or that of
+     an account that comes back before its team exists, is deleted unsent.
 
    No token (blocked script, timeout) still sends the event: Heedeo scores
    the email and network and adds the `no_token` note.
 
 4. The answer goes to PostHog as `auth_heedeo_signup_observed` and to a
    `Heedeo signup observation outcome` log line.
+
+The capture cookie belongs to the browser, not to one attempt. When two tabs
+sign up at the same time, one attempt can send the other's token, or none.
+Both tabs are the same browser, so the observed device is the same.
 
 ## PostHog `auth_heedeo_signup_observed`
 
@@ -48,7 +58,10 @@ Distinct ID: the new user ID, else the sign-up attempt ID.
 | `heedeo_response`                                                                                                     | The documented answer (`reasons` with text and weights, `risks`, `visitor`, `related`, `account`, `counts`, `activity`, `email`, `network`, `agent`, `environment`, ...), bounded in size; undocumented fields are dropped |
 | `api_version`, `observed_at`                                                                                          | `heedeo-version` sent, and time                                                                                                                                                                                            |
 
-The token, the email and request headers are not sent to PostHog.
+The token, the email and request headers are not sent to PostHog. The
+script also writes the token to its own `_idt` cookie (`Path=/`); the capture
+deletes that cookie as soon as `identify()` settles, so later requests (for
+example analytics) do not carry it.
 
 ## First-party route
 
@@ -64,11 +77,14 @@ first-party. `lib/heedeo/proxy.ts` limits the route:
   reads, and only Heedeo's `_idd` cookie, never console cookies;
 - back: `content-type`, `cache-control`, `etag`, `accept-ch`,
   `access-control-*`, and only an `_idd` Set-Cookie without a `Domain`;
-- 64 KB request body, 1 MB response body, 2 KB query, 3 s, no redirects.
+- 64 KB request body, 1 MB response body, 2 KB query, 3 s, no redirects;
+- the script is sent with `cache-control: no-cache`, so the browser
+  revalidates it on each page load.
 
 The script also has its own fallback to `https://heedeo.dev` (a warm-up
 request and a backup identify after 1.5 s when the first-party call is slow
-or fails), so some browsers still contact Heedeo's host directly.
+or fails), so some browsers still contact Heedeo's host directly. It does
+not fall back after a 403, so the kill switch answers 403 rather than 404.
 
 ## Configuration
 
@@ -76,7 +92,7 @@ or fails), so some browsers still contact Heedeo's host directly.
 | --------------------------- | -------------------- | ---------------------------------------------------------------------------------- |
 | `NEXT_PUBLIC_HEEDEO_KEY`    | browser (build time) | Publishable key `pk_...`. Unset: no script, no capture                             |
 | `HEEDEO_SECRET_KEY`         | server only          | Secret key `sk_...` for the route and the evaluation. Unset: off                   |
-| `HEEDEO_SIGNUP_OBSERVATION` | server               | `off` turns everything off (the route answers 404, so no identification is billed) |
+| `HEEDEO_SIGNUP_OBSERVATION` | server               | `off` turns everything off (the route answers 403, so no identification is billed) |
 
 Use a separate Heedeo workspace for preview and staging deployments: test
 sign-ups become history that later sign-ups are scored against.

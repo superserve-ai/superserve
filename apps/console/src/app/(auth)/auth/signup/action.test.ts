@@ -1047,7 +1047,10 @@ describe("signUpWithEmail", () => {
     it("sends the account this attempt created, read after the response", async () => {
       mockGenerateLink.mockResolvedValue({
         data: {
-          user: { id: "user-1", created_at: new Date().toISOString() },
+          user: {
+            id: "user-1",
+            created_at: new Date(Date.now() + 60_000).toISOString(),
+          },
           properties: { hashed_token: "abc123" },
         },
         error: null,
@@ -1089,6 +1092,55 @@ describe("signUpWithEmail", () => {
         error: "An account with this email already exists.",
       })
       expect(scheduled()).toMatchObject({ userId: null, status: "failed" })
+    })
+
+    it("sends a retry for an older unconfirmed account as failed", async () => {
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: { id: "existing-user", created_at: "2020-01-01T00:00:00Z" },
+          properties: { hashed_token: "abc123" },
+        },
+        error: null,
+      })
+
+      const result = await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Test User",
+      )
+
+      expect(result).toEqual({ success: true })
+      expect(scheduled()).toMatchObject({
+        userId: "existing-user",
+        status: "failed",
+      })
+    })
+
+    it("sends a held Enterprise account as created when its link fails", async () => {
+      mockPricingVersion.mockResolvedValue("v2")
+      mockCreateUser.mockResolvedValue({
+        data: { user: { id: "user-1" } },
+        error: null,
+      })
+      mockGenerateLink.mockRejectedValueOnce(new Error("link unavailable"))
+
+      await signUpWithEmail(
+        "user@test.com",
+        "password123",
+        "Test User",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "enterprise",
+      )
+
+      expect(scheduled()).toMatchObject({
+        userId: "user-1",
+        status: "succeeded",
+      })
     })
 
     it("reads nothing when off", async () => {
