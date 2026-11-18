@@ -28,7 +28,8 @@ function TabsTab({
         "px-4 py-2 text-sm font-medium text-muted transition-colors",
         "-mb-px border-b-2 border-transparent",
         "hover:text-foreground",
-        "data-[selected]:border-primary data-[selected]:text-primary",
+        // Base UI 1.x marks the selected tab with data-active (not data-selected).
+        "data-[active]:border-primary data-[active]:text-primary",
         "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none",
         className,
       )}

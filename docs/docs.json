@@ -190,9 +190,12 @@
           {
             "group": "Migrate",
             "pages": [
+              "guides/migrate-from-blaxel",
+              "guides/migrate-from-cloudflare",
               "guides/migrate-from-daytona",
               "guides/migrate-from-e2b",
-              "guides/migrate-from-modal"
+              "guides/migrate-from-modal",
+              "guides/migrate-from-vercel-sandbox"
             ]
           },
           {
@@ -203,8 +206,12 @@
                 "group": "Coding agents",
                 "expanded": true,
                 "pages": [
+                  "integrations/coding-agents/acp",
+                  "integrations/coding-agents/amp",
                   "integrations/coding-agents/claude",
                   "integrations/coding-agents/codex",
+                  "integrations/coding-agents/copilot-cli",
+                  "integrations/coding-agents/grok",
                   "integrations/coding-agents/kilocode",
                   "integrations/coding-agents/opencode",
                   "integrations/coding-agents/pi"
@@ -236,7 +243,8 @@
                   "integrations/agent-harnesses/openai-agents-sdk",
                   "integrations/agent-harnesses/pydantic-ai",
                   "integrations/agent-harnesses/sandcastle",
-                  "integrations/agent-harnesses/vercel-ai-sdk"
+                  "integrations/agent-harnesses/vercel-ai-sdk",
+                  "integrations/agent-harnesses/vercel-eve"
                 ]
               },
               {
