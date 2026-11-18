@@ -51,6 +51,10 @@ window, before its first team exists, can send a second event.
 A tab that loaded the script before the kill switch was set can still send
 a backup identify to `https://heedeo.dev` when the first-party call is slow.
 Revoking the publishable key in Heedeo's dashboard stops that too.
+Once loaded on the sign-up page, the script stays in the tab: a client-side
+move to another page, such as sign-in, does not unload it, so its background
+identify (at most 10, on visibility changes) can still run there. Such a call
+is not tied to a sign-up event, and Heedeo may bill it.
 
 ## PostHog `auth_heedeo_signup_observed`
 
