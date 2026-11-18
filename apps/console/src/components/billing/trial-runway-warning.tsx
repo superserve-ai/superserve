@@ -67,20 +67,30 @@ export function TrialRunwayWarning({
   // Until a new summary arrives, use the fixed threshold instead.
   const freshUntil = summaryQuery.dataUpdatedAt + MAX_SAMPLE_MS
   const fresh = Date.now() <= freshUntil
-  const [, setExpired] = useState(0)
-  useEffect(() => {
-    if (!fresh) return
-    const timer = setTimeout(
-      () => setExpired(freshUntil),
-      freshUntil - Date.now() + 1,
-    )
-    return () => clearTimeout(timer)
-  }, [fresh, freshUntil])
   const burn =
     reading && fresh && nextTrack?.latestAt === reading.at
       ? nextTrack.burnUsdPerMinute
       : null
   const decision = reading ? runwayDecision(reading.remainingUsd, burn) : null
+  // The estimate is from the last reading. After the time it predicts, show
+  // no countdown until a new summary confirms the balance.
+  const countdownUntil =
+    decision?.minutesLeft != null
+      ? summaryQuery.dataUpdatedAt + decision.minutesLeft * 60_000
+      : null
+  const countdown = countdownUntil !== null && Date.now() < countdownUntil
+  const deadline = fresh
+    ? Math.min(freshUntil, countdown ? countdownUntil : Infinity)
+    : null
+  const [, setExpired] = useState(0)
+  useEffect(() => {
+    if (deadline === null) return
+    const timer = setTimeout(
+      () => setExpired(deadline),
+      deadline - Date.now() + 1,
+    )
+    return () => clearTimeout(timer)
+  }, [deadline])
 
   // Support staff viewing a team do not see the experiment or send its events.
   const eligible = scope === "self" && decision?.show === true
@@ -131,16 +141,11 @@ export function TrialRunwayWarning({
         ) : null
       }
     >
-      {decision.minutesLeft !== null ? (
+      {countdownUntil !== null && countdown ? (
         <>
           At your current usage, your free trial credit runs out in{" "}
           <strong>
-            {formatMinutesLeft(
-              // The estimate is from the last reading, so take off the time
-              // since then.
-              decision.minutesLeft -
-                (Date.now() - summaryQuery.dataUpdatedAt) / 60_000,
-            )}
+            {formatMinutesLeft((countdownUntil - Date.now()) / 60_000)}
           </strong>
           .
         </>

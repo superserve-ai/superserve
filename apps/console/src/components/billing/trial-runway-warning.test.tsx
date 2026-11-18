@@ -220,6 +220,31 @@ describe("TrialRunwayWarning with the flag on", () => {
     }
   })
 
+  it("drops the countdown after the time it predicts", () => {
+    vi.useFakeTimers({ now: Date.now(), toFake: ["Date", "setTimeout"] })
+    try {
+      mocks.summary.mockReturnValue({
+        data: summary(0.0045),
+        isError: false,
+        dataUpdatedAt: Date.now(),
+      })
+      const { rerender } = render(view())
+      // $0.003 a minute leaves 30 seconds.
+      mocks.summary.mockReturnValue({
+        data: summary(0.0015, T0 + 60_000),
+        isError: false,
+        dataUpdatedAt: Date.now(),
+      })
+      rerender(view())
+      expect(screen.getByText(/less than a minute/)).toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(30_001))
+      expect(screen.queryByText(/runs out in/)).toBeNull()
+      expect(screen.getByText(/almost used up/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("hides the warning when nothing uses credit", () => {
     const { rerender } = render(view())
     expect(screen.queryByTestId("trial-banner")).toBeNull()
