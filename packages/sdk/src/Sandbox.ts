@@ -22,6 +22,7 @@ import {
   NotFoundError,
   SandboxError,
   TimeoutError,
+  ValidationError,
 } from "./errors.js"
 import { Files } from "./files.js"
 import {
@@ -60,6 +61,16 @@ import type {
   ApiSnapshotResponse,
 } from "./types.js"
 import { toNetworkLogPage, toSandboxInfo, toSnapshotInfo } from "./types.js"
+import {
+  Volume,
+  assertVolumeConnection,
+  getVolumeAttachment,
+  detachVolumeAttachment,
+  sameVolumeSandbox,
+  type VolumeAttachOptions,
+  type VolumeAttachment,
+  type VolumeRequestOptions,
+} from "./Volume.js"
 
 /** How long `pause()` waits for the host across every request it makes. */
 /**
@@ -130,6 +141,45 @@ export class Sandbox {
    * live viewer). Requires a desktop-enabled template.
    */
   readonly desktop: Desktop
+
+  /** @internal Validate captured connection identity before volume requests. */
+  _assertVolumeConfig(config: ResolvedConfig): void {
+    assertVolumeConnection(this._config, config)
+  }
+
+  async attachVolume(
+    volume: Volume | string,
+    options: VolumeAttachOptions,
+  ): Promise<VolumeAttachment> {
+    const resource =
+      typeof volume === "string"
+        ? await Volume.connect(volume, {
+            ...this._config,
+            signal: options.signal,
+            timeoutMs: options.timeoutMs,
+          })
+        : volume
+    return resource.attach(this, options)
+  }
+
+  async detachVolume(
+    attachmentId: string,
+    options: VolumeRequestOptions = {},
+  ): Promise<void> {
+    try {
+      const attachment = await getVolumeAttachment(
+        this._config,
+        attachmentId,
+        options,
+      )
+      if (!sameVolumeSandbox(attachment.sandboxId, this.id))
+        throw new ValidationError("Attachment belongs to a different sandbox")
+    } catch (error) {
+      if (error instanceof NotFoundError) return
+      throw error
+    }
+    await detachVolumeAttachment(this._config, attachmentId, options)
+  }
 
   private _accessToken: string
   private _routingHint?: string
@@ -244,6 +294,22 @@ export class Sandbox {
   static async create(options: SandboxCreateOptions): Promise<Sandbox> {
     const config = resolveConfig(options)
 
+    if ((options.volumes?.length ?? 0) > 128) {
+      throw new ValidationError(
+        "A new sandbox supports at most 128 volume mounts",
+      )
+    }
+    const volumeMounts = (options.volumes ?? []).map((mount) =>
+      Object.assign({}, mount),
+    )
+    const volumePaths = new Set<string>()
+    for (const mount of volumeMounts) {
+      if (volumePaths.has(mount.mountPath)) {
+        throw new ValidationError("Volume mount paths must be distinct")
+      }
+      volumePaths.add(mount.mountPath)
+      if (mount.volume instanceof Volume) mount.volume._assertConnection(config)
+    }
     const body: Record<string, unknown> = { name: options.name }
     if (options.timeoutSeconds !== undefined)
       body.timeout_seconds = options.timeoutSeconds
@@ -288,12 +354,45 @@ export class Sandbox {
         "Invalid API response from POST /sandboxes: missing access_token",
       )
     }
-    return new Sandbox(
+    const sandbox = new Sandbox(
       toSandboxInfo(raw),
       raw.access_token,
       config,
       raw.routing_hint,
     )
+    try {
+      for (const mount of volumeMounts) {
+        const combined =
+          options.signal && mount.signal
+            ? composeSignals(options.signal, mount.signal)
+            : undefined
+        try {
+          await sandbox.attachVolume(mount.volume, {
+            ...mount,
+            signal: combined?.signal ?? options.signal ?? mount.signal,
+          })
+        } finally {
+          combined?.release()
+        }
+      }
+    } catch (error) {
+      const cleanup = new AbortController()
+      const timer = setTimeout(() => cleanup.abort(), 30_000)
+      try {
+        await sandbox.kill({ signal: cleanup.signal })
+      } catch {
+        throw new SandboxError(
+          `Volume attachment failed and newly created sandbox ${sandbox.id} could not be deleted`,
+          undefined,
+          "volume_cleanup_failed",
+          { cause: error },
+        )
+      } finally {
+        clearTimeout(timer)
+      }
+      throw error
+    }
+    return sandbox
   }
 
   /**

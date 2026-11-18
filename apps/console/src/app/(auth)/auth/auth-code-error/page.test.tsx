@@ -265,4 +265,25 @@ describe("auth-code-error page", () => {
       screen.getByText("Something went wrong. Please try again."),
     ).toBeTruthy()
   })
+
+  it.each([
+    "missing_code",
+    "provider_error",
+    "exchange_failed",
+    "otp_failed",
+    "enterprise_hold_failed",
+  ])(
+    "shows the generic message and sign-in retry for callback reason %s",
+    (callbackReason) => {
+      reason = callbackReason
+      next = `/invite/ssinv_use_${"A".repeat(43)}`
+      render(<AuthCodeErrorPage />)
+      expect(
+        screen.getByText("Something went wrong. Please try again."),
+      ).toBeTruthy()
+      expect(
+        screen.getByRole("link", { name: "Try Again" }).getAttribute("href"),
+      ).toBe(`/auth/signin?${new URLSearchParams({ next })}`)
+    },
+  )
 })
