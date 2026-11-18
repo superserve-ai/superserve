@@ -4,6 +4,7 @@ import {
   fireEvent,
   render,
   screen,
+  waitFor,
   within,
 } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
@@ -213,6 +214,37 @@ describe("CreateKeyDialog created state", () => {
 
     expect(screen.getByRole("dialog")).toBeVisible()
     expect(screen.getByText(key, { selector: "code" })).toBeVisible()
+  })
+
+  it("keeps focus in the window when the backdrop is clicked", async () => {
+    await createKey()
+    const button = screen.getByRole("button", { name: "Copy key" })
+    expect(button).toHaveFocus()
+
+    await userEvent.click(document.querySelector(".ss-dialog-backdrop")!)
+
+    expect(screen.getByRole("dialog")).toBeVisible()
+    expect(button).toHaveFocus()
+  })
+
+  it("focuses Copy key when the window reopens with a key created while closed", async () => {
+    let finishCreate!: () => void
+    mockMutate.mockImplementationOnce((_name, options) => {
+      finishCreate = () => options.onSuccess({ key })
+    })
+    render(<ControlledCreateKeyDialog />)
+    await submitKey()
+
+    await userEvent.keyboard("{Escape}")
+    expect(screen.queryByRole("dialog")).toBeNull()
+    act(() => finishCreate())
+
+    await userEvent.click(screen.getByRole("button", { name: "Open dialog" }))
+
+    expect(screen.getByText(key, { selector: "code" })).toBeVisible()
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "Copy key" })).toHaveFocus(),
+    )
   })
 
   it.each([
@@ -508,14 +540,15 @@ describe("CreateKeyDialog created state", () => {
     const pending = deferredCopy()
     writeText.mockReturnValueOnce(pending.promise)
     const button = screen.getByRole("button", { name: "Copy command" })
-    let top = 300
-    vi.spyOn(button, "getBoundingClientRect").mockImplementation(
-      () => ({ top }) as DOMRect,
-    )
+    let scrollTop = 0
+    Object.defineProperty(screen.getByRole("dialog"), "scrollTop", {
+      configurable: true,
+      get: () => scrollTop,
+    })
 
     await userEvent.click(button)
     expect(button).toHaveFocus()
-    top = 460
+    scrollTop = 160
     await act(async () =>
       pending.reject(new Error("Clipboard permission denied")),
     )

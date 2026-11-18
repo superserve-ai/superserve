@@ -98,14 +98,19 @@ export function CreateKeyDialog({
     return cancelCopyFeedback
   }, [open, cancelCopyFeedback])
 
-  useLayoutEffect(() => {
+  // Plain focus() centers the button and can scroll the one-time warning out
+  // of a short window, so scroll only as far as the button needs.
+  const focusKeyCopyButton = useCallback(() => {
     const button = keyCopyButton.current
-    if (!createdKey || !button) return
-    // Plain focus() centers the button and can scroll the one-time warning
-    // out of a short window, so scroll only as far as the button needs.
+    if (!button) return true
     button.focus({ preventScroll: true })
     button.scrollIntoView?.({ block: "nearest" })
-  }, [createdKey])
+    return false
+  }, [])
+
+  useLayoutEffect(() => {
+    if (createdKey) focusKeyCopyButton()
+  }, [createdKey, focusKeyCopyButton])
 
   useLayoutEffect(() => {
     if (keyFailure?.scroll) {
@@ -133,8 +138,9 @@ export function CreateKeyDialog({
   const handleCopy = async (target: CopyTarget, text: string) => {
     const attempt = ++copyAttempts.current[target]
     const activeElement = document.activeElement
-    // Where the pressed button sits now, to tell later whether the user scrolled.
-    const startTop = activeElement?.getBoundingClientRect().top
+    // The window's scroll position now, to tell later whether the user scrolled.
+    const scroller = keyCopyButton.current?.closest('[role="dialog"]')
+    const startScrollTop = scroller?.scrollTop
     const { anchorNode, anchorOffset, focusNode, focusOffset } =
       window.getSelection?.() ?? {}
     try {
@@ -143,8 +149,7 @@ export function CreateKeyDialog({
       if (attempt !== copyAttempts.current[target]) return
 
       const focusUnchanged = document.activeElement === activeElement
-      const scrollUnchanged =
-        activeElement?.getBoundingClientRect().top === startTop
+      const scrollUnchanged = scroller?.scrollTop === startScrollTop
       clearTimeout(copyTimers.current[target])
       setCopied((previous) => ({ ...previous, [target]: false }))
       setCopyFailures((previous) => ({
@@ -210,7 +215,11 @@ export function CreateKeyDialog({
           Create Key
         </DialogTrigger>
       )}
-      <DialogPopup className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
+      <DialogPopup
+        className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto"
+        // A key created while the window was closed shows on reopen.
+        initialFocus={createdKey ? focusKeyCopyButton : true}
+      >
         <DialogHeader>
           <DialogTitle>
             {createdKey ? "API key created" : "Create API Key"}
