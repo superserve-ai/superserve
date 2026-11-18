@@ -110,7 +110,8 @@ describe("advanceRunway", () => {
     const track = advanceRunway(null, "use:a", first)
     expect(track).toEqual({
       team: "use:a",
-      reading: first,
+      baseline: first,
+      latestAt: T0,
       burnUsdPerMinute: null,
     })
     const next = advanceRunway(track, "use:a", second)
@@ -128,11 +129,27 @@ describe("advanceRunway", () => {
     expect(advanceRunway(track, "use:a", null)).toBe(track)
   })
 
+  it("keeps the estimate when a refresh comes too soon", () => {
+    const track = advanceRunway(
+      advanceRunway(null, "use:a", first),
+      "use:a",
+      second,
+    )
+    const soon = { at: T0 + 62_000, remainingUsd: 0.0279 }
+    expect(advanceRunway(track, "use:a", soon)).toEqual({
+      team: "use:a",
+      baseline: second,
+      latestAt: T0 + 62_000,
+      burnUsdPerMinute: track?.burnUsdPerMinute,
+    })
+  })
+
   it("starts again for another team", () => {
     const track = advanceRunway(null, "use:a", first)
     expect(advanceRunway(track, "usw:b", second)).toEqual({
       team: "usw:b",
-      reading: second,
+      baseline: second,
+      latestAt: T0 + 60_000,
       burnUsdPerMinute: null,
     })
     expect(advanceRunway(track, "usw:b", null)).toBeNull()

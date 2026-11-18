@@ -18,6 +18,7 @@ import { planPickerPath } from "@/lib/billing/signup-checkout-paths"
 import {
   advanceRunway,
   FIXED_WARNING_USD,
+  MAX_SAMPLE_MS,
   formatMinutesLeft,
   RUNWAY_WARNING_MINUTES,
   type RunwayTrack,
@@ -67,8 +68,11 @@ export function TrialRunwayWarning({
   const [track, setTrack] = useState<RunwayTrack | null>(null)
   const nextTrack = advanceRunway(track, teamKey, reading)
   if (nextTrack !== track) setTrack(nextTrack)
+  // Polling stops in a background tab, so an old estimate can be wrong.
+  // Until a new summary arrives, use the fixed threshold instead.
+  const fresh = Date.now() - summaryQuery.dataUpdatedAt <= MAX_SAMPLE_MS
   const burn =
-    reading && nextTrack?.reading.at === reading.at
+    reading && fresh && nextTrack?.latestAt === reading.at
       ? nextTrack.burnUsdPerMinute
       : null
   const decision = reading ? runwayDecision(reading.remainingUsd, burn) : null

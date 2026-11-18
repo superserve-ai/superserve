@@ -9,7 +9,7 @@ export const FIXED_WARNING_USD = 0.02
 // Readings closer than this differ mostly by rounding; readings further apart
 // average over usage that may have stopped (background tabs do not poll).
 const MIN_SAMPLE_MS = 5_000
-const MAX_SAMPLE_MS = 5 * 60_000
+export const MAX_SAMPLE_MS = 5 * 60_000
 
 export type RunwayMode = "burn_rate" | "fixed"
 
@@ -22,8 +22,11 @@ export interface TrialReading {
 
 export interface RunwayTrack {
   team: string
-  reading: TrialReading
-  // USD per minute between the last two readings; null when unknown.
+  // The reading the next burn rate is measured from.
+  baseline: TrialReading
+  // The time of the newest reading the burn rate applies to.
+  latestAt: number
+  // USD per minute between the last two usable readings; null when unknown.
   burnUsdPerMinute: number | null
 }
 
@@ -81,12 +84,22 @@ export function advanceRunway(
 ): RunwayTrack | null {
   if (!team) return null
   if (!reading) return track?.team === team ? track : null
-  if (track?.team !== team) return { team, reading, burnUsdPerMinute: null }
-  if (reading.at <= track.reading.at) return track
+  if (track?.team !== team)
+    return {
+      team,
+      baseline: reading,
+      latestAt: reading.at,
+      burnUsdPerMinute: null,
+    }
+  if (reading.at <= track.latestAt) return track
+  // A refresh too soon after the baseline keeps the last estimate.
+  if (reading.at - track.baseline.at < MIN_SAMPLE_MS)
+    return { ...track, latestAt: reading.at }
   return {
     team,
-    reading,
-    burnUsdPerMinute: burnRate(track.reading, reading),
+    baseline: reading,
+    latestAt: reading.at,
+    burnUsdPerMinute: burnRate(track.baseline, reading),
   }
 }
 

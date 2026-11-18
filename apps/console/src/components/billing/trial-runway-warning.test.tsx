@@ -73,7 +73,11 @@ beforeEach(() => {
   mocks.scope = "self"
   mocks.user = { id: "account-1" }
   mocks.entry.mockReturnValue({ data: "trial" })
-  mocks.summary.mockReturnValue({ data: summary(0.015), isError: false })
+  mocks.summary.mockReturnValue({
+    data: summary(0.015),
+    isError: false,
+    dataUpdatedAt: Date.now(),
+  })
   mocks.posthog.isFeatureEnabled.mockReset().mockReturnValue(true)
   mocks.posthog.capture.mockReset()
   window.sessionStorage.clear()
@@ -135,14 +139,22 @@ describe("TrialRunwayWarning with the flag on", () => {
   })
 
   it("does not read the flag when the credit is not close to running out", () => {
-    mocks.summary.mockReturnValue({ data: summary(0.04), isError: false })
+    mocks.summary.mockReturnValue({
+      data: summary(0.04),
+      isError: false,
+      dataUpdatedAt: Date.now(),
+    })
     render(view())
     expect(screen.getByTestId("trial-banner")).toBeInTheDocument()
     expect(mocks.posthog.isFeatureEnabled).not.toHaveBeenCalled()
   })
 
   it("uses the burn rate between two readings", () => {
-    mocks.summary.mockReturnValue({ data: summary(0.022), isError: false })
+    mocks.summary.mockReturnValue({
+      data: summary(0.022),
+      isError: false,
+      dataUpdatedAt: Date.now(),
+    })
     const { rerender } = render(view())
     expect(screen.getByTestId("trial-banner")).toBeInTheDocument()
 
@@ -150,6 +162,7 @@ describe("TrialRunwayWarning with the flag on", () => {
     mocks.summary.mockReturnValue({
       data: summary(0.018, T0 + 120_000),
       isError: false,
+      dataUpdatedAt: Date.now(),
     })
     rerender(view())
     expect(screen.getByText(/runs out in/)).toHaveTextContent(
@@ -162,12 +175,30 @@ describe("TrialRunwayWarning with the flag on", () => {
     })
   })
 
+  it("drops an old burn rate until the summary is read again", () => {
+    mocks.summary.mockReturnValue({
+      data: summary(0.022),
+      isError: false,
+      dataUpdatedAt: Date.now(),
+    })
+    const { rerender } = render(view())
+    mocks.summary.mockReturnValue({
+      data: summary(0.018, T0 + 120_000),
+      isError: false,
+      dataUpdatedAt: Date.now() - 10 * 60_000,
+    })
+    rerender(view())
+    expect(screen.getByText(/almost used up/)).toBeInTheDocument()
+    expect(screen.queryByText(/runs out in/)).toBeNull()
+  })
+
   it("hides the warning when nothing uses credit", () => {
     const { rerender } = render(view())
     expect(screen.queryByTestId("trial-banner")).toBeNull()
     mocks.summary.mockReturnValue({
       data: summary(0.015, T0 + 60_000),
       isError: false,
+      dataUpdatedAt: Date.now(),
     })
     rerender(view())
     expect(screen.getByTestId("trial-banner")).toBeInTheDocument()
@@ -196,6 +227,7 @@ describe("TrialRunwayWarning with the flag on", () => {
         permissions: { can_view: true, can_manage: false },
       }),
       isError: false,
+      dataUpdatedAt: Date.now(),
     })
     render(view())
     expect(screen.queryByRole("link")).toBeNull()
