@@ -9,10 +9,10 @@ from playwright.sync_api import expect, sync_playwright
 
 BASE = 'http://127.0.0.1:4173'
 VALUES = {
-    'Full Name': 'Synthetic account',
+    'Full name': 'Synthetic account',
     'Email': 'fixture@example.test',
     'Password': 'Synthetic-form-value-1',
-    'Confirm Password': 'Synthetic-form-value-1',
+    'Confirm password': 'Synthetic-form-value-1',
 }
 
 

@@ -155,3 +155,26 @@ describe("Pagination", () => {
     expect(screen.getByRole("button", { name: "Next page" })).toBeDisabled()
   })
 })
+
+describe("Pagination accessibility", () => {
+  it("uses foreground range numbers and muted separators", () => {
+    render(
+      <Pagination
+        page={1}
+        pageSize={50}
+        total={120}
+        onPageChange={noop}
+        onPageSizeChange={noop}
+      />,
+    )
+
+    const range = screen.getByText("–").closest("p")
+    expect(range).toHaveClass("text-foreground")
+    expect(range).not.toHaveClass("text-muted")
+
+    for (const separator of [screen.getByText("–"), screen.getByText("of")]) {
+      expect(separator).toHaveClass("text-muted")
+      expect(separator.className).not.toMatch(/text-muted\//)
+    }
+  })
+})

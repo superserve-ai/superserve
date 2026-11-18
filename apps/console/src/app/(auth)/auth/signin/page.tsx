@@ -390,8 +390,13 @@ function SignInContent() {
 
         {/* Email/Password Form */}
         <form onSubmit={handleEmailSignIn} className="space-y-3">
+          <label htmlFor="signin-email" className="sr-only">
+            Email
+          </label>
           <Input
             type="email"
+            id="signin-email"
+            autoComplete="email"
             placeholder="Email"
             value={email}
             onChange={(e) => {
@@ -401,8 +406,13 @@ function SignInContent() {
             disabled={isLinkSending}
             error={errors.email}
           />
+          <label htmlFor="signin-password" className="sr-only">
+            Password
+          </label>
           <Input
             type={showPassword ? "text" : "password"}
+            id="signin-password"
+            autoComplete="current-password"
             placeholder="Password"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
@@ -427,7 +437,7 @@ function SignInContent() {
             <Link
               href={forgotPasswordHref}
               className={cn(
-                "text-xs text-muted/60 hover:text-muted",
+                "text-xs text-muted hover:text-foreground",
                 inviteLinkReplayClass(forgotPasswordHref),
               )}
             >
@@ -525,7 +535,7 @@ function SignInContent() {
         </Button>
 
         {/* Privacy */}
-        <p className="mt-6 text-center text-xs leading-relaxed text-muted/60">
+        <p className="mt-6 text-center text-xs leading-relaxed text-muted">
           By continuing, you agree to our{" "}
           <a
             href={`${process.env.NEXT_PUBLIC_WEBSITE_URL}/privacy`}

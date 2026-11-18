@@ -128,8 +128,13 @@ function ForgotPasswordContent() {
             </h1>
 
             <form onSubmit={handleResetPassword} className="space-y-3">
+              <label htmlFor="forgot-password-email" className="sr-only">
+                Email
+              </label>
               <Input
                 type="email"
+                id="forgot-password-email"
+                autoComplete="email"
                 placeholder="Email"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
