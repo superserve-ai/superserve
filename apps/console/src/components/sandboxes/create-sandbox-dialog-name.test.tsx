@@ -52,7 +52,7 @@ function getNameInput() {
 }
 
 function getFieldError() {
-  return screen.getByText(nameError, { ignore: "output" })
+  return screen.getByText(nameError)
 }
 
 function stubGeneratedNames() {
@@ -134,37 +134,26 @@ it.each([
   expect(input).toHaveFocus()
 })
 
-it("updates the live region when submitting with focus already on the empty name input", async () => {
+it("describes the error once when submitting with focus already on the empty name input", async () => {
   const user = userEvent.setup()
   renderOpenDialog()
   const input = getNameInput()
   const dialog = within(screen.getByRole("dialog"))
-  const status = dialog.getByRole("status")
-
-  expect(status).toHaveClass("sr-only")
-  expect(status).toHaveAttribute("aria-live", "polite")
 
   await user.click(input)
   await user.clear(input)
   expect(input).toHaveFocus()
-  expect(status).toBeEmptyDOMElement()
-  expect(
-    dialog.queryByText(nameError, { ignore: "output" }),
-  ).not.toBeInTheDocument()
+  expect(input).toHaveValue("")
+  expect(input).not.toHaveAttribute("placeholder")
+  expect(dialog.queryByText(nameError)).not.toBeInTheDocument()
 
-  const onFocus = vi.fn()
-  input.addEventListener("focus", onFocus, { once: true })
   fireEvent.click(dialog.getByRole("button", { name: "Create Sandbox" }))
 
   expect(input).toHaveFocus()
-  expect(onFocus).not.toHaveBeenCalled()
-  expect(status).toHaveTextContent(nameError)
-  expect(getFieldError()).toBeVisible()
-
-  await user.type(input, "dev-sandbox")
-
-  expect(dialog.getByRole("status")).toBe(status)
-  expect(status).toBeEmptyDOMElement()
+  expect(input).toHaveAttribute("aria-invalid", "true")
+  expect(input).toHaveAccessibleDescription(nameError)
+  expect(dialog.getAllByText(nameError)).toHaveLength(1)
+  expect(dialog.queryByRole("status")).not.toBeInTheDocument()
 })
 
 it("clears the name error and submits the corrected name", async () => {
