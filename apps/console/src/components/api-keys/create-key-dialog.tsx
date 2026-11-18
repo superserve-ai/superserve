@@ -23,6 +23,10 @@ import { API_KEY_EVENTS } from "@/lib/posthog/events"
 type CopyTarget = "key" | "export_command"
 
 const initialCopyState = { key: false, export_command: false }
+const initialCopyFailures: Record<CopyTarget, number | null> = {
+  key: null,
+  export_command: null,
+}
 const copyError = "Could not copy. Select the text and copy it by hand."
 
 function selectCodeText(code: HTMLElement | null) {
@@ -50,13 +54,16 @@ export function CreateKeyDialog({
   const [name, setName] = useState("")
   const [createdKey, setCreatedKey] = useState<{ full: string } | null>(null)
   const [copied, setCopied] = useState(initialCopyState)
-  const [copyFailed, setCopyFailed] = useState(initialCopyState)
+  const [{ key: keyFailure, export_command: commandFailure }, setCopyFailures] =
+    useState(initialCopyFailures)
   const [copyAnnouncement, setCopyAnnouncement] = useState<{
     id: string
     message: string
   } | null>(null)
   const keyCode = useRef<HTMLElement>(null)
   const commandCode = useRef<HTMLElement>(null)
+  const keyAlert = useRef<HTMLParagraphElement>(null)
+  const commandAlert = useRef<HTMLParagraphElement>(null)
   const copyAttempts = useRef({ key: 0, export_command: 0 })
   const copyTimers = useRef<
     Partial<Record<CopyTarget, ReturnType<typeof setTimeout>>>
@@ -80,11 +87,23 @@ export function CreateKeyDialog({
   useLayoutEffect(() => {
     if (!open) {
       setCopied(initialCopyState)
-      setCopyFailed(initialCopyState)
+      setCopyFailures(initialCopyFailures)
       setCopyAnnouncement(null)
     }
     return cancelCopyFeedback
   }, [open, cancelCopyFeedback])
+
+  useLayoutEffect(() => {
+    if (keyFailure !== null) {
+      keyAlert.current?.scrollIntoView?.({ block: "nearest" })
+    }
+  }, [keyFailure])
+
+  useLayoutEffect(() => {
+    if (commandFailure !== null) {
+      commandAlert.current?.scrollIntoView?.({ block: "nearest" })
+    }
+  }, [commandFailure])
 
   const handleCreate = () => {
     if (!name.trim()) return
@@ -99,7 +118,6 @@ export function CreateKeyDialog({
 
   const handleCopy = async (target: CopyTarget, text: string) => {
     const attempt = ++copyAttempts.current[target]
-    const id = `${target}:${attempt}`
     const activeElement = document.activeElement
     const { anchorNode, anchorOffset, focusNode, focusOffset } =
       window.getSelection?.() ?? {}
@@ -110,8 +128,7 @@ export function CreateKeyDialog({
 
       clearTimeout(copyTimers.current[target])
       setCopied((previous) => ({ ...previous, [target]: false }))
-      setCopyFailed((previous) => ({ ...previous, [target]: true }))
-      setCopyAnnouncement({ id, message: copyError })
+      setCopyFailures((previous) => ({ ...previous, [target]: attempt }))
       const selection = window.getSelection?.()
       if (
         document.activeElement === activeElement &&
@@ -135,9 +152,9 @@ export function CreateKeyDialog({
         ? "API key copied to clipboard"
         : "Command copied to clipboard"
     posthog.capture(API_KEY_EVENTS.COPIED, { target })
-    setCopyFailed((previous) => ({ ...previous, [target]: false }))
+    setCopyFailures((previous) => ({ ...previous, [target]: null }))
     setCopied((previous) => ({ ...previous, [target]: true }))
-    setCopyAnnouncement({ id, message })
+    setCopyAnnouncement({ id: `${target}:${attempt}`, message })
     addToast(message, "success")
     clearTimeout(copyTimers.current[target])
     copyTimers.current[target] = setTimeout(() => {
@@ -212,8 +229,13 @@ export function CreateKeyDialog({
                   <KeyCopyIcon className="size-3.5" weight="light" />
                   {copied.key ? "Copied" : "Copy key"}
                 </Button>
-                {copyFailed.key && (
-                  <p role="alert" className="text-xs text-destructive">
+                {keyFailure !== null && (
+                  <p
+                    key={keyFailure}
+                    ref={keyAlert}
+                    role="alert"
+                    className="text-xs text-destructive"
+                  >
                     {copyError}
                   </p>
                 )}
@@ -247,8 +269,13 @@ export function CreateKeyDialog({
                   <CommandCopyIcon className="size-3.5" weight="light" />
                   {copied.export_command ? "Copied" : "Copy command"}
                 </Button>
-                {copyFailed.export_command && (
-                  <p role="alert" className="text-xs text-destructive">
+                {commandFailure !== null && (
+                  <p
+                    key={commandFailure}
+                    ref={commandAlert}
+                    role="alert"
+                    className="text-xs text-destructive"
+                  >
                     {copyError}
                   </p>
                 )}

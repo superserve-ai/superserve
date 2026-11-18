@@ -161,6 +161,8 @@ describe("CreateKeyDialog created state", () => {
       await userEvent.click(button)
 
       const alert = block.getByText(copyError, { selector: '[role="alert"]' })
+      expect.soft(screen.getByRole("status")).toBeEmptyDOMElement()
+      expect(screen.getAllByText(copyError)).toEqual([alert])
       expect(alert).toBeVisible()
       expect(alert).toHaveClass("text-xs", "text-destructive")
       expect(button.nextElementSibling).toBe(alert)
@@ -211,21 +213,28 @@ describe("CreateKeyDialog created state", () => {
     expect(button.nextElementSibling).toHaveTextContent(copyError)
   })
 
-  it("preserves a changed selection and replaces an unchanged one on failure", async () => {
+  it("preserves a selection when only its anchor offset changes during a copy", async () => {
     await createKey()
     const pending = deferredCopy()
     const error = new Error("Clipboard permission denied")
     writeText.mockReturnValueOnce(pending.promise).mockRejectedValueOnce(error)
 
     const button = screen.getByRole("button", { name: "Copy key" })
-    await userEvent.click(button)
+    const commandText = screen.getByText(command, {
+      selector: "code",
+    }).firstChild!
     const selection = window.getSelection()!
-    selection.selectAllChildren(screen.getByText(command, { selector: "code" }))
+    act(() => button.focus())
+    selection.setBaseAndExtent(commandText, 0, commandText, command.length)
+    expect(selection.toString()).toBe(command)
+
+    fireEvent.click(button)
+    selection.setBaseAndExtent(commandText, 1, commandText, command.length)
     expect(button).toHaveFocus()
 
     await act(async () => pending.reject(error))
 
-    expect(selection.toString()).toBe(command)
+    expect(selection.toString()).toBe(command.slice(1))
 
     await act(async () => fireEvent.click(button))
 
@@ -288,23 +297,56 @@ describe("CreateKeyDialog created state", () => {
     expect(screen.getByRole("status")).toBeEmptyDOMElement()
   })
 
-  it("announces each consecutive copy failure in the same live region", async () => {
+  it.each(["Copy key", "Copy command"])(
+    "remounts the alert for consecutive failures of %s",
+    async (label) => {
+      await createKey()
+      writeText.mockRejectedValue(new Error("Clipboard permission denied"))
+      const button = screen.getByRole("button", { name: label })
+      const block = within(button.parentElement!)
+
+      await userEvent.click(button)
+      const alert = block.getByRole("alert")
+
+      await userEvent.click(button)
+      expect(block.getByRole("alert")).not.toBe(alert)
+    },
+  )
+
+  it("scrolls each failed target's alert into view", async ({
+    onTestFinished,
+  }) => {
     await createKey()
     writeText.mockRejectedValue(new Error("Clipboard permission denied"))
-    const status = screen.getByRole("status")
-    const button = screen.getByRole("button", { name: "Copy command" })
+    const prototype = HTMLElement.prototype
+    const descriptor = Object.getOwnPropertyDescriptor(
+      prototype,
+      "scrollIntoView",
+    )
+    const scrollIntoView = vi.fn()
+    Object.defineProperty(prototype, "scrollIntoView", {
+      configurable: true,
+      value: scrollIntoView,
+    })
+    onTestFinished(() => {
+      if (descriptor) {
+        Object.defineProperty(prototype, "scrollIntoView", descriptor)
+      } else {
+        Reflect.deleteProperty(prototype, "scrollIntoView")
+      }
+    })
 
-    await userEvent.click(button)
+    for (const label of ["Copy key", "Copy command", "Copy command"]) {
+      scrollIntoView.mockClear()
+      const button = screen.getByRole("button", { name: label })
+      await userEvent.click(button)
 
-    expect(screen.getByRole("status")).toBe(status)
-    expect(status.textContent).toBe(copyError)
-    const announcement = status.firstChild
-
-    await userEvent.click(button)
-
-    expect(screen.getByRole("status")).toBe(status)
-    expect(status.textContent).toBe(copyError)
-    expect(status.firstChild).not.toBe(announcement)
+      const alert = within(button.parentElement!).getByRole("alert")
+      expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({
+        block: "nearest",
+      })
+      expect(scrollIntoView.mock.contexts[0]).toBe(alert)
+    }
   })
 
   it("gives both copied buttons distinct accessible names", async () => {
