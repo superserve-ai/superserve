@@ -11,6 +11,7 @@ The [AI SDK](https://ai-sdk.dev) is Vercel's TypeScript toolkit for building age
 
 ```bash
 npm install @superserve/sdk ai @ai-sdk/anthropic zod
+npm pkg set type=module  # the examples use top-level await
 export SUPERSERVE_API_KEY=ss_live_...
 export ANTHROPIC_API_KEY=sk-ant-...
 ```
@@ -218,7 +219,7 @@ export async function POST(req: Request) {
 
 Without `consumeStream()`, a client disconnect can cancel the stream before any callback fires, and the sandbox keeps running. As a backstop for crashes, set `timeoutSeconds` and `autoDeleteSeconds` when you create the sandbox. See [Auto-delete](/sandbox/lifecycle#auto-delete).
 
-On Vercel, work that must finish after the response is sent belongs in `waitUntil`. Register a promise that settles after `kill()`:
+On Vercel, work that must finish after the response is sent belongs in `waitUntil` from `@vercel/functions` (`npm install @vercel/functions`). Register a promise that settles after `kill()`:
 
 ```typescript
 import { waitUntil } from "@vercel/functions"

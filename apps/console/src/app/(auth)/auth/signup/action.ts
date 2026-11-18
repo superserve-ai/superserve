@@ -64,6 +64,12 @@ import {
   observeFingerprintSignup,
   resolveFingerprintSignup,
 } from "@/lib/fingerprint/observe"
+import {
+  isHeedeoObservationEnabled,
+  readHeedeoRequestContext,
+  scheduleHeedeoSignupObservation,
+  takeHeedeoSignupCapture,
+} from "@/lib/heedeo/observe"
 import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { verifyRecaptcha } from "@/lib/recaptcha/verify"
@@ -535,6 +541,28 @@ export const signUpWithEmail = async (
   )
   let fingerprintObservationScheduled = false
   let observationUserId: string | null = null
+  // The account this attempt created, if any. A retry for an older
+  // unconfirmed account returns that account, which is not a new sign-up; an
+  // Enterprise account exists once `createUser` succeeds, even when the link
+  // fails afterwards.
+  let heedeoCreatedUserId: string | null = null
+  if (isHeedeoObservationEnabled()) {
+    // Observe-only: runs after the response and reads the account this
+    // attempt created, if any. Nothing below depends on it.
+    const heedeoCapture = await takeHeedeoSignupCapture()
+    const heedeoRequest = await readHeedeoRequestContext("/auth/signup/")
+    scheduleHeedeoSignupObservation(() => ({
+      signupAttemptId,
+      signupMethod: "email",
+      email: parsed.data.email,
+      // Not the ID of an older account found by email: this browser has
+      // not proved it owns that account.
+      userId: heedeoCreatedUserId,
+      status: heedeoCreatedUserId ? "succeeded" : "failed",
+      capture: heedeoCapture,
+      request: heedeoRequest,
+    }))
+  }
   const emitFingerprintObservation = (userId?: string | null) => {
     if (!fingerprintEventId || fingerprintObservationScheduled) return
     fingerprintObservationScheduled = true
@@ -673,6 +701,7 @@ export const signUpWithEmail = async (
           app_metadata: { signup_review: "pending" },
         })
       : null
+    heedeoCreatedUserId = created?.data?.user?.id ?? null
     const { data, error } = created?.error
       ? { data: { user: null, properties: null }, error: created.error }
       : await supabase.auth.admin.generateLink(
@@ -730,6 +759,7 @@ export const signUpWithEmail = async (
 
     const originalSignup =
       data?.user && Date.parse(data.user.created_at) >= signupStartedAt
+    if (originalSignup) heedeoCreatedUserId = data.user.id
     let signupEligibilitySnapshot: unknown
     if (originalSignup) {
       try {

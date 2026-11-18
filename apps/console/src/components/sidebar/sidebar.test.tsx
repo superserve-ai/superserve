@@ -70,4 +70,25 @@ describe("Sidebar", () => {
       screen.queryByText("Billing", { exact: true }),
     ).not.toBeInTheDocument()
   })
+
+  it("shows Team to a user without platform permissions, after Settings", () => {
+    const queryClient = new QueryClient({
+      defaultOptions: {
+        queries: { retry: false },
+      },
+    })
+
+    render(
+      <QueryClientProvider client={queryClient}>
+        <Sidebar />
+      </QueryClientProvider>,
+    )
+
+    const labels = screen
+      .getAllByText(/./)
+      .map((element) => element.textContent)
+    expect(labels).toContain("Team")
+    expect(labels.indexOf("Team")).toBe(labels.indexOf("Settings") + 1)
+    expect(screen.queryByText("Admin", { exact: true })).not.toBeInTheDocument()
+  })
 })

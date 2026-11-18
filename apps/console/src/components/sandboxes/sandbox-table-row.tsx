@@ -89,7 +89,8 @@ export function SandboxTableRow({
         {sandbox.snapshot_id ? `${sandbox.snapshot_id.slice(0, 8)}...` : "-"}
       </TableCell> */}
       <TableCell className="font-mono text-xs whitespace-nowrap text-muted tabular-nums">
-        {sandbox.vcpu_count}CPU |{" "}
+        {sandbox.vcpu_count}
+        {sandbox.vcpu_max != null && `–${sandbox.vcpu_max}`}CPU |{" "}
         {sandbox.memory_max_mib != null && sandbox.memory_current_mib != null
           ? `${sandbox.memory_current_mib} of `
           : ""}

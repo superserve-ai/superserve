@@ -36,6 +36,7 @@ def _snap(status: str = "ready", **extra: Any) -> dict[str, Any]:
             "memory_mib": 2048,
             "disk_mib": 4096,
             "memory_max_mib": 4096,
+            "vcpu_max": 4,
         },
         "created_at": "2026-01-01T00:00:00Z",
         "ready_at": "2026-01-01T00:00:05Z" if status == "ready" else None,
@@ -80,6 +81,7 @@ class TestTakeSnapshot:
             assert snap.status == SnapshotStatus.READY
             assert snap.resources.memory_mib == 2048
             assert snap.resources.memory_max_mib == 4096
+            assert snap.resources.vcpu_max == 4
             assert snap.size_bytes == 1048576
             body = json.loads(route.calls.last.request.content)
             assert body["kind"] == "mem+fs"

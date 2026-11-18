@@ -56,6 +56,11 @@
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "redirects": [
+    {
+      "source": "/guides/migrate-from-blaxel",
+      "destination": "/quickstart#where-to-go-next",
+      "permanent": true
+    },
     { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
     {
       "source": "/integrations/managed-agents/claude-managed-agents",
@@ -123,6 +128,7 @@
               "sandbox/connect",
               "sandbox/lifecycle",
               "sandbox/live-memory-resizing",
+              "sandbox/live-cpu-resizing",
               "sandbox/snapshots",
               "sandbox/metadata",
               "sandbox/networking",
@@ -190,7 +196,6 @@
           {
             "group": "Migrate",
             "pages": [
-              "guides/migrate-from-blaxel",
               "guides/migrate-from-cloudflare",
               "guides/migrate-from-daytona",
               "guides/migrate-from-e2b",
@@ -213,6 +218,7 @@
                   "integrations/coding-agents/copilot-cli",
                   "integrations/coding-agents/grok",
                   "integrations/coding-agents/kilocode",
+                  "integrations/coding-agents/openhands",
                   "integrations/coding-agents/opencode",
                   "integrations/coding-agents/pi"
                 ]
@@ -388,26 +394,38 @@
             ]
           },
           {
-            "group": "Team Management",
+            "group": "Teams",
             "pages": [
               "PATCH /teams/{team_id}",
-              "GET /teams/{team_id}/members",
-              "POST /teams/{team_id}/members",
-              "DELETE /teams/{team_id}/members/{user_id}",
-              "GET /teams/{team_id}/roles",
-              "POST /teams/{team_id}/roles",
-              "DELETE /teams/{team_id}/roles/{assignment_id}",
-              "GET /teams/{team_id}/invitations",
-              "POST /teams/{team_id}/invitations",
-              "POST /teams/{team_id}/invitations/{invitation_id}/resend",
-              "POST /teams/{team_id}/invitations/{invitation_id}/revoke",
-              "POST /teams/{team_id}/invitations/{invitation_id}/delivery",
-              "POST /teams/{team_id}/leave"
+              "POST /teams/{team_id}/leave",
+              "GET /activity",
+              {
+                "group": "Members",
+                "pages": [
+                  "GET /teams/{team_id}/members",
+                  "POST /teams/{team_id}/members",
+                  "DELETE /teams/{team_id}/members/{user_id}"
+                ]
+              },
+              {
+                "group": "Roles",
+                "pages": [
+                  "GET /teams/{team_id}/roles",
+                  "POST /teams/{team_id}/roles",
+                  "DELETE /teams/{team_id}/roles/{assignment_id}"
+                ]
+              },
+              {
+                "group": "Invitations",
+                "pages": [
+                  "GET /teams/{team_id}/invitations",
+                  "POST /teams/{team_id}/invitations",
+                  "POST /teams/{team_id}/invitations/{invitation_id}/resend",
+                  "POST /teams/{team_id}/invitations/{invitation_id}/revoke",
+                  "POST /teams/{team_id}/invitations/{invitation_id}/delivery"
+                ]
+              }
             ]
-          },
-          {
-            "group": "Activity",
-            "pages": ["GET /activity"]
           }
         ],
         "openapi": "https://api.superserve.ai/openapi.yaml"
