@@ -29,6 +29,8 @@ any state  →  deleted
 
 `pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute. It returns once the pause is accepted and the sandbox finishes pausing on its own; pass `wait: true` / `wait=True` to return once the sandbox is `paused`. A waited pause is a single request the server holds until the pause lands, so in the usual case the SDK does not poll. The call still blocks until the sandbox is `paused`, up to `timeoutMs` / `timeout` (default 5 minutes). If that limit passes first, the call throws `TimeoutError` (TypeScript) or `SandboxTimeoutError` (Python), and the pause finishes in the background.
 
+`pause()` needs an `active` sandbox. On a sandbox that is already `pausing` or `paused`, it throws `ConflictError` (`409`), with or without `wait`. It does not wait for the earlier pause to finish.
+
 <CodeGroup>
 ```typescript TypeScript {5}
 import { Sandbox } from "@superserve/sdk"
@@ -57,7 +59,7 @@ sandbox.pause()
 
 ## Resume
 
-`resume()` restores a `paused` sandbox you already hold a reference to. Processes pick up where they left off.
+`resume()` restores a `paused` sandbox you already hold a reference to. Processes pick up where they left off. On a sandbox that is already `active`, `resume()` throws `ConflictError` (`409`).
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -80,7 +82,7 @@ sandbox.commands.run("ls /tmp")
 </CodeGroup>
 
 <Tip>
-A paused sandbox is auto-resumed by both `Sandbox.connect()` and `commands.run()`.
+`Sandbox.connect()` and `commands.run()` auto-resume a sandbox whose state is `paused`. While the state is still `pausing`, `commands.run()` does not resume it and fails after about 30 seconds with `TimeoutError` (TypeScript) or `SandboxTimeoutError` (Python). This can happen right after `pause()` returns, or when a command starts as an auto-pause takes effect. To run commands soon after a pause, use `pause({ wait: true })` / `pause(wait=True)`, or call `Sandbox.connect()` first. `connect()` and `resume()` also work while the state is `pausing`.
 </Tip>
 
 After a resume, keep using the same `sandbox` — your `commands` and `files` calls keep working with no changes on your side.
@@ -88,6 +90,8 @@ After a resume, keep using the same `sandbox` — your `commands` and `files` ca
 ## Kill
 
 `kill()` deletes the sandbox and all its resources. It's idempotent - deleting an already-deleted sandbox is a no-op that swallows the `404`.
+
+In Python, some methods on the `sandbox` object you killed, including `get_info()`, `pause()`, and `update()`, raise `SandboxError` without sending a request, instead of the `404` `NotFoundError`.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -159,7 +163,7 @@ Sandbox.update_by_id(
 
 ## Auto-pause
 
-Set `timeoutSeconds` to auto-pause a sandbox after it has been active for that long. Pausing checkpoints its state and stops compute billing, so a sandbox you forget about won't keep running and billing. It isn't deleted; the next `commands.run()`, file operation, or `connect()` resumes it where it left off.
+Set `timeoutSeconds` to auto-pause a sandbox after it has been active for that long. Pausing checkpoints its state and stops compute billing, so a sandbox you forget about won't keep running and billing. It isn't deleted; once it is `paused`, the next `commands.run()`, file operation, or `connect()` resumes it where it left off. A command that starts while the sandbox is still `pausing` can fail (see the tip under [Resume](#resume)).
 
 <CodeGroup>
 ```typescript TypeScript {5}
