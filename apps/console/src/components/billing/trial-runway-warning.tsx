@@ -70,7 +70,17 @@ export function TrialRunwayWarning({
   if (nextTrack !== track) setTrack(nextTrack)
   // Polling stops in a background tab, so an old estimate can be wrong.
   // Until a new summary arrives, use the fixed threshold instead.
-  const fresh = Date.now() - summaryQuery.dataUpdatedAt <= MAX_SAMPLE_MS
+  const freshUntil = summaryQuery.dataUpdatedAt + MAX_SAMPLE_MS
+  const fresh = Date.now() <= freshUntil
+  const [, setExpired] = useState(0)
+  useEffect(() => {
+    if (!fresh) return
+    const timer = setTimeout(
+      () => setExpired(freshUntil),
+      freshUntil - Date.now() + 1,
+    )
+    return () => clearTimeout(timer)
+  }, [fresh, freshUntil])
   const burn =
     reading && fresh && nextTrack?.latestAt === reading.at
       ? nextTrack.burnUsdPerMinute

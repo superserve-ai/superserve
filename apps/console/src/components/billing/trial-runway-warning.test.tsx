@@ -1,5 +1,5 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { cleanup, fireEvent, render, screen } from "@testing-library/react"
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
@@ -190,6 +190,30 @@ describe("TrialRunwayWarning with the flag on", () => {
     rerender(view())
     expect(screen.getByText(/almost used up/)).toBeInTheDocument()
     expect(screen.queryByText(/runs out in/)).toBeNull()
+  })
+
+  it("drops the burn rate when the estimate gets old", () => {
+    vi.useFakeTimers({ now: Date.now(), toFake: ["Date", "setTimeout"] })
+    try {
+      mocks.summary.mockReturnValue({
+        data: summary(0.022),
+        isError: false,
+        dataUpdatedAt: Date.now(),
+      })
+      const { rerender } = render(view())
+      mocks.summary.mockReturnValue({
+        data: summary(0.018, T0 + 120_000),
+        isError: false,
+        dataUpdatedAt: Date.now(),
+      })
+      rerender(view())
+      expect(screen.getByText(/runs out in/)).toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(5 * 60_000 + 1))
+      expect(screen.queryByText(/runs out in/)).toBeNull()
+      expect(screen.getByText(/almost used up/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it("hides the warning when nothing uses credit", () => {
