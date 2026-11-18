@@ -6,6 +6,8 @@ export interface TemplateShape {
   name: string
   from: string
   vcpu: number
+  /** Ceiling for live CPU resizing; null keeps the vCPU count fixed. */
+  vcpuMax: number | null
   memoryMib: number
   /** Ceiling for live memory resizing; null keeps memory fixed. */
   memoryMaxMib: number | null
@@ -19,6 +21,7 @@ export function createRequest(shape: TemplateShape): CreateTemplateRequest {
   return {
     name: shape.name,
     vcpu: shape.vcpu,
+    ...(shape.vcpuMax !== null && { vcpu_max: shape.vcpuMax }),
     memory_mib: shape.memoryMib,
     ...(shape.memoryMaxMib !== null && { memory_max_mib: shape.memoryMaxMib }),
     ...(shape.memoryShrinkAfterSeconds !== null && {
@@ -55,6 +58,7 @@ export function cliCommand(shape: TemplateShape): string {
     `superserve template create ${shellQuote(nameOf(shape))}`,
     `--from ${shellQuote(imageOf(shape))}`,
     `--vcpu ${shape.vcpu}`,
+    ...(shape.vcpuMax === null ? [] : [`--vcpu-max ${shape.vcpuMax}`]),
     `--memory ${cliSize(shape.memoryMib)}`,
     ...(shape.memoryMaxMib === null
       ? []
@@ -74,6 +78,7 @@ export function typescriptSnippet(shape: TemplateShape): string {
     `  name: ${JSON.stringify(nameOf(shape))},`,
     `  from: ${JSON.stringify(imageOf(shape))},`,
     `  vcpu: ${shape.vcpu},`,
+    ...(shape.vcpuMax === null ? [] : [`  vcpuMax: ${shape.vcpuMax},`]),
     `  memoryMib: ${shape.memoryMib},`,
     ...(shape.memoryMaxMib === null
       ? []
@@ -95,6 +100,7 @@ export function pythonSnippet(shape: TemplateShape): string {
     `    name=${JSON.stringify(nameOf(shape))},`,
     `    from_=${JSON.stringify(imageOf(shape))},`,
     `    vcpu=${shape.vcpu},`,
+    ...(shape.vcpuMax === null ? [] : [`    vcpu_max=${shape.vcpuMax},`]),
     `    memory_mib=${shape.memoryMib},`,
     ...(shape.memoryMaxMib === null
       ? []

@@ -95,6 +95,7 @@ export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
                       vcpu={snapshot.resources.vcpu_count}
                       memoryMib={snapshot.resources.memory_mib}
                       memoryMaxMib={snapshot.resources.memory_max_mib}
+                      vcpuMax={snapshot.resources.vcpu_max}
                       diskMib={snapshot.resources.disk_mib}
                     />
                   </TableCell>

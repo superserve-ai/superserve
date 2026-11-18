@@ -224,6 +224,10 @@ memory · 8192 MiB disk**.
 - Optional `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` (60 to 1800) sets how
   long memory must stay low after growing before it shrinks back. Requires `memoryMaxMib`;
   set on the template; its sandboxes and their snapshots inherit it. Unset means the default of about one minute, which is also the minimum.
+- Optional template `vcpuMax` / `vcpu_max` lets sandboxes get more CPU under load, up to
+  that many vCPUs (`vcpu` stays the minimum); it drops back when idle and is billed by the
+  allowance granted. Whole vCPUs: it must exceed `vcpu`, be at most 4x it and 32, and within
+  the plan limit. Omit it for a fixed vCPU count; sandboxes and snapshots inherit it.
 - `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
   team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,

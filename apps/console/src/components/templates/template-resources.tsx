@@ -12,18 +12,21 @@ export function TemplateResources({
   vcpu,
   memoryMib,
   memoryMaxMib,
+  vcpuMax,
   diskMib,
   className,
 }: {
   vcpu: number
   memoryMib: number
   memoryMaxMib?: number
+  vcpuMax?: number
   diskMib: number
   className?: string
 }) {
   return (
     <span className={cn("font-mono text-xs text-muted", className)}>
-      {vcpu} vCPU · {formatMemory(memoryMib)}
+      {vcpu}
+      {vcpuMax != null && `–${vcpuMax}`} vCPU · {formatMemory(memoryMib)}
       {memoryMaxMib != null && `–${formatMemory(memoryMaxMib)}`} ·{" "}
       {formatDisk(diskMib)}
     </span>
