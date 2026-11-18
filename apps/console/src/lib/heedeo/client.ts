@@ -39,7 +39,12 @@ let scriptRequested = false
 let scriptFailed = false
 let latestCapture = 0
 // Each capture's own run, so `settleHeedeoSignup` acts only on its capture.
-type CaptureRun = { run: number; start: number; identifyStarted: boolean }
+type CaptureRun = {
+  run: number
+  start: number
+  signal: AbortSignal | undefined
+  identifyStarted: boolean
+}
 const captureRuns = new WeakMap<Promise<void>, CaptureRun>()
 
 /** Called when the script cannot load. */
@@ -181,10 +186,12 @@ export function captureHeedeoSignup(
   budgetMs: number = HEEDEO_CAPTURE_BUDGET_MS,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!HEEDEO_PUBLISHABLE_KEY) return Promise.resolve()
+  // An attempt that already ended must not replace a newer capture.
+  if (!HEEDEO_PUBLISHABLE_KEY || signal?.aborted) return Promise.resolve()
   const own = {
     run: ++latestCapture,
     start: Date.now(),
+    signal,
     identifyStarted: false,
   }
   const capture = runCapture(budgetMs, own, signal)
@@ -242,7 +249,7 @@ export async function settleHeedeoSignup(
         timer = setTimeout(() => resolve(false), tailMs)
       }),
     ])
-    if (finished || own.run !== latestCapture) return
+    if (finished || !isLiveCapture(own.run, own.signal)) return
     latestCapture++
     writeCookie(
       encodeHeedeoCapture({

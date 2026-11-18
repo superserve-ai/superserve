@@ -328,6 +328,38 @@ describe("Heedeo browser capture", () => {
     expect(captured()).toMatchObject({ status: "script_timeout", token: null })
   })
 
+  it("writes no timeout for an email wait whose attempt was aborted", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    window.heedeo = { identify: () => new Promise(() => {}) }
+    const attempt = new AbortController()
+    const capture = client.captureHeedeoSignup(3000, attempt.signal)
+    const settled = client.settleHeedeoSignup(capture, 1000)
+    await vi.advanceTimersByTimeAsync(0)
+    attempt.abort()
+    await vi.advanceTimersByTimeAsync(1000)
+    await settled
+    expect(captured()).toBeNull()
+  })
+
+  it("starts nothing for an attempt that was aborted before it began", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const identify = vi.fn(async () => ({
+      token: "ct1.newer",
+      visitor_id: "v",
+      confidence: 1,
+    }))
+    window.heedeo = { identify }
+    const newer = client.captureHeedeoSignup(3000)
+    const ended = new AbortController()
+    ended.abort()
+    await client.captureHeedeoSignup(3000, ended.signal)
+    await newer
+    expect(identify).toHaveBeenCalledTimes(1)
+    expect(captured()).toMatchObject({ status: "ok", token: "ct1.newer" })
+  })
+
   it("does not identify once the budget is spent", async () => {
     vi.useFakeTimers()
     const client = await load("pk_live_123")

@@ -694,6 +694,32 @@ describe("SignUpPage", () => {
     },
   )
 
+  it("starts the Heedeo capture aborted when the continuation claim answers after unmount", async () => {
+    mockSearchParams = new URLSearchParams(
+      "complete_google=1&reason=started_from_signin",
+    )
+    let claim!: (claimed: boolean) => void
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
+    mockClaimGoogleRecoveryContinuation.mockReturnValue(
+      new Promise<boolean>((resolve) => {
+        claim = resolve
+      }),
+    )
+    const abortedAtStart: (boolean | undefined)[] = []
+    mockCaptureHeedeoSignup.mockImplementation(async (signal) => {
+      abortedAtStart.push(signal?.aborted)
+    })
+    const { default: RecoverySignUpPage } = await import("./page")
+    const page = render(<RecoverySignUpPage />)
+    await waitFor(() =>
+      expect(mockClaimGoogleRecoveryContinuation).toHaveBeenCalled(),
+    )
+    page.unmount()
+    claim(true)
+    await waitFor(() => expect(abortedAtStart).toEqual([true]))
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
+  })
+
   it("explains a reported recovery reason and continues to Google once", async () => {
     mockSearchParams = new URLSearchParams(
       "complete_google=1&reason=started_from_signin",

@@ -91,20 +91,28 @@ export default function SignUpContent() {
   // so a Heedeo capture it no longer waits for starts no identify and writes
   // no cookie; unmounting aborts them all.
   const heedeoAttempts = useRef(new Set<AbortController>())
+  // A recovery continuation can still start an attempt after unmount. Its
+  // capture starts aborted; the rest of the attempt runs as before.
+  const unmounted = useRef(false)
   useEffect(() => {
+    unmounted.current = false
     const attempts = heedeoAttempts.current
     return () => {
+      unmounted.current = true
       for (const attempt of attempts) attempt.abort()
       attempts.clear()
     }
   }, [])
   const startHeedeoCapture = () => {
     const attempt = new AbortController()
-    heedeoAttempts.current.add(attempt)
+    const late = unmounted.current
+    if (late) attempt.abort()
+    else heedeoAttempts.current.add(attempt)
     return {
       capture: captureHeedeoSignup(undefined, attempt.signal),
-      // The page unmounted, so the attempt starts no sign-up or redirect.
-      gone: () => attempt.signal.aborted,
+      // The page unmounted during the Heedeo wait, so the attempt starts no
+      // sign-up or redirect.
+      gone: () => !late && attempt.signal.aborted,
       end: () => {
         attempt.abort()
         heedeoAttempts.current.delete(attempt)
