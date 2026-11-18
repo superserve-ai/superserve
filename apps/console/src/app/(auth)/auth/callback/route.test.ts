@@ -816,15 +816,17 @@ describe("auth callback", () => {
     )
   })
 
+  // A token link redirects after the confirm page's POST, so it answers 303.
   it.each([
-    ["missing_code", "https://console.superserve.ai/auth/callback"],
+    ["missing_code", "https://console.superserve.ai/auth/callback", 307],
     [
       "signup_link_failed",
       "https://console.superserve.ai/auth/callback?token_hash=used&type=signup",
+      303,
     ],
   ])(
     "returns the %s redirect while PostHog never answers",
-    async (reason, url) => {
+    async (reason, url, status) => {
       authVerifyOtpError = { message: "expired", code: "otp_expired" }
       mockTrackEvent.mockImplementation(() => new Promise(() => {}))
 
@@ -833,7 +835,7 @@ describe("auth callback", () => {
         new Promise((resolve) => setTimeout(() => resolve("pending"), 200)),
       ])
 
-      expect(outcome).toBe(307)
+      expect(outcome).toBe(status)
       expect(mockTrackEvent).toHaveBeenCalledWith(
         "auth_callback_failed",
         expect.any(String),
