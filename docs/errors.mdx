@@ -12,9 +12,9 @@ Every error raised by the SDK extends a common base class - `SandboxError` in Ty
 |---|---|---|---|
 | `SandboxError` | `SandboxError` | - | Base class for every SDK error. |
 | `AuthenticationError` | `AuthenticationError` | `401` | Missing or invalid API key / access token. |
-| `ValidationError` | `ValidationError` | `400` | Request body or parameters rejected by the API. |
+| `ValidationError` | `ValidationError` | `400` | Request body or parameters rejected by the API. Branch on `code` (see [`ValidationError`](#validationerror)). |
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
-| `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-paused sandbox, or patching `network` rules while paused). |
+| `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing a `pausing` or `paused` sandbox, resuming an `active` sandbox, or patching `network` rules while paused). |
 | `BillingError` | `BillingError` | `402` | The team's billing or plan does not allow the sandbox to start. Branch on `code` and show `actionUrl` / `action_url` (see [Billing errors](#billing-errors-402)). |
 | `RateLimitError` | `RateLimitError` | `429` | Rate limit or per-team quota reached. Branch on `code` (see below). |
 | `TimeoutError` | `SandboxTimeoutError` | - | The SDK stopped waiting for a response. A command that reaches its own timeout doesn't throw: it returns exit code `124`. |
@@ -102,6 +102,14 @@ The SDK automatically retries transient failures on `GET` and `DELETE` requests 
 On a `429` that has a `Retry-After` header, the SDK uses that value, up to its maximum backoff, as the wait before the next attempt.
 
 `POST` / `PATCH` requests are **not** retried automatically because they aren't safely idempotent - the SDK surfaces the error so you can decide.
+
+## `ValidationError`
+
+Raised on `400` responses. Codes you can branch on include:
+
+| Code | Endpoint(s) | Meaning |
+|---|---|---|
+| `secret_not_found` | `POST /sandboxes` | A `secrets` entry names a secret that does not exist in your team. No sandbox is created. [Create the secret](/secrets/create) first, or fix the name, then retry. |
 
 ## `RateLimitError`
 
