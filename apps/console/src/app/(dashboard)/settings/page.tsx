@@ -168,7 +168,7 @@ export default function SettingsPage() {
 
       <div className="@container flex-1 overflow-y-auto">
         {/* Profile */}
-        <div className="grid gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
+        <div className="grid grid-cols-1 gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
           <div>
             <h2 className="text-base font-medium text-foreground">Profile</h2>
             <p className="mt-1 text-xs text-muted">
@@ -201,7 +201,7 @@ export default function SettingsPage() {
         <Separator />
 
         {/* Password / Auth */}
-        <div className="grid gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
+        <div className="grid grid-cols-1 gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
           <div>
             <h2 className="text-base font-medium text-foreground">
               {isOAuth ? "Authentication" : "Password"}
@@ -287,7 +287,7 @@ export default function SettingsPage() {
         <TeamsSection />
 
         {/* Members */}
-        <div className="grid gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
+        <div className="grid grid-cols-1 gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
           <div>
             <h2 className="text-base font-medium text-foreground">Members</h2>
             <p className="mt-1 text-xs text-muted">
@@ -306,7 +306,7 @@ export default function SettingsPage() {
         {billingVisible && (
           <>
             {/* Billing */}
-            <div className="grid gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
+            <div className="grid grid-cols-1 gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
               <div>
                 <h2 className="text-base font-medium text-foreground">
                   Billing
@@ -385,7 +385,7 @@ export default function SettingsPage() {
         )}
 
         {/* Danger Zone */}
-        <div className="grid gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
+        <div className="grid grid-cols-1 gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
           <div>
             <h2 className="text-base font-medium text-destructive">
               Danger Zone

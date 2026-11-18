@@ -47,7 +47,10 @@ describe("TeamDetailsSection", () => {
     const section = screen
       .getByRole("heading", { name: "Team" })
       .closest(".grid")
-    expect(section).toHaveClass("@2xl:grid-cols-[240px_minmax(0,1fr)]")
+    expect(section).toHaveClass(
+      "grid-cols-1",
+      "@2xl:grid-cols-[240px_minmax(0,1fr)]",
+    )
     expect(section).not.toHaveClass("grid-cols-[240px_1fr]")
   })
 
