@@ -15,7 +15,7 @@ import {
   useToast,
 } from "@superserve/ui"
 import { usePostHog } from "posthog-js/react"
-import { useCallback, useEffect, useRef, useState } from "react"
+import { useCallback, useLayoutEffect, useRef, useState } from "react"
 
 import { useCreateApiKey } from "@/hooks/use-api-keys"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
@@ -23,6 +23,7 @@ import { API_KEY_EVENTS } from "@/lib/posthog/events"
 type CopyTarget = "key" | "export_command"
 
 const initialCopied = { key: false, export_command: false }
+const copyError = "Could not copy. Select the text and copy it by hand."
 
 export function CreateKeyDialog({
   open: controlledOpen,
@@ -39,6 +40,8 @@ export function CreateKeyDialog({
   const [name, setName] = useState("")
   const [createdKey, setCreatedKey] = useState<{ full: string } | null>(null)
   const [copied, setCopied] = useState(initialCopied)
+  const [copyFailed, setCopyFailed] = useState(false)
+  const copyAttempts = useRef({ key: 0, export_command: 0 })
   const copyTimers = useRef<
     Partial<Record<CopyTarget, ReturnType<typeof setTimeout>>>
   >({})
@@ -49,17 +52,22 @@ export function CreateKeyDialog({
     ? `export SUPERSERVE_API_KEY=${createdKey.full}`
     : ""
 
-  const clearCopyTimers = useCallback(() => {
+  const cancelCopyFeedback = useCallback(() => {
     clearTimeout(copyTimers.current.key)
     clearTimeout(copyTimers.current.export_command)
-    // Pending clipboard writes can finish after the dialog closes.
     copyTimers.current = {}
+    // Invalidate pending clipboard writes.
+    copyAttempts.current.key++
+    copyAttempts.current.export_command++
   }, [])
 
-  useEffect(() => {
-    if (!open) setCopied(initialCopied)
-    return clearCopyTimers
-  }, [open, clearCopyTimers])
+  useLayoutEffect(() => {
+    if (!open) {
+      setCopied(initialCopied)
+      setCopyFailed(false)
+    }
+    return cancelCopyFeedback
+  }, [open, cancelCopyFeedback])
 
   const handleCreate = () => {
     if (!name.trim()) return
@@ -73,21 +81,23 @@ export function CreateKeyDialog({
   }
 
   const handleCopy = async (target: CopyTarget, text: string) => {
-    const timers = copyTimers.current
+    const attempt = ++copyAttempts.current[target]
     try {
       await navigator.clipboard.writeText(text)
     } catch {
-      if (timers !== copyTimers.current) return
+      if (attempt !== copyAttempts.current[target]) return
 
-      clearTimeout(timers[target])
+      clearTimeout(copyTimers.current[target])
       setCopied((previous) => ({ ...previous, [target]: false }))
-      addToast("Could not copy. Select the text and copy it by hand.", "error")
+      setCopyFailed(true)
+      addToast(copyError, "error")
       return
     }
 
-    posthog.capture(API_KEY_EVENTS.COPIED, { target })
-    if (timers !== copyTimers.current) return
+    if (attempt !== copyAttempts.current[target]) return
 
+    posthog.capture(API_KEY_EVENTS.COPIED, { target })
+    setCopyFailed(false)
     setCopied((previous) => ({ ...previous, [target]: true }))
     addToast(
       target === "key"
@@ -95,14 +105,14 @@ export function CreateKeyDialog({
         : "Command copied to clipboard",
       "success",
     )
-    clearTimeout(timers[target])
-    timers[target] = setTimeout(() => {
+    clearTimeout(copyTimers.current[target])
+    copyTimers.current[target] = setTimeout(() => {
       setCopied((previous) => ({ ...previous, [target]: false }))
     }, 2000)
   }
 
   const handleClose = () => {
-    clearCopyTimers()
+    cancelCopyFeedback()
     setOpen(false)
     setName("")
     setCreatedKey(null)
@@ -123,7 +133,7 @@ export function CreateKeyDialog({
           Create Key
         </DialogTrigger>
       )}
-      <DialogPopup className="max-w-lg">
+      <DialogPopup className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto">
         <DialogHeader>
           <DialogTitle>
             {createdKey ? "API key created" : "Create API Key"}
@@ -147,6 +157,7 @@ export function CreateKeyDialog({
                 </code>
                 <Button
                   size="sm"
+                  aria-label={copied.key ? "Copied API key" : undefined}
                   onClick={() => handleCopy("key", createdKey.full)}
                 >
                   <KeyCopyIcon className="size-3.5" weight="light" />
@@ -167,12 +178,20 @@ export function CreateKeyDialog({
                 <Button
                   variant="outline"
                   size="sm"
+                  aria-label={
+                    copied.export_command ? "Copied export command" : undefined
+                  }
                   onClick={() => handleCopy("export_command", exportCommand)}
                 >
                   <CommandCopyIcon className="size-3.5" weight="light" />
                   {copied.export_command ? "Copied" : "Copy command"}
                 </Button>
               </div>
+              {copyFailed && (
+                <p role="alert" className="text-xs text-destructive">
+                  {copyError}
+                </p>
+              )}
             </div>
           ) : (
             <Field label="Key Name" required>
