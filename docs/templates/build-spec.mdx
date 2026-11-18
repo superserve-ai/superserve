@@ -73,10 +73,6 @@ The process keeps running in each sandbox until it exits or the sandbox is kille
 
 `startCmd` runs with `/bin/sh -c`. If it can't be launched, the build fails with `start_cmd_failed`. A command that starts and then exits doesn't fail the build, so use `readyCmd` to check that the process is up.
 
-<Note>
-Templates built before 19:45 UTC on November 14, 2026 have a bug: their `startCmd` process can stop a few minutes after a sandbox starts. If your template has a long-running `startCmd`, [rebuild it](/templates/lifecycle#rebuild) to get the fix. You can't rebuild curated `superserve/*` templates, such as `superserve/desktop`; they get the fix when Superserve rebuilds them.
-</Note>
-
 ## `readyCmd`: readiness probe
 
 ```typescript

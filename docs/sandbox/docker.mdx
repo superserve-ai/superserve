@@ -9,7 +9,7 @@ Every Superserve sandbox is a full Firecracker microVM with its own kernel, so D
 
 ## 1. Bake Docker into a template
 
-Install Docker at build time with the official install script, and start the daemon with [`startCmd`](/templates/build-spec#startcmd-process-to-start-after-build). `readyCmd` waits until it answers before the template is snapshotted, and the snapshot captures the running daemon, so every sandbox from the template starts with Docker ready. If you built a Docker template before 19:45 UTC on November 14, 2026, [rebuild it](/templates/lifecycle#rebuild): in sandboxes from older builds, the daemon can stop a few minutes after the sandbox starts. The sizes below fit every plan; raise `diskMib` if you pull large images (see [resource limits](/templates/build-spec#resource-limits)).
+Install Docker at build time with the official install script, and start the daemon with [`startCmd`](/templates/build-spec#startcmd-process-to-start-after-build). `readyCmd` waits until it answers before the template is snapshotted, and the snapshot captures the running daemon, so every sandbox from the template starts with Docker ready. The sizes below fit every plan; raise `diskMib` if you pull large images (see [resource limits](/templates/build-spec#resource-limits)).
 
 <CodeGroup>
 ```typescript TypeScript
