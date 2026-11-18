@@ -1,29 +1,35 @@
 import { act, renderHook } from "@testing-library/react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
   posthog: undefined as
     | {
         isFeatureEnabled: ReturnType<typeof vi.fn>
         onFeatureFlags: ReturnType<typeof vi.fn>
+        on: ReturnType<typeof vi.fn>
         get_property: ReturnType<typeof vi.fn>
       }
     | undefined,
 }))
 vi.mock("posthog-js/react", () => ({ usePostHog: () => mocks.posthog }))
 
-import { useFeatureFlagOn } from "./use-feature-flag"
+import { FLAG_ERROR_CHECK_MS, useFeatureFlagOn } from "./use-feature-flag"
 
 function client(value: unknown) {
   return {
     isFeatureEnabled: vi.fn(() => value),
     onFeatureFlags: vi.fn(() => () => {}),
+    on: vi.fn(() => () => {}),
     get_property: vi.fn(() => undefined),
   }
 }
 
 beforeEach(() => {
   mocks.posthog = undefined
+})
+
+afterEach(() => {
+  vi.useRealTimers()
 })
 
 describe("useFeatureFlagOn", () => {
@@ -51,12 +57,49 @@ describe("useFeatureFlagOn", () => {
     expect(result.current).toBe(false)
   })
 
-  it("is off when the flag subscription fails", () => {
+  it.each(["onFeatureFlags", "on"] as const)(
+    "is off when the %s subscription fails",
+    (method) => {
+      mocks.posthog = client(true)
+      mocks.posthog[method].mockImplementation(() => {
+        throw new Error("posthog failed")
+      })
+      expect(renderHook(() => useFeatureFlagOn("f")).result.current).toBe(false)
+    },
+  )
+
+  it("is off while a flags request runs", () => {
     mocks.posthog = client(true)
-    mocks.posthog.onFeatureFlags.mockImplementation(() => {
-      throw new Error("posthog failed")
-    })
-    expect(renderHook(() => useFeatureFlagOn("f")).result.current).toBe(false)
+    let loaded = (..._args: unknown[]) => {}
+    let reloading = () => {}
+    mocks.posthog.onFeatureFlags.mockImplementation(
+      (callback: (...args: unknown[]) => void) => {
+        loaded = callback
+        return () => {}
+      },
+    )
+    mocks.posthog.on.mockImplementation(
+      (event: string, callback: () => void) => {
+        if (event === "featureFlagsReloading") reloading = callback
+        return () => {}
+      },
+    )
+    const { result } = renderHook(() => useFeatureFlagOn("f"))
+    expect(result.current).toBe(true)
+    act(() => reloading())
+    expect(result.current).toBe(false)
+    act(() => loaded([], {}, { errorsLoading: false }))
+    expect(result.current).toBe(true)
+  })
+
+  it("turns off when PostHog records a flag error without a callback", () => {
+    vi.useFakeTimers()
+    mocks.posthog = client(true)
+    const { result } = renderHook(() => useFeatureFlagOn("f"))
+    expect(result.current).toBe(true)
+    mocks.posthog.get_property.mockReturnValue(["quota_limited"])
+    act(() => vi.advanceTimersByTime(FLAG_ERROR_CHECK_MS))
+    expect(result.current).toBe(false)
   })
 
   it.each([

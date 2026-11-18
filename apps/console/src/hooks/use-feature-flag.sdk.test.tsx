@@ -36,24 +36,52 @@ function flags(enabled: boolean, failed = false) {
   }
 }
 
+function initPostHog() {
+  if (posthog.__loaded) return
+  posthog.init("phc_test", {
+    api_host: "https://ph.example.com",
+    persistence: "memory",
+    autocapture: false,
+    capture_pageview: false,
+    disable_session_recording: true,
+    advanced_disable_toolbar_metrics: true,
+    disable_external_dependency_loading: true,
+  })
+}
+
+async function loadFlags(response: unknown) {
+  const calls = fetchMock.mock.calls.length
+  responses.push(response)
+  if (posthog.__loaded) act(() => posthog.reloadFeatureFlags())
+  else initPostHog()
+  await waitFor(() =>
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(calls),
+  )
+}
+
 describe("useFeatureFlagOn with the PostHog SDK", () => {
   it("turns off when PostHog fails to evaluate the flag", async () => {
-    responses.push(flags(true))
-    posthog.init("phc_test", {
-      api_host: "https://ph.example.com",
-      persistence: "memory",
-      autocapture: false,
-      capture_pageview: false,
-      disable_session_recording: true,
-      advanced_disable_toolbar_metrics: true,
-      disable_external_dependency_loading: true,
-    })
+    await loadFlags(flags(true))
     const { result } = renderHook(() => useFeatureFlagOn(FLAG))
     await waitFor(() => expect(result.current).toBe(true))
 
-    responses.push(flags(false, true))
-    act(() => posthog.reloadFeatureFlags())
-    await waitFor(() => expect(fetchMock.mock.calls.length).toBeGreaterThan(1))
+    await loadFlags(flags(false, true))
     await waitFor(() => expect(result.current).toBe(false))
+  })
+
+  it("turns off when PostHog hits the flags quota", async () => {
+    await loadFlags(flags(true))
+    const { result } = renderHook(() => useFeatureFlagOn(FLAG))
+    await waitFor(() => expect(result.current).toBe(true))
+
+    await loadFlags({ quotaLimited: ["feature_flags"] })
+    await waitFor(() =>
+      expect(posthog.get_property("$feature_flag_errors")).toContain(
+        "quota_limited",
+      ),
+    )
+    // PostHog keeps the old ON value and does not call onFeatureFlags.
+    expect(posthog.isFeatureEnabled(FLAG, { fresh: true })).toBe(true)
+    expect(result.current).toBe(false)
   })
 })
