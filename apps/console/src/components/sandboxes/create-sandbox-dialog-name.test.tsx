@@ -82,7 +82,7 @@ it("creates a sandbox with the prefilled name", async () => {
 it.each([
   ["empty", ""],
   ["whitespace-only", "   "],
-])("shows and focuses the name error for an %s name", async (_, value) => {
+])("attaches the error before focusing for %s input", async (_, value) => {
   const user = userEvent.setup()
   renderOpenDialog()
   const input = getNameInput()
@@ -91,8 +91,22 @@ it.each([
   await user.clear(input)
   if (value) await user.type(input, value)
   expect(create).toBeEnabled()
+
+  const focusState = vi.fn()
+  input.addEventListener(
+    "focus",
+    () => {
+      const descriptionId = input.getAttribute("aria-describedby") ?? ""
+      focusState(
+        input.getAttribute("aria-invalid"),
+        document.getElementById(descriptionId)?.textContent,
+      )
+    },
+    { once: true },
+  )
   await user.click(create)
 
+  expect(focusState).toHaveBeenCalledExactlyOnceWith("true", nameError)
   expect(mutate).not.toHaveBeenCalled()
   expect(capture).not.toHaveBeenCalled()
   expect(screen.getByText(nameError)).toBeVisible()
@@ -101,21 +115,40 @@ it.each([
   expect(input).toHaveFocus()
 })
 
-it("clears the name error when a name is entered", async () => {
+it("clears the name error and submits the corrected name", async () => {
   const user = userEvent.setup()
   renderOpenDialog()
   const input = getNameInput()
+  const create = screen.getByRole("button", { name: "Create Sandbox" })
 
   await user.clear(input)
-  await user.click(screen.getByRole("button", { name: "Create Sandbox" }))
+  await user.click(create)
   expect(screen.getByText(nameError)).toBeVisible()
   await user.type(input, "dev-sandbox")
 
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
   expect(input).not.toHaveAttribute("aria-invalid")
+
+  await user.click(create)
+
+  expect(mutate).toHaveBeenCalledExactlyOnceWith(
+    expect.objectContaining({ name: "dev-sandbox" }),
+    expect.any(Object),
+  )
 })
 
-it("prefills the name and clears validation when reopened after Cancel", async () => {
+it("prefills a fresh name and clears validation when reopened after Cancel", async () => {
+  vi.spyOn(crypto, "getRandomValues")
+    .mockImplementationOnce((bytes) => {
+      const array = bytes as Uint8Array
+      array.set([0, 1, 2, 3])
+      return bytes
+    })
+    .mockImplementationOnce((bytes) => {
+      const array = bytes as Uint8Array
+      array.set([25, 26, 35, 36])
+      return bytes
+    })
   const user = userEvent.setup()
   render(
     <ToastProvider>
@@ -126,6 +159,7 @@ it("prefills the name and clears validation when reopened after Cancel", async (
 
   await user.click(trigger)
   const input = getNameInput()
+  expect(input.value).toBe("sandbox-abcd")
   await user.clear(input)
   await user.type(input, "   ")
   await user.click(screen.getByRole("button", { name: "Create Sandbox" }))
@@ -134,6 +168,6 @@ it("prefills the name and clears validation when reopened after Cancel", async (
   await user.click(screen.getByRole("button", { name: "Cancel" }))
   await user.click(trigger)
 
-  expect(getNameInput().value).toMatch(namePattern)
+  expect(getNameInput().value).toBe("sandbox-z09a")
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
 })

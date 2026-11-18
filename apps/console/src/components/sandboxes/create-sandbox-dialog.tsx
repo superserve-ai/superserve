@@ -25,7 +25,7 @@ import {
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { createPortal } from "react-dom"
+import { createPortal, flushSync } from "react-dom"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import type { SecretBindingEntry } from "@/components/secrets/secret-binding-editor"
@@ -575,7 +575,7 @@ export function CreateSandboxDialog({
 
   const handleCreate = () => {
     if (!name.trim()) {
-      setNameError("Enter a name for this sandbox.")
+      flushSync(() => setNameError("Enter a name for this sandbox."))
       nameInputRef.current?.focus()
       return
     }
