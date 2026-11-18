@@ -298,7 +298,7 @@ function MemberList({
               .join("")
               .toUpperCase()}
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-40">
             <div className="flex items-center gap-2 text-sm">
               <span className="min-w-0 break-all">
                 {member.full_name || "Team member"}

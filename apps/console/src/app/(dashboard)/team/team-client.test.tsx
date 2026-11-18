@@ -292,6 +292,18 @@ describe("TeamClient", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("lets role pills wrap below member names on narrow screens", () => {
+    render(<TeamClient />)
+
+    for (const member of baseManagement.members) {
+      const name = screen.getByText(member.full_name || "Team member")
+      expect(name.parentElement?.parentElement).toHaveClass(
+        "basis-40",
+        "flex-1",
+      )
+    }
+  })
+
   it.each(["hidden", "enabled", "blocked_free_plan"] as const)(
     "shows the no-invite explanation only for hidden state: %s",
     (state) => {
