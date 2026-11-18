@@ -382,28 +382,25 @@ describe("CreateKeyDialog created state", () => {
   it.each([
     ["API key", "Copy key", key],
     ["Export command", "Copy command", command],
-  ])("selects the %s when reached by keyboard", async (name, label, text) => {
-    await createKey()
+  ])(
+    "names the %s block without selecting it on keyboard moves",
+    async (name, label, text) => {
+      await createKey()
 
-    const code = screen.getByText(text, { selector: "code" })
-    expect(code).toHaveAccessibleName(name)
-    expect(code).toHaveAttribute("tabindex", "0")
-    expect(code).toHaveClass(
-      "focus-visible:ring-2",
-      "focus-visible:ring-border-focus",
-      "focus-visible:outline-none",
-    )
+      const code = screen.getByText(text, { selector: "code" })
+      expect(code).toHaveAccessibleName(name)
+      expect(code).not.toHaveAttribute("tabindex")
 
-    const selection = window.getSelection()!
-    selection.removeAllRanges()
-    act(() => screen.getByRole("button", { name: label }).focus())
-    await userEvent.tab({ shift: true })
+      // A selection would reach the X11 primary selection without a copy.
+      const selection = window.getSelection()!
+      selection.removeAllRanges()
+      act(() => screen.getByRole("button", { name: label }).focus())
+      await userEvent.tab({ shift: true })
 
-    expect(code).toHaveFocus()
-    expect(selection.toString()).toBe(text)
-    const range = selection.getRangeAt(0)
-    expect(code.contains(range.commonAncestorContainer)).toBe(true)
-  })
+      expect(code).not.toHaveFocus()
+      expect(selection.toString()).toBe("")
+    },
+  )
 
   it("announces each successful copy in the same live region", async () => {
     await createKey()

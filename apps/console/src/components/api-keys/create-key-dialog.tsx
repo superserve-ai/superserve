@@ -249,10 +249,7 @@ export function CreateKeyDialog({
                   // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the group role lets the code block carry a name
                   role="group"
                   aria-label="API key"
-                  // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focus selects the text for a manual copy
-                  tabIndex={0}
-                  onFocus={(event) => selectCodeText(event.currentTarget)}
-                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground"
                   data-mask
                 >
                   {createdKey.full}
@@ -292,10 +289,7 @@ export function CreateKeyDialog({
                   // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the group role lets the code block carry a name
                   role="group"
                   aria-label="Export command"
-                  // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focus selects the text for a manual copy
-                  tabIndex={0}
-                  onFocus={(event) => selectCodeText(event.currentTarget)}
-                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground"
                   data-mask
                 >
                   {exportCommand}
