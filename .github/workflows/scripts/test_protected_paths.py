@@ -66,6 +66,7 @@ class RepositoryCodeownersTest(unittest.TestCase):
         "apps/console/src/app/(public)/device/actions.ts",
         "apps/console/src/app/(auth)/auth/signin/google-signup-check.ts",
         "apps/console/src/lib/cells.ts",
+        "apps/console/src/lib/api/legacy-plan-entry.ts",
         "apps/console/src/lib/cloudflare/turnstile-client.ts",
         "apps/console/src/lib/fingerprint/account-device-action.ts",
         "apps/console/src/lib/recaptcha/verify.ts",

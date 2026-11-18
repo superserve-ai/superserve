@@ -54,6 +54,7 @@
 /apps/console/src/lib/api/billing* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/checkout-intent.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/plan-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/legacy-plan-entry.ts @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/prepaid* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/signup-* @awille-ai @meAmitPatil @pavitrabhalla
 /apps/console/src/lib/api/starter-checkout-recovery* @awille-ai @meAmitPatil @pavitrabhalla
