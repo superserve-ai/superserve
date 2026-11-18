@@ -137,7 +137,7 @@ export default function GetStartedPage() {
   const router = useRouter()
   const [language, setLanguage] = useState<Language>("typescript")
   const [hoveredTab, setHoveredTab] = useState<string | null>(null)
-  const createKeyMutation = useCreateApiKey()
+  const createKeyMutation = useCreateApiKey("get_started")
   const createdKey = createKeyMutation.data
     ? {
         full: createKeyMutation.data.key,

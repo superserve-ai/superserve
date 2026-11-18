@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
 
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
@@ -28,6 +28,21 @@ let uswProfileChecked = false
 let insertedApiKeyRow: Record<string, unknown> | null = null
 let revokedApiKeyRow: Record<string, unknown> | null = null
 let revokedKeyFilters: Array<[string, string]> = []
+let insertError: { message: string } | null = null
+const mockTrackEvent = vi.fn(async (..._args: unknown[]) => {})
+vi.mock("@/lib/posthog/actions", () => ({
+  trackEvent: (...args: unknown[]) => mockTrackEvent(...args),
+}))
+// Callbacks that next/server `after` would run once the response is sent.
+const afterQueue: Array<() => unknown> = []
+vi.mock("next/server", () => ({
+  after: (fn: () => unknown) => {
+    afterQueue.push(fn)
+  },
+}))
+async function runAfter() {
+  for (const fn of afterQueue.splice(0)) await fn()
+}
 
 // Default cell: the user's profile exists, but their team lives elsewhere.
 const useClient = {
@@ -144,10 +159,17 @@ const uswClient = {
           insertedApiKeyRow = row
           return {
             select: () => ({
-              single: async () => ({
-                data: { id: "k1", name: "test", created_at: "2026-07-01" },
-                error: null,
-              }),
+              single: async () =>
+                insertError
+                  ? { data: null, error: insertError }
+                  : {
+                      data: {
+                        id: "k1",
+                        name: "test",
+                        created_at: "2026-07-01",
+                      },
+                      error: null,
+                    },
             }),
           }
         },
@@ -230,6 +252,69 @@ describe("createApiKeyAction cell targeting", () => {
     } finally {
       uswProfileExists = true
     }
+  })
+})
+
+describe("api_key_created event", () => {
+  beforeEach(() => {
+    mockTrackEvent.mockReset().mockResolvedValue(undefined)
+    insertError = null
+    afterQueue.length = 0
+  })
+
+  it("sends one server event with the console source after the response", async () => {
+    const res = await createApiKeyAction("SDK Key", "connect_dialog_sdk_key")
+    if ("code" in res) throw new Error(res.message)
+
+    // Nothing is sent before the response, so PostHog cannot delay the key.
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+    await runAfter()
+    expect(mockTrackEvent).toHaveBeenCalledTimes(1)
+    expect(mockTrackEvent).toHaveBeenCalledWith("api_key_created", "u1", {
+      source: "connect_dialog_sdk_key",
+      api_key_id: "k1",
+      team_id: "team-west",
+      team_region: "usw",
+    })
+    // Neither the secret nor its hash goes to analytics.
+    const sent = JSON.stringify(mockTrackEvent.mock.calls)
+    expect(sent).not.toContain(res.key)
+    expect(sent).not.toContain(String(insertedApiKeyRow?.key_hash))
+  })
+
+  it.each([
+    ["create_dialog", "create_dialog"],
+    ["get_started", "get_started"],
+    [undefined, "console"],
+    ["cli_device_login", "console"],
+    ["anything-else", "console"],
+  ])("labels source %s as %s", async (source, expected) => {
+    await createApiKeyAction("k", source)
+    await runAfter()
+    expect(mockTrackEvent.mock.calls[0][2]).toMatchObject({ source: expected })
+  })
+
+  it("sends no event when the insert fails", async () => {
+    insertError = { message: "insert failed" }
+    await expect(createApiKeyAction("k", "create_dialog")).rejects.toThrow(
+      "insert failed",
+    )
+    await runAfter()
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+  })
+
+  it("returns the stored key without waiting for a slow PostHog", async () => {
+    mockTrackEvent.mockImplementationOnce(() => new Promise(() => {}))
+    const res = await createApiKeyAction("k", "create_dialog")
+    if ("code" in res) throw new Error(res.message)
+    expect(res.key).toMatch(/^ss_live_usw_/)
+    expect(afterQueue).toHaveLength(1)
+  })
+
+  it("swallows a failed delivery after the response", async () => {
+    mockTrackEvent.mockRejectedValueOnce(new Error("posthog down"))
+    await createApiKeyAction("k", "create_dialog")
+    await expect(runAfter()).resolves.toBeUndefined()
   })
 })
 

@@ -39,6 +39,18 @@ export { Sandbox } from "./Sandbox.js"
 export { Secret } from "./Secret.js"
 export { Snapshot } from "./Snapshot.js"
 export { Template } from "./Template.js"
+export { Volume } from "./Volume.js"
+export type {
+  VolumeInfo,
+  VolumeStatus,
+  VolumeAttachment,
+  VolumeAttachmentStatus,
+  VolumeRequestOptions,
+  VolumeCreateOptions,
+  VolumeListOptions,
+  VolumeAttachOptions,
+  SandboxVolumeMount,
+} from "./Volume.js"
 export type {
   AuditStatusFilter,
   BuildLogEvent,
