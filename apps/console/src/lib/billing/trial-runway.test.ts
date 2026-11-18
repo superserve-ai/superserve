@@ -113,6 +113,7 @@ describe("advanceRunway", () => {
       team: "use:a",
       baseline: first,
       latestAt: T0,
+      latestUsd: 0.03,
       burnUsdPerMinute: null,
     })
     const next = advanceRunway(track, "use:a", second)
@@ -141,6 +142,7 @@ describe("advanceRunway", () => {
       team: "use:a",
       baseline: second,
       latestAt: T0 + 62_000,
+      latestUsd: 0.0279,
       burnUsdPerMinute: track?.burnUsdPerMinute,
     })
   })
@@ -156,8 +158,24 @@ describe("advanceRunway", () => {
       team: "use:a",
       baseline: grant,
       latestAt: T0 + 62_000,
+      latestUsd: 0.05,
       burnUsdPerMinute: null,
     })
+  })
+
+  it("measures again when a balance goes up after a quick refresh", () => {
+    const track = advanceRunway(
+      advanceRunway(null, "use:a", first),
+      "use:a",
+      second,
+    )
+    const soon = advanceRunway(track, "use:a", {
+      at: T0 + 62_000,
+      remainingUsd: 0.026,
+    })
+    // Still below the baseline, but above the reading before it.
+    const grant = { at: T0 + 64_000, remainingUsd: 0.027 }
+    expect(advanceRunway(soon, "use:a", grant)?.burnUsdPerMinute).toBeNull()
   })
 
   it("starts again for another team", () => {
@@ -166,6 +184,7 @@ describe("advanceRunway", () => {
       team: "usw:b",
       baseline: second,
       latestAt: T0 + 60_000,
+      latestUsd: 0.028,
       burnUsdPerMinute: null,
     })
     expect(advanceRunway(track, "usw:b", null)).toBeNull()

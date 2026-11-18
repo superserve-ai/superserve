@@ -4,6 +4,7 @@ import posthog from "posthog-js"
 import { PostHogProvider as PHProvider } from "posthog-js/react"
 import type React from "react"
 
+import { trackFlagRequests } from "@/hooks/use-feature-flag"
 import {
   carriesInviteToken,
   redactCapturedRequest,
@@ -47,6 +48,7 @@ if (typeof window !== "undefined") {
           maskCapturedNetworkRequestFn: redactCapturedRequest,
         },
       })
+      trackFlagRequests(posthog)
       // First-touch attribution: if the user landed directly on the console
       // (e.g. shared signup link with UTMs), remember the first path, the
       // referrer, and any UTM params so funnel events carry them as super

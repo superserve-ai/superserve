@@ -2,7 +2,7 @@
 
 import type { PostHog } from "posthog-js"
 import { usePostHog } from "posthog-js/react"
-import { useEffect, useRef, useState } from "react"
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react"
 
 // How often to look again for flag errors that PostHog records without a
 // flags callback.
@@ -26,13 +26,64 @@ function flagOn(client: PostHog, flag: string): boolean {
   }
 }
 
-interface FlagsState {
+export interface FlagRequests {
   // A flags request started and has not reported a result yet.
   pending: boolean
   // The last flags request failed.
   failed: boolean
   // The PostHog listeners could not be set up.
   broken: boolean
+  // The number of flags results so far.
+  loads: number
+}
+
+const IDLE: FlagRequests = {
+  pending: false,
+  failed: false,
+  broken: false,
+  loads: 0,
+}
+const BROKEN: FlagRequests = { ...IDLE, broken: true }
+
+interface Tracker {
+  state: FlagRequests
+  listeners: Set<() => void>
+}
+
+const trackers = new WeakMap<PostHog, Tracker>()
+
+// Follows the flags requests of a PostHog client for the life of the page.
+// Call it right after init: a listener added during a request gets the old
+// flags at once and can not tell them from a result.
+export function trackFlagRequests(client: PostHog): Tracker {
+  const known = trackers.get(client)
+  if (known) return known
+  const tracker: Tracker = { state: IDLE, listeners: new Set() }
+  trackers.set(client, tracker)
+  const update = (next: Partial<FlagRequests>) => {
+    if (tracker.state.broken) return
+    tracker.state = { ...tracker.state, ...next }
+    for (const listener of tracker.listeners) listener()
+  }
+  try {
+    // A flags request that hits the PostHog quota records the error but does
+    // not call onFeatureFlags. So the flag reads as off from the start of each
+    // request until onFeatureFlags reports a result.
+    client.on("featureFlagsReloading", () => {
+      if (!tracker.state.pending) update({ pending: true })
+    })
+    client.onFeatureFlags((_flags, _variants, context) =>
+      update({
+        pending: false,
+        failed: context?.errorsLoading === true,
+        loads: tracker.state.loads + 1,
+      }),
+    )
+  } catch {
+    // Without both listeners the flag can not follow errors, so keep it off.
+    tracker.state = BROKEN
+  }
+  return tracker
 }
 
 // True only when the last PostHog flags request succeeded and the flag is on.
@@ -40,72 +91,29 @@ interface FlagsState {
 // request, a flags request that has not finished and any SDK error all read
 // as off.
 // The flag is read only while `enabled`, so PostHog records an exposure only
-// for users the flag can change. Flags requests are followed all the time, so
-// a request that started before `enabled` still keeps the flag off.
+// for users the flag can change.
 export function useFeatureFlagOn(flag: string, enabled = true): boolean {
   const posthog = usePostHog() as PostHog | undefined
-  const [flags, setFlags] = useState<FlagsState>({
-    pending: false,
-    failed: false,
-    broken: false,
-  })
-  const [on, setOn] = useState(false)
-  // The listeners below read these without subscribing again.
-  const read = useRef({ flag, enabled })
-  useEffect(() => {
-    read.current = { flag, enabled }
-  })
-
-  useEffect(() => {
-    if (!posthog) return
-    const cleanups: (() => void)[] = []
-    const cleanUp = () => {
-      for (const cleanup of cleanups) {
-        try {
-          cleanup()
-        } catch {
-          // Nothing to clean up.
-        }
+  const subscribe = useCallback(
+    (notify: () => void) => {
+      if (!posthog) return () => {}
+      const { listeners } = trackFlagRequests(posthog)
+      listeners.add(notify)
+      return () => {
+        listeners.delete(notify)
       }
-    }
-    try {
-      // A flags request that hits the PostHog quota records the error but
-      // does not call onFeatureFlags. So the flag reads as off from the start
-      // of each request until onFeatureFlags reports a result.
-      cleanups.push(
-        posthog.on("featureFlagsReloading", () =>
-          setFlags((current) =>
-            current.pending ? current : { ...current, pending: true },
-          ),
-        ),
-      )
-      cleanups.push(
-        posthog.onFeatureFlags((_flags, _variants, context) => {
-          const failed = context?.errorsLoading === true
-          setFlags((current) =>
-            !current.pending && current.failed === failed
-              ? current
-              : { ...current, pending: false, failed },
-          )
-          if (read.current.enabled && !failed)
-            setOn(flagOn(posthog, read.current.flag))
-        }),
-      )
-      setFlags((current) =>
-        current.broken ? { ...current, broken: false } : current,
-      )
-    } catch {
-      // Without both listeners the flag can not follow errors, so keep it off.
-      cleanUp()
-      setFlags((current) =>
-        current.broken ? current : { ...current, broken: true },
-      )
-      return
-    }
-    return cleanUp
-  }, [posthog])
+    },
+    [posthog],
+  )
+  const requests = useSyncExternalStore(
+    subscribe,
+    () => (posthog ? trackFlagRequests(posthog).state : IDLE),
+    () => IDLE,
+  )
+  const [on, setOn] = useState(false)
 
-  const blocked = flags.pending || flags.failed || flags.broken
+  const blocked = requests.pending || requests.failed || requests.broken
+  const { loads } = requests
   useEffect(() => {
     if (!enabled || !posthog || blocked) {
       setOn(false)
@@ -122,7 +130,7 @@ export function useFeatureFlagOn(flag: string, enabled = true): boolean {
       }
     }, FLAG_ERROR_CHECK_MS)
     return () => clearInterval(timer)
-  }, [posthog, flag, enabled, blocked])
+  }, [posthog, flag, enabled, blocked, loads])
 
   return enabled && !blocked && on
 }

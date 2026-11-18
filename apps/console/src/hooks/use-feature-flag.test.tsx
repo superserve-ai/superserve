@@ -13,7 +13,13 @@ const mocks = vi.hoisted(() => ({
 }))
 vi.mock("posthog-js/react", () => ({ usePostHog: () => mocks.posthog }))
 
-import { FLAG_ERROR_CHECK_MS, useFeatureFlagOn } from "./use-feature-flag"
+import type { PostHog } from "posthog-js"
+
+import {
+  FLAG_ERROR_CHECK_MS,
+  trackFlagRequests,
+  useFeatureFlagOn,
+} from "./use-feature-flag"
 
 function client(value: unknown) {
   return {
@@ -165,6 +171,37 @@ describe("useFeatureFlagOn", () => {
     expect(result.current).toBe(false)
     expect(mocks.posthog.isFeatureEnabled).not.toHaveBeenCalled()
     act(() => loaded([], {}, { errorsLoading: false }))
+    expect(result.current).toBe(true)
+  })
+
+  it("stays off when it mounts during a flags request", () => {
+    mocks.posthog = client(true)
+    const listeners: ((...args: unknown[]) => void)[] = []
+    let reloading = () => {}
+    // Like PostHog, a listener added after the first result gets the last
+    // flags at once.
+    mocks.posthog.onFeatureFlags.mockImplementation(
+      (callback: (...args: unknown[]) => void) => {
+        listeners.push(callback)
+        if (listeners.length > 1) callback([], {}, { errorsLoading: false })
+        return () => {}
+      },
+    )
+    mocks.posthog.on.mockImplementation(
+      (event: string, callback: () => void) => {
+        if (event === "featureFlagsReloading") reloading = callback
+        return () => {}
+      },
+    )
+    trackFlagRequests(mocks.posthog as unknown as PostHog)
+    act(() => {
+      for (const listener of listeners)
+        listener([], {}, { errorsLoading: false })
+    })
+    reloading()
+    const { result } = renderHook(() => useFeatureFlagOn("f"))
+    expect(result.current).toBe(false)
+    act(() => listeners[0]?.([], {}, { errorsLoading: false }))
     expect(result.current).toBe(true)
   })
 

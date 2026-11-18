@@ -4,14 +4,17 @@ import { describe, expect, it, vi } from "vitest"
 
 vi.mock("posthog-js/react", () => ({ usePostHog: () => posthog }))
 
-import { useFeatureFlagOn } from "./use-feature-flag"
+import { trackFlagRequests, useFeatureFlagOn } from "./use-feature-flag"
 
 const FLAG = "trial-runway-warning"
 // PostHog keeps a reference to fetch when it loads, so stub it first.
 const { responses, fetchMock } = vi.hoisted(() => {
   const responses: unknown[] = []
   const fetchMock = vi.fn(async (url: string) => {
-    const body = String(url).includes("/flags") ? (responses.shift() ?? {}) : {}
+    // A queued promise holds the flags response until the test resolves it.
+    const body = String(url).includes("/flags")
+      ? await (responses.shift() ?? {})
+      : {}
     return new Response(JSON.stringify(body), {
       status: 200,
       headers: { "Content-Type": "application/json" },
@@ -47,6 +50,8 @@ function initPostHog() {
     advanced_disable_toolbar_metrics: true,
     disable_external_dependency_loading: true,
   })
+  // As in the PostHog provider.
+  trackFlagRequests(posthog)
 }
 
 async function loadFlags(response: unknown) {
@@ -83,5 +88,21 @@ describe("useFeatureFlagOn with the PostHog SDK", () => {
     // PostHog keeps the old ON value and does not call onFeatureFlags.
     expect(posthog.isFeatureEnabled(FLAG, { fresh: true })).toBe(true)
     expect(result.current).toBe(false)
+  })
+
+  it("stays off when it mounts during a flags request", async () => {
+    await loadFlags(flags(true))
+    let release = (_body: unknown) => {}
+    await loadFlags(
+      new Promise((resolve) => {
+        release = resolve
+      }),
+    )
+    // PostHog gives a new listener the old ON flags at once.
+    const { result } = renderHook(() => useFeatureFlagOn(FLAG))
+    expect(result.current).toBe(false)
+
+    release(flags(true))
+    await waitFor(() => expect(result.current).toBe(true))
   })
 })

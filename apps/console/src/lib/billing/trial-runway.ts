@@ -26,6 +26,8 @@ export interface RunwayTrack {
   baseline: TrialReading
   // The time of the newest reading the burn rate applies to.
   latestAt: number
+  // The balance in the newest reading.
+  latestUsd: number
   // USD per minute between the last two usable readings; null when unknown.
   burnUsdPerMinute: number | null
 }
@@ -75,6 +77,16 @@ export function burnRate(
   return spent / (elapsed / 60_000)
 }
 
+function restart(team: string, reading: TrialReading): RunwayTrack {
+  return {
+    team,
+    baseline: reading,
+    latestAt: reading.at,
+    latestUsd: reading.remainingUsd,
+    burnUsdPerMinute: null,
+  }
+}
+
 // The next track for a reading. It returns the same object when nothing
 // changed, so a caller can keep it in state and update it during render.
 export function advanceRunway(
@@ -84,29 +96,18 @@ export function advanceRunway(
 ): RunwayTrack | null {
   if (!team) return null
   if (!reading) return track?.team === team ? track : null
-  if (track?.team !== team)
-    return {
-      team,
-      baseline: reading,
-      latestAt: reading.at,
-      burnUsdPerMinute: null,
-    }
+  if (track?.team !== team) return restart(team, reading)
   if (reading.at <= track.latestAt) return track
   // A new grant makes the old rate wrong, so measure again from here.
-  if (reading.remainingUsd > track.baseline.remainingUsd)
-    return {
-      team,
-      baseline: reading,
-      latestAt: reading.at,
-      burnUsdPerMinute: null,
-    }
+  if (reading.remainingUsd > track.latestUsd) return restart(team, reading)
   // A refresh too soon after the baseline keeps the last estimate.
   if (reading.at - track.baseline.at < MIN_SAMPLE_MS)
-    return { ...track, latestAt: reading.at }
+    return { ...track, latestAt: reading.at, latestUsd: reading.remainingUsd }
   return {
     team,
     baseline: reading,
     latestAt: reading.at,
+    latestUsd: reading.remainingUsd,
     burnUsdPerMinute: burnRate(track.baseline, reading),
   }
 }
