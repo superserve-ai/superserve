@@ -62,6 +62,10 @@ class RepositoryCodeownersTest(unittest.TestCase):
     # Sensitive files that reviews found unowned. Dropping or narrowing the entry
     # that covers one of them fails here instead of silently removing the gate.
     MUST_BE_PROTECTED = [
+        ".github/CODEOWNERS",
+        ".github/workflows/protected-paths.yml",
+        ".github/workflows/scripts/protected_paths.py",
+        "CLAUDE.md",
         "apps/console/src/app/(dashboard)/admin/billing/teams/[team_id]/actions.ts",
         "apps/console/src/app/(public)/device/actions.ts",
         "apps/console/src/app/(auth)/auth/signin/google-signup-check.ts",

@@ -7,8 +7,11 @@
 # Start each pattern with "/" and list individual @users; the Protected Paths
 # check reads this file the same way GitHub does.
 
-# CI and the npm, PyPI and docs release workflows, their scripts, and this file.
-/.github/ @awille-ai @meAmitPatil @pavitrabhalla
+# Merge policy and executable CI: the npm, PyPI and docs release workflows, their
+# scripts, this file, and the agent rules. PR templates do not change enforcement.
+/.github/CODEOWNERS @awille-ai @meAmitPatil @pavitrabhalla
+/.github/workflows/ @awille-ai @meAmitPatil @pavitrabhalla
+/CLAUDE.md @awille-ai @meAmitPatil @pavitrabhalla
 
 # Console request authentication, security headers, and the regional
 # service-role clients and tokens.
