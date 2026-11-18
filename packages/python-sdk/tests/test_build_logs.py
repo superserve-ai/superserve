@@ -65,6 +65,26 @@ class TestStreamBuildLogs:
             assert len(events) == 2
             assert events[0].text == "hello"
 
+    def test_delivers_final_event_without_timestamp(self) -> None:
+        # The server sends the final event without a timestamp.
+        with respx.mock() as router:
+            t = _make_template(router)
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"ready","finished":false}',
+                    '{"finished":true,"status":"ready","stream":"system","text":"build ready"}',
+                ]
+            )
+            router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
+                return_value=httpx.Response(200, text=sse)
+            )
+            events: list = []
+            t.stream_build_logs(on_event=events.append)
+            assert [e.text for e in events] == ["ready", "build ready"]
+            assert events[-1].finished is True
+            assert events[-1].status == "ready"
+            assert events[-1].timestamp.tzinfo is not None
+
     def test_falls_back_to_list_builds_when_latest_unset(self) -> None:
         # Connect: no build_id in response → latest_build_id is None
         with respx.mock() as router:

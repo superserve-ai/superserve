@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ConflictError } from "../src/errors.js"
 import { Template } from "../src/Template.js"
+import type { BuildLogEvent } from "../src/types.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -95,6 +96,28 @@ describe("Template.streamBuildLogs", () => {
       { stream: "stdout", text: "hello" },
       { stream: "system", text: "done" },
     ])
+  })
+
+  it("delivers the final event, which has no timestamp", async () => {
+    const t = await makeTemplate()
+    const stream = sseStream([
+      'data: {"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"ready","finished":false}',
+      "",
+      'data: {"finished":true,"status":"ready","stream":"system","text":"build ready"}',
+      "",
+    ])
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(stream, { status: 200 })),
+    )
+
+    const events: BuildLogEvent[] = []
+    await t.streamBuildLogs({ onEvent: (ev) => events.push(ev) })
+
+    expect(events.map((ev) => ev.text)).toEqual(["ready", "build ready"])
+    expect(events[1].finished).toBe(true)
+    expect(events[1].status).toBe("ready")
+    expect(events[1].timestamp).toBeInstanceOf(Date)
   })
 
   it("uses provided buildId when passed", async () => {

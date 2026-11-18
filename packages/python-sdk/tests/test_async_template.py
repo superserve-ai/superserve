@@ -212,6 +212,28 @@ class TestAsyncStreamBuildLogs:
             await t.stream_build_logs(on_event=events.append)
             assert len(events) == 2
 
+    async def test_delivers_final_event_without_timestamp(self) -> None:
+        # The server sends the final event without a timestamp.
+        with respx.mock() as router:
+            router.post(f"{API}/templates").mock(
+                return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
+            )
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"failed","finished":false}',
+                    '{"finished":true,"status":"failed","stream":"system","text":"build failed"}',
+                ]
+            )
+            router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
+                return_value=httpx.Response(200, text=sse)
+            )
+            events: list = []
+            await t.stream_build_logs(on_event=events.append)
+            assert [e.text for e in events] == ["failed", "build failed"]
+            assert events[-1].finished is True
+            assert events[-1].status == "failed"
+
 
 BUILD_BASE = {
     "id": "b-1",

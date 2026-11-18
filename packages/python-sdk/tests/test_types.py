@@ -244,6 +244,24 @@ class TestToBuildLogEvent:
         assert ev.finished is True
         assert ev.status == "ready"
 
+    def test_missing_timestamp_uses_receive_time(self) -> None:
+        before = datetime.now(timezone.utc)
+        ev = to_build_log_event(
+            {
+                "finished": True,
+                "status": "ready",
+                "stream": "system",
+                "text": "build ready",
+            }
+        )
+        assert before <= ev.timestamp <= datetime.now(timezone.utc)
+        assert ev.finished is True
+        assert ev.status == "ready"
+
+    def test_missing_stream_raises(self) -> None:
+        with pytest.raises(SandboxError, match="missing stream"):
+            to_build_log_event({"timestamp": "2026-01-01T00:00:00Z", "text": "x"})
+
 
 class TestBuildStepsToApi:
     def test_run(self) -> None:

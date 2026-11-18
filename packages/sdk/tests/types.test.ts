@@ -288,10 +288,19 @@ describe("toBuildLogEvent", () => {
     expect(ev.text).toBe("")
   })
 
-  it("throws on missing timestamp", () => {
-    expect(() => toBuildLogEvent({ stream: "stdout", text: "x" })).toThrow(
-      /missing timestamp/,
-    )
+  it("uses the receive time when timestamp is absent", () => {
+    const before = Date.now()
+    const ev = toBuildLogEvent({
+      finished: true,
+      status: "ready",
+      stream: "system",
+      text: "build ready",
+    })
+    expect(ev.timestamp).toBeInstanceOf(Date)
+    expect(ev.timestamp.getTime()).toBeGreaterThanOrEqual(before)
+    expect(ev.timestamp.getTime()).toBeLessThanOrEqual(Date.now())
+    expect(ev.finished).toBe(true)
+    expect(ev.status).toBe("ready")
   })
 
   it("throws on missing stream", () => {

@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import Any, Literal, Optional, Sequence, Union
 from urllib.parse import urlencode
@@ -457,13 +457,15 @@ def to_template_build_info(raw: dict[str, Any]) -> TemplateBuildInfo:
 
 
 def to_build_log_event(raw: dict[str, Any]) -> BuildLogEvent:
-    if not raw.get("timestamp"):
-        raise SandboxError("Invalid log event: missing timestamp")
     if not raw.get("stream"):
         raise SandboxError("Invalid log event: missing stream")
 
+    # The final event (``finished: true``) carries no server timestamp; use
+    # the time it was received so the stream does not fail on it.
     return BuildLogEvent(
-        timestamp=_parse_iso8601(raw["timestamp"]),
+        timestamp=_parse_iso8601(raw["timestamp"])
+        if raw.get("timestamp")
+        else datetime.now(timezone.utc),
         stream=BuildLogStream(raw["stream"]),
         text=raw.get("text", ""),
         finished=raw.get("finished"),
