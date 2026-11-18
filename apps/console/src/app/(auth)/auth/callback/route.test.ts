@@ -6,7 +6,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
 let retrySearch = new URLSearchParams()
 const mockRetryOAuth = vi.fn()
@@ -70,6 +70,10 @@ let currentUser: {
     signup_enterprise_pricing_pending?: boolean
   }
   user_metadata: { full_name?: string }
+  identities?: {
+    provider: string
+    identity_data?: { email?: string; email_verified?: boolean }
+  }[]
 } | null = null
 
 let proofAvailable = true
@@ -349,6 +353,22 @@ vi.mock("@/lib/supabase/server", () => ({
       getUser: async () => ({ data: { user: currentUser } }),
     },
   }),
+}))
+
+// Heedeo is observe-only and off unless a test turns it on.
+const mockHeedeoEnabled = vi.fn(() => false)
+const mockTakeHeedeoCapture = vi.fn()
+const mockScheduleHeedeo = vi.fn()
+const mockScheduleHeedeoDiscarded = vi.fn()
+vi.mock("@/lib/heedeo/observe", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/heedeo/observe")>()),
+  isHeedeoObservationEnabled: () => mockHeedeoEnabled(),
+  takeHeedeoSignupCapture: (...args: unknown[]) =>
+    mockTakeHeedeoCapture(...args),
+  scheduleHeedeoSignupObservation: (...args: unknown[]) =>
+    mockScheduleHeedeo(...args),
+  scheduleHeedeoCaptureDiscarded: (...args: unknown[]) =>
+    mockScheduleHeedeoDiscarded(...args),
 }))
 
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
@@ -2897,6 +2917,166 @@ describe("auth callback", () => {
       ).toBeLessThan(mockNotifySlackOfNewUser.mock.invocationCallOrder[0])
     },
   )
+
+  describe("Heedeo observation", () => {
+    const capture = { status: "ok", token: "ct1.t", latencyMs: 5 }
+    beforeEach(() => {
+      mockHeedeoEnabled.mockReset().mockReturnValue(true)
+      mockTakeHeedeoCapture.mockReset().mockResolvedValue(capture)
+      mockScheduleHeedeo.mockReset()
+      mockScheduleHeedeoDiscarded.mockReset()
+    })
+
+    // The observation is read after the response, as `after()` would.
+    const scheduled = () => {
+      expect(mockScheduleHeedeo).toHaveBeenCalledTimes(1)
+      expect(mockScheduleHeedeoDiscarded).not.toHaveBeenCalled()
+      const observation = mockScheduleHeedeo.mock.calls[0]![0]
+      return typeof observation === "function" ? observation() : observation
+    }
+
+    it("sends a first-time Google account as a sign-up", async () => {
+      process.env.VERCEL = "1"
+      onTestFinished(() => {
+        delete process.env.VERCEL
+      })
+      googleMembershipState = { kind: "first_time" }
+      mockHasValidGoogleSignupProof.mockResolvedValue(true)
+      currentUser!.identities = [
+        {
+          provider: "google",
+          identity_data: { email: "User@example.com", email_verified: true },
+        },
+      ]
+
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+          {
+            headers: {
+              "user-agent": "UA",
+              "x-real-ip": "203.0.113.7",
+              cookie: "sb-access-token=secret",
+            },
+          },
+        ),
+      )
+
+      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(mockTakeHeedeoCapture).toHaveBeenCalledTimes(1)
+      expect(scheduled()).toEqual({
+        signupAttemptId: "attempt-1",
+        signupMethod: "google",
+        email: "user@example.com",
+        userId: "u1",
+        status: "succeeded",
+        capture,
+        request: {
+          clientIp: "203.0.113.7",
+          headers: expect.objectContaining({
+            "user-agent": "UA",
+            ":method": "GET",
+            ":path": "/auth/callback/",
+          }),
+        },
+        oauthEmailVerified: true,
+      })
+      expect(scheduled().request.headers).not.toHaveProperty("cookie")
+    })
+
+    it("sends no Google email evidence without a Google identity for the address", async () => {
+      currentUser!.user_metadata = {
+        full_name: "Test User",
+        email_verified: true,
+      } as { full_name?: string }
+      currentUser!.identities = [
+        {
+          provider: "google",
+          identity_data: { email: "other@example.com", email_verified: true },
+        },
+      ]
+      await firstTimeGoogle()
+      expect(scheduled()).not.toHaveProperty("oauthEmailVerified")
+    })
+
+    const firstTimeGoogle = async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockHasValidGoogleSignupProof.mockResolvedValue(true)
+      return GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+        ),
+      )
+    }
+
+    it("sends a sign-up that the restriction check refuses as failed", async () => {
+      mockEvaluateSignupRestriction.mockRejectedValue(
+        new SignupRestrictedError(),
+      )
+
+      const response = await firstTimeGoogle()
+
+      expect(response.headers.get("location")).toContain(
+        "reason=signup_blocked",
+      )
+      expect(scheduled()).toMatchObject({ status: "failed" })
+    })
+
+    it("drops the capture of an older account that comes back before its team exists", async () => {
+      mockReadGooglePromotionEvidence.mockResolvedValue({
+        originalSignup: false,
+        attemptId: "attempt-1",
+        routineMissing: false,
+      })
+
+      await firstTimeGoogle()
+
+      expect(mockTakeHeedeoCapture).toHaveBeenCalledTimes(1)
+      expect(mockScheduleHeedeo).not.toHaveBeenCalled()
+    })
+
+    it("drops a returning Google account's capture without sending it", async () => {
+      const response = await GET(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+
+      expect(response.headers.get("location")).toContain("/sandboxes")
+      expect(mockTakeHeedeoCapture).toHaveBeenCalledTimes(1)
+      expect(mockScheduleHeedeo).not.toHaveBeenCalled()
+      // Its identify call was still made, so it is counted.
+      expect(mockScheduleHeedeoDiscarded).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ capture }),
+      )
+    })
+
+    it("sends nothing for a Google account that has no sign-up proof", async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockHasValidGoogleSignupProof.mockResolvedValue(false)
+
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+        ),
+      )
+
+      expect(mockScheduleHeedeo).not.toHaveBeenCalled()
+    })
+
+    it("does not touch the capture when off", async () => {
+      mockHeedeoEnabled.mockReturnValue(false)
+      googleMembershipState = { kind: "first_time" }
+      mockHasValidGoogleSignupProof.mockResolvedValue(true)
+
+      await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+        ),
+      )
+
+      expect(mockTakeHeedeoCapture).not.toHaveBeenCalled()
+      expect(mockScheduleHeedeo).not.toHaveBeenCalled()
+    })
+  })
 
   it("uses unavailable when Google publication has no authoritative snapshot", async () => {
     googleMembershipState = { kind: "first_time" }
