@@ -21,9 +21,10 @@ import { useCreateApiKey } from "@/hooks/use-api-keys"
 import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
 type CopyTarget = "key" | "export_command"
+type CopyFailure = { attempt: number; scroll: boolean }
 
 const initialCopyState = { key: false, export_command: false }
-const initialCopyFailures: Record<CopyTarget, number | null> = {
+const initialCopyFailures: Record<CopyTarget, CopyFailure | null> = {
   key: null,
   export_command: null,
 }
@@ -58,6 +59,7 @@ export function CreateKeyDialog({
     useState(initialCopyFailures)
   const [copyAnnouncement, setCopyAnnouncement] = useState<{
     id: string
+    target: CopyTarget
     message: string
   } | null>(null)
   const keyCode = useRef<HTMLElement>(null)
@@ -94,13 +96,13 @@ export function CreateKeyDialog({
   }, [open, cancelCopyFeedback])
 
   useLayoutEffect(() => {
-    if (keyFailure !== null) {
+    if (keyFailure?.scroll) {
       keyAlert.current?.scrollIntoView?.({ block: "nearest" })
     }
   }, [keyFailure])
 
   useLayoutEffect(() => {
-    if (commandFailure !== null) {
+    if (commandFailure?.scroll) {
       commandAlert.current?.scrollIntoView?.({ block: "nearest" })
     }
   }, [commandFailure])
@@ -126,12 +128,19 @@ export function CreateKeyDialog({
     } catch {
       if (attempt !== copyAttempts.current[target]) return
 
+      const focusUnchanged = document.activeElement === activeElement
       clearTimeout(copyTimers.current[target])
       setCopied((previous) => ({ ...previous, [target]: false }))
-      setCopyFailures((previous) => ({ ...previous, [target]: attempt }))
+      setCopyFailures((previous) => ({
+        ...previous,
+        [target]: { attempt, scroll: focusUnchanged },
+      }))
+      setCopyAnnouncement((previous) =>
+        previous?.target === target ? null : previous,
+      )
       const selection = window.getSelection?.()
       if (
-        document.activeElement === activeElement &&
+        focusUnchanged &&
         selection &&
         (selection.isCollapsed ||
           (selection.anchorNode === anchorNode &&
@@ -154,7 +163,7 @@ export function CreateKeyDialog({
     posthog.capture(API_KEY_EVENTS.COPIED, { target })
     setCopyFailures((previous) => ({ ...previous, [target]: null }))
     setCopied((previous) => ({ ...previous, [target]: true }))
-    setCopyAnnouncement({ id: `${target}:${attempt}`, message })
+    setCopyAnnouncement({ id: `${target}:${attempt}`, target, message })
     addToast(message, "success")
     clearTimeout(copyTimers.current[target])
     copyTimers.current[target] = setTimeout(() => {
@@ -231,7 +240,7 @@ export function CreateKeyDialog({
                 </Button>
                 {keyFailure !== null && (
                   <p
-                    key={keyFailure}
+                    key={keyFailure.attempt}
                     ref={keyAlert}
                     role="alert"
                     className="text-xs text-destructive"
@@ -271,7 +280,7 @@ export function CreateKeyDialog({
                 </Button>
                 {commandFailure !== null && (
                   <p
-                    key={commandFailure}
+                    key={commandFailure.attempt}
                     ref={commandAlert}
                     role="alert"
                     className="text-xs text-destructive"

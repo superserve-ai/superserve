@@ -8,7 +8,15 @@ import {
 } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { useState } from "react"
-import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
+import {
+  afterEach,
+  beforeEach,
+  describe,
+  expect,
+  it,
+  onTestFinished,
+  vi,
+} from "vitest"
 
 const mockAddToast = vi.fn()
 const mockCapture = vi.fn()
@@ -62,6 +70,27 @@ function deferredCopy() {
     reject = rej
   })
   return { promise, resolve, reject }
+}
+
+function mockScrollIntoView() {
+  const prototype = HTMLElement.prototype
+  const descriptor = Object.getOwnPropertyDescriptor(
+    prototype,
+    "scrollIntoView",
+  )
+  const scrollIntoView = vi.fn()
+  Object.defineProperty(prototype, "scrollIntoView", {
+    configurable: true,
+    value: scrollIntoView,
+  })
+  onTestFinished(() => {
+    if (descriptor) {
+      Object.defineProperty(prototype, "scrollIntoView", descriptor)
+    } else {
+      Reflect.deleteProperty(prototype, "scrollIntoView")
+    }
+  })
+  return scrollIntoView
 }
 
 describe("CreateKeyDialog created state", () => {
@@ -191,8 +220,9 @@ describe("CreateKeyDialog created state", () => {
     expect(commandButton.nextElementSibling).toHaveTextContent(copyError)
   })
 
-  it("leaves the selection alone when focus moves before a copy fails", async () => {
+  it("shows the alert without scrolling or selecting text when focus moves before a copy fails", async () => {
     await createKey()
+    const scrollIntoView = mockScrollIntoView()
     const pending = deferredCopy()
     writeText.mockReturnValueOnce(pending.promise)
     const selection = window.getSelection()!
@@ -210,7 +240,10 @@ describe("CreateKeyDialog created state", () => {
     )
 
     expect(selection.toString()).toBe("")
-    expect(button.nextElementSibling).toHaveTextContent(copyError)
+    const alert = within(button.parentElement!).getByRole("alert")
+    expect(alert).toHaveTextContent(copyError)
+    expect(alert).toBeVisible()
+    expect(scrollIntoView).not.toHaveBeenCalled()
   })
 
   it("preserves a selection when only its anchor offset changes during a copy", async () => {
@@ -256,11 +289,15 @@ describe("CreateKeyDialog created state", () => {
       "focus-visible:outline-none",
     )
 
+    const selection = window.getSelection()!
+    selection.removeAllRanges()
     act(() => screen.getByRole("button", { name: label }).focus())
     await userEvent.tab({ shift: true })
 
     expect(code).toHaveFocus()
-    expect(window.getSelection()?.toString()).toBe(text)
+    expect(selection.toString()).toBe(text)
+    const range = selection.getRangeAt(0)
+    expect(code.contains(range.commonAncestorContainer)).toBe(true)
   })
 
   it("announces each successful copy in the same live region", async () => {
@@ -297,6 +334,23 @@ describe("CreateKeyDialog created state", () => {
     expect(screen.getByRole("status")).toBeEmptyDOMElement()
   })
 
+  it("clears the success announcement only when a retry of that target fails", async () => {
+    await createKey()
+
+    const status = screen.getByRole("status")
+    const keyButton = screen.getByRole("button", { name: "Copy key" })
+    await userEvent.click(keyButton)
+    expect(status).toHaveTextContent("API key copied to clipboard")
+
+    const error = new Error("Clipboard permission denied")
+    writeText.mockRejectedValueOnce(error).mockRejectedValueOnce(error)
+    await userEvent.click(screen.getByRole("button", { name: "Copy command" }))
+    expect(status).toHaveTextContent("API key copied to clipboard")
+
+    await userEvent.click(keyButton)
+    expect(status).toBeEmptyDOMElement()
+  })
+
   it.each(["Copy key", "Copy command"])(
     "remounts the alert for consecutive failures of %s",
     async (label) => {
@@ -313,33 +367,19 @@ describe("CreateKeyDialog created state", () => {
     },
   )
 
-  it("scrolls each failed target's alert into view", async ({
-    onTestFinished,
-  }) => {
+  it("scrolls each failed target's alert into view when focus stays on the copy button", async () => {
     await createKey()
-    writeText.mockRejectedValue(new Error("Clipboard permission denied"))
-    const prototype = HTMLElement.prototype
-    const descriptor = Object.getOwnPropertyDescriptor(
-      prototype,
-      "scrollIntoView",
-    )
-    const scrollIntoView = vi.fn()
-    Object.defineProperty(prototype, "scrollIntoView", {
-      configurable: true,
-      value: scrollIntoView,
-    })
-    onTestFinished(() => {
-      if (descriptor) {
-        Object.defineProperty(prototype, "scrollIntoView", descriptor)
-      } else {
-        Reflect.deleteProperty(prototype, "scrollIntoView")
-      }
-    })
+    const scrollIntoView = mockScrollIntoView()
+    const error = new Error("Clipboard permission denied")
 
     for (const label of ["Copy key", "Copy command", "Copy command"]) {
       scrollIntoView.mockClear()
+      const pending = deferredCopy()
+      writeText.mockReturnValueOnce(pending.promise)
       const button = screen.getByRole("button", { name: label })
       await userEvent.click(button)
+      expect(button).toHaveFocus()
+      await act(async () => pending.reject(error))
 
       const alert = within(button.parentElement!).getByRole("alert")
       expect(scrollIntoView).toHaveBeenCalledExactlyOnceWith({
