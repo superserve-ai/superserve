@@ -61,7 +61,10 @@
       "destination": "/quickstart#where-to-go-next",
       "permanent": true
     },
-    { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
+    {
+      "source": "/sandbox/memory",
+      "destination": "/sandbox/live-memory-resizing"
+    },
     {
       "source": "/integrations/managed-agents/claude-managed-agents",
       "destination": "/integrations/agent-platforms/claude-managed-agents",
@@ -336,20 +339,6 @@
               "GET /snapshots/{snapshot_id}",
               "PATCH /snapshots/{snapshot_id}",
               "DELETE /snapshots/{snapshot_id}"
-            ]
-          },
-          {
-            "group": "Volumes",
-            "pages": [
-              "GET /volumes",
-              "POST /volumes",
-              "GET /volumes/{volume_id}",
-              "DELETE /volumes/{volume_id}",
-              "POST /sandboxes/{sandbox_id}/volumes",
-              "GET /volumes/{volume_id}/attachments",
-              "GET /volume-attachments/{attachment_id}",
-              "DELETE /volume-attachments/{attachment_id}",
-              "POST /volume-attachments/{attachment_id}/token"
             ]
           },
           {
