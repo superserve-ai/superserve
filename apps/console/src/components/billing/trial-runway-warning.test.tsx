@@ -188,15 +188,15 @@ describe("TrialRunwayWarning with the flag on", () => {
     })
   })
 
-  it("counts the time since the server read the balance", () => {
+  it("starts the countdown when the browser gets the summary", () => {
     mocks.summary.mockReturnValue({
       data: summary(0.022),
       isError: false,
       dataUpdatedAt: Date.now(),
     })
     const { rerender } = render(view())
-    // $0.002 a minute leaves 9 minutes at the reading, which arrives a
-    // minute late.
+    // $0.002 a minute leaves 9 minutes. The browser clock is a minute ahead
+    // of the server, which is not time used.
     vi.setSystemTime(T0 + 180_000)
     mocks.summary.mockReturnValue({
       data: summary(0.018, T0 + 120_000),
@@ -204,7 +204,7 @@ describe("TrialRunwayWarning with the flag on", () => {
       dataUpdatedAt: T0 + 180_000,
     })
     rerender(view())
-    expect(screen.getByText(/runs out in/)).toHaveTextContent("about 8 minutes")
+    expect(screen.getByText(/runs out in/)).toHaveTextContent("about 9 minutes")
   })
 
   it("drops an old burn rate until the summary is read again", () => {
