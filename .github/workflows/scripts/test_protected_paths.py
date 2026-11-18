@@ -1,14 +1,13 @@
+import io
+import os
 import subprocess
 import unittest
 from pathlib import Path
+from unittest.mock import patch
 
 import protected_paths as pp
 
 ROOT = Path(__file__).resolve().parents[3]
-
-
-def review(login, state, kind="User"):
-    return {"user": {"login": login, "type": kind}, "state": state}
 
 
 class PatternTest(unittest.TestCase):
@@ -38,24 +37,36 @@ class EvaluateTest(unittest.TestCase):
     rules = pp.parse_codeowners("/infra/ @alice @bob\n/infra/README.md\n/supabase/ @alice\n")
 
     def test_last_match_wins_and_ownerless_line_unprotects(self):
-        protected, missing = pp.evaluate(self.rules, ["infra/README.md", "docs/a.md"], [], "bot[bot]")
-        self.assertEqual((protected, missing), ({}, []))
+        self.assertEqual(pp.evaluate(self.rules, ["infra/README.md", "docs/a.md"]), {})
 
-    def test_only_a_standing_human_owner_approval_counts(self):
-        paths = ["infra/main.tf", "supabase/migrations/1.sql"]
-        reviews = [review("superserve-qm[bot]", "APPROVED", "Bot"), review("bob", "APPROVED")]
-        _, missing = pp.evaluate(self.rules, paths, reviews, "vorflux[bot]")
-        self.assertEqual(missing, ["supabase/migrations/1.sql"])
+    def test_protected_files_are_classified_without_querying_reviews(self):
+        self.assertEqual(pp.evaluate(self.rules, ["infra/main.tf", "supabase/a.sql"]),
+                         {"infra/main.tf": {"alice", "bob"}, "supabase/a.sql": {"alice"}})
 
-        reviews += [review("alice", "APPROVED"), review("alice", "COMMENTED")]
-        self.assertEqual(pp.evaluate(self.rules, paths, reviews, "vorflux[bot]")[1], [])
 
-        reviews.append(review("alice", "DISMISSED"))
-        self.assertEqual(pp.evaluate(self.rules, paths, reviews, "vorflux[bot]")[1], ["supabase/migrations/1.sql"])
+class MainTest(unittest.TestCase):
+    def run_check(self, files):
+        env = {"GITHUB_REPOSITORY": "superserve-ai/superserve", "PR_NUMBER": "12", "BASE_SHA": "base"}
+        with patch.dict(os.environ, env, clear=True), patch("sys.stdout", new_callable=io.StringIO) as out, \
+                patch.object(pp, "base_codeowners", return_value="/infra/ @alice"), \
+                patch.object(pp, "paginate", return_value=files) as api:
+            result = pp.main()
+            api.assert_called_once_with("/repos/superserve-ai/superserve/pulls/12/files")
+            return result, out.getvalue()
 
-    def test_author_cannot_satisfy_their_own_protected_change(self):
-        _, missing = pp.evaluate(self.rules, ["supabase/x.sql"], [review("Alice", "APPROVED")], "alice")
-        self.assertEqual(missing, ["supabase/x.sql"])
+    def test_rename_out_of_protected_path_reports_human_merge_decision_without_failing(self):
+        result, output = self.run_check([{"filename": "docs/moved.tf", "previous_filename": "infra/main.tf"}])
+        self.assertEqual(result, 0)
+        self.assertIn("infra/main.tf", output)
+        self.assertIn("human merge decision required", output)
+
+    def test_ordinary_pr_passes_without_human_review(self):
+        result, output = self.run_check([{"filename": "apps/console/src/app/page.tsx"}])
+        self.assertEqual(result, 0)
+        self.assertIn("no protected path", output)
+
+    def test_truncated_file_lists_fail_instead_of_claiming_ordinary(self):
+        self.assertEqual(self.run_check([{"filename": "docs/a.md"}] * 3000)[0], 1)
 
 
 class RepositoryCodeownersTest(unittest.TestCase):

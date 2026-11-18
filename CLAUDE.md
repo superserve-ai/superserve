@@ -93,7 +93,7 @@ The console has a deliberate austere, technical aesthetic:
 
 ## PR reviews and merging
 
-QM and other authorized independent automated reviewers may review and approve both ordinary and protected PRs after they review the current changes. Use an identity GitHub accepts for the required independent review; neither the author nor another agent using the author's credentials can approve their own PR. Required reviews, blocking findings, and CI still apply. A bot approval never counts as, or replaces, a human approval that GitHub or the `Protected Paths` check requires. Do not bypass these rules.
+QM and other authorized independent automated reviewers may review and approve both ordinary and protected PRs after they review the current changes. Use an identity GitHub accepts for the required independent review; neither the author nor another agent using the author's credentials can approve their own PR. Required reviews, blocking findings, and CI still apply. A bot approval never counts as, or replaces, a human approval where GitHub requires one. Do not bypass these rules.
 
 An ordinary PR changes no protected path. Once its required reviews and CI pass and it is up to date with `main`, the owning agent may merge it. First verify that the agent owns the PR; a shared login does not establish ownership. Read-only reviewers do not merge.
 
@@ -108,10 +108,10 @@ An ordinary PR changes no protected path. Once its required reviews and CI pass 
 - Billing, checkout, plans, signup offers, promotional credits, and device fingerprint evidence
 - `LICENSE`
 
-A protected PR needs an approval from a human code owner who is not its author; the `Protected Paths` check fails until it has one. It also needs a human merge decision. Agents may create, update, and review these PRs, but must not merge them, turn on auto-merge, or use a human's credentials to authorize their merge. A mixed PR is protected too, including when it deletes or moves a protected file.
+A protected PR needs the required independent review and a human merge decision. An authorized human may merge their own PR after an independent review and CI pass. Agents may create, update, and review these PRs, but must not merge them directly or with an administrator merge, turn on auto-merge, or use a human's credentials to authorize their merge. The `Protected Paths` check only lists the protected paths that a PR changes; it does not require reviews or authorize merges. A mixed PR is protected too, including when it deletes or moves a protected file.
 
 - Merging `main` into the PR branch to keep it current is fine.
-- Never bypass protections, use an administrator merge, or weaken CI.
+- Never bypass a gate or protection, or weaken CI.
 - Adding, removing, or re-owning a protected path is itself a protected change.
 
 ## Git

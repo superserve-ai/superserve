@@ -1,6 +1,6 @@
-# Protected paths. A human owner listed here, other than the PR author, must
-# approve every PR that changes one of these paths, and no bot may merge such a
-# PR without that approval (see "Protected paths" in CLAUDE.md).
+# Protected paths. A PR that changes one of these paths needs a human merge
+# decision; no bot may merge it (see "Protected paths" in CLAUDE.md). Independent
+# automated reviews are allowed. The owners identify maintainers.
 #
 # List only protected paths: once code-owner review is required, every owned
 # path needs an owner's approval, so a catch-all entry would gate every PR.
