@@ -25,7 +25,6 @@ import {
   TURNSTILE_SITE_KEY,
 } from "@/lib/cloudflare/turnstile-client"
 import { clearFingerprintSignupCapture } from "@/lib/fingerprint/client"
-import { heedeoPreloadProps } from "@/lib/heedeo/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
@@ -372,7 +371,6 @@ function SignInContent() {
           type="button"
           variant="outline"
           onClick={() => handleGoogleSignIn()}
-          {...heedeoPreloadProps}
           disabled={isLoading || isEmailLoading || isLinkSending}
           className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
         >
@@ -486,7 +484,6 @@ function SignInContent() {
               type="button"
               variant="outline"
               onClick={() => handleGoogleSignIn(true)}
-              {...heedeoPreloadProps}
               disabled={isLoading || isEmailLoading || isLinkSending}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >

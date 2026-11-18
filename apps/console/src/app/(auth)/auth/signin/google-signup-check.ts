@@ -201,18 +201,18 @@ async function runCheck(
   const diagnostics = getFingerprintSignupDiagnostics()
   onSend()
   // The proof call does not wait for Heedeo: only the callback reads its
-  // cookie, so the capture only has to finish before the trip to Google.
-  const [proof] = await Promise.all([
-    beginGoogleSignup(
-      recaptchaToken,
-      turnstileToken,
-      captureResult,
-      diagnostics,
-      "signin",
-    ),
-    heedeo,
-  ])
-  return proof.success ? proof.signupAttemptId : undefined
+  // cookie, so the capture only has to finish before the trip to Google, and
+  // only when there is a proof to send with it.
+  const proof = await beginGoogleSignup(
+    recaptchaToken,
+    turnstileToken,
+    captureResult,
+    diagnostics,
+    "signin",
+  )
+  if (!proof.success) return undefined
+  await heedeo
+  return proof.signupAttemptId
 }
 
 /**

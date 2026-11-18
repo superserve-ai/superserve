@@ -519,25 +519,25 @@ describe("SignUpPage", () => {
     await waitFor(() => expect(mockSignUpWithEmail).toHaveBeenCalledTimes(1))
   })
 
-  it("waits for the Heedeo capture before the Google sign-up check", async () => {
+  it("sends the Google proof at once and waits for Heedeo before Google", async () => {
     let finish!: () => void
     mockCaptureHeedeoSignup.mockReturnValueOnce(
       new Promise<void>((resolve) => {
         finish = resolve
       }),
     )
+    mockSignInWithOAuth.mockResolvedValue({ error: null })
     render(<SignUpPage />)
 
     await user.click(
       await screen.findByRole("button", { name: /Continue with Google/ }),
     )
 
-    await waitFor(() =>
-      expect(mockCaptureHeedeoSignup).toHaveBeenCalledTimes(1),
-    )
-    expect(mockBeginGoogleSignup).not.toHaveBeenCalled()
-    finish()
     await waitFor(() => expect(mockBeginGoogleSignup).toHaveBeenCalledTimes(1))
+    expect(mockCaptureHeedeoSignup).toHaveBeenCalledTimes(1)
+    expect(mockSignInWithOAuth).not.toHaveBeenCalled()
+    finish()
+    await waitFor(() => expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1))
   })
 
   it("shows inline form error when signUpWithEmail returns an error", async () => {

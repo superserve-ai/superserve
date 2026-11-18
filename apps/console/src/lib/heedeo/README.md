@@ -13,16 +13,17 @@ authentication decision depends on it, and every failure fails open.
    "First-party route" below), not with the page: once loaded, it identifies
    the browser in the background ahead of `identify()`. It loads when the
    pointer reaches, or focus enters, the email sign-up form or a Google button
-   on the sign-up page, or a "Continue with Google" button on the sign-in page
-   (`heedeoPreloadProps`), else at the action. Opening a page, or password sign-in, loads nothing.
+   on the sign-up page (`heedeoPreloadProps`), else at the action. The sign-in
+   page loads it only when "Continue with Google" is clicked. Opening a page,
+   or password sign-in, loads nothing.
 2. At the action, the page calls `captureHeedeoSignup()` beside the other
    checks: email sign-up submit, "Continue with Google" on the sign-up page, and
    the Google sign-up check on the sign-in page. It calls `identify()` (billed
    per call) with a 3 s budget (2.5 s on the sign-in page) and writes the token,
    or why there is none, to the `superserve-heedeo-signup` cookie (`Path=/auth`,
-   5 minutes, the token's lifetime). The sign-in page sends its proof request
-   without waiting for the capture, and waits for it only before the trip to
-   Google. Password sign-in captures nothing.
+   5 minutes, the token's lifetime). Both pages send the Google proof request
+   without waiting for the capture, and wait for it only after the proof
+   succeeds, before the trip to Google. Password sign-in captures nothing.
 3. The server reads and deletes that cookie and, after the response is sent,
    sends one `signup` event to `POST https://app.heedeo.com/v1/evaluations`:
    - email: from `signUpWithEmail`, with the email and `status` `succeeded`

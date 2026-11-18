@@ -372,7 +372,6 @@ export default function SignUpContent() {
         setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
-      await heedeo
 
       const proof = await beginGoogleSignup(
         recaptchaToken,
@@ -394,6 +393,8 @@ export default function SignUpContent() {
         })
         return
       }
+      // Only the callback reads Heedeo's cookie, so the proof does not wait.
+      await heedeo
       const loginHint =
         isCompleteGoogleSignup && !chooseAccount
           ? await loadRecoveryAccount()
