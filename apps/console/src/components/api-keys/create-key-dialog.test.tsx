@@ -473,27 +473,54 @@ describe("CreateKeyDialog created state", () => {
     },
   )
 
-  it("does not copy the key on a held Enter after creating it", async () => {
+  it("copies on a fresh Enter but not on a held Enter on Copy key", async () => {
     await createKey()
     const button = screen.getByRole("button", { name: "Copy key" })
     expect(button).toHaveFocus()
+    // user-event never sets KeyboardEvent.repeat, so act as the browser does:
+    // Enter on a button clicks it unless the keydown was canceled.
+    const pressEnter = (repeat: boolean) =>
+      act(async () => {
+        const keydown = new KeyboardEvent("keydown", {
+          key: "Enter",
+          repeat,
+          bubbles: true,
+          cancelable: true,
+        })
+        if (button.dispatchEvent(keydown)) button.click()
+      })
 
-    const repeated = new KeyboardEvent("keydown", {
-      key: "Enter",
-      repeat: true,
-      bubbles: true,
-      cancelable: true,
-    })
-    button.dispatchEvent(repeated)
-    expect(repeated.defaultPrevented).toBe(true)
+    await pressEnter(true)
+    await pressEnter(true)
+    expect(writeText).not.toHaveBeenCalled()
 
-    const fresh = new KeyboardEvent("keydown", {
-      key: "Enter",
-      bubbles: true,
-      cancelable: true,
+    await pressEnter(false)
+    expect(writeText).toHaveBeenCalledExactlyOnceWith(key)
+  })
+
+  it("does not focus Copy key for a key created while the window closes", async () => {
+    let finishCreate!: () => void
+    mockMutate.mockImplementationOnce((_name, options) => {
+      finishCreate = () => options.onSuccess({ key })
     })
-    button.dispatchEvent(fresh)
-    expect(fresh.defaultPrevented).toBe(false)
+    render(<ControlledCreateKeyDialog />)
+    await submitKey()
+    const dialog = screen.getByRole("dialog")
+    // Keep the popup mounted through the close and the late response.
+    const finished = new Promise<void>(() => {})
+    Object.defineProperty(dialog, "getAnimations", {
+      value: () => [{ finished }],
+    })
+
+    await userEvent.keyboard("{Escape}")
+    act(() => finishCreate())
+
+    const copyKey = screen.queryByRole("button", {
+      name: "Copy key",
+      hidden: true,
+    })
+    expect(copyKey).not.toBeNull()
+    expect(copyKey).not.toHaveFocus()
   })
 
   it.each(["Copy key", "Copy command"])(

@@ -109,8 +109,9 @@ export function CreateKeyDialog({
   }, [])
 
   useLayoutEffect(() => {
-    if (createdKey) focusKeyCopyButton()
-  }, [createdKey, focusKeyCopyButton])
+    // Not while the window closes; initialFocus covers the next open.
+    if (open && createdKey) focusKeyCopyButton()
+  }, [open, createdKey, focusKeyCopyButton])
 
   useLayoutEffect(() => {
     if (keyFailure?.scroll) {
@@ -218,7 +219,7 @@ export function CreateKeyDialog({
       <DialogPopup
         className="max-h-[calc(100dvh-2rem)] max-w-lg overflow-y-auto"
         // A key created while the window was closed shows on reopen.
-        initialFocus={createdKey ? focusKeyCopyButton : true}
+        initialFocus={createdKey ? focusKeyCopyButton : undefined}
       >
         <DialogHeader>
           <DialogTitle>
