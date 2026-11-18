@@ -22,8 +22,18 @@ import { API_KEY_EVENTS } from "@/lib/posthog/events"
 
 type CopyTarget = "key" | "export_command"
 
-const initialCopied = { key: false, export_command: false }
+const initialCopyState = { key: false, export_command: false }
 const copyError = "Could not copy. Select the text and copy it by hand."
+
+function selectCodeText(code: HTMLElement | null) {
+  const selection = window.getSelection?.()
+  if (!code || !selection) return
+
+  const range = document.createRange()
+  range.selectNodeContents(code)
+  selection.removeAllRanges()
+  selection.addRange(range)
+}
 
 export function CreateKeyDialog({
   open: controlledOpen,
@@ -39,8 +49,14 @@ export function CreateKeyDialog({
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
   const [createdKey, setCreatedKey] = useState<{ full: string } | null>(null)
-  const [copied, setCopied] = useState(initialCopied)
-  const [copyFailed, setCopyFailed] = useState(false)
+  const [copied, setCopied] = useState(initialCopyState)
+  const [copyFailed, setCopyFailed] = useState(initialCopyState)
+  const [copyAnnouncement, setCopyAnnouncement] = useState<{
+    id: string
+    message: string
+  } | null>(null)
+  const keyCode = useRef<HTMLElement>(null)
+  const commandCode = useRef<HTMLElement>(null)
   const copyAttempts = useRef({ key: 0, export_command: 0 })
   const copyTimers = useRef<
     Partial<Record<CopyTarget, ReturnType<typeof setTimeout>>>
@@ -63,8 +79,9 @@ export function CreateKeyDialog({
 
   useLayoutEffect(() => {
     if (!open) {
-      setCopied(initialCopied)
-      setCopyFailed(false)
+      setCopied(initialCopyState)
+      setCopyFailed(initialCopyState)
+      setCopyAnnouncement(null)
     }
     return cancelCopyFeedback
   }, [open, cancelCopyFeedback])
@@ -89,22 +106,23 @@ export function CreateKeyDialog({
 
       clearTimeout(copyTimers.current[target])
       setCopied((previous) => ({ ...previous, [target]: false }))
-      setCopyFailed(true)
+      setCopyFailed((previous) => ({ ...previous, [target]: true }))
+      selectCodeText(target === "key" ? keyCode.current : commandCode.current)
       addToast(copyError, "error")
       return
     }
 
     if (attempt !== copyAttempts.current[target]) return
 
-    posthog.capture(API_KEY_EVENTS.COPIED, { target })
-    setCopyFailed(false)
-    setCopied((previous) => ({ ...previous, [target]: true }))
-    addToast(
+    const message =
       target === "key"
         ? "API key copied to clipboard"
-        : "Command copied to clipboard",
-      "success",
-    )
+        : "Command copied to clipboard"
+    posthog.capture(API_KEY_EVENTS.COPIED, { target })
+    setCopyFailed((previous) => ({ ...previous, [target]: false }))
+    setCopied((previous) => ({ ...previous, [target]: true }))
+    setCopyAnnouncement({ id: `${target}:${attempt}`, message })
+    addToast(message, "success")
     clearTimeout(copyTimers.current[target])
     copyTimers.current[target] = setTimeout(() => {
       setCopied((previous) => ({ ...previous, [target]: false }))
@@ -116,7 +134,7 @@ export function CreateKeyDialog({
     setOpen(false)
     setName("")
     setCreatedKey(null)
-    setCopied(initialCopied)
+    setCopied(initialCopyState)
   }
 
   const KeyCopyIcon = copied.key ? CheckIcon : CopyIcon
@@ -148,9 +166,24 @@ export function CreateKeyDialog({
                 window.
               </Alert>
 
+              <output className="sr-only" aria-live="polite">
+                {copyAnnouncement && (
+                  <span key={copyAnnouncement.id}>
+                    {copyAnnouncement.message}
+                  </span>
+                )}
+              </output>
+
               <Field label="Your API key">
                 <code
-                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground"
+                  ref={keyCode}
+                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the group role lets the code block carry a name
+                  role="group"
+                  aria-label="API key"
+                  // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focus selects the text for a manual copy
+                  tabIndex={0}
+                  onFocus={(event) => selectCodeText(event.currentTarget)}
+                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   data-mask
                 >
                   {createdKey.full}
@@ -163,6 +196,11 @@ export function CreateKeyDialog({
                   <KeyCopyIcon className="size-3.5" weight="light" />
                   {copied.key ? "Copied" : "Copy key"}
                 </Button>
+                {copyFailed.key && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {copyError}
+                  </p>
+                )}
               </Field>
 
               <div className="space-y-1.5">
@@ -170,7 +208,14 @@ export function CreateKeyDialog({
                   Set the key in your shell, then create a sandbox:
                 </p>
                 <code
-                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground"
+                  ref={commandCode}
+                  // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- the group role lets the code block carry a name
+                  role="group"
+                  aria-label="Export command"
+                  // oxlint-disable-next-line jsx-a11y/no-noninteractive-tabindex -- focus selects the text for a manual copy
+                  tabIndex={0}
+                  onFocus={(event) => selectCodeText(event.currentTarget)}
+                  className="ph-no-capture block border border-dashed border-border bg-background px-3 py-2 font-mono text-xs break-all text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                   data-mask
                 >
                   {exportCommand}
@@ -186,12 +231,12 @@ export function CreateKeyDialog({
                   <CommandCopyIcon className="size-3.5" weight="light" />
                   {copied.export_command ? "Copied" : "Copy command"}
                 </Button>
+                {copyFailed.export_command && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {copyError}
+                  </p>
+                )}
               </div>
-              {copyFailed && (
-                <p role="alert" className="text-xs text-destructive">
-                  {copyError}
-                </p>
-              )}
             </div>
           ) : (
             <Field label="Key Name" required>

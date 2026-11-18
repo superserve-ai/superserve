@@ -117,11 +117,17 @@ describe("CreateKeyDialog created state", () => {
       ),
     ).toBeVisible()
     expect(screen.getByText("Your API key")).toBeVisible()
-    expect(screen.getByText(key, { selector: "code" })).toBeVisible()
+    const keyCode = screen.getByText(key, { selector: "code" })
+    expect(keyCode).toBeVisible()
+    expect(keyCode).toHaveAttribute("data-mask")
+    expect(keyCode).toHaveClass("ph-no-capture")
     expect(
       screen.getByText("Set the key in your shell, then create a sandbox:"),
     ).toBeVisible()
-    expect(screen.getByText(command, { selector: "code" })).toBeVisible()
+    const commandCode = screen.getByText(command, { selector: "code" })
+    expect(commandCode).toBeVisible()
+    expect(commandCode).toHaveAttribute("data-mask")
+    expect(commandCode).toHaveClass("ph-no-capture")
   })
 
   it.each([
@@ -140,30 +146,103 @@ describe("CreateKeyDialog created state", () => {
     expect(mockCapture).toHaveBeenCalledWith("api_key_copied", { target })
   })
 
-  it.each(["Copy key", "Copy command"])(
-    "shows an error when %s cannot write to the clipboard",
-    async (label) => {
+  it.each([
+    ["Copy key", key],
+    ["Copy command", command],
+  ])(
+    "shows an error below %s and selects its text when copying fails",
+    async (label, text) => {
       await createKey()
       writeText.mockRejectedValueOnce(new Error("Clipboard permission denied"))
 
       const button = screen.getByRole("button", { name: label })
-      const dialog = within(screen.getByRole("dialog"))
+      const block = within(button.parentElement!)
       await userEvent.click(button)
 
+      const alert = block.getByText(copyError, { selector: '[role="alert"]' })
+      expect(alert).toBeVisible()
+      expect(alert).toHaveClass("text-xs", "text-destructive")
+      expect(button.nextElementSibling).toBe(alert)
+      expect(window.getSelection()?.toString()).toBe(text)
       expect(button).toHaveAccessibleName(label)
       expect(mockCapture.mock.calls.map(([event]) => event)).not.toContain(
         "api_key_copied",
       )
       expect(mockAddToast).toHaveBeenCalledExactlyOnceWith(copyError, "error")
-      expect(
-        dialog.queryByText(copyError, { selector: '[role="alert"]' }),
-      ).toBeVisible()
 
       await userEvent.click(button)
 
-      expect(dialog.queryByText(copyError)).toBeNull()
+      expect(block.queryByText(copyError)).toBeNull()
     },
   )
+
+  it("keeps the command error when a subsequent key copy succeeds", async () => {
+    await createKey()
+    writeText.mockRejectedValueOnce(new Error("Clipboard permission denied"))
+
+    const commandButton = screen.getByRole("button", { name: "Copy command" })
+    await userEvent.click(commandButton)
+    await userEvent.click(screen.getByRole("button", { name: "Copy key" }))
+
+    expect(screen.getByRole("button", { name: "Copied API key" })).toBeVisible()
+    expect(commandButton.nextElementSibling).toHaveTextContent(copyError)
+  })
+
+  it.each([
+    ["API key", "Copy key", key],
+    ["Export command", "Copy command", command],
+  ])("selects the %s when reached by keyboard", async (name, label, text) => {
+    await createKey()
+
+    const code = screen.getByText(text, { selector: "code" })
+    expect(code).toHaveAccessibleName(name)
+    expect(code).toHaveAttribute("tabindex", "0")
+    expect(code).toHaveClass(
+      "focus-visible:ring-2",
+      "focus-visible:ring-border-focus",
+      "focus-visible:outline-none",
+    )
+
+    act(() => screen.getByRole("button", { name: label }).focus())
+    await userEvent.tab({ shift: true })
+
+    expect(code).toHaveFocus()
+    expect(window.getSelection()?.toString()).toBe(text)
+  })
+
+  it("announces each successful copy in the same live region", async () => {
+    await createKey()
+
+    const status = screen.getByRole("status")
+    expect(status).toHaveClass("sr-only")
+    expect(status).toHaveAttribute("aria-live", "polite")
+    expect(status).toBeEmptyDOMElement()
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy key" }))
+
+    expect(screen.getByRole("status")).toBe(status)
+    expect(status.textContent).toBe("API key copied to clipboard")
+
+    await userEvent.click(screen.getByRole("button", { name: "Copy command" }))
+
+    expect(screen.getByRole("status")).toBe(status)
+    expect(status.textContent).toBe("Command copied to clipboard")
+
+    const announcement = status.firstChild
+    await userEvent.click(
+      screen.getByRole("button", { name: "Copied export command" }),
+    )
+
+    expect(screen.getByRole("status")).toBe(status)
+    expect(status.textContent).toBe("Command copied to clipboard")
+    expect(status.firstChild).not.toBe(announcement)
+
+    await userEvent.click(screen.getByRole("button", { name: "Done" }))
+    await userEvent.click(screen.getByRole("button", { name: "Open dialog" }))
+    await submitKey()
+
+    expect(screen.getByRole("status")).toBeEmptyDOMElement()
+  })
 
   it("gives both copied buttons distinct accessible names", async () => {
     await createKey()
@@ -250,6 +329,55 @@ describe("CreateKeyDialog created state", () => {
     expect(commandButton).toHaveTextContent("Copied")
     act(() => vi.advanceTimersByTime(1))
     expect(commandButton).toHaveAccessibleName("Copy command")
+  })
+
+  it("restarts the two-second feedback timer when copying again", async () => {
+    await createKey()
+    vi.useFakeTimers()
+
+    const button = screen.getByRole("button", { name: "Copy key" })
+    await act(async () => {
+      fireEvent.click(button)
+    })
+    act(() => vi.advanceTimersByTime(1500))
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    act(() => vi.advanceTimersByTime(600))
+    expect(button).toHaveTextContent(/^Copied$/)
+    act(() => vi.advanceTimersByTime(1399))
+    expect(button).toHaveTextContent(/^Copied$/)
+    act(() => vi.advanceTimersByTime(1))
+    expect(button).toHaveTextContent(/^Copy key$/)
+  })
+
+  it("discards the copy timer from before the dialog was closed", async () => {
+    await createKey()
+    vi.useFakeTimers()
+
+    await act(async () => {
+      fireEvent.click(screen.getByRole("button", { name: "Copy key" }))
+    })
+    act(() => vi.advanceTimersByTime(1500))
+    fireEvent.click(screen.getByRole("button", { name: "Done" }))
+    fireEvent.click(screen.getByRole("button", { name: "Open dialog" }))
+
+    const newKey = "ss_live_test_key_456"
+    mockMutate.mockImplementationOnce((_name, options) => {
+      options.onSuccess({ key: newKey })
+    })
+    fireEvent.change(screen.getByRole("textbox"), { target: { value: "CI" } })
+    fireEvent.click(screen.getByRole("button", { name: "Create Key" }))
+
+    const button = screen.getByRole("button", { name: "Copy key" })
+    await act(async () => {
+      fireEvent.click(button)
+    })
+
+    expect(writeText).toHaveBeenLastCalledWith(newKey)
+    act(() => vi.advanceTimersByTime(600))
+    expect(button).toHaveTextContent(/^Copied$/)
   })
 
   it("closes and clears the key when Done is clicked", async () => {
