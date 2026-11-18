@@ -133,7 +133,11 @@ function TeamDetailsForm({ team }: { team: ActiveTeam }) {
         </form>
       ) : null}
       <dl className="border border-dashed border-border">
-        {!canRename && <DetailRow label="Name">{team.name}</DetailRow>}
+        {!canRename && (
+          <DetailRow label="Name">
+            <span className="break-all">{team.name}</span>
+          </DetailRow>
+        )}
         <DetailRow label="Region">{regionLabel(team.region)}</DetailRow>
         <DetailRow label="Team ID">
           <CopyableId value={team.id} />

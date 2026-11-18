@@ -112,11 +112,12 @@ describe("TeamDetailsSection", () => {
 
   it("is read-only without the capability", () => {
     canRename = false
+    teamName = "abcdefghijklmnopqrstuvwxyzabcdefghijklmno"
     render(<TeamDetailsSection />)
 
     expect(screen.queryByLabelText("Team Name")).toBeNull()
     expect(screen.queryByRole("button", { name: "Save Name" })).toBeNull()
-    expect(screen.getByText("Example Team")).toBeTruthy()
+    expect(screen.getByText(teamName)).toHaveClass("break-all")
     expect(screen.getByText("team-1")).toBeTruthy()
   })
 

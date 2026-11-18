@@ -247,4 +247,20 @@ describe("TeamsSection", () => {
     )
     expect(section).not.toHaveClass("grid-cols-[240px_1fr]")
   })
+
+  it("wraps long team names and keeps the directory labels from shrinking", () => {
+    const name = "abcdefghijklmnopqrstuvwxyzabcdefghijklmno"
+    teamsData = {
+      teams: [{ ...account, name }],
+      regions: ["use", "usw"],
+      activeTeamId: account.id,
+      activeRegion: account.region,
+    }
+    render(<TeamsSection />)
+
+    expect(screen.getByText(name)).toHaveClass("min-w-0", "break-all")
+    const labels = screen.getByText("Active").parentElement
+    expect(labels).toHaveClass("shrink-0")
+    expect(labels).toHaveTextContent("US West")
+  })
 })
