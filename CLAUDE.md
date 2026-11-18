@@ -93,7 +93,7 @@ The console has a deliberate austere, technical aesthetic:
 
 ## Protected paths
 
-`.github/CODEOWNERS` lists the paths that automation must not change on `main` without a human. It is the only source of the list; today it covers:
+`.github/CODEOWNERS` lists the paths that automation must not change on `main` without a human. It is the only source of this list, but it is not the only human-review rule: the repository rulesets on `main` also require human reviews for other paths, and GitHub applies all of them. Today the list covers:
 
 - CI and the npm, PyPI and docs release workflows, and CODEOWNERS itself
 - Console request authentication, the sign-in and sign-up reCAPTCHA and Turnstile checks, security headers, env config, and the Supabase admin and regional service-role clients
