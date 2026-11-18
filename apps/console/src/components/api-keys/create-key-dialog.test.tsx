@@ -238,13 +238,25 @@ describe("CreateKeyDialog created state", () => {
     await userEvent.keyboard("{Escape}")
     expect(screen.queryByRole("dialog")).toBeNull()
     act(() => finishCreate())
+    const scrollIntoView = mockScrollIntoView()
+    const focus = vi.spyOn(HTMLElement.prototype, "focus")
+    onTestFinished(() => focus.mockRestore())
 
     await userEvent.click(screen.getByRole("button", { name: "Open dialog" }))
 
     expect(screen.getByText(key, { selector: "code" })).toBeVisible()
-    await waitFor(() =>
-      expect(screen.getByRole("button", { name: "Copy key" })).toHaveFocus(),
+    const button = screen.getByRole("button", { name: "Copy key" })
+    await waitFor(() => expect(button).toHaveFocus())
+    // Focus without the default centering scroll, as on first creation.
+    const buttonFocusCalls = focus.mock.calls.filter(
+      (_args, index) => focus.mock.contexts[index] === button,
     )
+    expect(buttonFocusCalls.length).toBeGreaterThan(0)
+    for (const args of buttonFocusCalls) {
+      expect(args).toEqual([{ preventScroll: true }])
+    }
+    expect(scrollIntoView).toHaveBeenCalledWith({ block: "nearest" })
+    expect(scrollIntoView.mock.contexts).toContain(button)
   })
 
   it.each([
@@ -388,7 +400,8 @@ describe("CreateKeyDialog created state", () => {
       await createKey()
 
       const code = screen.getByText(text, { selector: "code" })
-      expect(code).toHaveAccessibleName(name)
+      // The code role cannot carry a name, so the block needs the group role.
+      expect(screen.getByRole("group", { name })).toBe(code)
       expect(code).not.toHaveAttribute("tabindex")
 
       // A selection would reach the X11 primary selection without a copy.
