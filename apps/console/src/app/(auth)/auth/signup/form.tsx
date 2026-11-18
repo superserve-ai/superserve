@@ -463,11 +463,7 @@ export default function SignUpContent() {
         <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
       <DitherBackground />
-      {/* Heedeo loads when the visitor reaches the sign-up card, not with the page. */}
-      <div
-        className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6"
-        {...heedeoPreloadProps}
-      >
+      <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
         <div className="mb-8 flex justify-center">
           <Link href="/">
@@ -528,6 +524,7 @@ export default function SignUpContent() {
               type="button"
               variant="outline"
               onClick={() => handleGoogleSignIn()}
+              {...heedeoPreloadProps}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
@@ -546,6 +543,7 @@ export default function SignUpContent() {
                 <button
                   type="button"
                   onClick={() => handleGoogleSignIn(true)}
+                  {...heedeoPreloadProps}
                   disabled={isGoogleLoading || isLoading}
                   className="font-medium text-foreground hover:underline disabled:opacity-50"
                 >
@@ -563,6 +561,7 @@ export default function SignUpContent() {
               type="button"
               variant="outline"
               onClick={() => handleGoogleSignIn()}
+              {...heedeoPreloadProps}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
@@ -577,7 +576,12 @@ export default function SignUpContent() {
                 <span className="bg-surface px-3 text-muted">or</span>
               </div>
             </div>
-            <form onSubmit={handleSignUp} className="space-y-3">
+            {/* Heedeo loads on the sign-up controls, not with the page. */}
+            <form
+              onSubmit={handleSignUp}
+              className="space-y-3"
+              {...heedeoPreloadProps}
+            >
               <Input
                 type="text"
                 placeholder="Full Name"

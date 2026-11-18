@@ -12,9 +12,9 @@ authentication decision depends on it, and every failure fails open.
 1. The script loads from the console origin (`/api/dv/i.js`, see
    "First-party route" below), not with the page: once loaded, it identifies
    the browser in the background ahead of `identify()`. It loads when the
-   pointer reaches, or focus enters, the sign-up card or a "Continue with
-   Google" button on the sign-in page (`heedeoPreloadProps`), else at the
-   action. Opening a page, or password sign-in, loads nothing.
+   pointer reaches, or focus enters, the email sign-up form or a Google button
+   on the sign-up page, or a "Continue with Google" button on the sign-in page
+   (`heedeoPreloadProps`), else at the action. Opening a page, or password sign-in, loads nothing.
 2. At the action, the page calls `captureHeedeoSignup()` beside the other
    checks: email sign-up submit, "Continue with Google" on the sign-up page, and
    the Google sign-up check on the sign-in page. It calls `identify()` (billed
@@ -47,6 +47,9 @@ sign up at the same time, one attempt can send the other's token, or none.
 Both tabs are the same browser, so the observed device is the same. A
 Google sign-up whose account signs in again within the five-minute OAuth
 window, before its first team exists, can send a second event.
+A tab that loaded the script before the kill switch was set can still send
+a backup identify to `https://heedeo.dev` when the first-party call is slow.
+Revoking the publishable key in Heedeo's dashboard stops that too.
 
 ## PostHog `auth_heedeo_signup_observed`
 
