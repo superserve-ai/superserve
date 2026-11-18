@@ -68,8 +68,8 @@ export function Sidebar() {
       toggleRef.current?.focus()
     }
 
-    document.addEventListener("keydown", handleKeyDown)
-    return () => document.removeEventListener("keydown", handleKeyDown)
+    window.addEventListener("keydown", handleKeyDown)
+    return () => window.removeEventListener("keydown", handleKeyDown)
   }, [isOverlayOpen, setCollapsed])
 
   const navItems = [
@@ -86,113 +86,125 @@ export function Sidebar() {
       className={cn(
         "absolute top-0 left-0 z-40 flex h-full flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200 motion-reduce:transition-none",
         "max-md:[&_a]:min-h-11 max-md:[&_button]:min-h-11",
+        !isCollapsed && "max-md:overflow-x-hidden max-md:overflow-y-auto",
         isCollapsed ? "w-16" : "w-64",
         !hydrated && "max-md:invisible max-md:w-16",
       )}
     >
-      {/* Logo */}
-      <div className="flex items-center justify-center p-5">
-        {isCollapsed ? (
-          <Image
-            src="/logo-mark.svg"
-            alt="Superserve"
-            width={20}
-            height={20}
-            className="size-5"
-          />
-        ) : (
-          <Image
-            src="/logo.svg"
-            alt="Superserve"
-            width={100}
-            height={20}
-            className="h-5 w-auto"
-          />
+      {/* Keep the rail's sideways user menu outside the scroll area. */}
+      <div
+        className={cn(
+          "contents",
+          isCollapsed &&
+            "max-md:flex max-md:flex-1 max-md:flex-col max-md:overflow-x-hidden max-md:overflow-y-auto",
         )}
-      </div>
+      >
+        {/* Logo */}
+        <div className="flex items-center justify-center p-5">
+          {isCollapsed ? (
+            <Image
+              src="/logo-mark.svg"
+              alt="Superserve"
+              width={20}
+              height={20}
+              className="size-5"
+            />
+          ) : (
+            <Image
+              src="/logo.svg"
+              alt="Superserve"
+              width={100}
+              height={20}
+              className="h-5 w-auto"
+            />
+          )}
+        </div>
 
-      {/* Team Switcher — scopes every view below to the active team */}
-      {!isCollapsed && <TeamSwitcher />}
+        {/* Team Switcher — scopes every view below to the active team */}
+        {!isCollapsed && <TeamSwitcher />}
 
-      {/* Search */}
-      <div className="mb-2 px-2.5">
-        {isCollapsed ? (
+        {/* Search */}
+        <div className="mb-2 px-2.5">
+          {isCollapsed ? (
+            <Tooltip>
+              <TooltipTrigger
+                render={
+                  <Button
+                    variant="outline"
+                    size="icon-sm"
+                    onClick={openCommandPalette}
+                    aria-label="Search"
+                    className="w-full"
+                  />
+                }
+              >
+                <MagnifyingGlassIcon className="size-4" weight="light" />
+              </TooltipTrigger>
+              <TooltipPopup>Search</TooltipPopup>
+            </Tooltip>
+          ) : (
+            <button
+              type="button"
+              onClick={openCommandPalette}
+              className="group flex w-full cursor-pointer items-center gap-2.5 border border-control px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+            >
+              <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
+              <span className="flex-1 text-left text-sm leading-none tracking-tight text-foreground/70">
+                Search
+              </span>
+              <div className="flex items-center gap-0.5">
+                <Kbd className="transition-colors group-hover:bg-neutral-900">
+                  &#8984;
+                </Kbd>
+                <Kbd className="transition-colors group-hover:bg-neutral-900">
+                  K
+                </Kbd>
+              </div>
+            </button>
+          )}
+        </div>
+
+        {/* Main Nav */}
+        <SidebarNav items={navItems} groupId="main" />
+
+        {/* Spacer */}
+        <div className="flex-1" />
+
+        {/* Collapse Toggle */}
+        <nav className="mb-0.5 px-2.5">
           <Tooltip>
             <TooltipTrigger
               render={
-                <Button
-                  variant="outline"
-                  size="icon-sm"
-                  onClick={openCommandPalette}
-                  aria-label="Search"
-                  className="w-full"
+                <button
+                  ref={toggleRef}
+                  type="button"
+                  onClick={toggle}
+                  aria-label={
+                    isCollapsed ? "Expand sidebar" : "Collapse sidebar"
+                  }
+                  className={cn(
+                    "flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground",
+                    isCollapsed && "justify-center",
+                  )}
                 />
               }
             >
-              <MagnifyingGlassIcon className="size-4" weight="light" />
+              <SidebarSimpleIcon className="size-4 shrink-0" weight="light" />
+              {!isCollapsed && (
+                <span className="text-sm leading-none tracking-tight">
+                  Collapse
+                </span>
+              )}
             </TooltipTrigger>
-            <TooltipPopup>Search</TooltipPopup>
+            {isCollapsed && <TooltipPopup>Expand</TooltipPopup>}
           </Tooltip>
-        ) : (
-          <button
-            type="button"
-            onClick={openCommandPalette}
-            className="group flex w-full cursor-pointer items-center gap-2.5 border border-control px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
-          >
-            <MagnifyingGlassIcon className="size-4 shrink-0" weight="light" />
-            <span className="flex-1 text-left text-sm leading-none tracking-tight text-foreground/70">
-              Search
-            </span>
-            <div className="flex items-center gap-0.5">
-              <Kbd className="transition-colors group-hover:bg-neutral-900">
-                &#8984;
-              </Kbd>
-              <Kbd className="transition-colors group-hover:bg-neutral-900">
-                K
-              </Kbd>
-            </div>
-          </button>
-        )}
+        </nav>
+
+        {/* Bottom Nav */}
+        <SidebarNav items={bottomNavItems} groupId="bottom" />
+
+        <div className="m-2.5 border-t border-border" />
       </div>
-
-      {/* Main Nav */}
-      <SidebarNav items={navItems} groupId="main" />
-
-      {/* Spacer */}
-      <div className="flex-1" />
-
-      {/* Collapse Toggle */}
-      <nav className="mb-0.5 px-2.5">
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <button
-                ref={toggleRef}
-                type="button"
-                onClick={toggle}
-                aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}
-                className={cn(
-                  "flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-brand/10 hover:text-foreground",
-                  isCollapsed && "justify-center",
-                )}
-              />
-            }
-          >
-            <SidebarSimpleIcon className="size-4 shrink-0" weight="light" />
-            {!isCollapsed && (
-              <span className="text-sm leading-none tracking-tight">
-                Collapse
-              </span>
-            )}
-          </TooltipTrigger>
-          {isCollapsed && <TooltipPopup>Expand</TooltipPopup>}
-        </Tooltip>
-      </nav>
-
-      {/* Bottom Nav */}
-      <SidebarNav items={bottomNavItems} groupId="bottom" />
-
-      <div className="m-2.5 border-t border-border" />
 
       {/* User Menu */}
       <div className="pb-2.5">

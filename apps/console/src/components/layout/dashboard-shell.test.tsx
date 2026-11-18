@@ -1,4 +1,5 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import userEvent from "@testing-library/user-event"
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
 
 import { DashboardShell } from "./dashboard-shell"
@@ -10,11 +11,28 @@ vi.mock("next/navigation", () => ({
   usePathname: () => "/sandboxes",
   useRouter: () => ({ push: vi.fn() }),
 }))
-vi.mock("@/components/sidebar/team-switcher", () => ({
-  TeamSwitcher: () => null,
+vi.mock("@/hooks/use-teams", () => ({
+  useTeams: () => ({
+    data: {
+      activeTeamId: "team-a",
+      activeRegion: "use",
+      teams: [
+        { id: "team-a", name: "Alpha", region: "use" },
+        { id: "team-b", name: "Beta", region: "use" },
+      ],
+    },
+  }),
+  useSwitchTeam: () => ({ mutate: vi.fn(), isPending: false }),
 }))
-vi.mock("@/components/sidebar/sidebar-user-menu", () => ({
-  SidebarUserMenu: () => null,
+vi.mock("@superserve/ui", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@superserve/ui")>()
+  return { ...actual, useToast: () => ({ addToast: vi.fn() }) }
+})
+vi.mock("@/components/sidebar/plan-badge", () => ({
+  PlanBadge: () => null,
+}))
+vi.mock("@/hooks/use-sign-out", () => ({
+  useSignOut: () => vi.fn(),
 }))
 vi.mock("@/hooks/use-user", () => ({
   useUser: () => ({ user: { id: "user-1" } }),
@@ -153,6 +171,44 @@ it("keeps the phone overlay open when Escape is prevented", () => {
     screen.getByRole("button", { name: "Collapse sidebar" }),
   ).toBeInTheDocument()
   expect(search).toHaveFocus()
+})
+
+it("dismisses the user menu before collapsing the phone overlay on Escape", async () => {
+  const user = userEvent.setup()
+  openSmallScreenSidebar()
+  const toggle = screen.getByRole("button", { name: "Collapse sidebar" })
+  await user.click(screen.getByRole("button", { name: "User" }))
+  const logout = screen.getByRole("button", { name: "Log out" })
+  logout.focus()
+  expect(logout).toHaveFocus()
+
+  await user.keyboard("{Escape}")
+
+  expect(logout).not.toBeInTheDocument()
+  expect(toggle).toHaveAccessibleName("Collapse sidebar")
+  expect(toggle).not.toHaveFocus()
+
+  await user.keyboard("{Escape}")
+
+  expect(toggle).toHaveAccessibleName("Expand sidebar")
+  expect(toggle).toHaveFocus()
+})
+
+it("keeps the phone overlay open when Escape dismisses the team switcher", async () => {
+  const user = userEvent.setup()
+  openSmallScreenSidebar()
+  const toggle = screen.getByRole("button", { name: "Collapse sidebar" })
+  const trigger = screen.getByRole("combobox", { name: "Active team" })
+  await user.click(trigger)
+  const option = await screen.findByRole("option", { name: "Alpha" })
+  expect(trigger).toHaveAttribute("aria-expanded", "true")
+  expect(screen.getByRole("complementary")).not.toContainElement(option)
+  await waitFor(() => expect(option).toHaveFocus())
+
+  await user.keyboard("{Escape}")
+
+  expect(trigger).toHaveAttribute("aria-expanded", "false")
+  expect(toggle).toHaveAccessibleName("Collapse sidebar")
 })
 
 it("keeps the phone overlay open when Escape dismisses the command palette", async () => {

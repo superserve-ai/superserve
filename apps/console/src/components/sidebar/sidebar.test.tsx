@@ -88,6 +88,15 @@ describe("Sidebar", () => {
     )
   })
 
+  it("lets the expanded sidebar scroll vertically below md", () => {
+    render(<Sidebar />)
+
+    expect(screen.getByRole("complementary")).toHaveClass(
+      "max-md:overflow-x-hidden",
+      "max-md:overflow-y-auto",
+    )
+  })
+
   it("shows Billing & Usage without a separate Billing nav item", () => {
     const queryClient = new QueryClient({
       defaultOptions: {
