@@ -129,6 +129,8 @@ export interface TemplateSummary {
   memoryMaxMib?: number
   /** Seconds memory must stay low after growing before it shrinks back; absent when the platform default applies. */
   memoryShrinkAfterSeconds?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpuMax?: number
   diskMib: number
 }
 
@@ -176,6 +178,7 @@ export interface TemplateCreateInput {
   memoryMib?: number
   memoryMaxMib?: number
   memoryShrinkAfterSeconds?: number
+  vcpuMax?: number
   diskMib?: number
   steps?: BuildStep[]
   startCmd?: string
@@ -294,6 +297,7 @@ function toTemplateSummary(t: TemplateInfo): TemplateSummary {
     memoryMib: t.memoryMib,
     memoryMaxMib: t.memoryMaxMib,
     memoryShrinkAfterSeconds: t.memoryShrinkAfterSeconds,
+    vcpuMax: t.vcpuMax,
     diskMib: t.diskMib,
   }
 }
@@ -387,6 +391,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         memoryMib: input.memoryMib,
         memoryMaxMib: input.memoryMaxMib,
         memoryShrinkAfterSeconds: input.memoryShrinkAfterSeconds,
+        vcpuMax: input.vcpuMax,
         diskMib: input.diskMib,
         steps: input.steps,
         startCmd: input.startCmd,
@@ -402,6 +407,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         memoryMib: t.memoryMib,
         memoryMaxMib: t.memoryMaxMib,
         memoryShrinkAfterSeconds: t.memoryShrinkAfterSeconds,
+        vcpuMax: t.vcpuMax,
         diskMib: t.diskMib,
         createdAt: t.createdAt,
       })

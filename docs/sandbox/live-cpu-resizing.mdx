@@ -1,0 +1,78 @@
+---
+title: "Live CPU resizing"
+sidebarTitle: CPU resizing
+description: "Sandboxes that get more CPU under load and drop back when they're idle."
+---
+
+Agent workloads spend much of their time waiting: on a model, on the network, on the user. Then they need several cores at once for a build, a test suite or a batch job. Live CPU resizing lets a sandbox start small, get more CPU while it's busy, and drop back when it's idle. You don't have to size every sandbox for its busiest moment, and you don't pay for that CPU while it sits idle.
+
+## Turn it on
+
+CPU resizing is set per template. Set `vcpuMax` alongside `vcpu`: `vcpu` is the minimum a sandbox starts with, and `vcpuMax` is the most it can grow to. Sandboxes from that template, and sandboxes created from snapshots of them, use the same range.
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "my-scaling-env",
+  vcpu: 1,
+  vcpuMax: 4,
+  from: "python:3.11",
+})
+```
+
+```python Python
+from superserve import Template
+
+template = Template.create(
+    name="my-scaling-env",
+    vcpu=1,
+    vcpu_max=4,
+    from_="python:3.11",
+)
+```
+
+```bash CLI
+superserve template create my-scaling-env --from python:3.11 \
+  --vcpu 1 --vcpu-max 4
+```
+
+</CodeGroup>
+
+With the [MCP server](/integrations/mcp), pass `vcpu_max` to `sandbox_template_create`.
+
+`vcpuMax` takes whole vCPUs. It must be greater than `vcpu`, at most 4 times it, at most 32, and within your plan's vCPU limit. See [Growing CPU](/templates/build-spec#growing-cpu). Templates without it keep a fixed vCPU count.
+
+You can combine it with [live memory resizing](/sandbox/live-memory-resizing) on the same template.
+
+## How it works
+
+It's automatic: no API calls, no restarts, and no changes to your code.
+
+- **Starting:** a new sandbox gets the minimum, `vcpu`.
+- **Under load:** when the sandbox is busy, its CPU allowance rises, up to `vcpuMax`.
+- **When idle:** once the load drops, the allowance drops back, never below `vcpu`.
+
+## Billing
+
+You pay for the CPU allowance a sandbox is granted, the same way you pay for memory. While it's quiet you're billed at the minimum, while it's scaled up you're billed for the larger allowance, and once it drops back you're billed at the smaller allowance again.
+
+## Check the range
+
+<CodeGroup>
+
+```typescript TypeScript
+const info = await sandbox.getInfo()
+console.log(info.vcpuCount, info.vcpuMax)
+```
+
+```python Python
+info = sandbox.get_info()
+print(info.vcpu_count, info.vcpu_max)
+```
+
+</CodeGroup>
+
+`vcpuCount` / `vcpu_count` is the minimum and `vcpuMax` / `vcpu_max` is the ceiling. `vcpuMax` isn't set for sandboxes with a fixed vCPU count. Templates and snapshots report the same range. The console shows it as a range, for example **1–4 vCPU**.

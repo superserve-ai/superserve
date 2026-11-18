@@ -101,6 +101,7 @@ superserve sandbox create --name analysis --template py-data
 | `--start-cmd <cmd>` | Process started after the build and captured running in the snapshot. |
 | `--ready-cmd <cmd>` | Readiness probe polled after `--start-cmd` until it exits 0. |
 | `--vcpu <n>` | vCPUs. Default `1`. |
+| `--vcpu-max <n>` | Let sandboxes get more CPU under load, up to this many vCPUs. See [Live CPU resizing](/sandbox/live-cpu-resizing). |
 | `--memory <size>` | Memory a sandbox boots with. Default `1G`. |
 | `--memory-max <size>` | Let sandboxes grow memory while running, up to this size. See [Live memory resizing](/sandbox/live-memory-resizing). |
 | `--memory-shrink-after <duration>` | How long memory must stay low after growing before it shrinks back, for example `10m`. 1 to 30 minutes; requires `--memory-max`. When unset, the default (about one minute) applies. See [Shrink timing](/sandbox/live-memory-resizing#shrink-timing). |
@@ -112,16 +113,18 @@ Build steps (`--run`, `--env`, `--workdir`, `--user`) run in command-line order.
 
 `--memory-max` must be greater than `--memory`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128 MiB. If neither `--memory` nor the file's `memory_mib` is set, it is compared with the default of `1G`. Leave it out for a fixed memory size. See [Growing memory](/templates/build-spec#growing-memory).
 
-Sandboxes created from the template, or from a snapshot of one of its sandboxes, inherit `--memory-shrink-after`.
+`--vcpu-max` takes whole vCPUs and must be greater than `--vcpu`, at most 4 times it, at most 32, and within your plan's vCPU limit. If neither `--vcpu` nor the file's `vcpu` is set, it is compared with the default of `1`. Leave it out for a fixed vCPU count. See [Growing CPU](/templates/build-spec#growing-cpu).
 
-`--file` takes the [build spec](/templates/build-spec) fields in snake_case (`from`, `steps`, `start_cmd`, `ready_cmd`) plus `vcpu`, `memory_mib`, `memory_max_mib`, `memory_shrink_after_seconds` and `disk_mib`. YAML is not supported. Flags override the file's fields, and flag build steps run after the file's steps.
+Sandboxes created from the template, or from a snapshot of one of its sandboxes, inherit `--memory-shrink-after` and `--vcpu-max`.
+
+`--file` takes the [build spec](/templates/build-spec) fields in snake_case (`from`, `steps`, `start_cmd`, `ready_cmd`) plus `vcpu`, `memory_mib`, `memory_max_mib`, `memory_shrink_after_seconds`, `vcpu_max` and `disk_mib`. YAML is not supported. Flags override the file's fields, and flag build steps run after the file's steps.
 
 ```bash
 echo '{"from": "python:3.11", "steps": [{"run": "pip install numpy"}], "memory_mib": 2048, "memory_max_mib": 8192}' > template.json
 superserve template create growable -f template.json
 ```
 
-`superserve template get <name>` shows the memory range of a growable template, for example `Memory: 2G-8G`; `--json` returns `memory_mib` and `memory_max_mib`. `superserve sandbox get` shows the same range for a sandbox. Both show `Memory shrink after` when the value is set.
+`superserve template get <name>` shows the memory range of a growable template, for example `Memory: 2G-8G`, and the vCPU range, for example `vCPU: 1-4`; `--json` returns `memory_mib`, `memory_max_mib`, `vcpu` and `vcpu_max`. `superserve sandbox get` shows the same ranges for a sandbox, for example `Shape: 1-4 vCPU, 2.0 GB-8.0 GB`. Both show `Memory shrink after` when the value is set.
 
 ## Scripting
 

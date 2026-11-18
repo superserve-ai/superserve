@@ -54,6 +54,7 @@ class AsyncTemplate:
         self.memory_mib: int = info.memory_mib
         self.memory_max_mib: int | None = info.memory_max_mib
         self.memory_shrink_after_seconds: int | None = info.memory_shrink_after_seconds
+        self.vcpu_max: int | None = info.vcpu_max
         self.disk_mib: int = info.disk_mib
         self.size_bytes = info.size_bytes
         self.error_message = info.error_message
@@ -76,6 +77,7 @@ class AsyncTemplate:
         memory_mib: int | None = None,
         memory_max_mib: int | None = None,
         memory_shrink_after_seconds: int | None = None,
+        vcpu_max: int | None = None,
         disk_mib: int | None = None,
         steps: list[BuildStep] | None = None,
         start_cmd: str | None = None,
@@ -103,6 +105,8 @@ class AsyncTemplate:
             body["memory_max_mib"] = memory_max_mib
         if memory_shrink_after_seconds is not None:
             body["memory_shrink_after_seconds"] = memory_shrink_after_seconds
+        if vcpu_max is not None:
+            body["vcpu_max"] = vcpu_max
         if disk_mib is not None:
             body["disk_mib"] = disk_mib
 
