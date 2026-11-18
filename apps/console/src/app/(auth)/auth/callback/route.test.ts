@@ -3732,6 +3732,15 @@ describe("auth callback", () => {
       expect(response.headers.get("location")).toBe(
         "https://console.superserve.ai/auth/confirm/?retry=1",
       )
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_callback_failed",
+        expect.any(String),
+        expect.objectContaining({
+          reason: "email_link_rejected",
+          method: "token_hash",
+          type: "magiclink",
+        }),
+      )
     })
 
     it.each<Record<string, string>>([
@@ -3746,6 +3755,50 @@ describe("auth callback", () => {
       const response = await POST(
         confirmPost(cookie, confirmCsrf(cookie), headers),
       )
+
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/auth/confirm/?retry=1",
+      )
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_callback_failed",
+        expect.any(String),
+        expect.objectContaining({
+          reason: "email_link_rejected",
+          method: "token_hash",
+          type: "magiclink",
+        }),
+      )
+    })
+
+    it("does not read the body of a post that is not from this site", async () => {
+      const { cookie } = await openLink()
+      const request = confirmPost(cookie, confirmCsrf(cookie), {
+        "sec-fetch-site": "cross-site",
+      })
+      const formData = vi.spyOn(request, "formData")
+
+      await POST(request)
+
+      expect(formData).not.toHaveBeenCalled()
+      expect(mockVerifyOtp).not.toHaveBeenCalled()
+    })
+
+    it("refuses a post that is not a URL-encoded form", async () => {
+      const { cookie } = await openLink()
+      const body = new FormData()
+      body.set("csrf", confirmCsrf(cookie))
+      const request = new Request(
+        "https://console.superserve.ai/auth/callback/",
+        {
+          method: "POST",
+          body,
+        },
+      )
+      request.headers.set("cookie", `${CONFIRM_COOKIE}=${cookie}`)
+      request.headers.set("sec-fetch-site", "same-origin")
+
+      const response = await POST(request)
 
       expect(mockVerifyOtp).not.toHaveBeenCalled()
       expect(response.headers.get("location")).toBe(
@@ -3771,6 +3824,15 @@ describe("auth callback", () => {
       expect(mockVerifyOtp).not.toHaveBeenCalled()
       expect(response.headers.get("location")).toBe(
         "https://console.superserve.ai/auth/confirm/",
+      )
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_callback_failed",
+        expect.any(String),
+        expect.objectContaining({
+          reason: "email_link_expired",
+          method: "token_hash",
+          type: null,
+        }),
       )
     })
 

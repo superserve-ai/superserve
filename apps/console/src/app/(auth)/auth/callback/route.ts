@@ -233,17 +233,29 @@ export async function POST(request: Request) {
   const secure = url.protocol === "https:"
   const cookieName = emailLinkCookieName(secure)
   const pending = decodePendingEmailLink(readRequestCookie(request, cookieName))
+  // The body is read only after the cookie and origin checks pass, and only
+  // as the small URL-encoded form the confirm page posts.
   let csrf: unknown = null
-  try {
-    csrf = (await request.formData()).get(EMAIL_LINK_CSRF_FIELD)
-  } catch {
-    csrf = null
-  }
   if (
-    !pending ||
-    !isSameOriginPost(request) ||
-    !csrfMatches(pending.csrf, csrf)
+    pending &&
+    isSameOriginPost(request) &&
+    request.headers
+      .get("content-type")
+      ?.toLowerCase()
+      .startsWith("application/x-www-form-urlencoded")
   ) {
+    try {
+      csrf = (await request.formData()).get(EMAIL_LINK_CSRF_FIELD)
+    } catch {
+      csrf = null
+    }
+  }
+  if (!pending || !csrfMatches(pending.csrf, csrf)) {
+    trackCallbackFailure({
+      reason: pending ? "email_link_rejected" : "email_link_expired",
+      method: "token_hash",
+      type: pending ? new URLSearchParams(pending.query).get("type") : null,
+    })
     // The confirm page shows a fresh button, or asks for the email link
     // again when the saved link is gone.
     const retry = new URL(EMAIL_LINK_CONFIRM_PATH, url.origin)
