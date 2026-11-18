@@ -142,7 +142,8 @@ export async function runCli(
     const exitCode = await run(args)
     return { exitCode, stdout, stderr, requests }
   } finally {
-    process.exitCode = savedExitCode
+    // Bun ignores process.exitCode = undefined, so explicitly restore success.
+    process.exitCode = savedExitCode ?? 0
     process.stdout.write = savedOut
     process.stderr.write = savedErr
     globalThis.fetch = savedFetch

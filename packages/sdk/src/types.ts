@@ -6,6 +6,7 @@
  */
 
 import { SandboxError } from "./errors.js"
+import type { SandboxVolumeMount } from "./Volume.js"
 
 // ---------------------------------------------------------------------------
 // Sandbox
@@ -43,6 +44,11 @@ export interface SandboxInfo {
   memoryMaxMib?: number
   /** Memory the sandbox last held; absent when memory is fixed. */
   memoryCurrentMib?: number
+  /**
+   * How long, in seconds, memory must stay low after growing before it
+   * shrinks back. Absent when the platform default applies.
+   */
+  memoryShrinkAfterSeconds?: number
   createdAt: Date
   timeoutSeconds?: number
   /** Pause the sandbox after this many seconds with no activity. */
@@ -73,6 +79,8 @@ export interface ConnectionOptions {
 
 export interface SandboxCreateOptions extends ConnectionOptions {
   name: string
+  /** Existing volumes to mount before returning; independent volumes survive failures. */
+  volumes?: SandboxVolumeMount[]
   /** Template name, UUID, or Template instance. */
   fromTemplate?: string | { name?: string; id: string }
   /**
@@ -380,6 +388,7 @@ export interface ApiSandboxResponse {
   memory_mib?: number
   memory_max_mib?: number | null
   memory_current_mib?: number | null
+  memory_shrink_after_seconds?: number | null
   access_token?: string
   routing_hint?: string
   created_at?: string
@@ -473,6 +482,7 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
     memoryMib: raw.memory_mib ?? 0,
     memoryMaxMib: raw.memory_max_mib ?? undefined,
     memoryCurrentMib: raw.memory_current_mib ?? undefined,
+    memoryShrinkAfterSeconds: raw.memory_shrink_after_seconds ?? undefined,
     createdAt: new Date(raw.created_at),
     timeoutSeconds: raw.timeout_seconds ?? undefined,
     idleTimeoutSeconds: raw.idle_timeout_seconds ?? undefined,
@@ -544,6 +554,11 @@ export interface TemplateInfo {
   memoryMib: number
   /** Ceiling memory can grow to while running; absent when memory is fixed. */
   memoryMaxMib?: number
+  /**
+   * How long, in seconds, memory must stay low after growing before it
+   * shrinks back. Absent when the platform default applies.
+   */
+  memoryShrinkAfterSeconds?: number
   diskMib: number
   sizeBytes?: number
   errorMessage?: string
@@ -589,6 +604,13 @@ export interface TemplateCreateOptions extends ConnectionOptions {
    * fixed memory size.
    */
   memoryMaxMib?: number
+  /**
+   * How long, in seconds, a sandbox's memory must stay low after growing
+   * before it shrinks back toward `memoryMib` (60 to 1800). Requires
+   * `memoryMaxMib`. Sandboxes created from the template inherit it. Omit
+   * for the platform default.
+   */
+  memoryShrinkAfterSeconds?: number
   diskMib?: number
   from: string
   steps?: BuildStep[]
@@ -629,6 +651,7 @@ export interface ApiTemplateResponse {
   vcpu?: number
   memory_mib?: number
   memory_max_mib?: number | null
+  memory_shrink_after_seconds?: number | null
   disk_mib?: number
   size_bytes?: number
   error_message?: string
@@ -695,6 +718,7 @@ export function toTemplateInfo(
     vcpu: raw.vcpu ?? 0,
     memoryMib: raw.memory_mib ?? 0,
     memoryMaxMib: raw.memory_max_mib ?? undefined,
+    memoryShrinkAfterSeconds: raw.memory_shrink_after_seconds ?? undefined,
     diskMib: raw.disk_mib ?? 0,
     sizeBytes: raw.size_bytes,
     errorMessage: raw.error_message,

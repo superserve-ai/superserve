@@ -301,12 +301,13 @@ async function cursorApi(path, { method = "GET", body } = {}) {
   const auth = Buffer.from(`${process.env.CURSOR_API_KEY}:`).toString("base64")
   const init = {
     method,
-    headers: {
-      Authorization: `Basic ${auth}`,
-      "Content-Type": "application/json",
-    },
+    headers: { Authorization: `Basic ${auth}` },
   }
-  if (body !== undefined) init.body = JSON.stringify(body)
+  // Content-Type only with a body: the API rejects an empty JSON body with 400.
+  if (body !== undefined) {
+    init.headers["Content-Type"] = "application/json"
+    init.body = JSON.stringify(body)
+  }
   // Bounded like the Python client: a hung Cursor endpoint must not stall
   // the monitor loop indefinitely.
   init.signal = AbortSignal.timeout(30_000)

@@ -1,5 +1,6 @@
 "use server"
 
+import { hasLegacyPlanEntry } from "@/lib/api/legacy-plan-entry"
 import { getAuthApiKeyAndTeamForUser } from "@/lib/api/proxy-auth"
 import { cellFor } from "@/lib/cells"
 import { createServerClient } from "@/lib/supabase/server"
@@ -109,16 +110,37 @@ export async function getTrialOutcomeAction(
     if (!user || locator.account !== user.id) return null
     const { apiKey, team } = await getAuthApiKeyAndTeamForUser(user)
     if (locator.team !== `${team.region}:${team.teamId}`) return null
-    const response = await fetch(
-      new URL("/billing/summary", cellFor(team.region).apiBaseUrl),
-      {
+    const [legacyPlanEntry, response] = await Promise.all([
+      hasLegacyPlanEntry(cellFor(team.region).createAdminClient(), team.teamId),
+      fetch(new URL("/billing/summary", cellFor(team.region).apiBaseUrl), {
         headers: { "X-API-Key": apiKey },
         cache: "no-store",
         signal: AbortSignal.timeout(5000),
-      },
-    )
+      }),
+    ])
+    if (legacyPlanEntry) return "unknown"
     if (!response.ok) return null
     return trialOutcome(await response.json())
+  } catch {
+    return null
+  }
+}
+
+// null means "could not check".
+export async function getLegacyPlanEntryAction(
+  teamKey: string,
+): Promise<boolean | null> {
+  try {
+    const {
+      data: { user },
+    } = await (await createServerClient()).auth.getUser()
+    if (!user) return false
+    const { team } = await getAuthApiKeyAndTeamForUser(user)
+    if (teamKey !== `${team.region}:${team.teamId}`) return false
+    return await hasLegacyPlanEntry(
+      cellFor(team.region).createAdminClient(),
+      team.teamId,
+    )
   } catch {
     return null
   }

@@ -115,7 +115,7 @@ The plugin binds the `anthropic-key` secret from [Via the SDK](#via-the-sdk), so
    ```json
    {
      "dependencies": {
-       "@superserve/sdk": "^0.11.6"
+       "@superserve/sdk": "^0.12.0"
      }
    }
    ```
@@ -214,7 +214,9 @@ The plugin binds the `anthropic-key` secret from [Via the SDK](#via-the-sdk), so
            }).trim()
            await run(
              `curl -fsSL https://opencode.ai/install | bash -s -- --version ${version}`,
-             { timeoutMs: 300_000 },
+             // An output callback streams the command and keeps the connection
+             // open, so a slow install does not fail before timeoutMs.
+             { timeoutMs: 300_000, onStderr: () => {} },
            )
 
            // Start the OpenCode server in the background so it outlives this call.
