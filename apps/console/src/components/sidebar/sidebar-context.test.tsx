@@ -121,3 +121,25 @@ it("collapses when the viewport crosses from desktop to small", () => {
   expect(SMALL_SCREEN_MEDIA_QUERY).toBe("(width < 48rem)")
   expect(window.matchMedia).toHaveBeenCalledWith(SMALL_SCREEN_MEDIA_QUERY)
 })
+
+it.each([
+  { preference: null, desktopState: "expanded" },
+  { preference: "true", desktopState: "collapsed" },
+])(
+  "clears the mobile expansion after switching to $desktopState desktop and back",
+  ({ preference, desktopState }) => {
+    const setMatches = mockMatchMedia(true)
+    if (preference !== null) localStorage.setItem(STORAGE_KEY, preference)
+    render(<SidebarState />, { wrapper: SidebarProvider })
+
+    fireEvent.click(screen.getByRole("button", { name: "Toggle sidebar" }))
+    expect(screen.getByRole("status")).toHaveTextContent("expanded")
+    expect(localStorage.getItem(STORAGE_KEY)).toBe(preference)
+
+    act(() => setMatches(false))
+    expect(screen.getByRole("status")).toHaveTextContent(desktopState)
+
+    act(() => setMatches(true))
+    expect(screen.getByRole("status")).toHaveTextContent("collapsed")
+  },
+)

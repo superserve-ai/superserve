@@ -49,15 +49,18 @@ const SidebarContext = createContext<SidebarContextValue | null>(null)
 export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const isSmallScreen = useIsSmallScreen()
   const pathname = usePathname()
-  const [previousPathname, setPreviousPathname] = useState(pathname)
+  const [previous, setPrevious] = useState({ pathname, isSmallScreen })
   const [mobileExpanded, setMobileExpanded] = useState(false)
   const [storedCollapsed, setStoredCollapsed] = useState(() => {
     if (typeof window === "undefined") return false
     return localStorage.getItem(STORAGE_KEY) === "true"
   })
 
-  if (pathname !== previousPathname) {
-    setPreviousPathname(pathname)
+  if (
+    pathname !== previous.pathname ||
+    isSmallScreen !== previous.isSmallScreen
+  ) {
+    setPrevious({ pathname, isSmallScreen })
     setMobileExpanded(false)
   }
 

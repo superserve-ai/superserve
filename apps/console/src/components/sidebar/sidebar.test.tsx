@@ -51,18 +51,23 @@ vi.mock("./sidebar-nav", () => ({
 import { Sidebar } from "./sidebar"
 
 describe("Sidebar", () => {
-  it("hides the server-rendered sidebar below md", () => {
-    expect(renderToString(<Sidebar />)).toMatch(
-      /<aside\b[^>]*class="[^"]*\bmax-md:invisible\b/,
+  it("hides the server-rendered sidebar at rail width below md", () => {
+    const container = document.createElement("div")
+    container.innerHTML = renderToString(<Sidebar />)
+
+    expect(container.querySelector("aside")).toHaveClass(
+      "max-md:invisible",
+      "max-md:w-16",
+      "w-64",
     )
   })
 
-  it("omits the pre-hydration visibility class on the client", () => {
+  it("omits the pre-hydration classes on the client", () => {
     render(<Sidebar />)
 
-    expect(screen.getByRole("complementary")).not.toHaveClass(
-      "max-md:invisible",
-    )
+    const aside = screen.getByRole("complementary")
+    expect(aside).not.toHaveClass("max-md:invisible")
+    expect(aside).not.toHaveClass("max-md:w-16")
   })
 
   it("shows Billing & Usage without a separate Billing nav item", () => {
