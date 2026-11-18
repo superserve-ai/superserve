@@ -234,6 +234,7 @@ it("prefills a fresh name and clears validation when the parent reopens the dial
   expect(input.value).toBe("sandbox-abcd")
 
   await user.clear(input)
+  await user.type(input, "   ")
   await user.click(screen.getByRole("button", { name: "Create Sandbox" }))
   expect(getFieldError()).toBeVisible()
 
