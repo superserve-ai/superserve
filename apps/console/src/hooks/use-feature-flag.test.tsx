@@ -127,10 +127,45 @@ describe("useFeatureFlagOn", () => {
 
   it("does not read the flag while disabled", () => {
     mocks.posthog = client(true)
-    expect(renderHook(() => useFeatureFlagOn("f", false)).result.current).toBe(
-      false,
+    let loaded = (..._args: unknown[]) => {}
+    mocks.posthog.onFeatureFlags.mockImplementation(
+      (callback: (...args: unknown[]) => void) => {
+        loaded = callback
+        return () => {}
+      },
     )
+    const { result } = renderHook(() => useFeatureFlagOn("f", false))
+    act(() => loaded([], {}, { errorsLoading: false }))
+    expect(result.current).toBe(false)
     expect(mocks.posthog.isFeatureEnabled).not.toHaveBeenCalled()
+  })
+
+  it("stays off when it becomes enabled during a flags request", () => {
+    mocks.posthog = client(true)
+    let loaded = (..._args: unknown[]) => {}
+    let reloading = () => {}
+    mocks.posthog.onFeatureFlags.mockImplementation(
+      (callback: (...args: unknown[]) => void) => {
+        loaded = callback
+        return () => {}
+      },
+    )
+    mocks.posthog.on.mockImplementation(
+      (event: string, callback: () => void) => {
+        if (event === "featureFlagsReloading") reloading = callback
+        return () => {}
+      },
+    )
+    const { result, rerender } = renderHook(
+      ({ enabled }) => useFeatureFlagOn("f", enabled),
+      { initialProps: { enabled: false } },
+    )
+    act(() => reloading())
+    rerender({ enabled: true })
+    expect(result.current).toBe(false)
+    expect(mocks.posthog.isFeatureEnabled).not.toHaveBeenCalled()
+    act(() => loaded([], {}, { errorsLoading: false }))
+    expect(result.current).toBe(true)
   })
 
   it("follows flags that load later", () => {

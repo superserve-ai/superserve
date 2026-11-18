@@ -91,6 +91,12 @@ export function TrialRunwayWarning({
     countdown && countdownUntil !== null
       ? nextMinutesLabelChange((countdownUntil - now) / 60_000)
       : null
+  // The countdown moves between polls, so it can reach the warning time
+  // before the next poll.
+  const warnAt =
+    countdownUntil !== null
+      ? countdownUntil - RUNWAY_WARNING_MINUTES * 60_000
+      : null
   const deadline = fresh
     ? Math.min(
         freshUntil,
@@ -98,6 +104,7 @@ export function TrialRunwayWarning({
         countdownUntil !== null && nextLabel !== null
           ? countdownUntil - nextLabel * 60_000
           : Infinity,
+        warnAt !== null && now < warnAt ? warnAt : Infinity,
       )
     : null
   useEffect(() => {
@@ -109,8 +116,9 @@ export function TrialRunwayWarning({
     return () => clearTimeout(timer)
   }, [deadline])
 
+  const due = warnAt !== null ? now >= warnAt : decision?.show === true
   // Support staff viewing a team do not see the experiment or send its events.
-  const eligible = scope === "self" && decision?.show === true
+  const eligible = scope === "self" && due
   const flagOn = useFeatureFlagOn(TRIAL_RUNWAY_WARNING_FLAG, eligible)
   const show = eligible && flagOn && reading !== null && teamKey !== null
 

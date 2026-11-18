@@ -277,6 +277,34 @@ describe("TrialRunwayWarning with the flag on", () => {
     }
   })
 
+  it("shows the warning when the countdown reaches the warning time", () => {
+    vi.useFakeTimers({ now: Date.now(), toFake: ["Date", "setTimeout"] })
+    try {
+      mocks.summary.mockReturnValue({
+        data: summary(0.0345),
+        isError: false,
+        dataUpdatedAt: Date.now(),
+      })
+      const { rerender } = render(view())
+      act(() => vi.advanceTimersByTime(60_000))
+      // $0.003 a minute leaves 10.5 minutes, so no warning yet.
+      mocks.summary.mockReturnValue({
+        data: summary(0.0315, T0 + 60_000),
+        isError: false,
+        dataUpdatedAt: Date.now(),
+      })
+      rerender(view())
+      expect(screen.getByTestId("trial-banner")).toBeInTheDocument()
+      // No new poll arrives, but the countdown reaches 10 minutes.
+      act(() => vi.advanceTimersByTime(1_000))
+      act(() => vi.advanceTimersByTime(30_000))
+      expect(screen.queryByTestId("trial-banner")).toBeNull()
+      expect(screen.getByText(/about 10 minutes/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
   it("drops the countdown after the time it predicts", () => {
     vi.useFakeTimers({ now: Date.now(), toFake: ["Date", "setTimeout"] })
     try {
