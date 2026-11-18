@@ -1,5 +1,6 @@
 "use server"
 
+import type { User } from "@supabase/supabase-js"
 import { after } from "next/server"
 import * as z from "zod"
 
@@ -61,6 +62,18 @@ function safeNext(raw: unknown): string | null {
   return raw
 }
 
+/**
+ * Verifying the link would confirm an unconfirmed address, so only confirmed
+ * accounts that are not banned or waiting for signup review get one.
+ */
+function canGetSignInLink(user: User): boolean {
+  const banned =
+    !!user.banned_until && new Date(user.banned_until).getTime() > Date.now()
+  const confirmedOrApproved =
+    !!user.email_confirmed_at || signupReviewStatus(user) === "approved"
+  return confirmedOrApproved && !banned && !isSignupReviewBlocked(user)
+}
+
 async function trackLinkFailure(reason: string, userId?: string) {
   await trackEvent(
     AUTH_EVENTS.SIGN_IN_LINK_FAILED,
@@ -95,16 +108,10 @@ async function deliverSignInLink(
       return
     }
 
-    // Verifying the link would confirm an unconfirmed address, so only
-    // confirmed accounts that are not waiting for signup review get one.
     // Staff approval already emails an unconfirmed account a confirming magic
     // link, and the token generated below replaces it, so approved accounts
     // get this link in its place.
-    const banned =
-      !!user.banned_until && new Date(user.banned_until).getTime() > Date.now()
-    const confirmedOrApproved =
-      !!user.email_confirmed_at || signupReviewStatus(user) === "approved"
-    if (!confirmedOrApproved || banned || isSignupReviewBlocked(user)) {
+    if (!canGetSignInLink(user)) {
       await trackLinkFailure("not_eligible", user.id)
       return
     }
@@ -136,6 +143,14 @@ async function deliverSignInLink(
     if (error || !data?.properties?.hashed_token) {
       console.error("Error generating sign-in link:", error?.message)
       await trackLinkFailure("generate_failed", user.id)
+      return
+    }
+
+    // The token belongs to the account generateLink found. Send it only when
+    // that is the account checked above and it can still get a link, so an
+    // address that changed hands in between gets nothing.
+    if (data.user?.id !== user.id || !canGetSignInLink(data.user)) {
+      await trackLinkFailure("not_eligible", user.id)
       return
     }
 

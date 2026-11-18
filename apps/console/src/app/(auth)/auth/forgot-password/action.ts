@@ -79,6 +79,14 @@ async function deliverPasswordReset(
       return
     }
 
+    // The token belongs to the account generateLink found. Send it only when
+    // that is the account checked above and it is still not awaiting signup
+    // review, so an address that changed hands in between gets nothing.
+    if (data.user?.id !== user.id || isSignupReviewBlocked(data.user)) {
+      console.error("Reset link was for a different or blocked account")
+      return
+    }
+
     const resetUrlObj = new URL(redirectTo)
     resetUrlObj.searchParams.set("token_hash", data.properties.hashed_token)
     resetUrlObj.searchParams.set("type", "recovery")

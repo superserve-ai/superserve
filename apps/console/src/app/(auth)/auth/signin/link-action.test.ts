@@ -531,6 +531,34 @@ describe("sendSignInLink", () => {
     consoleError.mockRestore()
   })
 
+  it.each([
+    ["a different account", { id: "user-2" }],
+    [
+      "an account now in review",
+      { app_metadata: { signup_review: "pending" } },
+    ],
+    ["a banned account", { banned_until: "2999-01-01T00:00:00Z" }],
+  ])(
+    "sends nothing when generateLink returns %s",
+    async (_label, overrides) => {
+      withAccount(confirmedUser)
+      mockGenerateLink.mockResolvedValue(
+        linkFor({ ...confirmedUser, ...overrides }),
+      )
+
+      await sendSignInLink("user@example.com", "token")
+      await runAfter()
+
+      expect(mockGenerateLink).toHaveBeenCalledOnce()
+      expect(mockSendEmail).not.toHaveBeenCalled()
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_sign_in_link_failed",
+        "user-1",
+        { method: "email_link", reason: "not_eligible" },
+      )
+    },
+  )
+
   it("tracks a failed link generation", async () => {
     withAccount(confirmedUser)
     mockGenerateLink.mockResolvedValue({

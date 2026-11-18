@@ -103,7 +103,7 @@ describe("sendPasswordResetEmail", () => {
     "/invite/invalid",
   ])("validates the invite destination again (%s)", async (next) => {
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "hash" } },
+      data: { user: account, properties: { hashed_token: "hash" } },
       error: null,
     })
     await reset("user@example.com", "recaptcha-token", next)
@@ -118,7 +118,7 @@ describe("sendPasswordResetEmail", () => {
 
   it("returns success for a valid email + happy path", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "token-abc" } },
+      data: { user: account, properties: { hashed_token: "token-abc" } },
       error: null,
     })
     mockSendEmail.mockResolvedValue(undefined)
@@ -155,7 +155,7 @@ describe("sendPasswordResetEmail", () => {
 
   it("answers before any account lookup", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "token-abc" } },
+      data: { user: account, properties: { hashed_token: "token-abc" } },
       error: null,
     })
     const result = await sendPasswordResetEmail("user@example.com", "token")
@@ -206,7 +206,7 @@ describe("sendPasswordResetEmail", () => {
 
   it("returns success when sendEmail throws", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "token-abc" } },
+      data: { user: account, properties: { hashed_token: "token-abc" } },
       error: null,
     })
     mockSendEmail.mockRejectedValue(new Error("SMTP down"))
@@ -228,7 +228,7 @@ describe("sendPasswordResetEmail", () => {
 
   it("builds the reset URL with token_hash + type=recovery", async () => {
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "hash-xyz" } },
+      data: { user: account, properties: { hashed_token: "hash-xyz" } },
       error: null,
     })
     mockSendEmail.mockResolvedValue(undefined)
@@ -252,7 +252,7 @@ describe("sendPasswordResetEmail", () => {
     async (_label, app_metadata) => {
       mockFindUser.mockResolvedValue({ ...account, app_metadata })
       mockGenerateLink.mockResolvedValue({
-        data: { properties: { hashed_token: "token-abc" } },
+        data: { user: account, properties: { hashed_token: "token-abc" } },
         error: null,
       })
 
@@ -277,6 +277,27 @@ describe("sendPasswordResetEmail", () => {
     await reset("user@example.com")
 
     expect(mockSendEmail).toHaveBeenCalledOnce()
+  })
+
+  it.each([
+    ["a different account", { ...account, id: "user-2" }],
+    [
+      "an account now in review",
+      { ...account, app_metadata: { signup_review: "pending" } },
+    ],
+  ])("sends nothing when generateLink returns %s", async (_label, user) => {
+    mockGenerateLink.mockResolvedValue({
+      data: { user, properties: { hashed_token: "token-abc" } },
+      error: null,
+    })
+    const consoleError = vi.spyOn(console, "error").mockImplementation(() => {})
+
+    const result = await reset("user@example.com")
+
+    expect(result).toEqual({ success: true })
+    expect(mockGenerateLink).toHaveBeenCalledOnce()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+    consoleError.mockRestore()
   })
 
   it("returns a captcha error and sends nothing when reCAPTCHA fails", async () => {
@@ -322,7 +343,7 @@ describe("sendPasswordResetEmail", () => {
       providerOutcome: "unconfigured",
     })
     mockGenerateLink.mockResolvedValue({
-      data: { properties: { hashed_token: "token-abc" } },
+      data: { user: account, properties: { hashed_token: "token-abc" } },
       error: null,
     })
 
@@ -570,7 +591,7 @@ describe("sendPasswordResetEmail", () => {
           limit.bucket !== "recovery_email_project",
       )
       mockGenerateLink.mockResolvedValue({
-        data: { properties: { hashed_token: "token-abc" } },
+        data: { user: account, properties: { hashed_token: "token-abc" } },
         error: null,
       })
       vi.spyOn(console, "error").mockImplementation(() => {})
