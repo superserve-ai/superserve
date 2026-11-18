@@ -6,6 +6,7 @@ import {
   advanceRunway,
   burnRate,
   formatMinutesLeft,
+  nextMinutesLabelChange,
   runwayDecision,
   trialReading,
 } from "./trial-runway"
@@ -212,5 +213,23 @@ describe("formatMinutesLeft", () => {
     [6.6, "about 7 minutes"],
   ])("formats %s", (minutes, text) => {
     expect(formatMinutesLeft(minutes)).toBe(text)
+  })
+})
+
+describe("nextMinutesLabelChange", () => {
+  it.each([
+    [4.3, 3.5],
+    [4.5, 4.5],
+    [1.2, 1],
+    [1, 1],
+    [0.4, null],
+  ])("for %s minutes left is %s", (minutes, next) => {
+    expect(nextMinutesLabelChange(minutes)).toBe(next)
+    // Just below the change, the text differs from the text now.
+    if (next !== null) {
+      expect(formatMinutesLeft(next - 0.001)).not.toBe(
+        formatMinutesLeft(minutes),
+      )
+    }
   })
 })

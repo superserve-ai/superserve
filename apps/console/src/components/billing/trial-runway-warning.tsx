@@ -15,6 +15,7 @@ import {
   FIXED_WARNING_USD,
   MAX_SAMPLE_MS,
   formatMinutesLeft,
+  nextMinutesLabelChange,
   RUNWAY_WARNING_MINUTES,
   type RunwayTrack,
   runwayDecision,
@@ -85,8 +86,19 @@ export function TrialRunwayWarning({
       ? updatedAt + decision.minutesLeft * 60_000
       : null
   const countdown = countdownUntil !== null && now < countdownUntil
+  // Polls can be late, so also move the clock when the shown minutes change.
+  const nextLabel =
+    countdown && countdownUntil !== null
+      ? nextMinutesLabelChange((countdownUntil - now) / 60_000)
+      : null
   const deadline = fresh
-    ? Math.min(freshUntil, countdown ? countdownUntil : Infinity)
+    ? Math.min(
+        freshUntil,
+        countdown && countdownUntil !== null ? countdownUntil : Infinity,
+        countdownUntil !== null && nextLabel !== null
+          ? countdownUntil - nextLabel * 60_000
+          : Infinity,
+      )
     : null
   useEffect(() => {
     if (deadline === null) return

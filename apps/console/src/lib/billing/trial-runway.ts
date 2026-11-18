@@ -127,6 +127,13 @@ export function runwayDecision(
   }
 }
 
+// The minutes left at which formatMinutesLeft next shows a different text,
+// or null when the text does not change again.
+export function nextMinutesLabelChange(minutes: number): number | null {
+  if (minutes < 1) return null
+  return Math.max(Math.round(minutes) - 0.5, 1)
+}
+
 export function formatMinutesLeft(minutes: number): string {
   if (minutes < 1) return "less than a minute"
   const rounded = Math.round(minutes)
