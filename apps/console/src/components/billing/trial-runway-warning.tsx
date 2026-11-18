@@ -63,10 +63,16 @@ export function TrialRunwayWarning({
   const [track, setTrack] = useState<RunwayTrack | null>(null)
   const nextTrack = advanceRunway(track, teamKey, reading)
   if (nextTrack !== track) setTrack(nextTrack)
+  // The time of this render, kept in state so the React Compiler does not
+  // reuse an old value. It moves on with each summary and each deadline below.
+  const updatedAt = summaryQuery.dataUpdatedAt
+  const [clock, setClock] = useState(() => ({ updatedAt, now: Date.now() }))
+  if (clock.updatedAt !== updatedAt) setClock({ updatedAt, now: Date.now() })
+  const now = clock.now
   // Polling stops in a background tab, so an old estimate can be wrong.
   // Until a new summary arrives, use the fixed threshold instead.
-  const freshUntil = summaryQuery.dataUpdatedAt + MAX_SAMPLE_MS
-  const fresh = Date.now() <= freshUntil
+  const freshUntil = updatedAt + MAX_SAMPLE_MS
+  const fresh = now <= freshUntil
   const burn =
     reading && fresh && nextTrack?.latestAt === reading.at
       ? nextTrack.burnUsdPerMinute
@@ -76,17 +82,16 @@ export function TrialRunwayWarning({
   // no countdown until a new summary confirms the balance.
   const countdownUntil =
     decision?.minutesLeft != null
-      ? summaryQuery.dataUpdatedAt + decision.minutesLeft * 60_000
+      ? updatedAt + decision.minutesLeft * 60_000
       : null
-  const countdown = countdownUntil !== null && Date.now() < countdownUntil
+  const countdown = countdownUntil !== null && now < countdownUntil
   const deadline = fresh
     ? Math.min(freshUntil, countdown ? countdownUntil : Infinity)
     : null
-  const [, setExpired] = useState(0)
   useEffect(() => {
     if (deadline === null) return
     const timer = setTimeout(
-      () => setExpired(deadline),
+      () => setClock((current) => ({ ...current, now: Date.now() })),
       deadline - Date.now() + 1,
     )
     return () => clearTimeout(timer)
@@ -144,10 +149,7 @@ export function TrialRunwayWarning({
       {countdownUntil !== null && countdown ? (
         <>
           At your current usage, your free trial credit runs out in{" "}
-          <strong>
-            {formatMinutesLeft((countdownUntil - Date.now()) / 60_000)}
-          </strong>
-          .
+          <strong>{formatMinutesLeft((countdownUntil - now) / 60_000)}</strong>.
         </>
       ) : (
         <>Your free trial credit is almost used up.</>

@@ -28,6 +28,33 @@ describe("useFeatureFlagOn", () => {
   it("is on only when PostHog says the flag is on", () => {
     mocks.posthog = client(true)
     expect(renderHook(() => useFeatureFlagOn("f")).result.current).toBe(true)
+    // Cached values from an earlier page load do not count.
+    expect(mocks.posthog.isFeatureEnabled).toHaveBeenCalledWith("f", {
+      fresh: true,
+    })
+  })
+
+  it("is off when the flags request fails", () => {
+    mocks.posthog = client(true)
+    let loaded = (..._args: unknown[]) => {}
+    mocks.posthog.onFeatureFlags.mockImplementation(
+      (callback: (...args: unknown[]) => void) => {
+        loaded = callback
+        return () => {}
+      },
+    )
+    const { result } = renderHook(() => useFeatureFlagOn("f"))
+    expect(result.current).toBe(true)
+    act(() => loaded([], {}, { errorsLoading: true }))
+    expect(result.current).toBe(false)
+  })
+
+  it("is off when the flag subscription fails", () => {
+    mocks.posthog = client(true)
+    mocks.posthog.onFeatureFlags.mockImplementation(() => {
+      throw new Error("posthog failed")
+    })
+    expect(renderHook(() => useFeatureFlagOn("f")).result.current).toBe(false)
   })
 
   it.each([

@@ -6,14 +6,17 @@ import { useEffect, useState } from "react"
 
 function flagOn(client: PostHog, flag: string): boolean {
   try {
-    return client.isFeatureEnabled(flag) === true
+    // `fresh` skips values cached from an earlier page load, so a failed
+    // flags request reads as off.
+    return client.isFeatureEnabled(flag, { fresh: true }) === true
   } catch {
     return false
   }
 }
 
-// True only when PostHog has loaded the flag and it is on. A missing client,
-// a flag that is not loaded or not defined, and any SDK error all read as off.
+// True only when the last PostHog flags request succeeded and the flag is on.
+// A missing client, a flag that is not loaded or not defined, a failed flags
+// request and any SDK error all read as off.
 // The flag is read only while `enabled`, so PostHog records an exposure only
 // for users the flag can change.
 export function useFeatureFlagOn(flag: string, enabled = true): boolean {
@@ -27,9 +30,11 @@ export function useFeatureFlagOn(flag: string, enabled = true): boolean {
     setOn(flagOn(posthog, flag))
     let unsubscribe: (() => void) | undefined
     try {
-      unsubscribe = posthog.onFeatureFlags(() => setOn(flagOn(posthog, flag)))
+      unsubscribe = posthog.onFeatureFlags((_flags, _variants, context) =>
+        setOn(context?.errorsLoading ? false : flagOn(posthog, flag)),
+      )
     } catch {
-      // Keep the value read above.
+      setOn(false)
     }
     return () => {
       try {

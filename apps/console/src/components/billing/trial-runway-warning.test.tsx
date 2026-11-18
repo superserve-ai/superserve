@@ -123,7 +123,9 @@ describe("TrialRunwayWarning with the flag on", () => {
       "When it runs out, your running sandboxes stop. Upgrade to a paid plan to keep them running.",
     )
     expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument()
-    expect(mocks.posthog.isFeatureEnabled).toHaveBeenCalledWith(FLAG)
+    expect(mocks.posthog.isFeatureEnabled).toHaveBeenCalledWith(FLAG, {
+      fresh: true,
+    })
     expect(captured("trial_runway_warning_shown")).toEqual([
       [
         "trial_runway_warning_shown",
@@ -215,6 +217,31 @@ describe("TrialRunwayWarning with the flag on", () => {
       act(() => vi.advanceTimersByTime(5 * 60_000 + 1))
       expect(screen.queryByText(/runs out in/)).toBeNull()
       expect(screen.getByText(/almost used up/)).toBeInTheDocument()
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it("counts down on each poll", () => {
+    vi.useFakeTimers({ now: Date.now(), toFake: ["Date", "setTimeout"] })
+    try {
+      const poll = (remaining: number, minute: number) =>
+        mocks.summary.mockReturnValue({
+          data: summary(remaining, T0 + minute * 60_000),
+          isError: false,
+          dataUpdatedAt: Date.now(),
+        })
+      poll(0.024, 0)
+      const { rerender } = render(view())
+      act(() => vi.advanceTimersByTime(60_000))
+      // $0.005 a minute leaves about 4 minutes, then about 3.
+      poll(0.019, 1)
+      rerender(view())
+      expect(screen.getByText(/about 4 minutes/)).toBeInTheDocument()
+      act(() => vi.advanceTimersByTime(60_000))
+      poll(0.014, 2)
+      rerender(view())
+      expect(screen.getByText(/about 3 minutes/)).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }
