@@ -413,6 +413,22 @@ describe("memory growth", () => {
       "https://docs.superserve.ai/sandbox/live-memory-resizing",
     )
   })
+
+  it("sends shrink-after only with growth and within 60 to 1800 seconds", async () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    expect(screen.queryByLabelText("Shrink after (seconds)")).toBeNull()
+    fireEvent.click(radio("Up to 4 GB"))
+    const shrinkAfter = screen.getByLabelText("Shrink after (seconds)")
+    fireEvent.change(shrinkAfter, { target: { value: "30" } })
+    expect(
+      screen.getByRole("button", { name: "Create & build" }),
+    ).toBeDisabled()
+    fireEvent.change(shrinkAfter, { target: { value: "300" } })
+    expect(await submit()).toMatchObject({
+      memory_max_mib: 4096,
+      memory_shrink_after_seconds: 300,
+    })
+  })
 })
 
 describe("view as code", () => {

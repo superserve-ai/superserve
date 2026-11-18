@@ -18,3 +18,179 @@ html.dark
 html.dark .has-line-numbers .line-highlight::after {
   background: rgb(var(--primary-light) / 0.08) !important;
 }
+
+/*
+ * Benchmark comparison cards (snippets/benchmark-comparison.jsx).
+ * One dashed card per benchmark: the other provider's bar is grey, the
+ * Superserve bar is the brand mint #B2FAB4, and its row has a tint, a mint
+ * left border and a bold name and value. Docs are dark only; the light values keep
+ * the cards readable if that changes.
+ */
+.ss-bench {
+  --ss-bench-fg: #141414;
+  --ss-bench-muted: #5c5c5c;
+  --ss-bench-surface: #ffffff;
+  --ss-bench-border: rgba(0, 0, 0, 0.1);
+  --ss-bench-track: #ececec;
+  --ss-bench-peer-bar: #8a8a8a;
+  --ss-bench-own-bar: #2f9e44;
+  --ss-bench-own-text: #1d7a32;
+  --ss-bench-badge-bg: rgba(47, 158, 68, 0.1);
+  --ss-bench-peer-text: #5c5c5c;
+  --ss-bench-own-row: #eef7ee;
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 8px;
+  color: var(--ss-bench-fg);
+  font-size: 14px;
+  line-height: 1.5;
+}
+html.dark .ss-bench {
+  --ss-bench-fg: #eaeaea;
+  --ss-bench-muted: #9a9a9a;
+  --ss-bench-surface: #1c1c1c;
+  --ss-bench-border: rgba(255, 255, 255, 0.1);
+  --ss-bench-track: #2a2a2a;
+  --ss-bench-peer-bar: #737373;
+  --ss-bench-own-bar: #b2fab4;
+  --ss-bench-own-text: #b2fab4;
+  --ss-bench-badge-bg: rgba(178, 250, 180, 0.1);
+  --ss-bench-peer-text: #b0b0b0;
+  --ss-bench-own-row: #282e28;
+}
+.ss-bench-card {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--ss-bench-border);
+  background: var(--ss-bench-surface);
+}
+.ss-bench-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.ss-bench-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ss-bench-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.ss-bench-desc {
+  color: var(--ss-bench-muted);
+  font-size: 12px;
+}
+.ss-bench-desc strong {
+  color: var(--ss-bench-fg);
+  font-weight: 600;
+}
+.ss-bench-badge {
+  padding: 2px 6px;
+  border-radius: 0;
+  background: var(--ss-bench-badge-bg);
+  color: var(--ss-bench-own-text);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ss-bench-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ss-bench-row {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 0;
+}
+.ss-bench-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.ss-bench-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ss-bench-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--ss-bench-peer-bar);
+}
+.ss-bench-track {
+  display: block;
+  height: 8px;
+  background: var(--ss-bench-track);
+}
+.ss-bench-bar {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+  background: var(--ss-bench-peer-bar);
+}
+.ss-bench-val {
+  min-width: 4.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.ss-bench-row:not(.ss-bench-own) .ss-bench-name,
+.ss-bench-row:not(.ss-bench-own) .ss-bench-val {
+  color: var(--ss-bench-peer-text);
+}
+.ss-bench-own {
+  margin: 0 -8px;
+  padding: 4px 8px 4px 6px;
+  border-left: 2px solid var(--ss-bench-own-bar);
+  background: var(--ss-bench-own-row);
+}
+.ss-bench-own .ss-bench-name {
+  font-weight: 600;
+}
+.ss-bench-own .ss-bench-dot,
+.ss-bench-own .ss-bench-bar {
+  background: var(--ss-bench-own-bar);
+}
+.ss-bench-own .ss-bench-val {
+  color: var(--ss-bench-fg);
+}
+.ss-bench-source {
+  margin: 0;
+  color: var(--ss-bench-muted);
+  font-size: 12px;
+}
+.ss-bench-source a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .ss-bench-row {
+    grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .ss-bench-val {
+    min-width: 3.75rem;
+  }
+}

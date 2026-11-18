@@ -67,6 +67,8 @@ const DEFAULT_CAPS = { vcpu: 2, memoryMib: 4096, diskMib: 8192 } as const
 const MEMORY_GROWTH_STEP_MIB = 128
 
 const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
+const SHRINK_AFTER_MIN = 60
+const SHRINK_AFTER_MAX = 1800
 
 const LIVE_MEMORY_DOCS_URL =
   "https://docs.superserve.ai/sandbox/live-memory-resizing"
@@ -126,6 +128,13 @@ function validateName(name: string): string | null {
   if (name.length > 128) return "Name must be 128 characters or fewer"
   if (!NAME_RE.test(name))
     return "Use lowercase letters, numbers, and hyphens; start with a letter or number"
+  return null
+}
+
+function validateShrinkAfter(value: string): string | null {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n < SHRINK_AFTER_MIN || n > SHRINK_AFTER_MAX)
+    return `Use a whole number of seconds from ${SHRINK_AFTER_MIN} to ${SHRINK_AFTER_MAX}`
   return null
 }
 
@@ -525,6 +534,8 @@ export function CreateTemplateDialog({
   const [diskPick, setDisk] = useState(4096)
   const [growth, setGrowth] = useState(false)
   const [memoryMaxPick, setMemoryMax] = useState(2048)
+  // Empty means the platform default; only sent with a max memory.
+  const [shrinkAfter, setShrinkAfter] = useState("")
   const [codeOpen, setCodeOpen] = useState(false)
   // Picks are clamped at render rather than rewritten, so a cap or boot size
   // change always shows, and submits, a shape the API accepts.
@@ -556,6 +567,7 @@ export function CreateTemplateDialog({
     setDisk(4096)
     setGrowth(false)
     setMemoryMax(2048)
+    setShrinkAfter("")
     setCodeOpen(false)
     setErrors({})
   }
@@ -568,7 +580,12 @@ export function CreateTemplateDialog({
     [trimmedImage],
   )
 
-  const isValid = !liveNameError && !liveImageError
+  const sendShrinkAfter = memoryMax !== null && shrinkAfter.trim() !== ""
+  const liveShrinkAfterError = sendShrinkAfter
+    ? validateShrinkAfter(shrinkAfter.trim())
+    : null
+
+  const isValid = !liveNameError && !liveImageError && !liveShrinkAfterError
 
   const shape: TemplateShape = {
     name: trimmedName,
@@ -576,6 +593,9 @@ export function CreateTemplateDialog({
     vcpu,
     memoryMib: memory,
     memoryMaxMib: memoryMax,
+    memoryShrinkAfterSeconds: sendShrinkAfter
+      ? Number(shrinkAfter.trim())
+      : null,
     diskMib: disk,
   }
 
@@ -583,7 +603,7 @@ export function CreateTemplateDialog({
     if (entitlement.status !== "allowed") return
     const nameError = validateName(trimmedName)
     const imageError = validateImage(trimmedImage)
-    if (nameError || imageError) {
+    if (nameError || imageError || liveShrinkAfterError) {
       setErrors({
         name: nameError ?? undefined,
         image: imageError ?? undefined,
@@ -831,6 +851,29 @@ export function CreateTemplateDialog({
                     >
                       {formatMib(growthCeiling)}
                     </span>
+                  </div>
+                )}
+                {memoryMax !== null && (
+                  <div className={ROW_GRID}>
+                    <label
+                      htmlFor={`${ids}-shrink-after`}
+                      className="border-l border-dashed border-control pl-3 text-sm text-foreground"
+                    >
+                      Shrink after (seconds)
+                    </label>
+                    <Input
+                      id={`${ids}-shrink-after`}
+                      type="number"
+                      inputMode="numeric"
+                      min={SHRINK_AFTER_MIN}
+                      max={SHRINK_AFTER_MAX}
+                      value={shrinkAfter}
+                      onChange={(e) => setShrinkAfter(e.target.value)}
+                      placeholder="Default"
+                      title="How long memory must stay low after growing before it shrinks back, 60 to 1800"
+                      className="w-[10.5rem] font-mono"
+                      error={liveShrinkAfterError ?? undefined}
+                    />
                   </div>
                 )}
               </div>
