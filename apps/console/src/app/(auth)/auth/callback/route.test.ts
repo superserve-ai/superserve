@@ -355,6 +355,7 @@ vi.mock("@/lib/supabase/server", () => ({
 const mockHeedeoEnabled = vi.fn(() => false)
 const mockTakeHeedeoCapture = vi.fn()
 const mockScheduleHeedeo = vi.fn()
+const mockScheduleHeedeoDiscarded = vi.fn()
 vi.mock("@/lib/heedeo/observe", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/lib/heedeo/observe")>()),
   isHeedeoObservationEnabled: () => mockHeedeoEnabled(),
@@ -362,6 +363,8 @@ vi.mock("@/lib/heedeo/observe", async (importOriginal) => ({
     mockTakeHeedeoCapture(...args),
   scheduleHeedeoSignupObservation: (...args: unknown[]) =>
     mockScheduleHeedeo(...args),
+  scheduleHeedeoCaptureDiscarded: (...args: unknown[]) =>
+    mockScheduleHeedeoDiscarded(...args),
 }))
 
 import { SignupSetupBlockedError } from "@/lib/api/signup-setup-error"
@@ -2917,11 +2920,13 @@ describe("auth callback", () => {
       mockHeedeoEnabled.mockReset().mockReturnValue(true)
       mockTakeHeedeoCapture.mockReset().mockResolvedValue(capture)
       mockScheduleHeedeo.mockReset()
+      mockScheduleHeedeoDiscarded.mockReset()
     })
 
     // The observation is read after the response, as `after()` would.
     const scheduled = () => {
       expect(mockScheduleHeedeo).toHaveBeenCalledTimes(1)
+      expect(mockScheduleHeedeoDiscarded).not.toHaveBeenCalled()
       const observation = mockScheduleHeedeo.mock.calls[0]![0]
       return typeof observation === "function" ? observation() : observation
     }
@@ -3017,6 +3022,10 @@ describe("auth callback", () => {
       expect(response.headers.get("location")).toContain("/sandboxes")
       expect(mockTakeHeedeoCapture).toHaveBeenCalledTimes(1)
       expect(mockScheduleHeedeo).not.toHaveBeenCalled()
+      // Its identify call was still made, so it is counted.
+      expect(mockScheduleHeedeoDiscarded).toHaveBeenCalledExactlyOnceWith(
+        expect.objectContaining({ capture }),
+      )
     })
 
     it("sends nothing for a Google account that has no sign-up proof", async () => {

@@ -86,6 +86,7 @@ import { resolveFingerprintSignup } from "@/lib/fingerprint/observe"
 import {
   heedeoRequestContext,
   isHeedeoObservationEnabled,
+  scheduleHeedeoCaptureDiscarded,
   scheduleHeedeoSignupObservation,
   takeHeedeoSignupCapture,
 } from "@/lib/heedeo/observe"
@@ -708,6 +709,12 @@ export async function GET(request: Request) {
                   ? { oauthEmailVerified: emailVerified }
                   : {}),
               }))
+            } else if (heedeoCapture) {
+              scheduleHeedeoCaptureDiscarded({
+                signupAttemptId,
+                userId: user.id,
+                capture: heedeoCapture,
+              })
             }
           }
         } else {

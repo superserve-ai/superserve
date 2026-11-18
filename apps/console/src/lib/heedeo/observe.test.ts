@@ -26,6 +26,7 @@ import {
   type HeedeoSignupObservation,
   observeHeedeoSignup,
   readHeedeoRequestContext,
+  scheduleHeedeoCaptureDiscarded,
   scheduleHeedeoSignupObservation,
   takeHeedeoSignupCapture,
 } from "./observe"
@@ -184,6 +185,15 @@ describe("observeHeedeoSignup", () => {
     // The token and email never go to analytics.
     expect(JSON.stringify(props)).not.toContain("ct1.token")
     expect(JSON.stringify(props)).not.toContain("new@example.com")
+    // The log line alone links the evidence to the account.
+    expect(console.info).toHaveBeenCalledWith(
+      "Heedeo signup observation outcome",
+      expect.objectContaining({
+        signup_attempt_id: "attempt-1",
+        superserve_user_id: "user-1",
+        heedeo_visitor_id: "613d",
+      }),
+    )
   })
 
   it("still sends the event without a token, with the capture status", async () => {
@@ -209,6 +219,13 @@ describe("observeHeedeoSignup", () => {
       token_present: false,
       no_token: true,
     })
+    expect(console.info).toHaveBeenCalledWith(
+      "Heedeo signup observation outcome",
+      expect.objectContaining({
+        signup_attempt_id: "attempt-1",
+        superserve_user_id: null,
+      }),
+    )
   })
 
   it("records a missing capture as absent", async () => {
@@ -360,6 +377,28 @@ describe("scheduleHeedeoSignupObservation", () => {
     delete process.env.HEEDEO_SECRET_KEY
     scheduleHeedeoSignupObservation(observation())
     expect(afterQueue).toHaveLength(0)
+  })
+})
+
+describe("scheduleHeedeoCaptureDiscarded", () => {
+  it("counts a dropped capture after the response, without its token", async () => {
+    scheduleHeedeoCaptureDiscarded({
+      signupAttemptId: "attempt-1",
+      userId: "user-1",
+      capture: { status: "ok", token: "ct1.token", latencyMs: 640 },
+    })
+    expect(mockTrackEvent).not.toHaveBeenCalled()
+    await Promise.all(afterQueue.splice(0).map((callback) => callback()))
+    const [event, distinctId, props] = mockTrackEvent.mock.calls[0]!
+    expect(event).toBe("auth_heedeo_capture_discarded")
+    expect(distinctId).toBe("user-1")
+    expect(props).toMatchObject({
+      reason: "existing_account",
+      signup_attempt_id: "attempt-1",
+      capture_status: "ok",
+      token_present: true,
+    })
+    expect(JSON.stringify(props)).not.toContain("ct1.token")
   })
 })
 

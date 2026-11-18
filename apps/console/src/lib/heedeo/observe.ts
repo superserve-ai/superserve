@@ -394,6 +394,8 @@ async function collect(
   const codes = reasonCodes(answer)
   const summary = {
     signup_attempt_id: requestId,
+    // Set only when this attempt created the account (see `userId`).
+    superserve_user_id: userId,
     signup_method: signupMethod,
     signup_status: status,
     capture_status: capture?.status ?? "absent",
@@ -413,7 +415,6 @@ async function collect(
     provider: "heedeo",
     mode: "observe",
     ...summary,
-    superserve_user_id: userId,
     capture_latency_ms: capture?.latencyMs ?? null,
     token_present: token !== null,
     provider_error_code: result.errorCode,
@@ -437,6 +438,46 @@ async function collect(
  * its later steps created. Does nothing when the observation is off, and never
  * throws.
  */
+/**
+ * Counts a Google capture that the callback drops unsent because the account
+ * already existed. Its `identify()` call was still made, so the count
+ * explains identify usage that `auth_heedeo_signup_observed` does not.
+ * Observe-only, after the response, and never throws.
+ */
+export function scheduleHeedeoCaptureDiscarded(discarded: {
+  signupAttemptId: string | undefined
+  userId: string
+  capture: HeedeoCapture
+}): void {
+  if (!isHeedeoObservationEnabled()) return
+  try {
+    after(async () => {
+      try {
+        await trackEvent(
+          AUTH_EVENTS.HEEDEO_CAPTURE_DISCARDED,
+          discarded.userId,
+          {
+            provider: "heedeo",
+            mode: "observe",
+            reason: "existing_account",
+            signup_method: "google",
+            signup_attempt_id: discarded.signupAttemptId ?? null,
+            superserve_user_id: discarded.userId,
+            capture_status: discarded.capture.status,
+            capture_latency_ms: discarded.capture.latencyMs,
+            token_present: discarded.capture.token !== null,
+            observed_at: new Date().toISOString(),
+          },
+        )
+      } catch {
+        // Observation only.
+      }
+    })
+  } catch {
+    // Observation only: `after` throws outside a request scope.
+  }
+}
+
 export function scheduleHeedeoSignupObservation(
   observation: HeedeoSignupObservation | (() => HeedeoSignupObservation),
 ): void {

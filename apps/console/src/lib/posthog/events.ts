@@ -22,6 +22,7 @@ export const AUTH_EVENTS = {
   SIGNUP_RECAPTCHA_OBSERVED: "auth_signup_recaptcha_observed",
   // Observe-only Heedeo evaluation of a sign-up (lib/heedeo/observe.ts).
   HEEDEO_SIGNUP_OBSERVED: "auth_heedeo_signup_observed",
+  HEEDEO_CAPTURE_DISCARDED: "auth_heedeo_capture_discarded",
   SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
   SIGN_OUT: "auth_sign_out",
   PASSWORD_RESET_REQUESTED: "auth_password_reset_requested",

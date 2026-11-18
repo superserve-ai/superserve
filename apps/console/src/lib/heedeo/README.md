@@ -41,7 +41,13 @@ authentication decision depends on it, and every failure fails open.
    the email and network and adds the `no_token` note.
 
 4. The answer goes to PostHog as `auth_heedeo_signup_observed` and to a
-   `Heedeo signup observation outcome` log line.
+   `Heedeo signup observation outcome` log line. The log line has the
+   summary fields, `signup_attempt_id` and `superserve_user_id` included, so
+   the evidence can be found from an account without PostHog. The user ID is
+   set only when this attempt created the account.
+5. A Google capture that the callback deletes unsent (a returning account)
+   goes to PostHog as `auth_heedeo_capture_discarded`: its identify call was
+   still made. See "Identify usage" below.
 
 The capture cookie belongs to the browser, not to one attempt. When two tabs
 sign up at the same time, one attempt can send the other's token, or none.
@@ -53,8 +59,35 @@ a backup identify to `https://heedeo.dev` when the first-party call is slow.
 Revoking the publishable key in Heedeo's dashboard stops that too.
 Once loaded on the sign-up page, the script stays in the tab: a client-side
 move to another page, such as sign-in, does not unload it, so its background
-identify (at most 10, on visibility changes) can still run there. Such a call
-is not tied to a sign-up event, and Heedeo may bill it.
+identification (see below) can still run there.
+
+## Identify usage
+
+Heedeo's docs say one identification is one `identify()` call and page loads
+are free. They do not say whether the script's background identification
+(below) counts. Confirm both in a staging workspace before relying on them.
+
+- `identify()` runs once per sign-up action: an email sign-up submit, a
+  Google button on the sign-up page, and "Continue with Google" on the sign-in
+  page. The last one runs before Google says who the user is, so it also runs
+  for returning accounts, whose capture the callback deletes unsent. In the
+  six days to 2026-11-18, the sign-in page ran 93 Google sign-up checks and the
+  sign-up page 36, for 86 new Google accounts: most Google sign-ups start on
+  the sign-in page, so it keeps the capture. Telling a new account apart
+  before the trip to Google needs a larger change.
+- The script, once loaded, identifies in the background on load, then
+  again every 3 minutes while the tab is visible and on a return to the tab,
+  at most 10 more times per tab (about 30 minutes). It loads only on sign-up
+  intent (see Flow).
+- Compare Heedeo's usage (dashboard, or `get_usage` on its MCP server)
+  with unique `signup_attempt_id`s and new accounts, not with
+  `auth_heedeo_signup_observed` alone: add `auth_heedeo_capture_discarded`
+  for returning accounts. The rest of the gap is Google trips that were
+  never finished and background identification, if it is billed.
+- Heedeo documents no spend cap or usage alert, only rate limits (120 a
+  minute per end-user address, 6,000 a minute per workspace). Over quota,
+  the script does not load or `identify()` rejects, which fails open here.
+  The local route cannot limit calls sent straight to Heedeo's own hosts.
 
 ## PostHog `auth_heedeo_signup_observed`
 
@@ -114,3 +147,16 @@ not fall back after a 403, so the kill switch answers 403 rather than 404.
 
 Use a separate Heedeo workspace for preview and staging deployments: test
 sign-ups become history that later sign-ups are scored against.
+
+Before production, with a live staging workspace:
+
+- check that an email sign-up, a Google sign-up and a sign-up with no token
+  each give an `auth_heedeo_signup_observed` event and log line with the
+  right `superserve_user_id`;
+- check that a returning Google sign-in, repeated navigation and visibility
+  changes, and the kill switch change Heedeo's usage as described above;
+- agree a quota or budget and a usage alert with Heedeo.
+
+A high score or a matching visitor ID is a reason to look, not proof of
+abuse. `token_present` and `no_token` tell a tokenless evaluation apart from
+one backed by a device.
