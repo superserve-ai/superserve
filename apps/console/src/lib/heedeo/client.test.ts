@@ -286,6 +286,47 @@ describe("Heedeo browser capture", () => {
     expect(captured()).toBeNull()
   })
 
+  it("does not let an older email wait overwrite a newer capture", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const identify = vi
+      .fn()
+      .mockReturnValueOnce(new Promise(() => {}))
+      .mockResolvedValueOnce({
+        token: "ct1.newer",
+        visitor_id: "v",
+        confidence: 1,
+      })
+    window.heedeo = { identify }
+    const older = client.captureHeedeoSignup(3000, new AbortController().signal)
+    await vi.advanceTimersByTimeAsync(0)
+    const newer = client.captureHeedeoSignup(3000)
+    await newer
+    expect(captured()).toMatchObject({ status: "ok", token: "ct1.newer" })
+    const settled = client.settleHeedeoSignup(older, 1000)
+    await vi.advanceTimersByTimeAsync(1000)
+    await settled
+    expect(identify).toHaveBeenCalledTimes(2)
+    expect(captured()).toMatchObject({ status: "ok", token: "ct1.newer" })
+  })
+
+  it("does not identify once the budget is spent", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const capture = client.captureHeedeoSignup(150)
+    await vi.advanceTimersByTimeAsync(150)
+    const identify = vi.fn(async () => ({
+      token: "ct1.late",
+      visitor_id: "v",
+      confidence: 1,
+    }))
+    window.heedeo = { identify }
+    await vi.advanceTimersByTimeAsync(100)
+    await capture
+    expect(identify).not.toHaveBeenCalled()
+    expect(captured()).toMatchObject({ status: "script_timeout", token: null })
+  })
+
   it("keeps a newer capture when an older attempt is aborted", async () => {
     vi.useFakeTimers()
     const client = await load("pk_live_123")

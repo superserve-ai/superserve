@@ -38,7 +38,8 @@ const HEEDEO_TOKEN_COOKIE = "_idt"
 let scriptRequested = false
 let scriptFailed = false
 let latestCapture = 0
-let captureStartedAt = 0
+// Each capture's own run, so `settleHeedeoSignup` acts only on its capture.
+const captureRuns = new WeakMap<Promise<void>, { run: number; start: number }>()
 
 /** Called when the script cannot load. */
 export function markHeedeoScriptFailed(): void {
@@ -123,9 +124,9 @@ async function identifyWithin(
   )
     await new Promise((resolve) => setTimeout(resolve, 100))
   const heedeo = window.heedeo
-  // A capture that `settleHeedeoSignup` or its attempt gave up on must not
-  // start a billed `identify()` whose result nobody reads.
-  if (!heedeo || !isLiveCapture(run, signal))
+  // A capture that `settleHeedeoSignup` or its attempt gave up on, or whose
+  // budget is spent, must not start a billed `identify()` nobody reads.
+  if (!heedeo || !isLiveCapture(run, signal) || Date.now() - start >= budgetMs)
     return {
       status: hasScriptFailed() ? "script_failed" : "script_timeout",
       token: null,
@@ -174,17 +175,27 @@ async function identifyWithin(
  * then starts no `identify()` and writes no cookie. Aborting it does not
  * touch a newer capture.
  */
-export async function captureHeedeoSignup(
+export function captureHeedeoSignup(
   budgetMs: number = HEEDEO_CAPTURE_BUDGET_MS,
   signal?: AbortSignal,
 ): Promise<void> {
-  if (!HEEDEO_PUBLISHABLE_KEY) return
+  if (!HEEDEO_PUBLISHABLE_KEY) return Promise.resolve()
   const run = ++latestCapture
+  const start = Date.now()
+  const capture = runCapture(budgetMs, run, start, signal)
+  captureRuns.set(capture, { run, start })
+  return capture
+}
+
+async function runCapture(
+  budgetMs: number,
+  run: number,
+  start: number,
+  signal: AbortSignal | undefined,
+): Promise<void> {
   try {
     loadHeedeoScript()
     clearHeedeoSignupCapture()
-    const start = Date.now()
-    captureStartedAt = start
     const result = await identifyWithin(budgetMs, run, signal)
     // A newer capture owns the cookie now, or nobody reads this one.
     if (!isLiveCapture(run, signal)) return
@@ -207,14 +218,15 @@ export const HEEDEO_SIGNUP_TAIL_MS = 1000
 /**
  * Waits for a running `captureHeedeoSignup` for at most `tailMs` more. When
  * it is still running, records the timeout for the server at once and drops
- * the late result. Never throws.
+ * the late result. Acts only while `capture` is the latest capture, so an
+ * older attempt never overwrites a newer one. Never throws.
  */
 export async function settleHeedeoSignup(
   capture: Promise<void>,
   tailMs: number = HEEDEO_SIGNUP_TAIL_MS,
 ): Promise<void> {
-  if (!HEEDEO_PUBLISHABLE_KEY) return
-  const run = latestCapture
+  const own = captureRuns.get(capture)
+  if (!own) return
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const finished = await Promise.race([
@@ -226,7 +238,7 @@ export async function settleHeedeoSignup(
         timer = setTimeout(() => resolve(false), tailMs)
       }),
     ])
-    if (finished || run !== latestCapture) return
+    if (finished || own.run !== latestCapture) return
     latestCapture++
     writeCookie(
       encodeHeedeoCapture({
@@ -236,7 +248,7 @@ export async function settleHeedeoSignup(
             ? "script_failed"
             : "script_timeout",
         token: null,
-        latencyMs: Date.now() - captureStartedAt,
+        latencyMs: Date.now() - own.start,
       }),
       HEEDEO_SIGNUP_COOKIE_MAX_AGE_SECONDS,
     )
