@@ -245,3 +245,31 @@ it("prefills a fresh name and clears validation when the parent reopens the dial
   expect(getNameInput().value).toBe("sandbox-z09a")
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
 })
+
+it("clears a name error set during the closing transition when reopened", () => {
+  const { rerender } = render(<CreateSandboxDialog open hideTrigger />, {
+    wrapper: ToastProvider,
+  })
+  const dialog = screen.getByRole("dialog")
+  const input = getNameInput()
+  const create = within(dialog).getByRole("button", { name: "Create Sandbox" })
+
+  // Keep the popup mounted through the close reset and the late click.
+  const finished = new Promise<void>(() => {})
+  Object.defineProperty(dialog, "getAnimations", {
+    value: () => [{ finished }],
+  })
+
+  rerender(<CreateSandboxDialog open={false} hideTrigger />)
+  expect(input).toBeInTheDocument()
+  expect(input).toHaveValue("")
+
+  fireEvent.click(create)
+  expect(input).toHaveAttribute("aria-invalid", "true")
+  expect(getFieldError()).toBeInTheDocument()
+
+  rerender(<CreateSandboxDialog open hideTrigger />)
+  expect(getNameInput().value).toMatch(namePattern)
+  expect(getNameInput()).not.toHaveAttribute("aria-invalid")
+  expect(screen.queryByText(nameError)).not.toBeInTheDocument()
+})

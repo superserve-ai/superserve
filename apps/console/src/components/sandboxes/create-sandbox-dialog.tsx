@@ -482,8 +482,8 @@ export function CreateSandboxDialog({
       setName((current) => current || generateSandboxName())
     } else {
       setName("")
-      setNameError(undefined)
     }
+    setNameError(undefined)
   }, [open])
 
   // Keep `templateRef` in sync when the caller changes `initialTemplateRef`
