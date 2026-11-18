@@ -85,6 +85,22 @@ describe("forwardHeedeoRequest", () => {
     )
   })
 
+  it("serves an upstream page as an inert document", async () => {
+    const upstream = ok("<script>alert(1)</script>", {
+      status: 403,
+      headers: { "content-type": "text/html" },
+    })
+    const response = await forwardHeedeoRequest(
+      new Request(`${BASE}/i.js?key=pk_live_1`),
+      ["i.js"],
+      options(upstream),
+    )
+    expect(response.headers.get("content-security-policy")).toBe(
+      "sandbox; default-src 'none'",
+    )
+    expect(response.headers.get("x-content-type-options")).toBe("nosniff")
+  })
+
   it("never sends console cookies upstream when there is no visitor cookie", async () => {
     const upstream = ok()
     await forwardHeedeoRequest(

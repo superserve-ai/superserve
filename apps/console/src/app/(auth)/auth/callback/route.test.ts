@@ -70,6 +70,10 @@ let currentUser: {
     signup_enterprise_pricing_pending?: boolean
   }
   user_metadata: { full_name?: string }
+  identities?: {
+    provider: string
+    identity_data?: { email?: string; email_verified?: boolean }
+  }[]
 } | null = null
 
 let proofAvailable = true
@@ -2938,10 +2942,12 @@ describe("auth callback", () => {
       })
       googleMembershipState = { kind: "first_time" }
       mockHasValidGoogleSignupProof.mockResolvedValue(true)
-      currentUser!.user_metadata = {
-        full_name: "Test User",
-        email_verified: true,
-      } as { full_name?: string }
+      currentUser!.identities = [
+        {
+          provider: "google",
+          identity_data: { email: "User@example.com", email_verified: true },
+        },
+      ]
 
       const response = await GET(
         new Request(
@@ -2976,6 +2982,21 @@ describe("auth callback", () => {
         oauthEmailVerified: true,
       })
       expect(scheduled().request.headers).not.toHaveProperty("cookie")
+    })
+
+    it("sends no Google email evidence without a Google identity for the address", async () => {
+      currentUser!.user_metadata = {
+        full_name: "Test User",
+        email_verified: true,
+      } as { full_name?: string }
+      currentUser!.identities = [
+        {
+          provider: "google",
+          identity_data: { email: "other@example.com", email_verified: true },
+        },
+      ]
+      await firstTimeGoogle()
+      expect(scheduled()).not.toHaveProperty("oauthEmailVerified")
     })
 
     const firstTimeGoogle = async () => {

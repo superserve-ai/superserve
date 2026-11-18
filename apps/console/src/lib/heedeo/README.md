@@ -42,7 +42,8 @@ authentication decision depends on it, and every failure fails open.
      has not proved it owns that account;
    - Google: from `/auth/callback` for a Google account that passed the
      sign-up proof and was created by this attempt, with
-     `evidence.oauth.email_verified`. `status` is `failed` when the sign-up
+     `evidence.oauth.email_verified` from the account's Google identity for
+     that address (none without one). `status` is `failed` when the sign-up
      restriction check refuses it. A returning account's capture, or that of
      an account that comes back before its team exists, is deleted unsent.
 
@@ -136,7 +137,10 @@ first-party. `lib/heedeo/proxy.ts` limits the route:
   `x-forwarded-for`, read only when `VERCEL` is set (never `cf-connecting-ip`; off Vercel the route answers 503), the browser headers identify
   reads, and only Heedeo's `_idd` cookie, never console cookies;
 - back: `content-type`, `cache-control`, `etag`, `accept-ch`,
-  `access-control-*`, and only an `_idd` Set-Cookie without a `Domain`;
+  `access-control-*`, and only an `_idd` Set-Cookie without a `Domain`; every
+  answer also gets `content-security-policy: sandbox; default-src 'none'` and
+  `nosniff`, so an upstream page opened directly cannot run on the console
+  origin (scripts and fetch answers ignore the header);
 - 64 KB request body, 1 MB response body, 2 KB query, 3 s, no redirects; a
   key or header value that is not valid also fails open with 502;
 - the script is sent with `cache-control: no-cache`, so the browser

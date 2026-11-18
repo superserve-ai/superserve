@@ -687,7 +687,15 @@ export async function GET(request: Request) {
             // the account is a sign-up: a returning account, or one that comes
             // back before its team exists, has its capture dropped unsent.
             const heedeoCapture = await takeHeedeoSignupCapture()
-            const emailVerified = user.user_metadata?.email_verified
+            // From the Google identity for this address, not the editable
+            // `user_metadata`.
+            const emailVerified = user.identities?.find(
+              (identity) =>
+                identity.provider === "google" &&
+                typeof identity.identity_data?.email === "string" &&
+                identity.identity_data.email.toLowerCase() ===
+                  user.email?.toLowerCase(),
+            )?.identity_data?.email_verified
             const createdNow =
               heedeoOriginalSignup ??
               Date.now() - Date.parse(user.created_at) < 30000

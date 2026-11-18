@@ -237,6 +237,11 @@ export async function forwardHeedeoRequest(
     // that one keeps Heedeo's cache policy.
     if (path === "/i.js" && !url.searchParams.has("m"))
       back.set("cache-control", "no-cache")
+    // A browser that opens a proxied answer directly gets an inert document:
+    // an upstream error or challenge page cannot run on the console origin.
+    // Script and fetch answers ignore this header.
+    back.set("content-security-policy", "sandbox; default-src 'none'")
+    back.set("x-content-type-options", "nosniff")
     for (const value of upstream.headers.getSetCookie()) {
       const kept = visitorSetCookie(value)
       if (kept) back.append("set-cookie", kept)
