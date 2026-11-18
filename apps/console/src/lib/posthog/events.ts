@@ -49,6 +49,15 @@ export const TERMINAL_EVENTS = {
   TAB_RENAMED: "terminal_tab_renamed",
 } as const
 
+// The trial-runway-warning experiment banner. Both events carry team_id,
+// region, remaining_usd, threshold_mode (burn_rate or fixed), minutes_left
+// and burn_usd_per_minute (null in fixed mode), and can_manage. shown is
+// sent once per team per browser tab session.
+export const TRIAL_RUNWAY_EVENTS = {
+  WARNING_SHOWN: "trial_runway_warning_shown",
+  WARNING_CLICKED: "trial_runway_warning_clicked",
+} as const
+
 export const FILE_EVENTS = {
   UPLOAD_SUCCEEDED: "file_upload_succeeded",
   UPLOAD_FAILED: "file_upload_failed",

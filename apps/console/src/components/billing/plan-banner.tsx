@@ -3,6 +3,7 @@
 import { Button } from "@superserve/ui"
 import Link from "next/link"
 
+import { TrialRunwayWarning } from "@/components/billing/trial-runway-warning"
 import { useQueryScope } from "@/components/query-provider"
 import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
@@ -89,6 +90,7 @@ export function PlanBanner() {
   useBillingReturnNotice()
   const plan = useTeamPlan(true).data
   if (plan === undefined) return null
-  if (!plan || plan.kind === "legacy_payg") return <TrialBillingBanner />
+  if (!plan || plan.kind === "legacy_payg")
+    return <TrialRunwayWarning fallback={<TrialBillingBanner />} />
   return <PricingV2Banner plan={plan} />
 }
