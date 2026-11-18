@@ -312,3 +312,47 @@ it("does nothing for zero memberships or read failures", async () => {
   expect(await settleTeamSelection(user())).toBeNull()
   expect(mocks.write).not.toHaveBeenCalled()
 })
+
+it("times out a hanging directory lookup without writing after it resolves", async () => {
+  vi.useFakeTimers()
+  try {
+    const directory = { memberships: [older], degradedRegions: [] }
+    let resolveDirectory!: (value: typeof directory) => void
+    const pending = new Promise<typeof directory>((resolve) => {
+      resolveDirectory = resolve
+    })
+    mocks.directory.mockReturnValue(pending)
+
+    const selection = settleTeamSelection(user())
+    await vi.advanceTimersByTimeAsync(SETTLE_TEAM_DEADLINE_MS)
+    expect(await selection).toBeNull()
+    expect(mocks.write).not.toHaveBeenCalled()
+
+    resolveDirectory(directory)
+    await vi.advanceTimersByTimeAsync(0)
+    expect(mocks.read).toHaveBeenCalled()
+    expect(mocks.write).not.toHaveBeenCalled()
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it("chooses an eligible older team while a younger plan read hangs", async () => {
+  vi.useFakeTimers()
+  try {
+    mocks.plan
+      .mockResolvedValueOnce({ state: "legacy" })
+      .mockReturnValueOnce(new Promise(() => {}))
+
+    const selection = settleTeamSelection(user())
+    await vi.advanceTimersByTimeAsync(SETTLE_TEAM_DEADLINE_MS)
+    expect(await selection).toEqual(older)
+    expect(mocks.write).toHaveBeenCalledWith(older)
+    expect(mocks.plan.mock.calls).toEqual([
+      ["user-a", older],
+      ["user-a", newer],
+    ])
+  } finally {
+    vi.useRealTimers()
+  }
+})
