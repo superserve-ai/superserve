@@ -6,7 +6,7 @@ import {
   type ReactElement,
   type ReactNode,
 } from "react"
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, onTestFinished, vi } from "vitest"
 
 let retrySearch = new URLSearchParams()
 const mockRetryOAuth = vi.fn()
@@ -2927,6 +2927,10 @@ describe("auth callback", () => {
     }
 
     it("sends a first-time Google account as a sign-up", async () => {
+      process.env.VERCEL = "1"
+      onTestFinished(() => {
+        delete process.env.VERCEL
+      })
       googleMembershipState = { kind: "first_time" }
       mockHasValidGoogleSignupProof.mockResolvedValue(true)
       currentUser!.user_metadata = {

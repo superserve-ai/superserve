@@ -107,6 +107,7 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.restoreAllMocks()
+  vi.unstubAllEnvs()
   mockTrackEvent.mockReset()
   cookieStore.get.mockReset()
   cookieStore.delete.mockReset()
@@ -387,6 +388,7 @@ describe("takeHeedeoSignupCapture", () => {
 
 describe("heedeoRequestContext", () => {
   it("forwards only the headers Heedeo reads, never cookies or authorization", () => {
+    vi.stubEnv("VERCEL", "1")
     const context = heedeoRequestContext(
       new Headers({
         host: "console.superserve.ai",

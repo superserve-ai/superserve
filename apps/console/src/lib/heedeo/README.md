@@ -81,7 +81,7 @@ first-party. `lib/heedeo/proxy.ts` limits the route:
 - fixed upstream `https://app.heedeo.com`; only `GET /i.js` and
   `POST|OPTIONS /v1/identify`; any other path is a local 404;
 - up: the secret key, the visitor IP from Vercel's `x-real-ip` /
-  `x-forwarded-for` (never `cf-connecting-ip`), the browser headers identify
+  `x-forwarded-for`, read only when `VERCEL` is set (never `cf-connecting-ip`; off Vercel the route answers 503), the browser headers identify
   reads, and only Heedeo's `_idd` cookie, never console cookies;
 - back: `content-type`, `cache-control`, `etag`, `accept-ch`,
   `access-control-*`, and only an `_idd` Set-Cookie without a `Domain`;

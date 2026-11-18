@@ -71,9 +71,11 @@ const refuse = (
 /**
  * The visitor's IP as Vercel reports it. Vercel overwrites `x-real-ip` and
  * `x-forwarded-for` with the connecting client's address; never read
- * `cf-connecting-ip`, which a caller can set.
+ * `cf-connecting-ip`, which a caller can set. Off Vercel nothing vouches for
+ * these headers, so there is no trusted IP.
  */
 export function trustedClientIp(headers: Headers): string | null {
+  if (!process.env.VERCEL) return null
   const value =
     headers.get("x-real-ip")?.trim() ||
     headers.get("x-forwarded-for")?.split(",")[0]?.trim()

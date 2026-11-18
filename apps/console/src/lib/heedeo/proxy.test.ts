@@ -335,7 +335,14 @@ describe("forwardHeedeoRequest", () => {
 })
 
 describe("trustedClientIp", () => {
+  it("trusts no forwarded header off Vercel", () => {
+    expect(
+      trustedClientIp(new Headers({ "x-real-ip": "203.0.113.7" })),
+    ).toBeNull()
+  })
+
   it("reads Vercel's headers and ignores cf-connecting-ip", () => {
+    process.env.VERCEL = "1"
     expect(
       trustedClientIp(
         new Headers({
