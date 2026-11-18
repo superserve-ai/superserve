@@ -14,7 +14,7 @@ import { trackEvent } from "@/lib/posthog/actions"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 
 import { heedeoObservationEnabled, heedeoSecretKey } from "./config"
-import { HEEDEO_UPSTREAM, trustedClientIp } from "./proxy"
+import { HEEDEO_UPSTREAM, readCapped, trustedClientIp } from "./proxy"
 import {
   decodeHeedeoCapture,
   HEEDEO_SIGNUP_COOKIE,
@@ -24,6 +24,8 @@ import {
 
 export const HEEDEO_API_VERSION = "2026-11-08"
 export const HEEDEO_EVALUATION_BUDGET_MS = 3000
+// An evaluation answer is a few KB; anything far larger is not one.
+export const HEEDEO_EVALUATION_RESPONSE_MAX = 256 * 1024
 
 // The end user's request headers Heedeo reads, as `@heedeo/sdk` sends them.
 // Never cookie or authorization.
@@ -177,6 +179,21 @@ export async function takeHeedeoSignupCapture(): Promise<HeedeoCapture | null> {
   }
 }
 
+// Reads at most `HEEDEO_EVALUATION_RESPONSE_MAX` bytes. A larger or invalid
+// body throws a SyntaxError, which the caller reports as `malformed`.
+async function readJson(
+  response: Response,
+  signal: AbortSignal,
+): Promise<unknown> {
+  const bytes = await readCapped(
+    response.body,
+    HEEDEO_EVALUATION_RESPONSE_MAX,
+    signal,
+  )
+  if (!bytes) throw new SyntaxError("Heedeo response too large")
+  return JSON.parse(new TextDecoder().decode(bytes))
+}
+
 async function evaluate(
   secretKey: string,
   body: string,
@@ -209,7 +226,7 @@ async function evaluate(
       })
       const traceId = str(response.headers.get("heedeo-trace-id"), 64)
       if (response.ok) {
-        const json: unknown = await response.json()
+        const json = await readJson(response, signal)
         return record(json)
           ? {
               outcome: "success",
@@ -230,7 +247,7 @@ async function evaluate(
       }
       let errorCode: string | null = null
       try {
-        const json: unknown = await response.json()
+        const json = await readJson(response, signal)
         const code = record(json) && record(json.error) ? json.error.code : null
         errorCode =
           typeof code === "string" && /^[a-z_]{1,40}$/.test(code) ? code : null

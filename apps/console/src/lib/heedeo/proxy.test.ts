@@ -283,6 +283,17 @@ describe("forwardHeedeoRequest", () => {
     expect(response.status).toBe(502)
   })
 
+  it("fails open with 502 on a key that is not a valid header value", async () => {
+    const upstream = ok()
+    const response = await forwardHeedeoRequest(
+      new Request(`${BASE}/i.js?key=pk`),
+      ["i.js"],
+      options(upstream, { secretKey: "sk_test\nsecret" }),
+    )
+    expect(response.status).toBe(502)
+    expect(upstream).not.toHaveBeenCalled()
+  })
+
   it("gives up at the time limit", async () => {
     const upstream = vi.fn<typeof fetch>(
       (_input, init) =>

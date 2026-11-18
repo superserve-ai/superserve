@@ -123,7 +123,7 @@ function visitorSetCookie(value: string): string | null {
   ].join("; ")
 }
 
-async function readCapped(
+export async function readCapped(
   stream: ReadableStream<Uint8Array> | null,
   max: number,
   signal: AbortSignal,
@@ -179,24 +179,26 @@ export async function forwardHeedeoRequest(
   const url = new URL(request.url)
   if (url.search.length > SEARCH_MAX) return refuse(414, "uri_too_long")
 
-  const headers = new Headers({
-    authorization: `Bearer ${options.secretKey}`,
-    "x-heedeo-client-ip": options.clientIp,
-  })
-  for (const name of UP_HEADERS) {
-    const value = request.headers.get(name)
-    if (value !== null) headers.set(name, value)
-  }
-  const cookie = visitorCookie(request.headers.get("cookie"))
-  if (cookie) headers.set("cookie", cookie)
-  if (request.method === "POST" && options.ja4)
-    headers.set("x-heedeo-connection", JSON.stringify({ ja4: options.ja4 }))
-
-  const signal = AbortSignal.any([
-    AbortSignal.timeout(options.timeoutMs ?? HEEDEO_PROXY_TIMEOUT_MS),
-    request.signal,
-  ])
   try {
+    // Inside the try: a key or header value that `Headers` rejects is a
+    // failure like any other.
+    const headers = new Headers({
+      authorization: `Bearer ${options.secretKey}`,
+      "x-heedeo-client-ip": options.clientIp,
+    })
+    for (const name of UP_HEADERS) {
+      const value = request.headers.get(name)
+      if (value !== null) headers.set(name, value)
+    }
+    const cookie = visitorCookie(request.headers.get("cookie"))
+    if (cookie) headers.set("cookie", cookie)
+    if (request.method === "POST" && options.ja4)
+      headers.set("x-heedeo-connection", JSON.stringify({ ja4: options.ja4 }))
+
+    const signal = AbortSignal.any([
+      AbortSignal.timeout(options.timeoutMs ?? HEEDEO_PROXY_TIMEOUT_MS),
+      request.signal,
+    ])
     let body: Uint8Array | undefined
     if (request.method === "POST") {
       if (
@@ -255,7 +257,8 @@ export async function forwardHeedeoRequest(
       headers: back,
     })
   } catch {
-    // Timeout, abort or network error: fail open, the page sends no token.
+    // Timeout, abort, network or header error: fail open, the page sends no
+    // token.
     return refuse(502, "upstream_unreachable")
   }
 }

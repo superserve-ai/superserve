@@ -266,6 +266,15 @@ describe("observeHeedeoSignup", () => {
     expect(mockTrackEvent.mock.calls[0]![2].provider_outcome).toBe("malformed")
   })
 
+  it("records an answer over the size limit as malformed", async () => {
+    const huge = JSON.stringify({ ...ANSWER, padding: "x".repeat(300_000) })
+    await observeHeedeoSignup(
+      observation(),
+      vi.fn<typeof fetch>(async () => new Response(huge)),
+    )
+    expect(mockTrackEvent.mock.calls[0]![2].provider_outcome).toBe("malformed")
+  })
+
   it("records a timeout within the budget", async () => {
     const fetchMock = vi.fn<typeof fetch>(
       (_input, init) =>

@@ -89,7 +89,8 @@ first-party. `lib/heedeo/proxy.ts` limits the route:
   reads, and only Heedeo's `_idd` cookie, never console cookies;
 - back: `content-type`, `cache-control`, `etag`, `accept-ch`,
   `access-control-*`, and only an `_idd` Set-Cookie without a `Domain`;
-- 64 KB request body, 1 MB response body, 2 KB query, 3 s, no redirects;
+- 64 KB request body, 1 MB response body, 2 KB query, 3 s, no redirects; a
+  key or header value that is not valid also fails open with 502;
 - the script is sent with `cache-control: no-cache`, so the browser
   revalidates it on each load. Its `i.js?m=1` marker, which the script reads
   back from the browser cache, keeps Heedeo's cache policy.
