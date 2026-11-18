@@ -210,6 +210,34 @@ it.each([
   },
 )
 
+it.each(["click", "Enter"])(
+  "returns focus to the sidebar toggle after activating the active phone link with %s",
+  async (activation) => {
+    const user = userEvent.setup()
+    mockMatchMedia(true)
+    render(
+      <RouterContext.Provider value={router}>
+        <DashboardShell>Page</DashboardShell>
+      </RouterContext.Provider>,
+    )
+    await user.click(screen.getByRole("button", { name: "Expand sidebar" }))
+    const activeLink = screen.getByRole("link", {
+      name: "Sandboxes",
+      current: "page",
+    })
+    activeLink.focus()
+    expect(activeLink).toHaveFocus()
+
+    if (activation === "click") {
+      await user.click(activeLink)
+    } else {
+      await user.keyboard("{Enter}")
+    }
+
+    expect(screen.getByRole("button", { name: "Expand sidebar" })).toHaveFocus()
+  },
+)
+
 it("closes the phone overlay on Escape and returns focus to the toggle", () => {
   openSmallScreenSidebar()
   const toggle = screen.getByRole("button", { name: "Collapse sidebar" })

@@ -49,7 +49,9 @@ export function Sidebar() {
     () => false,
   )
   const { isCollapsed, isOverlayOpen, setCollapsed, toggle } = useSidebar()
+  const asideRef = useRef<HTMLElement>(null)
   const toggleRef = useRef<HTMLButtonElement>(null)
+  const focusToggleAfterCloseRef = useRef(false)
   const { user } = useUser()
 
   useEffect(() => {
@@ -72,6 +74,20 @@ export function Sidebar() {
     return () => window.removeEventListener("keydown", handleKeyDown)
   }, [isOverlayOpen, setCollapsed])
 
+  useEffect(() => {
+    if (isOverlayOpen || !focusToggleAfterCloseRef.current) return
+    focusToggleAfterCloseRef.current = false
+
+    const activeElement = document.activeElement
+    if (
+      !activeElement?.isConnected ||
+      activeElement === document.body ||
+      asideRef.current?.contains(activeElement)
+    ) {
+      toggleRef.current?.focus()
+    }
+  }, [isOverlayOpen])
+
   const navItems = [
     ...mainNavItems,
     // Every user can open Team; the page shows what their team role allows.
@@ -83,6 +99,7 @@ export function Sidebar() {
 
   return (
     <aside
+      ref={asideRef}
       onClickCapture={(event) => {
         // Check before Next.js Link prevents the browser default for routing.
         if (
@@ -94,6 +111,7 @@ export function Sidebar() {
 
         const link = event.target.closest("a[href]")
         if (link && event.currentTarget.contains(link)) {
+          focusToggleAfterCloseRef.current = true
           // Keep the expanded link mounted through its click handler.
           startTransition(() => setCollapsed(true))
         }
