@@ -298,9 +298,11 @@ describe("TeamClient", () => {
     for (const member of baseManagement.members) {
       const name = screen.getByText(member.full_name || "Team member")
       expect(name.parentElement?.parentElement).toHaveClass(
-        "basis-40",
         "flex-1",
+        "basis-[min(10rem,100%_-_2.75rem)]",
+        "@2xl:basis-0",
       )
+      expect(name.closest("ul")).toHaveClass("@container")
     }
   })
 
