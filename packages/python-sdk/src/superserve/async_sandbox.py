@@ -199,6 +199,7 @@ class AsyncSandbox:
                 volume if isinstance(volume, str) else volume.id,
                 api_key=self._config.api_key,
                 base_url=self._config.base_url,
+                timeout=timeout,
             )
         )
         return await resource.attach(

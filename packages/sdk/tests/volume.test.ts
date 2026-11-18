@@ -383,6 +383,49 @@ describe("native volumes", () => {
     expect(calls.filter((call) => call.method === "DELETE")).toHaveLength(0)
   })
 
+  it.each(["data", volume.id])(
+    "honors a short attach timeout while looking up volume %s",
+    async (nameOrId) => {
+      const fetcher = vi.fn(async (url: string, init: RequestInit) => {
+        if (url.endsWith("/sandboxes")) return json(sandbox)
+        if (init.method !== "GET") return json(attachment)
+        return new Promise<Response>((resolve, reject) => {
+          const timer = setTimeout(() => resolve(json(volume)), 2_000)
+          init.signal!.addEventListener(
+            "abort",
+            () => {
+              clearTimeout(timer)
+              reject(init.signal!.reason)
+            },
+            { once: true },
+          )
+        })
+      })
+      vi.stubGlobal("fetch", fetcher)
+      const guest = await Sandbox.create({ ...config, name: "example" })
+      vi.useFakeTimers()
+      let outcome: unknown = "pending"
+      const pending = guest
+        .attachVolume(nameOrId, { mountPath: "/mnt/data", timeoutMs: 1_000 })
+        .then(
+          (value) => {
+            outcome = value
+          },
+          (error: unknown) => {
+            outcome = error
+          },
+        )
+      try {
+        await vi.advanceTimersByTimeAsync(1_000)
+        expect(outcome).toBeInstanceOf(TimeoutError)
+        expect(fetcher).toHaveBeenCalledTimes(2)
+      } finally {
+        await vi.advanceTimersByTimeAsync(1_000)
+        await pending
+      }
+    },
+  )
+
   it("uses a longer bounded mount timeout and respects cancellation", async () => {
     const fetcher = vi.fn(async () => json(volume))
     vi.stubGlobal("fetch", fetcher)

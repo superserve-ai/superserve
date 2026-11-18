@@ -15,6 +15,7 @@ from superserve import (
     ConflictError,
     Sandbox,
     SandboxError,
+    SandboxTimeoutError,
     ValidationError,
     Volume,
 )
@@ -188,6 +189,41 @@ def test_volume_id_matching_preserves_opaque_and_explicit_region_boundaries(
     a: str, b: str, expected: bool
 ) -> None:
     assert _same_volume_sandbox(a, b) is expected
+
+
+@pytest.mark.parametrize("guest_type", [Sandbox, AsyncSandbox])
+@pytest.mark.parametrize("name_or_id", ["data", VOLUME["id"]])
+async def test_attach_timeout_applies_to_volume_lookup(
+    guest_type: Any, name_or_id: str
+) -> None:
+    def delayed_lookup(request: httpx.Request) -> httpx.Response:
+        # Model a response arriving after two seconds without a real sleep.
+        if request.extensions["timeout"]["read"] < 2.0:
+            raise httpx.ReadTimeout("Volume lookup timed out", request=request)
+        return httpx.Response(200, json=VOLUME)
+
+    with respx.mock(assert_all_called=False) as router:
+        router.post(f"{API}/sandboxes").respond(201, json=GUEST)
+        lookup = router.get(f"{API}/volumes/{name_or_id}").mock(
+            side_effect=delayed_lookup
+        )
+        attach = router.post(f"{API}/sandboxes/{GUEST['id']}/volumes").respond(
+            201, json=ATTACHMENT
+        )
+        guest = await call(guest_type.create, name="example")
+        try:
+            with pytest.raises(SandboxTimeoutError):
+                await call(
+                    guest.attach_volume,
+                    name_or_id,
+                    mount_path="/mnt/data",
+                    timeout=1.0,
+                )
+            assert lookup.call_count == 1
+            assert 0.0 < lookup.calls.last.request.extensions["timeout"]["read"] <= 1.0
+            assert attach.call_count == 0
+        finally:
+            await call(guest._close_http_client)
 
 
 @pytest.mark.parametrize("resource", [Volume, AsyncVolume])

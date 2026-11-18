@@ -156,6 +156,7 @@ export class Sandbox {
         ? await Volume.connect(volume, {
             ...this._config,
             signal: options.signal,
+            timeoutMs: options.timeoutMs,
           })
         : volume
     return resource.attach(this, options)

@@ -224,7 +224,7 @@ export class Volume {
   }
   static async connect(
     nameOrId: string,
-    options: ConnectionOptions = {},
+    options: ConnectionOptions & VolumeRequestOptions = {},
   ): Promise<Volume> {
     const config = resolveConfig(options)
     const raw = await request<ApiVolume>({
@@ -232,6 +232,7 @@ export class Volume {
       url: `${config.baseUrl}/volumes/${encodeURIComponent(nameOrId)}`,
       headers: { "X-API-Key": config.apiKey },
       signal: options.signal,
+      timeoutMs: options.timeoutMs,
     })
     return new Volume(volumeInfo(raw), config)
   }
