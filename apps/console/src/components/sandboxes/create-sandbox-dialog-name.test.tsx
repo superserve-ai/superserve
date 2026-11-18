@@ -251,7 +251,7 @@ it("prefills a fresh name and clears validation when the parent reopens the dial
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
 })
 
-it("clears a name error set during the closing transition when reopened", () => {
+it("ignores Create during the closing transition", () => {
   const { rerender } = render(<CreateSandboxDialog open hideTrigger />, {
     wrapper: ToastProvider,
   })
@@ -269,9 +269,12 @@ it("clears a name error set during the closing transition when reopened", () => 
   expect(input).toBeInTheDocument()
   expect(input).toHaveValue("")
 
+  create.focus()
   fireEvent.click(create)
-  expect(input).toHaveAttribute("aria-invalid", "true")
-  expect(getFieldError()).toBeInTheDocument()
+  expect(input).not.toHaveAttribute("aria-invalid")
+  expect(screen.queryByText(nameError)).not.toBeInTheDocument()
+  expect(create).toHaveFocus()
+  expect(mutate).not.toHaveBeenCalled()
 
   rerender(<CreateSandboxDialog open hideTrigger />)
   expect(getNameInput().value).toMatch(namePattern)

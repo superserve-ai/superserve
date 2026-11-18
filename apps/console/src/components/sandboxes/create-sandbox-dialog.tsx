@@ -574,6 +574,8 @@ export function CreateSandboxDialog({
   }
 
   const handleCreate = () => {
+    // Ignore a late click or Enter during the closing animation.
+    if (!open) return
     if (!name.trim()) {
       flushSync(() => setNameError("Enter a name for this sandbox."))
       nameInputRef.current?.focus()
