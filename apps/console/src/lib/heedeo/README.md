@@ -151,25 +151,30 @@ not fall back after a 403, so the kill switch answers 403 rather than 404.
 | `HEEDEO_SECRET_KEY`         | server only          | Secret key `sk_...` for the route and the evaluation. Unset: off                   |
 | `HEEDEO_SIGNUP_OBSERVATION` | server               | `off` turns everything off (the route answers 403, so no identification is billed) |
 
-Use a separate Heedeo workspace for preview and staging deployments: test
-sign-ups become history that later sign-ups are scored against.
+Production and staging use separate Heedeo workspaces: test sign-ups become
+history that later sign-ups are scored against. Preview and Development must
+use the staging workspace keys, never the production ones.
 
 ### Where the variables are set
 
-| Place                                     | `NEXT_PUBLIC_HEEDEO_KEY` | `HEEDEO_SECRET_KEY` | `HEEDEO_SIGNUP_OBSERVATION` |
-| ----------------------------------------- | ------------------------ | ------------------- | --------------------------- |
-| Vercel project environment variables      | yes                      | yes (sensitive)     | only to turn it off         |
-| `turbo.json` `build.env`                  | yes                      | yes                 | yes                         |
-| `apps/console/.env.example` (local)       | yes                      | yes                 | yes                         |
-| `src/test/ui/ss640/next.config.ts` (test) | empty                    | no                  | no                          |
+| Place                                     | `NEXT_PUBLIC_HEEDEO_KEY` | `HEEDEO_SECRET_KEY`              | `HEEDEO_SIGNUP_OBSERVATION`       |
+| ----------------------------------------- | ------------------------ | -------------------------------- | --------------------------------- |
+| Vercel Production                         | production workspace     | production workspace (sensitive) | `off` until staging proves it out |
+| Vercel Preview and Development            | staging workspace        | staging workspace (sensitive)    | unset (observation on)            |
+| `turbo.json` `build.env`                  | yes                      | yes                              | yes                               |
+| `apps/console/.env.example` (local)       | yes                      | yes                              | yes                               |
+| `src/test/ui/ss640/next.config.ts` (test) | empty                    | no                               | no                                |
 
 - Vercel builds the console with `turbo run build`. Turbo runs in strict env
   mode, so `next build` sees only the variables that `turbo.json` declares
   (and the `NEXT_PUBLIC_*` names that Turbo infers for Next.js). Declare every
   new variable there, as for the Fingerprint, Turnstile and reCAPTCHA keys.
+- In each Vercel environment, use the publishable and the secret key of the
+  same workspace, so each evaluation reads a token from its own workspace.
 - `NEXT_PUBLIC_HEEDEO_KEY` is inlined into the browser bundle by `next build`.
-  Set it for each Vercel environment (Production, Preview, Development) and
-  redeploy after a change: a running deployment keeps the old value.
+  Redeploy after a change: a running deployment keeps the old value.
+- To turn Production on, remove `HEEDEO_SIGNUP_OBSERVATION=off` from Production
+  after the staging checks below pass, and deploy.
 - `HEEDEO_SECRET_KEY` and `HEEDEO_SIGNUP_OBSERVATION` are read at request time
   in `config.ts`, which imports `server-only`, so a client import fails the
   build. The secret key never has a `NEXT_PUBLIC_` name. A change applies to the
@@ -180,7 +185,8 @@ sign-ups become history that later sign-ups are scored against.
   console, and the console reads these values from `process.env` directly,
   without a schema, as the other providers do.
 
-Before production, with a live staging workspace:
+Before Production is turned on, on a Preview deployment with the staging
+workspace keys:
 
 - check that an email sign-up, a Google sign-up and a sign-up with no token
   each give an `auth_heedeo_signup_observed` event and log line with the
