@@ -25,6 +25,7 @@ vi.mock("@/hooks/use-posthog-identify", () => ({
 vi.mock("./sidebar-context", () => ({
   useSidebar: () => ({
     isCollapsed: false,
+    isOverlayOpen: false,
     toggle: vi.fn(),
   }),
   SidebarProvider: ({ children }: { children: ReactNode }) => children,
@@ -68,6 +69,23 @@ describe("Sidebar", () => {
     const aside = screen.getByRole("complementary")
     expect(aside).not.toHaveClass("max-md:invisible")
     expect(aside).not.toHaveClass("max-md:w-16")
+  })
+
+  it("disables the sidebar transition for reduced motion", () => {
+    render(<Sidebar />)
+
+    expect(screen.getByRole("complementary")).toHaveClass(
+      "motion-reduce:transition-none",
+    )
+  })
+
+  it("gives sidebar links and buttons a 44 px minimum height below md", () => {
+    render(<Sidebar />)
+
+    expect(screen.getByRole("complementary")).toHaveClass(
+      "max-md:[&_a]:min-h-11",
+      "max-md:[&_button]:min-h-11",
+    )
   })
 
   it("shows Billing & Usage without a separate Billing nav item", () => {

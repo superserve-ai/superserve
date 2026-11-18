@@ -20,7 +20,7 @@ function DashboardContent({
   globalBanner?: React.ReactNode
   children: React.ReactNode
 }) {
-  const { isCollapsed } = useSidebar()
+  const { isCollapsed, isOverlayOpen, setCollapsed } = useSidebar()
   usePostHogIdentify()
   useFaviconStatus()
 
@@ -30,9 +30,17 @@ function DashboardContent({
       <div className="relative flex min-h-0 flex-1">
         <Sidebar />
         <CommandPalette />
+        {isOverlayOpen && (
+          <div
+            aria-hidden="true"
+            className="absolute inset-0 z-30 bg-background/60 md:hidden"
+            onClick={() => setCollapsed(true)}
+          />
+        )}
         <main
+          inert={isOverlayOpen || undefined}
           className={cn(
-            "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-all duration-200",
+            "flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden transition-all duration-200 motion-reduce:transition-none",
             isCollapsed ? "ml-16" : "ml-16 md:ml-64",
           )}
         >

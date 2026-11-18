@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@superserve/ui"
 import Image from "next/image"
-import { useSyncExternalStore } from "react"
+import { useEffect, useRef, useSyncExternalStore } from "react"
 
 import { useUser } from "@/hooks/use-user"
 import {
@@ -48,8 +48,30 @@ export function Sidebar() {
     () => true,
     () => false,
   )
-  const { isCollapsed, toggle } = useSidebar()
+  const { isCollapsed, isOverlayOpen, setCollapsed, toggle } = useSidebar()
+  const toggleRef = useRef<HTMLButtonElement>(null)
   const { user } = useUser()
+
+  useEffect(() => {
+    if (!isOverlayOpen) return
+
+    function handleKeyDown(event: KeyboardEvent) {
+      if (event.key !== "Escape" || event.defaultPrevented) return
+      // The command palette handles Escape inside its dialog.
+      if (
+        event.target instanceof Element &&
+        event.target.closest('[role="dialog"]')
+      )
+        return
+
+      setCollapsed(true)
+      toggleRef.current?.focus()
+    }
+
+    document.addEventListener("keydown", handleKeyDown)
+    return () => document.removeEventListener("keydown", handleKeyDown)
+  }, [isOverlayOpen, setCollapsed])
+
   const navItems = [
     ...mainNavItems,
     // Every user can open Team; the page shows what their team role allows.
@@ -62,7 +84,8 @@ export function Sidebar() {
   return (
     <aside
       className={cn(
-        "absolute top-0 left-0 z-40 flex h-full flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200",
+        "absolute top-0 left-0 z-40 flex h-full flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200 motion-reduce:transition-none",
+        "max-md:[&_a]:min-h-11 max-md:[&_button]:min-h-11",
         isCollapsed ? "w-16" : "w-64",
         !hydrated && "max-md:invisible max-md:w-16",
       )}
@@ -144,6 +167,7 @@ export function Sidebar() {
           <TooltipTrigger
             render={
               <button
+                ref={toggleRef}
                 type="button"
                 onClick={toggle}
                 aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"}

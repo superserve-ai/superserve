@@ -40,6 +40,7 @@ function useIsSmallScreen() {
 
 interface SidebarContextValue {
   isCollapsed: boolean
+  isOverlayOpen: boolean
   toggle: () => void
   setCollapsed: (value: boolean) => void
 }
@@ -65,6 +66,7 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   }
 
   const isCollapsed = isSmallScreen ? !mobileExpanded : storedCollapsed
+  const isOverlayOpen = isSmallScreen && !isCollapsed
 
   const setCollapsed = useCallback(
     (value: boolean) => {
@@ -84,8 +86,8 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   )
 
   const value = useMemo(
-    () => ({ isCollapsed, toggle, setCollapsed }),
-    [isCollapsed, toggle, setCollapsed],
+    () => ({ isCollapsed, isOverlayOpen, toggle, setCollapsed }),
+    [isCollapsed, isOverlayOpen, toggle, setCollapsed],
   )
 
   return <SidebarContext value={value}>{children}</SidebarContext>

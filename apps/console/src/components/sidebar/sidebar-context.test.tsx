@@ -30,11 +30,13 @@ function mockMatchMedia(matches: boolean) {
 }
 
 function SidebarState() {
-  const { isCollapsed, toggle } = useSidebar()
+  const { isCollapsed, isOverlayOpen, toggle } = useSidebar()
 
   return (
     <>
-      <output>{isCollapsed ? "collapsed" : "expanded"}</output>
+      <output data-overlay-open={String(isOverlayOpen)}>
+        {isCollapsed ? "collapsed" : "expanded"}
+      </output>
       <button type="button" onClick={toggle}>
         Toggle sidebar
       </button>
@@ -76,6 +78,21 @@ it("expands on small screens without writing the desktop preference", () => {
 
   expect(screen.getByRole("status")).toHaveTextContent("expanded")
   expect(localStorage.getItem(STORAGE_KEY)).toBe("true")
+})
+
+it("reports an open overlay only on small screens while expanded", () => {
+  const setMatches = mockMatchMedia(true)
+  render(<SidebarState />, { wrapper: SidebarProvider })
+  const status = screen.getByRole("status")
+  const toggle = screen.getByRole("button", { name: "Toggle sidebar" })
+  expect(status).toHaveAttribute("data-overlay-open", "false")
+
+  fireEvent.click(toggle)
+  expect(status).toHaveAttribute("data-overlay-open", "true")
+
+  act(() => setMatches(false))
+  expect(status).toHaveTextContent("expanded")
+  expect(status).toHaveAttribute("data-overlay-open", "false")
 })
 
 it("closes the expanded sidebar on small screens when the pathname changes", () => {
