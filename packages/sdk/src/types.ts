@@ -539,7 +539,11 @@ export type TemplateBuildStatus =
   | "failed"
   | "cancelled"
 
-export type BuildLogStream = "stdout" | "stderr" | "system"
+/**
+ * `error` carries the build failure line, as `"<code>: <message>"`. Values
+ * the server adds later are passed through unchanged.
+ */
+export type BuildLogStream = "stdout" | "stderr" | "system" | "error"
 
 export interface TemplateInfo {
   id: string

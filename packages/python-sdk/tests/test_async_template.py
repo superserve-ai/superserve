@@ -234,6 +234,34 @@ class TestAsyncStreamBuildLogs:
             assert events[-1].finished is True
             assert events[-1].status == "failed"
 
+    async def test_delivers_error_stream_of_failed_build(self) -> None:
+        with respx.mock() as router:
+            router.post(f"{API}/templates").mock(
+                return_value=httpx.Response(202, json={**BASE, "build_id": "b-1"})
+            )
+            t = await AsyncTemplate.create(name="my-env", from_="python:3.11")
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"Step 1/1"}',
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"stdout","text":"boom"}',
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"stderr","text":"oops"}',
+                    '{"timestamp":"2026-01-01T00:00:02Z","stream":"error","text":"step_failed: step 1/1 failed after 1ms: exited with code 3"}',
+                    '{"finished":true,"status":"failed","stream":"system","text":"build failed"}',
+                ]
+            )
+            router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
+                return_value=httpx.Response(200, text=sse)
+            )
+            events: list = []
+            await t.stream_build_logs(on_event=events.append)
+            assert [e.stream.value for e in events] == [
+                "system",
+                "stdout",
+                "stderr",
+                "error",
+                "system",
+            ]
+
 
 BUILD_BASE = {
     "id": "b-1",

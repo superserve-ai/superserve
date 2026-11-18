@@ -5,7 +5,7 @@ from __future__ import annotations
 import httpx
 import pytest
 import respx
-from superserve import Template
+from superserve import BuildLogStream, Template
 from superserve.errors import BuildError, ConflictError
 
 API = "https://api.example.com"
@@ -84,6 +84,34 @@ class TestStreamBuildLogs:
             assert events[-1].finished is True
             assert events[-1].status == "ready"
             assert events[-1].timestamp.tzinfo is not None
+
+    def test_delivers_error_stream_of_failed_build(self) -> None:
+        # Event sequence the server sends for a build whose step exits non-zero.
+        with respx.mock() as router:
+            t = _make_template(router)
+            sse = _sse_text(
+                [
+                    '{"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"Step 1/1"}',
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"stdout","text":"boom"}',
+                    '{"timestamp":"2026-01-01T00:00:01Z","stream":"stderr","text":"oops"}',
+                    '{"timestamp":"2026-01-01T00:00:02Z","stream":"error","text":"step_failed: step 1/1 failed after 1ms: exited with code 3"}',
+                    '{"finished":true,"status":"failed","stream":"system","text":"build failed"}',
+                ]
+            )
+            router.get(f"{API}/templates/t-1/builds/b-1/logs").mock(
+                return_value=httpx.Response(200, text=sse)
+            )
+            events: list = []
+            t.stream_build_logs(on_event=events.append)
+            assert [e.stream for e in events] == [
+                BuildLogStream.SYSTEM,
+                BuildLogStream.STDOUT,
+                BuildLogStream.STDERR,
+                BuildLogStream.ERROR,
+                BuildLogStream.SYSTEM,
+            ]
+            assert events[3].text.startswith("step_failed: ")
+            assert events[-1].status == "failed"
 
     def test_falls_back_to_list_builds_when_latest_unset(self) -> None:
         # Connect: no build_id in response → latest_build_id is None

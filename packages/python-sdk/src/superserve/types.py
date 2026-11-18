@@ -322,6 +322,19 @@ class BuildLogStream(str, Enum):
     STDOUT = "stdout"
     STDERR = "stderr"
     SYSTEM = "system"
+    # The build failure line, as "<code>: <message>".
+    ERROR = "error"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Optional[BuildLogStream]:
+        # The server forwards the build runner's stream name unchanged. Keep a
+        # name this SDK does not list yet instead of failing the whole stream.
+        if not isinstance(value, str) or not value:
+            return None
+        member = str.__new__(cls, value)
+        member._name_ = value.upper()
+        member._value_ = value
+        return member
 
 
 class TemplateInfo(BaseModel):
