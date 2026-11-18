@@ -45,25 +45,40 @@ const getScoreThreshold = (): number => {
   return parsed
 }
 
-// reCAPTCHA Enterprise. Outside production, a fully unconfigured integration
-// passes so local and preview builds work without keys. In production a
-// missing configuration fails closed, so losing the keys cannot silently turn
-// the check off. Transient availability failures still return verified; the
-// caller decides whether to accept them. Partial configuration, rejected
-// requests, and credential/configuration failures fail closed.
+// reCAPTCHA Enterprise. A fully unconfigured integration and transient
+// availability failures fail open; partial configuration, rejected requests,
+// and credential/configuration failures fail closed so they cannot silently
+// disable the abuse control. A production deployment with no keys still
+// passes, but logs an error so the lost keys are visible.
+
+const MISSING_CONFIG_LOG_INTERVAL_MS = 60_000
+let lastMissingConfigLogAt: number | undefined
+
 /**
- * Whether missing reCAPTCHA keys must refuse every check. Vercel production
- * always needs them. Any other production build needs them too, unless it is
- * a Vercel preview or development deployment, or it sets
- * RECAPTCHA_ALLOW_UNCONFIGURED=true for a local or self-hosted run. Vercel
- * production ignores that opt-out.
+ * Whether this deployment should have reCAPTCHA keys: Vercel production, or
+ * any other production build that is not a Vercel preview or development
+ * deployment.
  */
-function requiresRecaptcha(): boolean {
+function expectsRecaptcha(): boolean {
   const vercelEnv = process.env.VERCEL_ENV
   if (vercelEnv === "production") return true
   if (vercelEnv === "preview" || vercelEnv === "development") return false
-  if (process.env.NODE_ENV !== "production") return false
-  return process.env.RECAPTCHA_ALLOW_UNCONFIGURED !== "true"
+  return process.env.NODE_ENV === "production"
+}
+
+/** Logs the missing keys at most once a minute per server instance. */
+function logMissingConfiguration() {
+  if (!expectsRecaptcha()) return
+  const now = Date.now()
+  if (
+    lastMissingConfigLogAt !== undefined &&
+    now - lastMissingConfigLogAt < MISSING_CONFIG_LOG_INTERVAL_MS
+  )
+    return
+  lastMissingConfigLogAt = now
+  console.error(
+    "reCAPTCHA is not configured in production: RECAPTCHA_API_KEY, RECAPTCHA_PROJECT_ID and NEXT_PUBLIC_RECAPTCHA_SITE_KEY are all missing, so every reCAPTCHA check passes unverified",
+  )
 }
 
 export const verifyRecaptcha = async (
@@ -94,14 +109,7 @@ export const verifyRecaptcha = async (
 
   const configuredValues = [apiKey, projectId, siteKey].filter(Boolean).length
   if (configuredValues === 0) {
-    if (requiresRecaptcha()) {
-      console.error("reCAPTCHA is not configured in production")
-      return {
-        verified: false,
-        providerOutcome: "configuration_error",
-        reason: "missing_configuration",
-      }
-    }
+    logMissingConfiguration()
     return { verified: true, providerOutcome: "unconfigured" }
   }
   if (configuredValues < 3) {

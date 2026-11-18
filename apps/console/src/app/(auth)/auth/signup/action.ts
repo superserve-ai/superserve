@@ -180,24 +180,10 @@ async function readCloudflareClientContext() {
 }
 
 // verifyRecaptcha also passes when the provider is down. Signup creates an
-// account, so it must not run without a real verdict. A missing or invalid
-// token is refused; a broken setup on our side gets its own message so the
-// visitor does not retry a check they cannot pass.
+// account, so it must not run without a real verdict.
 function strictRecaptchaBlock(
   recaptcha: Awaited<ReturnType<typeof verifyRecaptcha>>,
 ) {
-  if (
-    !recaptcha.verified &&
-    recaptcha.providerOutcome === "configuration_error"
-  ) {
-    return {
-      reason: recaptcha.reason,
-      response: {
-        error: "Sign-up is not available right now. Please try again later.",
-        errorCode: "captcha_unavailable" as const,
-      },
-    }
-  }
   if (!recaptcha.verified) {
     return {
       reason: recaptcha.reason,
@@ -860,7 +846,6 @@ export type ResendSignupConfirmationResult =
       error: string
       errorCode:
         | "captcha_failed"
-        | "captcha_unavailable"
         | "resend_unavailable"
         | "already_confirmed"
         | "cooldown"
@@ -887,18 +872,6 @@ export const resendSignupConfirmation = async (
   shownEmail?: string,
 ): Promise<ResendSignupConfirmationResult> => {
   const recaptcha = await verifyRecaptcha(recaptchaToken, "signup_resend")
-  // A broken setup on our side gets its own message, so the visitor does not
-  // retry a check that cannot pass.
-  if (
-    !recaptcha.verified &&
-    recaptcha.providerOutcome === "configuration_error"
-  )
-    return {
-      success: false,
-      error:
-        "Resending the email is not available right now. Please try again later.",
-      errorCode: "captcha_unavailable",
-    }
   if (!recaptcha.verified)
     return {
       success: false,

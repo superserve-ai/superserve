@@ -3,7 +3,7 @@
  *
  * Tests exercise the configured path (all three env vars set), which the
  * signup action/page tests don't cover since they run without reCAPTCHA
- * configured and only prove the unconfigured behavior outside production.
+ * configured and only prove the unconfigured fail-open behavior.
  */
 
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
@@ -38,6 +38,8 @@ function okResponse(body: Record<string, unknown>) {
 }
 
 describe("verifyRecaptcha (unconfigured)", () => {
+  let clock = Date.UTC(2026, 0, 1)
+  let errorSpy: ReturnType<typeof vi.spyOn>
   beforeEach(() => {
     delete process.env.RECAPTCHA_API_KEY
     delete process.env.RECAPTCHA_PROJECT_ID
@@ -45,98 +47,67 @@ describe("verifyRecaptcha (unconfigured)", () => {
     // Outside production unless a test says otherwise, whatever the shell has.
     vi.stubEnv("VERCEL_ENV", "")
     vi.stubEnv("NODE_ENV", "test")
-    vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", "")
+    // The missing-keys log is throttled per server instance; start each test
+    // well past the previous one's log.
+    vi.useFakeTimers({ toFake: ["Date"] })
+    clock += 60 * 60_000
+    vi.setSystemTime(clock)
+    errorSpy = vi.spyOn(console, "error").mockImplementation(() => {})
   })
 
   afterEach(() => {
+    errorSpy.mockRestore()
+    vi.useRealTimers()
     vi.unstubAllEnvs()
     restoreEnv()
     fetchSpy.mockReset()
   })
 
-  it("fails open outside production without calling the assessment API", async () => {
+  it("fails open outside production without calling the assessment API or logging", async () => {
     const result = await verifyRecaptcha("some-token", "signup")
     expect(result).toEqual({
       verified: true,
       providerOutcome: "unconfigured",
     })
     expect(fetchSpy).not.toHaveBeenCalled()
+    expect(errorSpy).not.toHaveBeenCalled()
   })
 
-  it("fails closed in production so lost keys cannot turn the check off", async () => {
-    vi.stubEnv("VERCEL_ENV", "production")
-    try {
-      const result = await verifyRecaptcha("some-token", "signup")
-      expect(result).toEqual({
-        verified: false,
-        providerOutcome: "configuration_error",
-        reason: "missing_configuration",
-      })
-      expect(fetchSpy).not.toHaveBeenCalled()
-    } finally {
-      vi.unstubAllEnvs()
-    }
-  })
+  it.each([
+    ["Vercel production", { VERCEL_ENV: "production", NODE_ENV: "production" }],
+    ["a production build outside Vercel", { NODE_ENV: "production" }],
+  ])(
+    "fails open in %s but logs that the keys are missing",
+    async (_label, env) => {
+      for (const [name, value] of Object.entries(env)) vi.stubEnv(name, value)
 
-  it("still passes on preview builds without keys", async () => {
-    vi.stubEnv("VERCEL_ENV", "preview")
-    try {
       await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
         verified: true,
         providerOutcome: "unconfigured",
       })
-    } finally {
-      vi.unstubAllEnvs()
-    }
-  })
-
-  it("fails closed in a production build outside Vercel", async () => {
-    vi.stubEnv("NODE_ENV", "production")
-
-    await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
-      verified: false,
-      providerOutcome: "configuration_error",
-      reason: "missing_configuration",
-    })
-    expect(fetchSpy).not.toHaveBeenCalled()
-  })
-
-  it("lets a local or self-hosted production build opt out", async () => {
-    vi.stubEnv("NODE_ENV", "production")
-    vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", "true")
-
-    await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
-      verified: true,
-      providerOutcome: "unconfigured",
-    })
-  })
-
-  it.each(["1", "TRUE", "yes"])(
-    "accepts only the exact value true for the opt-out, not %s",
-    async (value) => {
-      vi.stubEnv("NODE_ENV", "production")
-      vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", value)
-
-      await expect(
-        verifyRecaptcha("some-token", "signup"),
-      ).resolves.toMatchObject({ verified: false })
+      expect(fetchSpy).not.toHaveBeenCalled()
+      expect(errorSpy).toHaveBeenCalledTimes(1)
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("reCAPTCHA is not configured in production"),
+      )
     },
   )
 
-  it("ignores the opt-out in Vercel production", async () => {
-    vi.stubEnv("NODE_ENV", "production")
+  it("logs the missing keys at most once a minute", async () => {
     vi.stubEnv("VERCEL_ENV", "production")
-    vi.stubEnv("RECAPTCHA_ALLOW_UNCONFIGURED", "true")
 
-    await expect(verifyRecaptcha("some-token", "signup")).resolves.toEqual({
-      verified: false,
-      providerOutcome: "configuration_error",
-      reason: "missing_configuration",
-    })
+    await verifyRecaptcha("some-token", "signup")
+    vi.setSystemTime(clock + 59_000)
+    await verifyRecaptcha("some-token", "signup")
+    expect(errorSpy).toHaveBeenCalledTimes(1)
+
+    vi.setSystemTime(clock + 60_000)
+    await verifyRecaptcha("some-token", "signup")
+    expect(errorSpy).toHaveBeenCalledTimes(2)
   })
 
   it.each(["preview", "development"])(
-    "still passes a production build on a Vercel %s deployment",
+    "does not log on a Vercel %s deployment",
     async (vercelEnv) => {
       vi.stubEnv("NODE_ENV", "production")
       vi.stubEnv("VERCEL_ENV", vercelEnv)
@@ -145,6 +116,7 @@ describe("verifyRecaptcha (unconfigured)", () => {
         verified: true,
         providerOutcome: "unconfigured",
       })
+      expect(errorSpy).not.toHaveBeenCalled()
     },
   )
 

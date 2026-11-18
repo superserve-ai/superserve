@@ -240,7 +240,7 @@ function SignInContent() {
         setLinkError(
           result.errorCode === "captcha_failed"
             ? AUTH_MESSAGES.botCheckFailed
-            : result.error,
+            : AUTH_MESSAGES.signInLinkFailed,
         )
         return
       }
