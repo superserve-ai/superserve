@@ -9,7 +9,6 @@ const mocks = vi.hoisted(() => ({
   entry: vi.fn(),
   scope: "self",
   teamKey: "use:team-1" as string | null,
-  user: { id: "account-1" } as { id: string } | null,
   posthog: {
     isFeatureEnabled: vi.fn(),
     onFeatureFlags: vi.fn(() => () => {}),
@@ -28,8 +27,17 @@ vi.mock("@/hooks/use-billing-context", () => ({
     ready: mocks.teamKey !== null,
   }),
 }))
-vi.mock("@/hooks/use-user", () => ({
-  useUser: () => ({ user: mocks.user, loading: false }),
+// The upgrade action has its own tests; this one only needs its callback.
+vi.mock("@/components/billing/trial-upgrade-action", () => ({
+  TrialUpgradeAction: ({
+    onAction,
+  }: {
+    onAction?: (target: string) => void
+  }) => (
+    <button type="button" onClick={() => onAction?.("checkout")}>
+      Upgrade
+    </button>
+  ),
 }))
 vi.mock("@/components/query-provider", () => ({
   useQueryScope: () => mocks.scope,
@@ -71,7 +79,6 @@ beforeEach(() => {
   team += 1
   mocks.teamKey = `use:team-${team}`
   mocks.scope = "self"
-  mocks.user = { id: "account-1" }
   mocks.entry.mockReturnValue({ data: "trial" })
   mocks.summary.mockReturnValue({
     data: summary(0.015),
@@ -113,12 +120,9 @@ describe("TrialRunwayWarning with the flag on", () => {
     expect(
       screen.getByText(/Your free trial credit is almost used up\./),
     ).toHaveTextContent(
-      "When it runs out, your running sandboxes stop. Choose a plan to keep them running.",
+      "When it runs out, your running sandboxes stop. Upgrade to a paid plan to keep them running.",
     )
-    expect(screen.getByRole("link", { name: "Choose a plan" })).toHaveAttribute(
-      "href",
-      `/auth/choose-plan?reason=upgrade&account=account-1&team=use%3A${mocks.teamKey?.slice(4)}`,
-    )
+    expect(screen.getByRole("button", { name: "Upgrade" })).toBeInTheDocument()
     expect(mocks.posthog.isFeatureEnabled).toHaveBeenCalledWith(FLAG)
     expect(captured("trial_runway_warning_shown")).toEqual([
       [
@@ -237,11 +241,12 @@ describe("TrialRunwayWarning with the flag on", () => {
 
   it("records the click", () => {
     render(view())
-    fireEvent.click(screen.getByRole("link", { name: "Choose a plan" }))
+    fireEvent.click(screen.getByRole("button", { name: "Upgrade" }))
     expect(captured("trial_runway_warning_clicked")).toHaveLength(1)
     expect(captured("trial_runway_warning_clicked")[0]?.[1]).toMatchObject({
       remaining_usd: 0.015,
       threshold_mode: "fixed",
+      target: "checkout",
     })
   })
 
@@ -254,9 +259,9 @@ describe("TrialRunwayWarning with the flag on", () => {
       dataUpdatedAt: Date.now(),
     })
     render(view())
-    expect(screen.queryByRole("link")).toBeNull()
+    expect(screen.queryByRole("button")).toBeNull()
     expect(
-      screen.getByText(/billing administrator to choose a plan/),
+      screen.getByText(/billing administrator to upgrade/),
     ).toBeInTheDocument()
   })
 

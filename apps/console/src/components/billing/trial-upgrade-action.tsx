@@ -21,7 +21,14 @@ const useTrialCheckoutSubmitOnce = createSharedSubmitOnce()
 
 // The trial upgrade action. The banner and the Billing plan card both render
 // it, so a trial team sees one upgrade path with one destination.
-export function TrialUpgradeAction() {
+export type TrialUpgradeTarget = "checkout" | "plan_picker" | "other_plans"
+
+export function TrialUpgradeAction({
+  onAction,
+}: {
+  // Called when the user takes the action, for example to record a click.
+  onAction?: (target: TrialUpgradeTarget) => void
+} = {}) {
   const { teamKey } = useBillingContext()
   const offers = useBillingCapabilities().data?.offers
   const signup = useQueryClient().getQueryData<SignupPlanContext>([
@@ -42,7 +49,10 @@ export function TrialUpgradeAction() {
         <form
           method="post"
           action={signupCheckoutPath(selected, locator)}
-          onSubmit={onSubmit}
+          onSubmit={(event) => {
+            onAction?.("checkout")
+            onSubmit(event)
+          }}
         >
           <Button type="submit" size="sm" disabled={submitting}>
             {submitting ? <Spinner size="sm" /> : null}
@@ -53,6 +63,7 @@ export function TrialUpgradeAction() {
         <Button
           size="sm"
           render={<Link href={planPickerPath("upgrade", undefined, locator)} />}
+          onClick={() => onAction?.("plan_picker")}
         >
           Upgrade
         </Button>
@@ -61,6 +72,7 @@ export function TrialUpgradeAction() {
         <Link
           href={planPickerPath("upgrade", selected, locator)}
           className="self-center underline underline-offset-4"
+          onClick={() => onAction?.("other_plans")}
         >
           Other plans
         </Link>

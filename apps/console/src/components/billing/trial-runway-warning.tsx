@@ -1,20 +1,15 @@
 "use client"
 
-import { Button } from "@superserve/ui"
-import { useQueryClient } from "@tanstack/react-query"
-import Link from "next/link"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useState } from "react"
 
 import { BannerShell } from "@/components/billing/plan-aware-banner"
+import { TrialUpgradeAction } from "@/components/billing/trial-upgrade-action"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
 import { useTeamEntry } from "@/hooks/use-billing-v2"
 import { useFeatureFlagOn } from "@/hooks/use-feature-flag"
-import { useUser } from "@/hooks/use-user"
-import type { SignupPlanContext } from "@/lib/api/signup-plan"
-import { planPickerPath } from "@/lib/billing/signup-checkout-paths"
 import {
   advanceRunway,
   FIXED_WARNING_USD,
@@ -93,17 +88,6 @@ export function TrialRunwayWarning({
   const show = eligible && flagOn && reading !== null && teamKey !== null
 
   const canManage = summary?.permissions.can_manage === true
-  const queryClient = useQueryClient()
-  const user = useUser().user
-  const signup = show
-    ? queryClient.getQueryData<SignupPlanContext>(["signup-plan", teamKey])
-    : undefined
-  const account = signup?.userId ?? user?.id
-  // The picker lists plans only with an account and team.
-  const href =
-    account && teamKey
-      ? planPickerPath("upgrade", undefined, { account, team: teamKey })
-      : null
 
   const [region, teamId] = teamKey?.split(":", 2) ?? [null, null]
   const properties = {
@@ -135,35 +119,38 @@ export function TrialRunwayWarning({
       tone="warning"
       label="Free trial credit"
       action={
-        canManage && href ? (
-          <Button
-            size="sm"
-            render={<Link href={href} />}
-            onClick={() =>
-              captureBestEffort(
-                posthog,
-                TRIAL_RUNWAY_EVENTS.WARNING_CLICKED,
-                properties,
-              )
+        canManage ? (
+          <TrialUpgradeAction
+            onAction={(target) =>
+              captureBestEffort(posthog, TRIAL_RUNWAY_EVENTS.WARNING_CLICKED, {
+                ...properties,
+                target,
+              })
             }
-          >
-            Choose a plan
-          </Button>
+          />
         ) : null
       }
     >
       {decision.minutesLeft !== null ? (
         <>
           At your current usage, your free trial credit runs out in{" "}
-          <strong>{formatMinutesLeft(decision.minutesLeft)}</strong>.
+          <strong>
+            {formatMinutesLeft(
+              // The estimate is from the last reading, so take off the time
+              // since then.
+              decision.minutesLeft -
+                (Date.now() - summaryQuery.dataUpdatedAt) / 60_000,
+            )}
+          </strong>
+          .
         </>
       ) : (
         <>Your free trial credit is almost used up.</>
       )}{" "}
       When it runs out, your running sandboxes stop.{" "}
       {canManage
-        ? "Choose a plan to keep them running."
-        : "Ask your team's billing administrator to choose a plan."}
+        ? "Upgrade to a paid plan to keep them running."
+        : "Ask your team's billing administrator to upgrade."}
     </BannerShell>
   )
 }
