@@ -156,13 +156,12 @@ it("describes the error once when submitting with focus already on the empty nam
   expect(dialog.queryByRole("status")).not.toBeInTheDocument()
   // The input's description already reads the error at focus time, so a live
   // region around it would announce the error a second time.
-  expect(
-    dialog
-      .getByText(nameError)
-      .closest(
-        '[aria-live], [role="alert"], [role="status"], [role="log"], output',
-      ),
-  ).toBeNull()
+  const liveRegion =
+    '[aria-live], [role="alert"], [role="status"], [role="log"], output'
+  expect(dialog.getByText(nameError).closest(liveRegion)).toBeNull()
+  expect(screen.getByRole("dialog").querySelectorAll(liveRegion)).toHaveLength(
+    0,
+  )
 })
 
 it("clears the name error and submits the corrected name", async () => {
