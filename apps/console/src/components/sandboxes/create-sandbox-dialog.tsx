@@ -705,6 +705,9 @@ export function CreateSandboxDialog({
 
         {mode === "form" ? (
           <>
+            <output className="sr-only" aria-live="polite">
+              {nameError ?? ""}
+            </output>
             <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-4">
               <Field label="Sandbox name" required error={nameError}>
                 <Input

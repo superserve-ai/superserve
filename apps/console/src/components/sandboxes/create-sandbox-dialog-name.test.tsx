@@ -1,6 +1,7 @@
 import { ToastProvider } from "@superserve/ui"
-import { render, screen } from "@testing-library/react"
+import { fireEvent, render, screen, within } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { useState } from "react"
 import { beforeEach, expect, it, vi } from "vitest"
 
 import {
@@ -48,6 +49,24 @@ function renderOpenDialog() {
 
 function getNameInput() {
   return screen.getByRole<HTMLInputElement>("textbox", { name: /Sandbox name/ })
+}
+
+function getFieldError() {
+  return screen.getByText(nameError, { ignore: "output" })
+}
+
+function stubGeneratedNames() {
+  vi.spyOn(crypto, "getRandomValues")
+    .mockImplementationOnce((bytes) => {
+      const array = bytes as Uint8Array
+      array.set([0, 1, 2, 3])
+      return bytes
+    })
+    .mockImplementationOnce((bytes) => {
+      const array = bytes as Uint8Array
+      array.set([25, 26, 35, 36])
+      return bytes
+    })
 }
 
 it("generates sandbox names in the expected format with varying suffixes", () => {
@@ -109,10 +128,38 @@ it.each([
   expect(focusState).toHaveBeenCalledExactlyOnceWith("true", nameError)
   expect(mutate).not.toHaveBeenCalled()
   expect(capture).not.toHaveBeenCalled()
-  expect(screen.getByText(nameError)).toBeVisible()
+  expect(getFieldError()).toBeVisible()
   expect(input).toHaveAttribute("aria-invalid", "true")
   expect(input).toHaveAccessibleDescription(nameError)
   expect(input).toHaveFocus()
+})
+
+it("updates the live region when submitting with focus already on the empty name input", async () => {
+  const user = userEvent.setup()
+  renderOpenDialog()
+  const input = getNameInput()
+  const dialog = within(screen.getByRole("dialog"))
+  const status = dialog.getByRole("status")
+
+  expect(status).toHaveClass("sr-only")
+  expect(status).toHaveAttribute("aria-live", "polite")
+  expect(status).toBeEmptyDOMElement()
+
+  await user.click(input)
+  await user.clear(input)
+  expect(input).toHaveFocus()
+  const onFocus = vi.fn()
+  input.addEventListener("focus", onFocus, { once: true })
+  fireEvent.click(dialog.getByRole("button", { name: "Create Sandbox" }))
+
+  expect(input).toHaveFocus()
+  expect(onFocus).not.toHaveBeenCalled()
+  expect(status).toHaveTextContent(nameError)
+
+  await user.type(input, "dev-sandbox")
+
+  expect(dialog.getByRole("status")).toBe(status)
+  expect(status).toBeEmptyDOMElement()
 })
 
 it("clears the name error and submits the corrected name", async () => {
@@ -123,7 +170,7 @@ it("clears the name error and submits the corrected name", async () => {
 
   await user.clear(input)
   await user.click(create)
-  expect(screen.getByText(nameError)).toBeVisible()
+  expect(getFieldError()).toBeVisible()
   await user.type(input, "dev-sandbox")
 
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
@@ -138,17 +185,7 @@ it("clears the name error and submits the corrected name", async () => {
 })
 
 it("prefills a fresh name and clears validation when reopened after Cancel", async () => {
-  vi.spyOn(crypto, "getRandomValues")
-    .mockImplementationOnce((bytes) => {
-      const array = bytes as Uint8Array
-      array.set([0, 1, 2, 3])
-      return bytes
-    })
-    .mockImplementationOnce((bytes) => {
-      const array = bytes as Uint8Array
-      array.set([25, 26, 35, 36])
-      return bytes
-    })
+  stubGeneratedNames()
   const user = userEvent.setup()
   render(
     <ToastProvider>
@@ -163,10 +200,46 @@ it("prefills a fresh name and clears validation when reopened after Cancel", asy
   await user.clear(input)
   await user.type(input, "   ")
   await user.click(screen.getByRole("button", { name: "Create Sandbox" }))
-  expect(screen.getByText(nameError)).toBeVisible()
+  expect(getFieldError()).toBeVisible()
 
   await user.click(screen.getByRole("button", { name: "Cancel" }))
   await user.click(trigger)
+
+  expect(getNameInput().value).toBe("sandbox-z09a")
+  expect(screen.queryByText(nameError)).not.toBeInTheDocument()
+})
+
+it("prefills a fresh name and clears validation when the parent reopens the dialog", async () => {
+  function ControlledDialog() {
+    const [open, setOpen] = useState(false)
+
+    return (
+      <ToastProvider>
+        <button type="button" onClick={() => setOpen(true)}>
+          Launch sandbox
+        </button>
+        <CreateSandboxDialog open={open} onOpenChange={setOpen} hideTrigger />
+      </ToastProvider>
+    )
+  }
+
+  stubGeneratedNames()
+  const user = userEvent.setup()
+  render(<ControlledDialog />)
+  const launch = screen.getByRole("button", { name: "Launch sandbox" })
+
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  await user.click(launch)
+  const input = getNameInput()
+  expect(input.value).toBe("sandbox-abcd")
+
+  await user.clear(input)
+  await user.click(screen.getByRole("button", { name: "Create Sandbox" }))
+  expect(getFieldError()).toBeVisible()
+
+  await user.click(screen.getByRole("button", { name: "Cancel" }))
+  expect(screen.queryByRole("dialog")).not.toBeInTheDocument()
+  await user.click(launch)
 
   expect(getNameInput().value).toBe("sandbox-z09a")
   expect(screen.queryByText(nameError)).not.toBeInTheDocument()
