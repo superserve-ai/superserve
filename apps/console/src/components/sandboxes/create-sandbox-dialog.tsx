@@ -40,6 +40,15 @@ import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
 const DEFAULT_TEMPLATE = "superserve/base"
 
+export function generateSandboxName() {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+  const bytes = crypto.getRandomValues(new Uint8Array(4))
+  const suffix = Array.from(bytes, (byte) =>
+    alphabet.charAt(byte % alphabet.length),
+  ).join("")
+  return `sandbox-${suffix}`
+}
+
 interface PickerItem {
   value: string
   label: string
@@ -438,6 +447,8 @@ export function CreateSandboxDialog({
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
+  const [nameError, setNameError] = useState<string>()
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [timeout, setTimeout] = useState("")
   const [idleTimeout, setIdleTimeout] = useState("")
   const [autoDelete, setAutoDelete] = useState("")
@@ -465,6 +476,15 @@ export function CreateSandboxDialog({
     initialSnapshotId ? "snapshot" : "template",
   )
   const [snapshotId, setSnapshotId] = useState(initialSnapshotId ?? "")
+
+  useLayoutEffect(() => {
+    if (open) {
+      setName((current) => current || generateSandboxName())
+    } else {
+      setName("")
+      setNameError(undefined)
+    }
+  }, [open])
 
   // Keep `templateRef` in sync when the caller changes `initialTemplateRef`
   // (e.g. a different Launch action was fired).
@@ -536,6 +556,7 @@ export function CreateSandboxDialog({
 
   const handleReset = () => {
     setName("")
+    setNameError(undefined)
     setTimeout("")
     setIdleTimeout("")
     setAutoDelete("")
@@ -553,6 +574,12 @@ export function CreateSandboxDialog({
   }
 
   const handleCreate = () => {
+    if (!name.trim()) {
+      setNameError("Enter a name for this sandbox.")
+      nameInputRef.current?.focus()
+      return
+    }
+
     let payload: CreateSandboxRequest
     try {
       payload = buildCreateSandboxRequest({
@@ -679,11 +706,16 @@ export function CreateSandboxDialog({
         {mode === "form" ? (
           <>
             <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-4">
-              <Field label="Sandbox Name" required>
+              <Field label="Sandbox name" required error={nameError}>
                 <Input
+                  ref={nameInputRef}
                   placeholder="my-sandbox"
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setName(value)
+                    if (value.trim()) setNameError(undefined)
+                  }}
                 />
               </Field>
 
@@ -1065,9 +1097,7 @@ export function CreateSandboxDialog({
               </Button>
               <Button
                 disabled={
-                  !name.trim() ||
-                  (fromSnapshot && !snapshotId) ||
-                  createMutation.isPending
+                  (fromSnapshot && !snapshotId) || createMutation.isPending
                 }
                 onClick={handleCreate}
               >
