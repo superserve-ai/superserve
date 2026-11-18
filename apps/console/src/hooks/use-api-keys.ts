@@ -3,6 +3,7 @@
 import { useToast } from "@superserve/ui"
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 
+import type { ConsoleApiKeySource } from "@/lib/api/api-key-mint"
 import { createApiKey, listApiKeys, revokeApiKey } from "@/lib/api/api-keys"
 import {
   ApiError,
@@ -19,12 +20,13 @@ export function useApiKeys() {
   })
 }
 
-export function useCreateApiKey() {
+/** `source` labels the server-side `api_key_created` event. */
+export function useCreateApiKey(source?: ConsoleApiKeySource) {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
 
   return useMutation({
-    mutationFn: (name: string) => createApiKey({ name }),
+    mutationFn: (name: string) => createApiKey({ name, source }),
     onSuccess: (created: CreateApiKeyResponse) => {
       const listEntry: ApiKeyResponse = {
         id: created.id,

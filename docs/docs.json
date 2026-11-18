@@ -56,6 +56,11 @@
     "options": ["copy", "view", "claude", "mcp", "add-mcp", "cursor", "vscode"]
   },
   "redirects": [
+    {
+      "source": "/guides/migrate-from-blaxel",
+      "destination": "/quickstart#where-to-go-next",
+      "permanent": true
+    },
     { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
     {
       "source": "/integrations/managed-agents/claude-managed-agents",
@@ -188,6 +193,16 @@
             ]
           },
           {
+            "group": "Migrate",
+            "pages": [
+              "guides/migrate-from-cloudflare",
+              "guides/migrate-from-daytona",
+              "guides/migrate-from-e2b",
+              "guides/migrate-from-modal",
+              "guides/migrate-from-vercel-sandbox"
+            ]
+          },
+          {
             "group": "Integrations",
             "pages": [
               "integrations/overview",
@@ -195,8 +210,12 @@
                 "group": "Coding agents",
                 "expanded": true,
                 "pages": [
+                  "integrations/coding-agents/acp",
+                  "integrations/coding-agents/amp",
                   "integrations/coding-agents/claude",
                   "integrations/coding-agents/codex",
+                  "integrations/coding-agents/copilot-cli",
+                  "integrations/coding-agents/grok",
                   "integrations/coding-agents/kilocode",
                   "integrations/coding-agents/opencode",
                   "integrations/coding-agents/pi"
@@ -228,7 +247,8 @@
                   "integrations/agent-harnesses/openai-agents-sdk",
                   "integrations/agent-harnesses/pydantic-ai",
                   "integrations/agent-harnesses/sandcastle",
-                  "integrations/agent-harnesses/vercel-ai-sdk"
+                  "integrations/agent-harnesses/vercel-ai-sdk",
+                  "integrations/agent-harnesses/vercel-eve"
                 ]
               },
               {
@@ -314,6 +334,20 @@
               "GET /snapshots/{snapshot_id}",
               "PATCH /snapshots/{snapshot_id}",
               "DELETE /snapshots/{snapshot_id}"
+            ]
+          },
+          {
+            "group": "Volumes",
+            "pages": [
+              "GET /volumes",
+              "POST /volumes",
+              "GET /volumes/{volume_id}",
+              "DELETE /volumes/{volume_id}",
+              "POST /sandboxes/{sandbox_id}/volumes",
+              "GET /volumes/{volume_id}/attachments",
+              "GET /volume-attachments/{attachment_id}",
+              "DELETE /volume-attachments/{attachment_id}",
+              "POST /volume-attachments/{attachment_id}/token"
             ]
           },
           {
