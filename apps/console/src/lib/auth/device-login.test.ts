@@ -175,6 +175,7 @@ describe("device login", () => {
       team,
       "CLI · laptop",
       expect.any(String),
+      "cli_device_login",
     )
     await expect(pollDeviceCode(deviceCode)).rejects.toMatchObject({
       code: "invalid_grant",

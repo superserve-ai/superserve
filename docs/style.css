@@ -18,3 +18,334 @@ html.dark
 html.dark .has-line-numbers .line-highlight::after {
   background: rgb(var(--primary-light) / 0.08) !important;
 }
+
+/*
+ * Benchmark comparison cards (snippets/benchmark-comparison.jsx).
+ * One dashed card per benchmark: the other provider's bar is grey, the
+ * Superserve bar is the brand mint #B2FAB4, and its row has a tint, a mint
+ * left border and a bold name and value. Docs are dark only; the light values keep
+ * the cards readable if that changes.
+ */
+.ss-bench {
+  --ss-bench-fg: #141414;
+  --ss-bench-muted: #5c5c5c;
+  --ss-bench-surface: #ffffff;
+  --ss-bench-border: rgba(0, 0, 0, 0.1);
+  --ss-bench-track: #ececec;
+  --ss-bench-peer-bar: #8a8a8a;
+  --ss-bench-own-bar: #2f9e44;
+  --ss-bench-own-text: #1d7a32;
+  --ss-bench-badge-bg: rgba(47, 158, 68, 0.1);
+  --ss-bench-peer-text: #5c5c5c;
+  --ss-bench-own-row: #eef7ee;
+  display: grid;
+  gap: 12px;
+  margin: 12px 0 8px;
+  color: var(--ss-bench-fg);
+  font-size: 14px;
+  line-height: 1.5;
+}
+html.dark .ss-bench {
+  --ss-bench-fg: #eaeaea;
+  --ss-bench-muted: #9a9a9a;
+  --ss-bench-surface: #1c1c1c;
+  --ss-bench-border: rgba(255, 255, 255, 0.1);
+  --ss-bench-track: #2a2a2a;
+  /* #7a7a7a on the #2a2a2a track is 3.34:1 (UI minimum 3:1). */
+  --ss-bench-peer-bar: #7a7a7a;
+  --ss-bench-own-bar: #b2fab4;
+  --ss-bench-own-text: #b2fab4;
+  --ss-bench-badge-bg: rgba(178, 250, 180, 0.1);
+  --ss-bench-peer-text: #b0b0b0;
+  --ss-bench-own-row: #282e28;
+}
+.ss-bench-card {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 16px;
+  border: 1px dashed var(--ss-bench-border);
+  background: var(--ss-bench-surface);
+}
+.ss-bench-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 4px 12px;
+}
+.ss-bench-heading {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.ss-bench-title {
+  font-size: 14px;
+  font-weight: 600;
+}
+.ss-bench-desc {
+  color: var(--ss-bench-muted);
+  font-size: 12px;
+}
+.ss-bench-desc strong {
+  color: var(--ss-bench-fg);
+  font-weight: 600;
+}
+.ss-bench-badge {
+  padding: 2px 6px;
+  border-radius: 0;
+  background: var(--ss-bench-badge-bg);
+  color: var(--ss-bench-own-text);
+  font-size: 12px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ss-bench-rows {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.ss-bench-row {
+  display: grid;
+  grid-template-columns: minmax(0, 9rem) minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  margin: 0;
+}
+.ss-bench-sr {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+}
+.ss-bench-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+  overflow: hidden;
+  white-space: nowrap;
+  text-overflow: ellipsis;
+}
+.ss-bench-dot {
+  flex: none;
+  width: 8px;
+  height: 8px;
+  background: var(--ss-bench-peer-bar);
+}
+.ss-bench-track {
+  display: block;
+  height: 8px;
+  background: var(--ss-bench-track);
+}
+.ss-bench-bar {
+  display: block;
+  min-width: 2px;
+  height: 100%;
+  background: var(--ss-bench-peer-bar);
+}
+.ss-bench-val {
+  min-width: 4.5rem;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+.ss-bench-row:not(.ss-bench-own) .ss-bench-name,
+.ss-bench-row:not(.ss-bench-own) .ss-bench-val {
+  color: var(--ss-bench-peer-text);
+}
+.ss-bench-own {
+  margin: 0 -8px;
+  padding: 4px 8px 4px 6px;
+  border-left: 2px solid var(--ss-bench-own-bar);
+  background: var(--ss-bench-own-row);
+}
+.ss-bench-own .ss-bench-name {
+  font-weight: 600;
+}
+.ss-bench-own .ss-bench-dot,
+.ss-bench-own .ss-bench-bar {
+  background: var(--ss-bench-own-bar);
+}
+.ss-bench-own .ss-bench-val {
+  color: var(--ss-bench-fg);
+}
+.ss-bench-source {
+  margin: 0;
+  color: var(--ss-bench-muted);
+  font-size: 12px;
+}
+.ss-bench-source a {
+  color: inherit;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+@media (max-width: 480px) {
+  .ss-bench-row {
+    grid-template-columns: minmax(0, 6.5rem) minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+  .ss-bench-val {
+    min-width: 3.75rem;
+  }
+}
+
+/*
+ * Brand accents (dark mode). Mint stays the primary and action color.
+ * Each extra hue has one job on every Superserve surface:
+ *   mint   #b2fab4  brand, actions, running, Superserve data
+ *   cyan   #7cc4fa  info, compute, sandboxes, paused
+ *   violet #c3a6ff  ecosystem: templates, storage, integrations
+ *   amber  #f5c76b  attention: warnings, secrets, migration
+ *   coral  #ff8f7a  errors only
+ * All five pass WCAG AA (4.5:1) as text on #141414 and on the callout tints.
+ */
+html.dark {
+  --ss-mint: #b2fab4;
+  --ss-cyan: #7cc4fa;
+  --ss-violet: #c3a6ff;
+  --ss-amber: #f5c76b;
+  --ss-coral: #ff8f7a;
+}
+
+/* Sidebar groups: a square in the group color before the group title. */
+html.dark .sidebar-group-header .sidebar-title::before {
+  display: inline-block;
+  width: 7px;
+  height: 7px;
+  margin-right: 8px;
+  vertical-align: 1px;
+  background: var(--ss-group, transparent);
+  content: "";
+}
+/*
+ * Each group is matched by a page it holds, at any position, so a new first
+ * page does not drop the color. Use a path prefix when only that group has it;
+ * otherwise use one page that anchors the group.
+ */
+html.dark .sidebar-group-header:has(+ ul > li[id="/introduction"]) {
+  --ss-group: var(--ss-mint);
+}
+html.dark
+  .sidebar-group-header:is(
+    :has(+ ul > li[id="/sandbox/create"]),
+    :has(+ ul > li[id^="/commands/"]),
+    :has(+ ul > li[id^="/guides/"]:not([id^="/guides/migrate-from-"]))
+  ) {
+  --ss-group: var(--ss-cyan);
+}
+html.dark
+  .sidebar-group-header:is(
+    :has(+ ul > li[id^="/templates/"]),
+    :has(+ ul > li[id^="/filesystem/"]),
+    :has(+ ul > li[id^="/storage/"]),
+    :has(+ ul > li[id="/integrations/overview"])
+  ) {
+  --ss-group: var(--ss-violet);
+}
+html.dark
+  .sidebar-group-header:is(
+    :has(+ ul > li[id^="/secrets/"]),
+    :has(+ ul > li[id^="/guides/migrate-from-"])
+  ) {
+  --ss-group: var(--ss-amber);
+}
+html.dark .sidebar-group-header:has(+ ul > li[id="/errors"]) {
+  --ss-group: var(--ss-coral);
+}
+
+/* Page eyebrow (the group name above the title) uses the group color. */
+html.dark:is(
+    [data-current-path^="/sandbox/"],
+    [data-current-path^="/commands/"],
+    [data-current-path^="/guides/"]
+  )
+  #header
+  .eyebrow {
+  color: var(--ss-cyan);
+}
+html.dark:is(
+    [data-current-path^="/templates/"],
+    [data-current-path^="/filesystem/"],
+    [data-current-path^="/storage/"],
+    [data-current-path^="/integrations/"]
+  )
+  #header
+  .eyebrow {
+  color: var(--ss-violet);
+}
+html.dark:is(
+    [data-current-path^="/secrets/"],
+    [data-current-path="/sandbox/environment-variables"],
+    [data-current-path^="/guides/migrate-from-"]
+  )
+  #header
+  .eyebrow {
+  color: var(--ss-amber);
+}
+html.dark[data-current-path="/integrations/mcp"] #header .eyebrow {
+  color: var(--ss-mint);
+}
+html.dark[data-current-path="/errors"] #header .eyebrow {
+  color: var(--ss-coral);
+}
+
+/* Callouts: note and info cyan, tip and check mint, warning amber, danger coral. */
+html.dark :is([data-callout-type="note"], [data-callout-type="info"]) {
+  --ss-callout: var(--ss-cyan);
+}
+html.dark :is([data-callout-type="tip"], [data-callout-type="check"]) {
+  --ss-callout: var(--ss-mint);
+}
+html.dark [data-callout-type="warning"] {
+  --ss-callout: var(--ss-amber);
+}
+html.dark [data-callout-type="danger"] {
+  --ss-callout: var(--ss-coral);
+}
+html.dark .callout[data-callout-type] {
+  border-color: color-mix(
+    in srgb,
+    var(--ss-callout) 35%,
+    transparent
+  ) !important;
+  background: color-mix(in srgb, var(--ss-callout) 7%, #141414) !important;
+}
+html.dark .callout[data-callout-type] [data-component-part="callout-icon"] svg {
+  color: var(--ss-callout) !important;
+  fill: var(--ss-callout) !important;
+}
+html.dark .callout[data-callout-type] [data-component-part="callout-content"] {
+  color: #d6d6d6 !important;
+}
+
+/*
+ * Code: map github-dark-default token colors onto the brand hues.
+ * keyword violet, string mint, function cyan, constant and number amber.
+ */
+html.dark span[style*="--shiki-dark:#FF7B72"] {
+  color: var(--ss-violet) !important;
+}
+html.dark
+  :is(
+    span[style*="--shiki-dark:#A5D6FF"],
+    span[style*="--shiki-dark:#7EE787"]
+  ) {
+  color: var(--ss-mint) !important;
+}
+html.dark span[style*="--shiki-dark:#D2A8FF"] {
+  color: var(--ss-cyan) !important;
+}
+html.dark
+  :is(
+    span[style*="--shiki-dark:#79C0FF"],
+    span[style*="--shiki-dark:#FFA657"]
+  ) {
+  color: var(--ss-amber) !important;
+}

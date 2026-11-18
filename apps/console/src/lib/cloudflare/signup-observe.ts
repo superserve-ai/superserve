@@ -9,6 +9,8 @@ const FLAG_KEY = "cloudflare_signup_observation"
 export type CloudflareSignupObservation = {
   signupAttemptId: string
   signupMethod: "email" | "google"
+  // Which page ran the check. Only labels events; unset for other callers.
+  entryPoint?: "signin" | "signup"
   userId?: string | null
   teamId?: string | null
   turnstileToken?: string | null
@@ -76,6 +78,7 @@ export async function observeCloudflareSignup(
 async function collectCloudflareSignup({
   signupAttemptId,
   signupMethod,
+  entryPoint,
   userId = null,
   teamId = null,
   turnstileToken,
@@ -102,6 +105,7 @@ async function collectCloudflareSignup({
         provider: "cloudflare",
         signup_attempt_id: signupAttemptId,
         signup_method: signupMethod,
+        entry_point: entryPoint,
         provider_outcome: "configuration_lookup_failed",
         capabilities,
         ephemeral_id_expected: ephemeralIdExpected,
@@ -204,6 +208,7 @@ async function collectCloudflareSignup({
       capabilities,
       config_version: configVersion,
       signup_method: signupMethod,
+      entry_point: entryPoint,
       superserve_user_id: userId,
       team_id: teamId,
       provider_latency_ms: Date.now() - started,
