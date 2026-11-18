@@ -66,13 +66,23 @@ async def call(method: Any, *args: Any, **kwargs: Any) -> Any:
 
 @pytest.mark.parametrize("resource", [Sandbox, AsyncSandbox])
 @pytest.mark.parametrize("mode", ["too many", "duplicate paths"])
-async def test_rejects_invalid_mount_batch_before_guest_creation(resource: Any, mode: str) -> None:
+async def test_rejects_invalid_mount_batch_before_guest_creation(
+    resource: Any, mode: str
+) -> None:
     mounts = (
         [{"volume": "data", "mount_path": f"/mnt/data-{i}"} for i in range(129)]
         if mode == "too many"
         else [
-            {"volume": "data", "mount_path": "/mnt/data", "idempotency_key": "repeated"},
-            {"volume": "data", "mount_path": "/mnt/data", "idempotency_key": "repeated"},
+            {
+                "volume": "data",
+                "mount_path": "/mnt/data",
+                "idempotency_key": "repeated",
+            },
+            {
+                "volume": "data",
+                "mount_path": "/mnt/data",
+                "idempotency_key": "repeated",
+            },
         ]
     )
     with respx.mock() as router:

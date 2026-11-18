@@ -26,7 +26,11 @@ from ._http import (
 from .commands import Commands, CommandsDeps
 from .desktop import DESKTOP_STREAM_PORT, Desktop, DesktopDeps
 from .errors import (
-    ConflictError, NotFoundError, SandboxError, SandboxTimeoutError, ValidationError,
+    ConflictError,
+    NotFoundError,
+    SandboxError,
+    SandboxTimeoutError,
+    ValidationError,
 )
 from .snapshots import (
     DEFAULT_SNAPSHOT_POLL_S,
