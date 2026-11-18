@@ -17,7 +17,7 @@ vi.mock("next/image", () => ({
 }))
 vi.mock("next/navigation", () => ({
   usePathname: () => "/sandboxes",
-  useRouter: () => ({ push: vi.fn() }),
+  useRouter: () => ({ push: palettePush }),
 }))
 vi.mock("@/hooks/use-teams", () => ({
   useTeams: () => ({
@@ -50,6 +50,7 @@ vi.mock("@/hooks/use-posthog-identify", () => ({
   usePostHogIdentify: () => {},
 }))
 
+const palettePush = vi.fn()
 const push = vi.fn<NextRouter["push"]>().mockResolvedValue(true)
 const router: NextRouter = {
   route: "/sandboxes",
@@ -163,6 +164,34 @@ it("shows a scrim in the sidebar row and collapses the phone overlay when clicke
   expect(getScrim()).toBeNull()
 })
 
+it("returns focus on scrim dismissal when needed and preserves focus outside the sidebar", () => {
+  mockMatchMedia(true)
+  render(
+    <DashboardShell globalBanner={<button type="button">Banner action</button>}>
+      Page
+    </DashboardShell>,
+  )
+  const toggle = screen.getByRole("button", { name: "Expand sidebar" })
+  fireEvent.click(toggle)
+  const teamSwitcher = screen.getByRole("combobox", { name: "Active team" })
+  teamSwitcher.focus()
+  expect(teamSwitcher).toHaveFocus()
+
+  fireEvent.click(getScrim()!)
+
+  expect(teamSwitcher).not.toBeInTheDocument()
+  expect(toggle).toHaveFocus()
+
+  fireEvent.click(toggle)
+  const bannerAction = screen.getByRole("button", { name: "Banner action" })
+  bannerAction.focus()
+
+  fireEvent.click(getScrim()!)
+
+  expect(toggle).toHaveAccessibleName("Expand sidebar")
+  expect(bannerAction).toHaveFocus()
+})
+
 it("makes main inert only while the phone overlay is open", () => {
   openSmallScreenSidebar()
   const main = screen.getByRole("main", { hidden: true })
@@ -171,6 +200,38 @@ it("makes main inert only while the phone overlay is open", () => {
   fireEvent.click(screen.getByRole("button", { name: "Collapse sidebar" }))
 
   expect(main).not.toHaveAttribute("inert")
+})
+
+it("scrolls the focused phone toggle into view after expanding and collapsing", async () => {
+  const scrollIntoView = vi
+    .spyOn(HTMLElement.prototype, "scrollIntoView")
+    .mockImplementation(() => {})
+  const user = userEvent.setup()
+  mockMatchMedia(true)
+  render(<DashboardShell>Page</DashboardShell>)
+  const toggle = screen.getByRole("button", { name: "Expand sidebar" })
+  toggle.focus()
+
+  await user.keyboard("{Enter}")
+
+  expect(
+    screen.getByRole("combobox", { name: "Active team" }),
+  ).toBeInTheDocument()
+  expect(toggle).toHaveFocus()
+  expect(scrollIntoView).toHaveBeenCalledWith(
+    expect.objectContaining({ block: "nearest" }),
+  )
+  expect(scrollIntoView.mock.contexts).toContain(toggle)
+  scrollIntoView.mockClear()
+
+  await user.keyboard("{Enter}")
+
+  expect(toggle).toHaveAccessibleName("Expand sidebar")
+  expect(toggle).toHaveFocus()
+  expect(scrollIntoView).toHaveBeenCalledWith(
+    expect.objectContaining({ block: "nearest" }),
+  )
+  expect(scrollIntoView.mock.contexts).toContain(toggle)
 })
 
 it.each([
@@ -237,6 +298,40 @@ it.each(["click", "Enter"])(
     expect(screen.getByRole("button", { name: "Expand sidebar" })).toHaveFocus()
   },
 )
+
+it("keeps the phone overlay and link focus for modified clicks, other targets, and downloads", () => {
+  openSmallScreenSidebar()
+  const main = screen.getByRole("main")
+  const link = screen.getByRole("link", { name: "Sandboxes", current: "page" })
+  const label = within(link).getByText("Sandboxes")
+  link.focus()
+  link.addEventListener("click", (event) => event.preventDefault())
+
+  function expectOverlayOpen() {
+    expect(main).toHaveAttribute("inert")
+    expect(link).toHaveFocus()
+  }
+
+  for (const modifiers of [
+    { ctrlKey: true },
+    { metaKey: true },
+    { shiftKey: true },
+    { altKey: true },
+    { button: 1 },
+  ]) {
+    fireEvent.click(label, modifiers)
+    expectOverlayOpen()
+  }
+
+  link.setAttribute("target", "_blank")
+  fireEvent.click(label)
+  expectOverlayOpen()
+  link.removeAttribute("target")
+
+  link.setAttribute("download", "")
+  fireEvent.click(label)
+  expectOverlayOpen()
+})
 
 it("closes the phone overlay on Escape and returns focus to the toggle", () => {
   openSmallScreenSidebar()
@@ -316,6 +411,25 @@ it("keeps the phone overlay open when Escape dismisses the command palette", asy
   expect(
     screen.getByRole("button", { name: "Collapse sidebar" }),
   ).toBeInTheDocument()
+})
+
+it("closes the phone overlay and restores focus when the palette selects the current page", async () => {
+  const user = userEvent.setup()
+  openSmallScreenSidebar()
+  const main = screen.getByRole("main")
+  const search = screen.getByRole("button", { name: /Search/ })
+  expect(main).toHaveAttribute("inert")
+  await user.click(search)
+  const input = screen.getByPlaceholderText("Type a command or search...")
+  await waitFor(() => expect(input).toHaveFocus())
+
+  await user.keyboard("{Enter}")
+
+  expect(palettePush).toHaveBeenCalledWith("/sandboxes")
+  await waitFor(() => expect(input).not.toBeInTheDocument())
+  expect(main).not.toHaveAttribute("inert")
+  expect(search).not.toBeInTheDocument()
+  expect(screen.getByRole("button", { name: "Expand sidebar" })).toHaveFocus()
 })
 
 it("keeps the expanded desktop sidebar non-modal and ignores Escape", () => {

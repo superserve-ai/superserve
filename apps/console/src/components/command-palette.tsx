@@ -29,9 +29,14 @@ interface CommandItem {
   onSelect: () => void
 }
 
-export function CommandPalette() {
+export function CommandPalette({
+  onNavigate,
+}: {
+  onNavigate?: (dialog: HTMLElement | null) => void
+}) {
   const [open, setOpen] = useState(false)
   const [hoveredLabel, setHoveredLabel] = useState<string | null>(null)
+  const dialogRef = useRef<HTMLDivElement>(null)
   const router = useRouter()
 
   useEffect(() => {
@@ -47,10 +52,11 @@ export function CommandPalette() {
 
   const navigate = useCallback(
     (path: string) => {
+      onNavigate?.(dialogRef.current)
       router.push(path)
       setOpen(false)
     },
-    [router],
+    [onNavigate, router],
   )
 
   const navigationItems: CommandItem[] = [
@@ -152,6 +158,7 @@ export function CommandPalette() {
     <AnimatePresence>
       {open && (
         <div
+          ref={dialogRef}
           className="fixed inset-0 z-50"
           // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- cmdk pattern, not native dialog
           role="dialog"

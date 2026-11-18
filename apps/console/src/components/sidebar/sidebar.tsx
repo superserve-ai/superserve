@@ -10,7 +10,7 @@ import {
   TooltipTrigger,
 } from "@superserve/ui"
 import Image from "next/image"
-import { startTransition, useEffect, useRef, useSyncExternalStore } from "react"
+import { startTransition, useEffect, useSyncExternalStore } from "react"
 
 import { useUser } from "@/hooks/use-user"
 import {
@@ -48,10 +48,8 @@ export function Sidebar() {
     () => true,
     () => false,
   )
-  const { isCollapsed, isOverlayOpen, setCollapsed, toggle } = useSidebar()
-  const asideRef = useRef<HTMLElement>(null)
-  const toggleRef = useRef<HTMLButtonElement>(null)
-  const focusToggleAfterCloseRef = useRef(false)
+  const { isCollapsed, isOverlayOpen, closeOverlay, toggle, toggleRef } =
+    useSidebar()
   const { user } = useUser()
 
   useEffect(() => {
@@ -66,27 +64,12 @@ export function Sidebar() {
       )
         return
 
-      setCollapsed(true)
-      toggleRef.current?.focus()
+      closeOverlay()
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [isOverlayOpen, setCollapsed])
-
-  useEffect(() => {
-    if (isOverlayOpen || !focusToggleAfterCloseRef.current) return
-    focusToggleAfterCloseRef.current = false
-
-    const activeElement = document.activeElement
-    if (
-      !activeElement?.isConnected ||
-      activeElement === document.body ||
-      asideRef.current?.contains(activeElement)
-    ) {
-      toggleRef.current?.focus()
-    }
-  }, [isOverlayOpen])
+  }, [isOverlayOpen, closeOverlay])
 
   const navItems = [
     ...mainNavItems,
@@ -99,22 +82,31 @@ export function Sidebar() {
 
   return (
     <aside
-      ref={asideRef}
       onClickCapture={(event) => {
         // Check before Next.js Link prevents the browser default for routing.
         if (
           !isOverlayOpen ||
           event.defaultPrevented ||
+          event.button !== 0 ||
+          event.metaKey ||
+          event.ctrlKey ||
+          event.shiftKey ||
+          event.altKey ||
           !(event.target instanceof Element)
         )
           return
 
         const link = event.target.closest("a[href]")
-        if (link && event.currentTarget.contains(link)) {
-          focusToggleAfterCloseRef.current = true
-          // Keep the expanded link mounted through its click handler.
-          startTransition(() => setCollapsed(true))
-        }
+        if (!link || !event.currentTarget.contains(link)) return
+        const target = link.getAttribute("target")
+        if (
+          (target && target.toLowerCase() !== "_self") ||
+          link.hasAttribute("download")
+        )
+          return
+
+        // Keep the expanded link mounted through its click handler.
+        startTransition(() => closeOverlay())
       }}
       className={cn(
         "absolute top-0 left-0 z-40 flex h-full flex-col border-r border-border bg-background/80 backdrop-blur-sm transition-all duration-200 motion-reduce:transition-none",

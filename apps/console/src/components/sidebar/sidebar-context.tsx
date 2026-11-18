@@ -5,7 +5,9 @@ import {
   createContext,
   useCallback,
   useContext,
+  useLayoutEffect,
   useMemo,
+  useRef,
   useState,
   useSyncExternalStore,
 } from "react"
@@ -42,7 +44,8 @@ interface SidebarContextValue {
   isCollapsed: boolean
   isOverlayOpen: boolean
   toggle: () => void
-  setCollapsed: (value: boolean) => void
+  toggleRef: React.RefObject<HTMLButtonElement | null>
+  closeOverlay: (focusFrom?: HTMLElement | null) => void
 }
 
 const SidebarContext = createContext<SidebarContextValue | null>(null)
@@ -52,6 +55,8 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
   const [previous, setPrevious] = useState({ pathname, isSmallScreen })
   const [mobileExpanded, setMobileExpanded] = useState(false)
+  const toggleRef = useRef<HTMLButtonElement>(null)
+  const focusAfterCloseRef = useRef<{ from?: HTMLElement | null } | null>(null)
   const [storedCollapsed, setStoredCollapsed] = useState(() => {
     if (typeof window === "undefined") return false
     return localStorage.getItem(STORAGE_KEY) === "true"
@@ -67,6 +72,39 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
 
   const isCollapsed = isSmallScreen ? !mobileExpanded : storedCollapsed
   const isOverlayOpen = isSmallScreen && !isCollapsed
+
+  const closeOverlay = useCallback(
+    (focusFrom?: HTMLElement | null) => {
+      if (!isOverlayOpen) return
+      focusAfterCloseRef.current = { from: focusFrom }
+      setMobileExpanded(false)
+    },
+    [isOverlayOpen],
+  )
+
+  useLayoutEffect(() => {
+    const focusRequest = focusAfterCloseRef.current
+    if (!isOverlayOpen) focusAfterCloseRef.current = null
+
+    const toggleButton = toggleRef.current
+    if (!isSmallScreen || !toggleButton) return
+
+    const activeElement = document.activeElement
+    if (
+      !isOverlayOpen &&
+      focusRequest &&
+      (!activeElement?.isConnected ||
+        activeElement === document.body ||
+        toggleButton.closest("aside")?.contains(activeElement) ||
+        focusRequest.from?.contains(activeElement))
+    ) {
+      toggleButton.focus({ preventScroll: true })
+    }
+
+    if (document.activeElement === toggleButton) {
+      toggleButton.scrollIntoView({ block: "nearest", behavior: "instant" })
+    }
+  }, [isOverlayOpen, isSmallScreen])
 
   const setCollapsed = useCallback(
     (value: boolean) => {
@@ -86,8 +124,8 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   )
 
   const value = useMemo(
-    () => ({ isCollapsed, isOverlayOpen, toggle, setCollapsed }),
-    [isCollapsed, isOverlayOpen, toggle, setCollapsed],
+    () => ({ isCollapsed, isOverlayOpen, toggle, toggleRef, closeOverlay }),
+    [isCollapsed, isOverlayOpen, toggle, closeOverlay],
   )
 
   return <SidebarContext value={value}>{children}</SidebarContext>
