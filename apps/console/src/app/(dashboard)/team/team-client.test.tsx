@@ -457,6 +457,18 @@ describe("TeamClient", () => {
       ).not.toBeInTheDocument()
     })
 
+    it("gives pending invitation emails room on narrow screens", () => {
+      render(<TeamClient />)
+
+      const email = screen.getByText(pendingInvitation.email)
+      expect(email.closest("ul")).toHaveClass("@container")
+      expect(email.parentElement).toHaveClass(
+        "flex-1",
+        "basis-[min(10rem,100%_-_2rem)]",
+        "@2xl:basis-0",
+      )
+    })
+
     it("hides Resend but keeps Revoke on a Free plan team", () => {
       mockUseTeamManagement.mockReturnValue({
         data: {
