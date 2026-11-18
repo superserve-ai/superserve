@@ -36,6 +36,7 @@ interface TemplateRow {
   vcpu: number
   memory_mib: number
   memory_max_mib?: number | null
+  memory_shrink_after_seconds?: number | null
   disk_mib: number
   size_bytes?: number
   error_message?: string
@@ -71,6 +72,7 @@ const SPEC_KEYS = [
   "vcpu",
   "memory_mib",
   "memory_max_mib",
+  "memory_shrink_after_seconds",
   "disk_mib",
 ]
 
@@ -198,6 +200,7 @@ interface CreateOpts {
   vcpu?: string
   memory?: string
   memoryMax?: string
+  memoryShrinkAfter?: string
   disk?: string
   wait: boolean
 }
@@ -255,6 +258,10 @@ async function buildCreateBody(
     opts.memoryMax !== undefined
       ? parseMib(opts.memoryMax, "--memory-max")
       : file.memory_max_mib
+  const shrinkAfter =
+    opts.memoryShrinkAfter !== undefined
+      ? parseDuration(opts.memoryShrinkAfter, "--memory-shrink-after")
+      : file.memory_shrink_after_seconds
   const disk =
     opts.disk !== undefined ? parseMib(opts.disk, "--disk") : file.disk_mib
   if (vcpu !== undefined) {
@@ -276,6 +283,13 @@ async function buildCreateBody(
       )
     }
     body.memory_max_mib = memoryMax
+  }
+  if (shrinkAfter !== undefined) {
+    checkRange(shrinkAfter, "Memory shrink after (seconds)", 60, 1800)
+    if (memoryMax === undefined) {
+      throw usageError("--memory-shrink-after needs --memory-max.")
+    }
+    body.memory_shrink_after_seconds = shrinkAfter
   }
   if (disk !== undefined) {
     checkRange(disk, "Disk (MiB)", 1024, 131_072)
@@ -515,7 +529,7 @@ export function register(program: Command): void {
     .argument("<name>", "Template name, unique in your team")
     .option(
       "-f, --file <path>",
-      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, memory_max_mib, disk_mib (- for stdin)",
+      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, memory_max_mib, memory_shrink_after_seconds, disk_mib (- for stdin)",
     )
     .option("--from <image>", "Base OCI image, e.g. python:3.11 (linux/amd64)")
     .option("--run <cmd>", "Build step: run a shell command (repeatable)")
@@ -548,6 +562,10 @@ export function register(program: Command): void {
     .option(
       "--memory-max <size>",
       "Let sandboxes grow memory while running, up to this size; above --memory, at most 4x it",
+    )
+    .option(
+      "--memory-shrink-after <duration>",
+      "How long memory must stay low after growing before it shrinks back, e.g. 5m; 1m-30m, needs --memory-max (default: platform default)",
     )
     .option(
       "--disk <size>",
@@ -651,6 +669,12 @@ Examples:
         ["Status", t.status, statusColor],
         ["vCPU", String(t.vcpu)],
         ["Memory", fmtMemory(t)],
+        [
+          "Memory shrink after",
+          t.memory_shrink_after_seconds == null
+            ? undefined
+            : `${t.memory_shrink_after_seconds}s`,
+        ],
         ["Disk", fmtMib(t.disk_mib)],
         [
           "Size",

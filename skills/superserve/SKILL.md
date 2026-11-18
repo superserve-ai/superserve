@@ -221,6 +221,9 @@ memory · 8192 MiB disk**.
   running up to that ceiling (`memoryMib` stays the boot size). It must exceed `memoryMib`,
   be at most 4x it and within the plan limit, and differ from it by a multiple of 128.
   Omit it for fixed memory; only templates built with it set can grow.
+- Optional `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` (60 to 1800) sets how
+  long memory must stay low after growing before it shrinks back. Requires `memoryMaxMib`;
+  set on the template; its sandboxes and their snapshots inherit it. Unset means the default of about one minute, which is also the minimum.
 - `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
   team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
@@ -549,6 +552,7 @@ narrow to a subclass. A **non-zero `exitCode` is a normal result, not a thrown e
 | `NotFoundError`       | Sandbox / template / resource does not exist (404)                                                                          |
 | `ConflictError`       | Invalid state transition, e.g. an unsupported lifecycle change (409)                                                        |
 | `TimeoutError`        | A request timed out — **Python: `SandboxTimeoutError`** (avoids shadowing the builtin)                                      |
+| `BillingError`        | Billing blocks a sandbox start (402); branch on `code`, show `actionUrl` (Python: `action_url`)                             |
 | `RateLimitError`      | Quota / rate limit exceeded (429); `code` names which limit (`too_many_builds`, `too_many_templates`, `too_many_sandboxes`) |
 | `ServerError`         | Platform error (500+)                                                                                                       |
 | `BuildError`          | Template build failed (carries `buildId`, `templateId`, `code`)                                                             |

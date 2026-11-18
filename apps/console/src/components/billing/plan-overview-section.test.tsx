@@ -61,12 +61,22 @@ vi.mock("@superserve/ui", async (original) => ({
   useToast: () => ({ addToast: vi.fn() }),
 }))
 vi.mock("@/components/current-plan", () => ({
-  CurrentPlan: () => <div data-testid="legacy-plan" />,
+  CurrentPlan: ({ legacyTransition }: { legacyTransition?: boolean }) => (
+    <div data-testid="legacy-plan" data-legacy-transition={legacyTransition} />
+  ),
 }))
+const legacyTransition = vi.hoisted(() => ({ value: false }))
+vi.mock("@/hooks/use-legacy-plan-transition", () => ({
+  useLegacyPlanTransition: () => legacyTransition.value,
+}))
+beforeEach(() => {
+  legacyTransition.value = false
+})
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: mocks.version,
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
+  useTeamEntry: () => ({ data: null, isPending: false, isError: false }),
   useTeamPlan: mocks.plan,
   useFreeAllowance: mocks.allowance,
   useAllowancePricing: mocks.pricing,
@@ -159,6 +169,19 @@ beforeEach(() => {
 })
 
 describe("PlanOverviewSection with pricing v2 off", () => {
+  it.each([null, plan({ kind: "legacy_payg" })])(
+    "passes migration status to the current plan for %j",
+    (assigned) => {
+      legacyTransition.value = true
+      mocks.plan.mockReturnValue({ data: assigned, isError: false })
+      render(<PlanOverviewSection summary={summary} />)
+      expect(screen.getByTestId("legacy-plan")).toHaveAttribute(
+        "data-legacy-transition",
+        "true",
+      )
+    },
+  )
+
   it("keeps an assigned team's settings change-plan link available after rollback", () => {
     mocks.version.mockReturnValue("legacy")
     mocks.plan.mockReturnValue({

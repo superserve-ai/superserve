@@ -1,0 +1,505 @@
+---
+title: "Migrate from Cloudflare Sandbox"
+sidebarTitle: From Cloudflare
+description: Move your sandboxes, backups and agent code from the Cloudflare Sandbox SDK to Superserve. Includes an API mapping, before and after code, a migration script and a prompt for coding agents.
+icon: "arrow-right-arrow-left"
+---
+
+import { BenchmarkComparison } from "/snippets/benchmark-comparison.jsx"
+
+Superserve runs cloud coding agents, long-running agents, CI workers, background jobs, evals, and RL environments in isolated VMs. If you run these on Cloudflare today, most code moves call by call.
+
+## How Superserve compares
+
+<BenchmarkComparison
+  compare="cloudflare"
+  compareName="Cloudflare"
+  sourceUrl="https://www.computesdk.com/benchmarks/sandboxes/compare/cloudflare-vs-superserve"
+/>
+
+## Ready to switch
+
+Pick how you want to migrate. Do it yourself step by step, or give the prompt to a coding agent and let it change your code.
+
+<Tabs>
+<Tab title="Human">
+
+<Info>
+**Before you start**
+
+- **Get a Superserve API key.** Sign in to the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), or sign up for free (no card required). Open **API Keys** and click **Create Key**. See [Get an API key](https://console.superserve.ai/api-keys/).
+</Info>
+
+<Steps>
+<Step title="Install the SDK and set your API key">
+
+Install the Superserve SDK and set `SUPERSERVE_API_KEY` in your environment and CI secrets.
+
+<CodeGroup>
+```bash TypeScript
+npm install @superserve/sdk
+export SUPERSERVE_API_KEY=ss_live_...
+```
+
+```bash Python
+pip install superserve
+export SUPERSERVE_API_KEY=ss_live_...
+```
+</CodeGroup>
+
+The TypeScript SDK also runs in a Cloudflare Worker with the `nodejs_compat` flag. There, store the key with `npx wrangler secret put SUPERSERVE_API_KEY`.
+
+</Step>
+<Step title="Map the API">
+
+The main changes: Superserve is an API that you call from any backend, so you need no Durable Object or container configuration. A Dockerfile becomes a template, every sandbox gets an `id` that you keep, and an idle sandbox pauses with its memory and disk. The Cloudflare columns show Sandbox SDK 0.12 calls on the `sandbox` stub and 1.0 calls on `this.ctx.container`.
+
+<Tabs>
+<Tab title="TypeScript">
+
+| Task | Cloudflare 0.12 | Cloudflare 1.0 | Superserve |
+| --- | --- | --- | --- |
+| Create | `getSandbox(env.Sandbox, id)` | `env.SANDBOX.getByName(id)`, then `container.start({ image, env })` | `Sandbox.create({ name, fromTemplate, envVars, metadata })`. Keep `sbx.id` and reconnect with `Sandbox.connect(id)`. |
+| Image | `FROM docker.io/cloudflare/sandbox` in a Dockerfile | A Dockerfile with `sandbox-shim` | `Template.create({ name, from: img, steps: [{ run }] })`, built once. Then `fromTemplate: name`. The default `superserve/base` template has Node.js, Python and Git. |
+| Run a command | `sandbox.exec(cmd, { cwd, env, timeout })` | `container.exec(argv, { cwd, env })`, then `await proc.output()` | `sbx.commands.run(cmd, { cwd, env, timeoutMs })` returns `exitCode`, `stdout` and `stderr` as strings |
+| Stream output | `sandbox.execStream(cmd)` | `proc.stdout` | `sbx.commands.run(cmd, { onStdout, onStderr })` |
+| Background process | `sandbox.startProcess(cmd)` | `container.exec(argv, { stdout: "ignore" })` and your own process tracking | `sbx.commands.spawn(cmd)`, then `wait()` / `kill()` |
+| Files | `sandbox.writeFile(path, content)` / `readFile(path)` | `new Files(container).writeFile(path, content)` / `readFile(path)` | `sbx.files.write(path, data)` / `read(path)` / `readText(path)` |
+| Git | `sandbox.gitCheckout(url, { targetDir })` | `container.exec(["git", "clone", url, dir])` | `sbx.commands.run("git clone --depth 1 <url> /home/user/app")` |
+| Run code | `sandbox.runCode(code)` | A kernel that you start in the container | `sbx.files.write("/home/user/main.py", code)`, then `sbx.commands.run("python3 /home/user/main.py")` |
+| Save state | `sandbox.createBackup({ dir })` / `restoreBackup(backup)` | `DirectoryBackup` or `container.snapshotContainer()` | `sbx.snapshot()`, then `Sandbox.create({ name, fromSnapshot })`. Saves memory and disk; forks keep running processes. |
+| Idle timeout | `sleepAfter`, default `"10m"`. `keepAlive: true` to stay awake. | `container.setInactivityTimeout(ms)` | `idleTimeoutSeconds`. Off by default. Pauses the sandbox and keeps memory, processes and disk. `sbx.pause()` / `sbx.resume()` at any time. |
+| Env vars and secrets | `envVars` or `setEnvVars()`. Credentials added by `outboundByHost` handlers. | `start({ env })` and an outbound `WorkerEntrypoint` | `envVars` on create, `env` per command, `secrets: { ENV_VAR: "secret-name" }`. The real key never enters the sandbox. See [Secrets](/secrets/overview). |
+| Network rules | `enableInternet`, `allowedHosts`, `deniedHosts` | `start({ enableInternet })` and an outbound `WorkerEntrypoint` | `allowedHosts` becomes `network: { allowOut: ["1.1.1.1/32", "8.8.8.8/32", ...hosts], denyOut: ["0.0.0.0/0"] }`. The two IPs are the sandbox DNS resolvers. Without them, no name resolves. `enableInternet: false` becomes `network: { denyOut: ["0.0.0.0/0"] }`. `denyOut` takes only IPs and CIDRs, so `deniedHosts` has no direct match. Check those rules by hand, or block the hosts with an allowlist that leaves them out. See [Network rules](/sandbox/networking). |
+| Buckets | `sandbox.mountBucket(bucket, path, options)` | `S3Mount` | A FUSE driver in a template. See [Cloud buckets](/storage/cloud-buckets). |
+| Public URL | `sandbox.exposePort(port, { hostname })` and `proxyToSandbox()` on your wildcard domain | Your Worker routes to `container.getTcpPort(port)` | `await sbx.publishPreviewPort(port, { access: "private" })`, then `sbx.getPreviewUrl(port)`. For the token, use `await sbx.getPreviewToken(port)` (send `token` in the returned `header`) or `await sbx.getSignedPreviewUrl(port)` for a browser. No DNS or routing to set up. See [Preview URLs](/sandbox/preview-urls). |
+| List and delete | IDs that your app keeps / `sandbox.destroy()` | IDs that your app keeps / `container.destroy()` | `Sandbox.list({ metadata })` / `sbx.kill()` |
+
+</Tab>
+<Tab title="Python">
+
+| Task | Cloudflare 0.12 | Cloudflare 1.0 | Superserve |
+| --- | --- | --- | --- |
+| Create | `getSandbox(env.Sandbox, id)` | `env.SANDBOX.getByName(id)`, then `container.start({ image, env })` | `Sandbox.create(name=, from_template=, env_vars=, metadata=)`. Keep `sbx.id` and reconnect with `Sandbox.connect(id)`. |
+| Image | `FROM docker.io/cloudflare/sandbox` in a Dockerfile | A Dockerfile with `sandbox-shim` | `Template.create(name=, from_=img, steps=[RunStep(run=...)])`, built once. Then `from_template=name`. The default `superserve/base` template has Node.js, Python and Git. |
+| Run a command | `sandbox.exec(cmd, { cwd, env, timeout })` | `container.exec(argv, { cwd, env })`, then `await proc.output()` | `sbx.commands.run(cmd, cwd=, env=, timeout_seconds=)` returns `exit_code`, `stdout` and `stderr` as strings |
+| Stream output | `sandbox.execStream(cmd)` | `proc.stdout` | `sbx.commands.run(cmd, on_stdout=, on_stderr=)` |
+| Background process | `sandbox.startProcess(cmd)` | `container.exec(argv, { stdout: "ignore" })` and your own process tracking | `await sbx.commands.spawn(cmd)` on `AsyncSandbox`, then `wait()` / `kill()` |
+| Files | `sandbox.writeFile(path, content)` / `readFile(path)` | `new Files(container).writeFile(path, content)` / `readFile(path)` | `sbx.files.write(path, data)` / `read(path)` / `read_text(path)` |
+| Git | `sandbox.gitCheckout(url, { targetDir })` | `container.exec(["git", "clone", url, dir])` | `sbx.commands.run("git clone --depth 1 <url> /home/user/app")` |
+| Run code | `sandbox.runCode(code)` | A kernel that you start in the container | `sbx.files.write("/home/user/main.py", code)`, then `sbx.commands.run("python3 /home/user/main.py")` |
+| Save state | `sandbox.createBackup({ dir })` / `restoreBackup(backup)` | `DirectoryBackup` or `container.snapshotContainer()` | `sbx.snapshot()`, then `Sandbox.create(name=, from_snapshot=)`. Saves memory and disk; forks keep running processes. |
+| Idle timeout | `sleepAfter`, default `"10m"`. `keepAlive: true` to stay awake. | `container.setInactivityTimeout(ms)` | `idle_timeout_seconds`. Off by default. Pauses the sandbox and keeps memory, processes and disk. `sbx.pause()` / `sbx.resume()` at any time. |
+| Env vars and secrets | `envVars` or `setEnvVars()`. Credentials added by `outboundByHost` handlers. | `start({ env })` and an outbound `WorkerEntrypoint` | `env_vars` on create, `env` per command, `secrets={"ENV_VAR": "secret-name"}`. The real key never enters the sandbox. See [Secrets](/secrets/overview). |
+| Network rules | `enableInternet`, `allowedHosts`, `deniedHosts` | `start({ enableInternet })` and an outbound `WorkerEntrypoint` | `allowedHosts` becomes `network=NetworkConfig(allow_out=["1.1.1.1/32", "8.8.8.8/32", *hosts], deny_out=["0.0.0.0/0"])`. The two IPs are the sandbox DNS resolvers. Without them, no name resolves. `enableInternet: false` becomes `network=NetworkConfig(deny_out=["0.0.0.0/0"])`. `deny_out` takes only IPs and CIDRs, so `deniedHosts` has no direct match. Check those rules by hand, or block the hosts with an allowlist that leaves them out. See [Network rules](/sandbox/networking). |
+| Buckets | `sandbox.mountBucket(bucket, path, options)` | `S3Mount` | A FUSE driver in a template. See [Cloud buckets](/storage/cloud-buckets). |
+| Public URL | `sandbox.exposePort(port, { hostname })` and `proxyToSandbox()` on your wildcard domain | Your Worker routes to `container.getTcpPort(port)` | `sbx.publish_preview_port(port, access="private")`, then `sbx.get_preview_url(port)`. For the token, use `sbx.get_preview_token(port)` (send `token` in the returned `header`) or `sbx.get_signed_preview_url(port)` for a browser. No DNS or routing to set up. See [Preview URLs](/sandbox/preview-urls). |
+| List and delete | IDs that your app keeps / `sandbox.destroy()` | IDs that your app keeps / `container.destroy()` | `Sandbox.list(metadata=)` / `sbx.kill()` |
+
+</Tab>
+</Tabs>
+
+To turn your Dockerfile into a template, see [Create a template](/templates/create).
+
+</Step>
+<Step title="Update your code">
+
+Replace the sandbox stub or Durable Object with `Sandbox`, add a `name`, and change paths under `/workspace` to `/home/user`.
+
+<CodeGroup>
+```ts 0.12
+import { getSandbox, type Sandbox } from "@cloudflare/sandbox"
+export { Sandbox } from "@cloudflare/sandbox"
+
+type Env = { Sandbox: DurableObjectNamespace<Sandbox> }
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const sandbox = getSandbox(env.Sandbox, "ci-run", { sleepAfter: "10m" })
+    await sandbox.setEnvVars({ MODE: "ci" })
+    await sandbox.gitCheckout("https://github.com/your-org/your-app.git", {
+      targetDir: "/workspace/app",
+    })
+    const result = await sandbox.exec("npm install && npm test", {
+      cwd: "/workspace/app",
+    })
+    const { hostname } = new URL(request.url)
+    const { url } = await sandbox.exposePort(3000, { hostname })
+    const backup = await sandbox.createBackup({ dir: "/workspace/app" })
+    await getSandbox(env.Sandbox, "fork").restoreBackup(backup)
+    return Response.json({ stdout: result.stdout, url })
+  },
+}
+```
+
+```ts 1.0
+import { DurableObject } from "cloudflare:workers"
+
+interface Env {
+  SANDBOX: DurableObjectNamespace<Sandbox>
+}
+
+export class Sandbox extends DurableObject<Env> {
+  async test(): Promise<string> {
+    const container = this.ctx.container
+    if (!container) throw new Error("The container binding is not configured")
+    if (!container.running) {
+      container.start({ image: container.images.sandbox, env: { MODE: "ci" } })
+      await container.setInactivityTimeout(10 * 60 * 1000)
+    }
+    const app = "/workspace/app"
+    const repo = "https://github.com/your-org/your-app.git"
+    await (await container.exec(["git", "clone", repo, app])).output()
+    const proc = await container.exec(["bash", "-c", "npm install && npm test"], {
+      cwd: app,
+      env: { MODE: "ci" },
+    })
+    const { stdout } = await proc.output()
+    return new TextDecoder().decode(stdout)
+  }
+}
+
+export default {
+  async fetch(_request, env) {
+    return new Response(await env.SANDBOX.getByName("ci-run").test())
+  },
+} satisfies ExportedHandler<Env>
+```
+
+```ts Superserve
+import { Sandbox } from "@superserve/sdk"
+
+const sbx = await Sandbox.create({
+  name: "ci-run",
+  fromTemplate: "superserve/base",
+  envVars: { MODE: "ci" },
+  idleTimeoutSeconds: 600,
+})
+const timeoutMs = 10 * 60 * 1000 // run() stops a command after 30 s by default
+await sbx.commands.run(
+  "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+  { timeoutMs },
+)
+const result = await sbx.commands.run("npm install && npm test", {
+  cwd: "/home/user/app",
+  timeoutMs,
+})
+console.log(result.stdout)
+await sbx.publishPreviewPort(3000, { access: "private" })
+const url = await sbx.getSignedPreviewUrl(3000) // opens in a browser
+const snap = await sbx.snapshot()
+const fork = await Sandbox.create({ name: "fork", fromSnapshot: snap })
+```
+</CodeGroup>
+
+<CodeGroup>
+```python Superserve
+from superserve import Sandbox
+
+sbx = Sandbox.create(
+    name="ci-run",
+    from_template="superserve/base",
+    env_vars={"MODE": "ci"},
+    idle_timeout_seconds=600,
+)
+timeout = 10 * 60  # run() stops a command after 30 s by default
+sbx.commands.run(
+    "git clone --depth 1 https://github.com/your-org/your-app.git /home/user/app",
+    timeout_seconds=timeout,
+)
+result = sbx.commands.run(
+    "npm install && npm test", cwd="/home/user/app", timeout_seconds=timeout
+)
+print(result.stdout)
+sbx.publish_preview_port(3000, access="private")
+url = sbx.get_signed_preview_url(3000)  # opens in a browser
+snap = sbx.snapshot()
+fork = Sandbox.create(name="fork", from_snapshot=snap)
+```
+</CodeGroup>
+
+</Step>
+<Step title="Move existing sandboxes with the migration script">
+
+A Cloudflare sandbox is reachable only through your Worker. First add a temporary export route to the Worker. The route archives `/workspace` in one sandbox and streams the archive back. Protect it with a `MIGRATION_TOKEN` secret. The route refuses all requests until the secret is set.
+
+<CodeGroup>
+```ts Export route (Cloudflare 0.12)
+import { getSandbox, streamFile, type Sandbox } from "@cloudflare/sandbox"
+
+type Env = { Sandbox: DurableObjectNamespace<Sandbox>; MIGRATION_TOKEN: string }
+
+// Call this from your fetch handler for requests to /migrate/export.
+export async function exportSandbox(request: Request, env: Env): Promise<Response> {
+  const token = env.MIGRATION_TOKEN
+  if (!token || request.headers.get("Authorization") !== `Bearer ${token}`) {
+    return new Response("unauthorized", { status: 401 })
+  }
+  const id = new URL(request.url).searchParams.get("id") ?? ""
+  const sandbox = getSandbox(env.Sandbox, id)
+  const tar = await sandbox.exec("tar czf /tmp/state.tgz -C /workspace .")
+  if (!tar.success) return new Response(tar.stderr, { status: 500 })
+  // Stream the archive so the Worker holds one chunk at a time, not the whole file.
+  const chunks = streamFile(await sandbox.readFileStream("/tmp/state.tgz"))
+  const body = new ReadableStream<Uint8Array>({
+    async pull(controller) {
+      const { value, done } = await chunks.next()
+      if (done) return controller.close()
+      controller.enqueue(
+        typeof value === "string" ? new TextEncoder().encode(value) : value,
+      )
+    },
+  })
+  return new Response(body)
+}
+```
+
+```ts Export route (Cloudflare 1.0)
+import { Files } from "@cloudflare/sandbox"
+import { DurableObject } from "cloudflare:workers"
+
+interface Env {
+  SANDBOX: DurableObjectNamespace<Sandbox>
+  MIGRATION_TOKEN: string
+}
+
+export class Sandbox extends DurableObject<Env> {
+  // Add this method to your Durable Object class.
+  async exportArchive(): Promise<Response> {
+    const container = this.ctx.container
+    if (!container?.running) return new Response("not running", { status: 404 })
+    const args = ["tar", "czf", "/tmp/state.tgz", "-C", "/workspace", "."]
+    const { exitCode, stderr } = await (await container.exec(args)).output()
+    if (exitCode !== 0) return new Response(stderr, { status: 500 })
+    return new Files(container).readFile("/tmp/state.tgz")
+  }
+}
+
+// Call this from your fetch handler for requests to /migrate/export.
+export async function exportSandbox(request: Request, env: Env): Promise<Response> {
+  const token = env.MIGRATION_TOKEN
+  if (!token || request.headers.get("Authorization") !== `Bearer ${token}`) {
+    return new Response("unauthorized", { status: 401 })
+  }
+  const id = new URL(request.url).searchParams.get("id") ?? ""
+  return env.SANDBOX.getByName(id).exportArchive()
+}
+```
+</CodeGroup>
+
+Then run the script with the sandbox IDs that your app passes to `getSandbox()` or `getByName()`. The script copies each archive into `/home/user` in a new Superserve sandbox. It does not change or delete your Cloudflare sandboxes. If a copy fails, the script deletes the new Superserve sandbox. Set `CLOUDFLARE_EXPORT_URL` to the full URL of the route, and set `MIGRATION_TOKEN` and `SUPERSERVE_API_KEY`.
+
+<CodeGroup>
+```ts migrate-from-cloudflare.ts
+import { Sandbox } from "@superserve/sdk"
+
+const EXPORT_URL = process.env.CLOUDFLARE_EXPORT_URL // https://<your-worker>/migrate/export
+const TOKEN = process.env.MIGRATION_TOKEN
+if (!EXPORT_URL || !TOKEN) {
+  throw new Error("Set CLOUDFLARE_EXPORT_URL and MIGRATION_TOKEN")
+}
+const DST = "/home/user" // directory to copy into in Superserve
+const TEMPLATE = "superserve/base" // or the template you built from your Dockerfile
+const TIMEOUT_MS = 10 * 60 * 1000 // limit for each upload and extract
+
+for (const id of process.argv.slice(2)) {
+  const res = await fetch(`${EXPORT_URL}?id=${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  })
+  if (!res.ok) {
+    console.error(`${id}: export failed: ${res.status} ${await res.text()}`)
+    process.exitCode = 1
+    continue
+  }
+  const tgz = new Uint8Array(await res.arrayBuffer())
+
+  const dst = await Sandbox.create({
+    name: `from-cloudflare-${id}`,
+    fromTemplate: TEMPLATE,
+    metadata: { migrated_from: id },
+  })
+  try {
+    await dst.files.write("/tmp/state.tgz", tgz, { timeoutMs: TIMEOUT_MS })
+    const out = await dst.commands.run(
+      `tar xzf /tmp/state.tgz -C ${DST} && rm /tmp/state.tgz`,
+      { timeoutMs: TIMEOUT_MS },
+    )
+    if (out.exitCode !== 0) throw new Error(out.stderr)
+  } catch (err) {
+    console.error(`${id}: copy failed: ${err}`)
+    process.exitCode = 1
+    // Delete the new sandbox so a failed copy does not keep running.
+    await dst
+      .kill()
+      .catch(() => console.error(`${id}: delete ${dst.id} by hand`))
+    continue
+  }
+  console.log(`${id} -> ${dst.id}`)
+}
+```
+
+```python migrate_from_cloudflare.py
+import os
+import sys
+import urllib.error
+import urllib.parse
+import urllib.request
+
+from superserve import Sandbox
+
+EXPORT_URL = os.environ["CLOUDFLARE_EXPORT_URL"]  # https://<your-worker>/migrate/export
+TOKEN = os.environ["MIGRATION_TOKEN"]
+DST = "/home/user"  # directory to copy into in Superserve
+TEMPLATE = "superserve/base"  # or the template you built from your Dockerfile
+TIMEOUT_SECONDS = 10 * 60  # limit for each upload and extract
+failed = False
+
+for sandbox_id in sys.argv[1:]:
+    url = f"{EXPORT_URL}?id={urllib.parse.quote(sandbox_id)}"
+    request = urllib.request.Request(url, headers={"Authorization": f"Bearer {TOKEN}"})
+    try:
+        with urllib.request.urlopen(request) as res:
+            tgz = res.read()
+    except urllib.error.URLError as err:
+        print(f"{sandbox_id}: export failed: {err}", file=sys.stderr)
+        failed = True
+        continue
+
+    dst = Sandbox.create(
+        name=f"from-cloudflare-{sandbox_id}",
+        from_template=TEMPLATE,
+        metadata={"migrated_from": sandbox_id},
+    )
+    try:
+        dst.files.write("/tmp/state.tgz", tgz, timeout=TIMEOUT_SECONDS)
+        out = dst.commands.run(
+            f"tar xzf /tmp/state.tgz -C {DST} && rm /tmp/state.tgz",
+            timeout_seconds=TIMEOUT_SECONDS,
+        )
+        if out.exit_code != 0:
+            raise RuntimeError(out.stderr)
+    except Exception as err:
+        print(f"{sandbox_id}: copy failed: {err}", file=sys.stderr)
+        failed = True
+        # Delete the new sandbox so a failed copy does not keep running.
+        try:
+            dst.kill()
+        except Exception:
+            print(f"{sandbox_id}: delete {dst.id} by hand", file=sys.stderr)
+        continue
+    print(f"{sandbox_id} -> {dst.id}")
+
+sys.exit(1 if failed else 0)
+```
+</CodeGroup>
+
+For example, run `npx tsx migrate-from-cloudflare.ts user-123 user-456`. Run the script while the sandboxes are awake. A Cloudflare sandbox that went to sleep starts again with an empty disk, so restore its backup first.
+
+Each upload and extract can take up to 10 minutes. For large directories or slow connections, raise `TIMEOUT_MS` / `TIMEOUT_SECONDS`.
+
+The script copies files. Start your services in the new sandbox, then take a Superserve [snapshot](/sandbox/snapshots) to save memory, processes and disk together.
+
+</Step>
+<Step title="Verify and cut over">
+
+Run your test suite against Superserve. Check the sandbox list in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link). When the results match, send production traffic to Superserve.
+
+</Step>
+<Step title="Uninstall Cloudflare Sandbox">
+
+After the cutover, remove the export route and the `MIGRATION_TOKEN` secret. Then remove the Sandbox SDK package. To delete the sandbox class, remove its `containers` and `durable_objects` entries from your Wrangler configuration and add a `deleted_classes` migration.
+
+```bash
+npm uninstall @cloudflare/sandbox
+```
+
+</Step>
+</Steps>
+
+</Tab>
+<Tab title="Agent">
+
+Paste this prompt into Claude Code, Codex, Cursor or another coding agent at the root of your repo. The agent changes the code and runs your tests. You review the diff.
+
+```text Migration prompt
+Migrate this repository from the Cloudflare Sandbox SDK (@cloudflare/sandbox) to the Superserve SDK.
+
+Reference: https://docs.superserve.ai/llms-full.txt (read it first).
+
+Before you start: ask me for a Superserve API key if SUPERSERVE_API_KEY is not set.
+I get it from the console (https://console.superserve.ai/api-keys/). Do not create a key yourself.
+
+1. Install @superserve/sdk (npm) or superserve (pip). Do not remove @cloudflare/sandbox yet.
+   Add SUPERSERVE_API_KEY to code, .env.example, and CI config. In a Worker, keep the
+   nodejs_compat flag and store the key with wrangler secret put SUPERSERVE_API_KEY.
+2. Find every import of "@cloudflare/sandbox" and every Durable Object class that uses
+   this.ctx.container. Version 0.x uses getSandbox(); version 1.0 uses the container API.
+   Apply this mapping:
+   - getSandbox(env.Sandbox, id) or env.SANDBOX.getByName(id) -> Sandbox.create({name, fromTemplate,
+     envVars, metadata: {key: id}}) the first time, then Sandbox.connect(sbx.id). Store sbx.id
+     where the app keeps its sandbox IDs, or find it with Sandbox.list({metadata: {key: id}}).
+   - The Dockerfile -> a template built once with Template.create({name, from, steps}).
+     The default superserve/base template has Node.js, Python and Git.
+   - exec(cmd, {cwd, env, timeout}) -> commands.run(cmd, {cwd, env, timeoutMs}).
+     1.0 container.exec(argv) + output() -> commands.run(one shell string). Quote arguments.
+     stdout and stderr are strings. It does not throw on a nonzero exit code, so keep the checks.
+     Without timeoutMs, run() stops the command after 30 seconds. Set timeoutMs on installs,
+     builds, tests and any other command that can take longer.
+     createSession({cwd, env}) -> pass cwd and env to each commands.run call.
+   - execStream(cmd) -> commands.run(cmd, {onStdout, onStderr}).
+   - startProcess(cmd) -> commands.spawn(cmd). Python: on AsyncSandbox.
+   - writeFile / readFile, or the Files class -> files.write(path, data) / files.read(path) /
+     files.readText(path).
+   - gitCheckout(url, {targetDir}) -> commands.run("git clone --depth 1 <url> <dir>").
+   - runCode(code) -> files.write the code to an absolute path, then commands.run it.
+   - createBackup / restoreBackup, DirectoryBackup or snapshotContainer -> snapshot() +
+     Sandbox.create({name, fromSnapshot}). Snapshots save memory and disk.
+   - sleepAfter or setInactivityTimeout(ms) -> idleTimeoutSeconds. The sandbox pauses and keeps
+     memory and disk. keepAlive: true -> remove it. There is no idle timeout by default.
+   - envVars / setEnvVars -> envVars on create. Credentials added by outboundByHost handlers ->
+     Secret.create once, then secrets: {ENV_VAR: "secret-name"} on create.
+   - allowedHosts -> network {allowOut: ["1.1.1.1/32", "8.8.8.8/32", ...hosts],
+     denyOut: ["0.0.0.0/0"]}. The two IPs are the DNS resolvers. Without them, no name resolves.
+     enableInternet: false -> network {denyOut: ["0.0.0.0/0"]} with no allowOut.
+   - deniedHosts has no direct match: denyOut accepts only IPs and CIDRs, not domains. Do not put
+     hostnames in denyOut. List each deniedHosts rule for me to review. If allowedHosts is also
+     set and no allowed pattern matches a denied host, the allowlist already blocks it; say so.
+   - exposePort(port) + proxyToSandbox(), or routing to container.getTcpPort(port) ->
+     publishPreviewPort(port, {access: "private"}), then getPreviewUrl(port). Send the Superserve
+     preview credential: getPreviewToken(port) returns {header, token} for machine clients;
+     getSignedPreviewUrl(port) returns a URL for browsers. Use access "public" only if the port
+     was public on purpose. Ports must be 1024 to 65535. Remove the wildcard preview route.
+   - mountBucket / S3Mount -> a FUSE driver in a template (see the Cloud buckets docs page).
+   - destroy() -> kill().
+   - Paths under /workspace -> /home/user.
+   - Python: use snake_case (from_template, idle_timeout_seconds, env_vars, from_snapshot).
+3. Run the test suite. Fix failures. Do not delete Cloudflare Sandbox code paths you cannot test; list them.
+4. Report: files changed, tests run and their result, and anything left for a human.
+5. Only after I confirm the cutover: uninstall @cloudflare/sandbox and remove the sandbox
+   container and Durable Object entries from the Wrangler configuration.
+```
+
+### Give your agent the full reference
+
+| Resource | Use |
+| --- | --- |
+| [`docs.superserve.ai/llms-full.txt`](https://docs.superserve.ai/llms-full.txt) | The whole docs in one file for the agent context |
+| [`superserve` skill](https://github.com/superserve-ai/superserve/tree/main/skills/superserve) | Full SDK reference for Claude Code and other skill-aware agents |
+| [Superserve MCP server](/integrations/mcp) | Lets the agent create and test sandboxes while it migrates |
+
+The API mapping and the migration script are in the **Human** tab.
+
+</Tab>
+</Tabs>
+
+## Known differences
+
+| Area | What to do |
+| --- | --- |
+| Where your code runs | Cloudflare sandboxes are Durable Objects inside your Worker. Superserve is an API, so call it from your Worker, a server, CI or a notebook. |
+| Sandbox ID | Cloudflare uses the ID that you pass to `getSandbox()`. Superserve gives each sandbox an `id` on create. Store it, or set your ID in `metadata` and find the sandbox with `Sandbox.list({ metadata })`. |
+| Idle behavior | Cloudflare stops an idle sandbox after 10 minutes by default, and the next start has a fresh disk. By default, a Superserve sandbox does not pause for being idle. Set `idleTimeoutSeconds` to pause it with its memory, processes and disk. |
+| Commands | `commands.run` takes one shell string, as 0.12 `exec()` did. It returns `stdout` and `stderr` as strings and does not throw on a nonzero exit code. Check `exitCode` / `exit_code`. Without a timeout, `run()` stops a command after 30 seconds, so set `timeoutMs` / `timeout_seconds` on installs, builds and tests. |
+| Home directory | Cloudflare sandboxes use `/workspace`. Superserve sandboxes use `/home/user`. Update hard-coded paths. |
+| Preview ports | Each published port gets its own URL, with no DNS or Worker route to set up. A new port is public by default. Publish with `access: "private"` and send a preview token to keep a port protected. Serve on a port from 1024 to 65535. |
+| Process state | The migration script moves files, not memory. Take a Superserve snapshot after you restart services. |

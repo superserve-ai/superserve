@@ -4,7 +4,6 @@ import { Button, cn, Input } from "@superserve/ui"
 import Image from "next/image"
 import Link from "next/link"
 import { useSearchParams } from "next/navigation"
-import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
 import { Suspense, useState } from "react"
 
@@ -12,9 +11,12 @@ import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { Spinner } from "@/components/icons"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
+import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { getRecaptchaToken, RECAPTCHA_SITE_KEY } from "@/lib/recaptcha/client"
+import { RecaptchaScript } from "@/lib/recaptcha/script"
 
 import { sendPasswordResetEmail } from "./action"
 
@@ -40,8 +42,11 @@ function ForgotPasswordContent() {
     try {
       const recaptchaToken = await getRecaptchaToken("password_reset")
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
+        captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+          reason: "captcha_not_loaded",
+        })
         setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+          form: AUTH_MESSAGES.botCheckBlocked,
         })
         return
       }
@@ -51,13 +56,23 @@ function ForgotPasswordContent() {
         invite ?? undefined,
       )
       if (!result.success) {
+        captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+          reason: result.errorCode,
+        })
         setErrors({ form: result.error })
         return
       }
-      posthog.capture(AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
+      captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_REQUESTED)
       setEmailSent(true)
-    } catch {
-      setErrors({ form: "Error sending reset email. Please try again." })
+    } catch (err) {
+      captureBestEffort(posthog, AUTH_EVENTS.PASSWORD_RESET_FAILED, {
+        reason: "request_error",
+      })
+      setErrors({
+        form: isNetworkAuthError(err)
+          ? AUTH_MESSAGES.resetEmailNetworkError
+          : AUTH_MESSAGES.resetEmailFailed,
+      })
     } finally {
       setIsLoading(false)
     }
@@ -65,12 +80,7 @@ function ForgotPasswordContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      {RECAPTCHA_SITE_KEY && (
-        <Script
-          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
-        />
-      )}
+      <RecaptchaScript />
       <DitherBackground />
       <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
         <CornerBrackets size="lg" />
@@ -131,7 +141,7 @@ function ForgotPasswordContent() {
               )}
               <Button type="submit" disabled={isLoading} className="w-full">
                 {isLoading ? <Spinner /> : null}
-                {isLoading ? "Sending..." : "Send Reset Link"}
+                {isLoading ? "Sending..." : "Send reset link"}
               </Button>
             </form>
 
