@@ -480,6 +480,20 @@
             ]
           },
           {
+            "group": "Volumes",
+            "pages": [
+              "GET /volumes",
+              "POST /volumes",
+              "GET /volumes/{volume_id}",
+              "DELETE /volumes/{volume_id}",
+              "POST /sandboxes/{sandbox_id}/volumes",
+              "GET /volumes/{volume_id}/attachments",
+              "GET /volume-attachments/{attachment_id}",
+              "DELETE /volume-attachments/{attachment_id}",
+              "POST /volume-attachments/{attachment_id}/token"
+            ]
+          },
+          {
             "group": "Exec",
             "pages": ["POST /exec", "POST /exec/stream", "GET /exec/connect"]
           },
