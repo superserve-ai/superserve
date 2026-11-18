@@ -7,9 +7,22 @@ import {
   proAuthReturnPath,
   starterAuthReturnPath,
 } from "@/lib/billing/pro-auth-return"
+import { HEEDEO_BROWSER_COOKIES } from "@/lib/heedeo/shared"
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
 import { ycReturnPath } from "@/lib/yc/return-path"
 import { staffReturnPath } from "@/lib/yc/staff-return-path"
+
+function withoutCookies(
+  header: string | null,
+  names: readonly string[],
+): string | null {
+  if (!header) return null
+  const kept = header
+    .split(";")
+    .map((pair) => pair.trim())
+    .filter((pair) => pair && !names.includes(pair.split("=", 1)[0]!.trim()))
+  return kept.length > 0 ? kept.join("; ") : null
+}
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -38,6 +51,13 @@ export async function middleware(request: NextRequest) {
     // Invite tokens appear in auth page URLs; the rewrite would forward Referer to PostHog.
     const headers = new Headers(request.headers)
     headers.delete("referer")
+    // Heedeo's script keeps its token and visitor ID in `Path=/` cookies.
+    const cookie = withoutCookies(
+      request.headers.get("cookie"),
+      HEEDEO_BROWSER_COOKIES,
+    )
+    if (cookie === null) headers.delete("cookie")
+    else headers.set("cookie", cookie)
     return NextResponse.next({ request: { headers } })
   }
 

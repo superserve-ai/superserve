@@ -125,6 +125,31 @@ describe("middleware", () => {
     },
   )
 
+  it.each([
+    ["_idt=ct1.tok; ph_x=1; _idd=v1", "ph_x=1"],
+    ["_idt=ct1.tok; _idd=v1", null],
+    ["ph_x=1; x_idt=2", "ph_x=1; x_idt=2"],
+  ])(
+    "drops Heedeo's cookies from %s before the rewrite",
+    async (cookie, kept) => {
+      const request = new NextRequest(
+        new URL("https://console.superserve.ai/ingest/e/"),
+      )
+      // Set after construction: happy-dom's Request drops a cookie header.
+      request.headers.set("cookie", cookie)
+      const res = await middleware(request)
+      const overrides = res.headers
+        .get("x-middleware-override-headers")!
+        .split(",")
+      if (kept === null) {
+        expect(overrides).not.toContain("cookie")
+        expect(res.headers.has("x-middleware-request-cookie")).toBe(false)
+      } else {
+        expect(res.headers.get("x-middleware-request-cookie")).toBe(kept)
+      }
+    },
+  )
+
   it.each(["/ingestion", "/ingest-private"])(
     "still authenticates and redirects signed-out requests to %s",
     async (path) => {

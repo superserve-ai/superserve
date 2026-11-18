@@ -17,6 +17,13 @@ export const HEEDEO_PROXY_PREFIX = "/api/dv"
  * the cookie lives as long. `/auth` covers the sign-up page, the sign-in page
  * and the OAuth callback.
  */
+/**
+ * Cookies Heedeo's script writes at `Path=/`: the token (`_idt`) and the
+ * visitor ID (`_idd`). They are for Heedeo only, so the analytics rewrite
+ * drops them (see `middleware.ts`).
+ */
+export const HEEDEO_BROWSER_COOKIES: readonly string[] = ["_idt", "_idd"]
+
 export const HEEDEO_SIGNUP_COOKIE = "superserve-heedeo-signup"
 export const HEEDEO_SIGNUP_COOKIE_PATH = "/auth"
 export const HEEDEO_SIGNUP_COOKIE_MAX_AGE_SECONDS = 300

@@ -12,6 +12,7 @@ async function load(key: string | undefined): Promise<ClientModule> {
 }
 
 let writes: string[] = []
+let scripts: HTMLScriptElement[] = []
 
 function captured() {
   const last = writes.findLast((write) =>
@@ -23,6 +24,14 @@ function captured() {
 
 beforeEach(() => {
   writes = []
+  scripts = []
+  // Keep the script element out of the page: the test DOM would try to fetch it.
+  const append = document.head.appendChild.bind(document.head)
+  vi.spyOn(document.head, "appendChild").mockImplementation((node) => {
+    if (node instanceof HTMLScriptElement) scripts.push(node)
+    else append(node)
+    return node
+  })
   vi.spyOn(document, "cookie", "set").mockImplementation((value: string) => {
     writes.push(value)
   })
@@ -46,6 +55,33 @@ describe("Heedeo browser capture", () => {
   it("serves the script from the console origin", async () => {
     const client = await load("pk_live_123")
     expect(client.HEEDEO_SCRIPT_SRC).toBe("/api/dv/i.js?key=pk_live_123")
+  })
+
+  it("loads the script once, when first asked or at the capture", async () => {
+    const client = await load("pk_live_123")
+    expect(scripts).toHaveLength(0)
+    client.loadHeedeoScript()
+    client.heedeoPreloadProps.onFocus()
+    window.heedeo = {
+      identify: vi.fn(async () => ({
+        token: "ct1.t",
+        visitor_id: "v",
+        confidence: 1,
+      })),
+    }
+    await client.captureHeedeoSignup()
+    expect(scripts).toHaveLength(1)
+    expect(scripts[0]!.getAttribute("src")).toBe("/api/dv/i.js?key=pk_live_123")
+  })
+
+  it("reports a script that cannot load as failed", async () => {
+    vi.useFakeTimers()
+    const client = await load("pk_live_123")
+    const done = client.captureHeedeoSignup(5000)
+    scripts[0]!.dispatchEvent(new Event("error"))
+    await vi.advanceTimersByTimeAsync(200)
+    await done
+    expect(captured()).toMatchObject({ status: "script_failed" })
   })
 
   it("writes the token for the server, after clearing an earlier one", async () => {

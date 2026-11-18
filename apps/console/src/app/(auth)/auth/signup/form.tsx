@@ -25,8 +25,7 @@ import {
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
-import { captureHeedeoSignup } from "@/lib/heedeo/client"
-import { HeedeoScript } from "@/lib/heedeo/script"
+import { captureHeedeoSignup, heedeoPreloadProps } from "@/lib/heedeo/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
@@ -460,12 +459,15 @@ export default function SignUpContent() {
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
       <RecaptchaScript />
-      <HeedeoScript />
       {TURNSTILE_SITE_KEY && (
         <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
       <DitherBackground />
-      <div className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6">
+      {/* Heedeo loads when the visitor reaches the sign-up card, not with the page. */}
+      <div
+        className="relative w-full max-w-sm border border-dashed border-border bg-surface p-6"
+        {...heedeoPreloadProps}
+      >
         <CornerBrackets size="lg" />
         <div className="mb-8 flex justify-center">
           <Link href="/">

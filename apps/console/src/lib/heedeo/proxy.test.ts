@@ -71,6 +71,20 @@ describe("forwardHeedeoRequest", () => {
     expect(init?.redirect).toBe("manual")
   })
 
+  it("keeps Heedeo's cache policy for the browser marker", async () => {
+    const upstream = ok("1", {
+      headers: { "cache-control": "private, max-age=31536000, immutable" },
+    })
+    const response = await forwardHeedeoRequest(
+      new Request(`${BASE}/i.js?key=pk_live_1&m=1`),
+      ["i.js"],
+      options(upstream),
+    )
+    expect(response.headers.get("cache-control")).toBe(
+      "private, max-age=31536000, immutable",
+    )
+  })
+
   it("never sends console cookies upstream when there is no visitor cookie", async () => {
     const upstream = ok()
     await forwardHeedeoRequest(

@@ -35,12 +35,44 @@ declare global {
 
 const HEEDEO_TOKEN_COOKIE = "_idt"
 
+let scriptRequested = false
 let scriptFailed = false
 let latestCapture = 0
 
-/** Called by `HeedeoScript` when the script cannot load. */
+/** Called when the script cannot load. */
 export function markHeedeoScriptFailed(): void {
   scriptFailed = true
+}
+
+/**
+ * Loads Heedeo's script from the console origin, once. Once loaded, the
+ * script identifies the browser in the background ahead of `identify()`, so
+ * do not load it with the page: load it when the visitor starts a sign-up
+ * (see `heedeoPreloadProps`), and `captureHeedeoSignup` loads it at the
+ * action when that has not happened.
+ */
+export function loadHeedeoScript(): void {
+  if (!HEEDEO_SCRIPT_SRC || scriptRequested) return
+  scriptRequested = true
+  try {
+    const script = document.createElement("script")
+    script.src = HEEDEO_SCRIPT_SRC
+    script.async = true
+    script.onerror = markHeedeoScriptFailed
+    document.head.appendChild(script)
+  } catch {
+    markHeedeoScriptFailed()
+  }
+}
+
+/**
+ * Spread on a sign-up control, so the script loads when the pointer reaches
+ * it or it takes focus, a moment before the click. Never on a control that
+ * only signs in.
+ */
+export const heedeoPreloadProps = {
+  onPointerEnter: loadHeedeoScript,
+  onFocus: loadHeedeoScript,
 }
 
 // A function call, so the wait loop reads the flag that `onError` sets later.
@@ -85,10 +117,10 @@ async function identifyWithin(
   let timer: ReturnType<typeof setTimeout> | undefined
   try {
     const identify = Promise.resolve(heedeo.identify())
-    // The script also leaves the token in its own `_idt` cookie (Path=/),
-    // which every console request would then carry, analytics included.
+    // The script also leaves the token in its own `_idt` cookie (Path=/).
     // The server reads the token from our `/auth` cookie, so drop `_idt`
-    // when identify settles, even after the budget ran out.
+    // when identify settles. A late write can bring it back, so the
+    // analytics rewrite strips it too (`middleware.ts`).
     identify.then(clearHeedeoTokenCookie, clearHeedeoTokenCookie)
     const answer = await Promise.race([
       identify,
@@ -127,6 +159,7 @@ export async function captureHeedeoSignup(
   if (!HEEDEO_PUBLISHABLE_KEY) return
   const run = ++latestCapture
   try {
+    loadHeedeoScript()
     clearHeedeoSignupCapture()
     const start = Date.now()
     const result = await identifyWithin(budgetMs)

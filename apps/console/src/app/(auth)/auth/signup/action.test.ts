@@ -1111,7 +1111,7 @@ describe("signUpWithEmail", () => {
 
       expect(result).toEqual({ success: true })
       expect(scheduled()).toMatchObject({
-        userId: "existing-user",
+        userId: null,
         status: "failed",
       })
     })

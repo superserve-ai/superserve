@@ -227,9 +227,12 @@ export async function forwardHeedeoRequest(
     for (const [name, value] of upstream.headers)
       if (BACK_HEADERS.has(name) || name.startsWith(BACK_PREFIX))
         back.set(name, value)
-    // The browser revalidates the script on every page load, so a cached
-    // copy stops running as soon as the kill switch answers 403.
-    if (path === "/i.js") back.set("cache-control", "no-cache")
+    // The browser revalidates the script on every load, so a cached copy
+    // stops running as soon as the kill switch answers 403. The script also
+    // fetches `i.js?m=1`, a marker it reads back from the browser cache:
+    // that one keeps Heedeo's cache policy.
+    if (path === "/i.js" && !url.searchParams.has("m"))
+      back.set("cache-control", "no-cache")
     for (const value of upstream.headers.getSetCookie()) {
       const kept = visitorSetCookie(value)
       if (kept) back.append("set-cookie", kept)

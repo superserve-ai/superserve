@@ -532,7 +532,9 @@ export const signUpWithEmail = async (
       signupAttemptId,
       signupMethod: "email",
       email: parsed.data.email,
-      userId: heedeoCreatedUserId ?? observationUserId,
+      // Not the ID of an older account found by email: this browser has
+      // not proved it owns that account.
+      userId: heedeoCreatedUserId,
       status: heedeoCreatedUserId ? "succeeded" : "failed",
       capture: heedeoCapture,
       request: heedeoRequest,

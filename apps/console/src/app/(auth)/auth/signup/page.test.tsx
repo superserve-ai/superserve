@@ -83,6 +83,7 @@ const mockCaptureHeedeoSignup = vi.fn<() => Promise<void>>(() =>
 vi.mock("@/lib/heedeo/client", () => ({
   HEEDEO_SCRIPT_SRC: undefined,
   markHeedeoScriptFailed: vi.fn(),
+  heedeoPreloadProps: {},
   captureHeedeoSignup: () => mockCaptureHeedeoSignup(),
 }))
 

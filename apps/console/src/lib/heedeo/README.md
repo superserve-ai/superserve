@@ -9,8 +9,12 @@ authentication decision depends on it, and every failure fails open.
 
 ## Flow
 
-1. The sign-up and sign-in pages load Heedeo's script from the console origin
-   (`/api/dv/i.js`, see "First-party route" below).
+1. The script loads from the console origin (`/api/dv/i.js`, see
+   "First-party route" below), not with the page: once loaded, it identifies
+   the browser in the background ahead of `identify()`. It loads when the
+   pointer reaches, or focus enters, the sign-up card or a "Continue with
+   Google" button on the sign-in page (`heedeoPreloadProps`), else at the
+   action. Opening a page, or password sign-in, loads nothing.
 2. At the action, the page calls `captureHeedeoSignup()` beside the other
    checks: email sign-up submit, "Continue with Google" on the sign-up page, and
    the Google sign-up check on the sign-in page. It calls `identify()` (billed
@@ -21,10 +25,11 @@ authentication decision depends on it, and every failure fails open.
    Google. Password sign-in captures nothing.
 3. The server reads and deletes that cookie and, after the response is sent,
    sends one `signup` event to `POST https://app.heedeo.com/v1/evaluations`:
-   - email: from `signUpWithEmail`, with the email, the user ID and `status`
-     `succeeded` only when this attempt created the account (a held Enterprise
-     account counts). A refusal, an error, or a retry for an older unconfirmed
-     account is `failed`;
+   - email: from `signUpWithEmail`, with the email and `status` `succeeded`
+     only when this attempt created the account (a held Enterprise account
+     counts), with its user ID. A refusal, an error, or a retry for an older
+     unconfirmed account is `failed` and has no user ID, because the browser
+     has not proved it owns that account;
    - Google: from `/auth/callback` for a Google account that passed the
      sign-up proof and was created by this attempt, with
      `evidence.oauth.email_verified`. `status` is `failed` when the sign-up
@@ -39,7 +44,9 @@ authentication decision depends on it, and every failure fails open.
 
 The capture cookie belongs to the browser, not to one attempt. When two tabs
 sign up at the same time, one attempt can send the other's token, or none.
-Both tabs are the same browser, so the observed device is the same.
+Both tabs are the same browser, so the observed device is the same. A
+Google sign-up whose account signs in again within the five-minute OAuth
+window, before its first team exists, can send a second event.
 
 ## PostHog `auth_heedeo_signup_observed`
 
@@ -59,9 +66,10 @@ Distinct ID: the new user ID, else the sign-up attempt ID.
 | `api_version`, `observed_at`                                                                                          | `heedeo-version` sent, and time                                                                                                                                                                                            |
 
 The token, the email and request headers are not sent to PostHog. The
-script also writes the token to its own `_idt` cookie (`Path=/`); the capture
-deletes that cookie as soon as `identify()` settles, so later requests (for
-example analytics) do not carry it.
+script also keeps the token and the visitor ID in its own `_idt` and `_idd`
+cookies (`Path=/`). The capture deletes `_idt` when `identify()` settles, and
+the `/ingest` analytics rewrite drops both (`HEEDEO_BROWSER_COOKIES` in
+`middleware.ts`), as the script can write `_idt` again later.
 
 ## First-party route
 
@@ -79,7 +87,8 @@ first-party. `lib/heedeo/proxy.ts` limits the route:
   `access-control-*`, and only an `_idd` Set-Cookie without a `Domain`;
 - 64 KB request body, 1 MB response body, 2 KB query, 3 s, no redirects;
 - the script is sent with `cache-control: no-cache`, so the browser
-  revalidates it on each page load.
+  revalidates it on each load. Its `i.js?m=1` marker, which the script reads
+  back from the browser cache, keeps Heedeo's cache policy.
 
 The script also has its own fallback to `https://heedeo.dev` (a warm-up
 request and a backup identify after 1.5 s when the first-party call is slow
