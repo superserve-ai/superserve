@@ -19,8 +19,9 @@ export const HEEDEO_PROXY_PREFIX = "/api/dv"
  */
 /**
  * Cookies Heedeo's script writes at `Path=/`: the token (`_idt`) and the
- * visitor ID (`_idd`). They are for Heedeo only, so the analytics rewrite
- * drops them (see `middleware.ts`).
+ * visitor ID (`_idd`). They are for Heedeo only; the middleware drops all
+ * cookies before the analytics rewrite, and `ingest-cookies.test.ts` checks
+ * that these two never reach it.
  */
 export const HEEDEO_BROWSER_COOKIES: readonly string[] = ["_idt", "_idd"]
 

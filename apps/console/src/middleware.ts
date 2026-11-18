@@ -7,22 +7,9 @@ import {
   proAuthReturnPath,
   starterAuthReturnPath,
 } from "@/lib/billing/pro-auth-return"
-import { HEEDEO_BROWSER_COOKIES } from "@/lib/heedeo/shared"
 import { createMiddlewareClient, matchesRoute } from "@/lib/supabase/middleware"
 import { ycReturnPath } from "@/lib/yc/return-path"
 import { staffReturnPath } from "@/lib/yc/staff-return-path"
-
-function withoutCookies(
-  header: string | null,
-  names: readonly string[],
-): string | null {
-  if (!header) return null
-  const kept = header
-    .split(";")
-    .map((pair) => pair.trim())
-    .filter((pair) => pair && !names.includes(pair.split("=", 1)[0]!.trim()))
-  return kept.length > 0 ? kept.join("; ") : null
-}
 
 const PUBLIC_ROUTES = [
   "/auth/signin",
@@ -47,17 +34,16 @@ export async function middleware(request: NextRequest) {
     return NextResponse.redirect(url, 308)
   }
 
-  if (pathname === "/ingest" || pathname.startsWith("/ingest/")) {
-    // Invite tokens appear in auth page URLs; the rewrite would forward Referer to PostHog.
+  // Lowercased: a mixed-case path such as /Ingest/e/ must not keep cookies,
+  // even though next.config.ts rewrites only the lowercase path.
+  const lowerPath = pathname.toLowerCase()
+  if (lowerPath === "/ingest" || lowerPath.startsWith("/ingest/")) {
+    // Invite tokens appear in auth page URLs, and console cookies hold the
+    // session and pending email-link tokens. The rewrite would forward both
+    // headers to PostHog, which needs neither.
     const headers = new Headers(request.headers)
     headers.delete("referer")
-    // Heedeo's script keeps its token and visitor ID in `Path=/` cookies.
-    const cookie = withoutCookies(
-      request.headers.get("cookie"),
-      HEEDEO_BROWSER_COOKIES,
-    )
-    if (cookie === null) headers.delete("cookie")
-    else headers.set("cookie", cookie)
+    headers.delete("cookie")
     return NextResponse.next({ request: { headers } })
   }
 
@@ -143,8 +129,11 @@ export const config = {
     // authenticates its own request (and answers JSON, not a redirect to the
     // signin page), so the middleware getUser() was a second Supabase auth
     // round-trip on every API call — including the 10s sandbox list poll.
-    // PostHog uses its own matcher to strip Referer and bypass auth before the rewrite.
+    // PostHog uses its own matchers to strip Referer and cookies and bypass
+    // auth before the rewrite. They match any case, so /INGEST/static/x.js
+    // is not skipped as a static file.
     "/((?!ingest(?:/|$)|api/|_next/static|_next/image|favicon\\.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico|woff|woff2|ttf|otf|css|js|map)$).*)",
-    "/ingest/:path*",
+    "/:analytics((?:[iI][nN][gG][eE][sS][tT]))",
+    "/:analytics((?:[iI][nN][gG][eE][sS][tT]))/:path*",
   ],
 }

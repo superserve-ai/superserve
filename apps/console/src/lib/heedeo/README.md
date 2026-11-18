@@ -120,9 +120,11 @@ Distinct ID: the new user ID, else the sign-up attempt ID.
 
 The token, the email and request headers are not sent to PostHog. The
 script also keeps the token and the visitor ID in its own `_idt` and `_idd`
-cookies (`Path=/`). The capture deletes `_idt` when `identify()` settles, and
-the `/ingest` analytics rewrite drops both (`HEEDEO_BROWSER_COOKIES` in
-`middleware.ts`), as the script can write `_idt` again later.
+cookies (`Path=/`). The capture deletes `_idt` when `identify()` settles. The
+script can write `_idt` again later, so `middleware.ts` drops the whole Cookie
+header on `/ingest` in any letter case, and `next.config.ts` rewrites only the
+lowercase path (`caseSensitiveRoutes`). `src/ingest-cookies.test.ts` checks the
+real matcher and rewrites together for `HEEDEO_BROWSER_COOKIES`.
 
 ## First-party route
 
