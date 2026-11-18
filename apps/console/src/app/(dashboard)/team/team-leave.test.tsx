@@ -1,6 +1,6 @@
 import { ToastProvider } from "@superserve/ui"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { render, screen } from "@testing-library/react"
+import { render, screen, waitFor } from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
@@ -31,7 +31,9 @@ import { TeamClient } from "./team-client"
 
 function renderTeam() {
   const client = new QueryClient({
-    defaultOptions: { queries: { retry: false, staleTime: Infinity } },
+    defaultOptions: {
+      queries: { retry: false, retryDelay: 0, staleTime: Infinity },
+    },
   })
   client.setQueryData(teamKeys.directory(), {
     teams: [
@@ -114,9 +116,11 @@ describe("TeamClient without team-management permission", () => {
     const user = userEvent.setup()
     renderTeam()
 
-    await user.click(await screen.findByRole("button", { name: /try again/i }))
+    const retry = await screen.findByRole("button", { name: /try again/i })
+    expect(mocks.management).toHaveBeenCalledTimes(4)
+    await user.click(retry)
 
-    expect(mocks.management).toHaveBeenCalledTimes(2)
+    await waitFor(() => expect(mocks.management).toHaveBeenCalledTimes(8))
     expect(
       screen.queryByRole("button", { name: /^leave team$/i }),
     ).not.toBeInTheDocument()
