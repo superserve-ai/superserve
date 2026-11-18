@@ -117,8 +117,10 @@ function visitorSetCookie(value: string): string | null {
     ...attributes
       .map((attribute) => attribute.trim())
       .filter(
+        // Browsers trim spaces around the name, so `Domain = x` counts too.
         (attribute) =>
-          attribute && !attribute.toLowerCase().startsWith("domain="),
+          attribute &&
+          attribute.split("=", 1)[0]!.trim().toLowerCase() !== "domain",
       ),
   ].join("; ")
 }

@@ -156,6 +156,28 @@ describe("forwardHeedeoRequest", () => {
     expect(response.headers.get("x-other")).toBeNull()
   })
 
+  it.each(["Domain = .superserve.ai", "DOMAIN =superserve.ai", "domain= x.io"])(
+    "drops the %s attribute from the visitor cookie",
+    async (domain) => {
+      const upstream = vi.fn<typeof fetch>(async () => {
+        const headers = new Headers()
+        headers.append("set-cookie", `_idd=v2; Path=/; ${domain}; Secure`)
+        return new Response("{}", { status: 200, headers })
+      })
+      const response = await forwardHeedeoRequest(
+        new Request(`${BASE}/v1/identify?key=pk`, {
+          method: "POST",
+          body: "{}",
+        }),
+        ["v1", "identify"],
+        options(upstream),
+      )
+      expect(response.headers.getSetCookie()).toEqual([
+        "_idd=v2; Path=/; Secure",
+      ])
+    },
+  )
+
   it.each([
     [["v1", "visitors", "abc"]],
     [["v1", "evaluations"]],
