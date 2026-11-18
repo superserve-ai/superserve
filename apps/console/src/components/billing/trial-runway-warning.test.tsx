@@ -300,6 +300,9 @@ describe("TrialRunwayWarning with the flag on", () => {
       act(() => vi.advanceTimersByTime(30_000))
       expect(screen.queryByTestId("trial-banner")).toBeNull()
       expect(screen.getByText(/about 10 minutes/)).toBeInTheDocument()
+      expect(captured("trial_runway_warning_shown")[0]?.[1]).toMatchObject({
+        minutes_left: 10,
+      })
     } finally {
       vi.useRealTimers()
     }
@@ -325,6 +328,10 @@ describe("TrialRunwayWarning with the flag on", () => {
       act(() => vi.advanceTimersByTime(30_001))
       expect(screen.queryByText(/runs out in/)).toBeNull()
       expect(screen.getByText(/almost used up/)).toBeInTheDocument()
+      fireEvent.click(screen.getByRole("button", { name: "Upgrade" }))
+      expect(captured("trial_runway_warning_clicked")[0]?.[1]).toMatchObject({
+        minutes_left: null,
+      })
     } finally {
       vi.useRealTimers()
     }

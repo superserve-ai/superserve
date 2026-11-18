@@ -92,6 +92,14 @@ export function advanceRunway(
       burnUsdPerMinute: null,
     }
   if (reading.at <= track.latestAt) return track
+  // A new grant makes the old rate wrong, so measure again from here.
+  if (reading.remainingUsd > track.baseline.remainingUsd)
+    return {
+      team,
+      baseline: reading,
+      latestAt: reading.at,
+      burnUsdPerMinute: null,
+    }
   // A refresh too soon after the baseline keeps the last estimate.
   if (reading.at - track.baseline.at < MIN_SAMPLE_MS)
     return { ...track, latestAt: reading.at }

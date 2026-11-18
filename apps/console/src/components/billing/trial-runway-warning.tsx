@@ -124,6 +124,12 @@ export function TrialRunwayWarning({
 
   const canManage = summary?.permissions.can_manage === true
 
+  // The minutes the countdown shows at a time, or null when it shows none.
+  const minutesAt = (at: number) =>
+    countdownUntil !== null && at <= freshUntil && at < countdownUntil
+      ? (countdownUntil - at) / 60_000
+      : null
+
   const [region, teamId] = teamKey?.split(":", 2) ?? [null, null]
   const properties = {
     team_id: teamId ?? null,
@@ -132,7 +138,7 @@ export function TrialRunwayWarning({
     threshold_mode: decision?.mode ?? null,
     threshold_minutes: RUNWAY_WARNING_MINUTES,
     threshold_usd: FIXED_WARNING_USD,
-    minutes_left: round(decision?.minutesLeft ?? null, 1),
+    minutes_left: round(minutesAt(now), 1),
     burn_usd_per_minute: round(burn, 6),
     can_manage: canManage,
   }
@@ -159,6 +165,7 @@ export function TrialRunwayWarning({
             onAction={(target) =>
               captureBestEffort(posthog, TRIAL_RUNWAY_EVENTS.WARNING_CLICKED, {
                 ...properties,
+                minutes_left: round(minutesAt(Date.now()), 1),
                 target,
               })
             }

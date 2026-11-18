@@ -145,6 +145,21 @@ describe("advanceRunway", () => {
     })
   })
 
+  it("measures again after the balance goes up", () => {
+    const track = advanceRunway(
+      advanceRunway(null, "use:a", first),
+      "use:a",
+      second,
+    )
+    const grant = { at: T0 + 62_000, remainingUsd: 0.05 }
+    expect(advanceRunway(track, "use:a", grant)).toEqual({
+      team: "use:a",
+      baseline: grant,
+      latestAt: T0 + 62_000,
+      burnUsdPerMinute: null,
+    })
+  })
+
   it("starts again for another team", () => {
     const track = advanceRunway(null, "use:a", first)
     expect(advanceRunway(track, "usw:b", second)).toEqual({
