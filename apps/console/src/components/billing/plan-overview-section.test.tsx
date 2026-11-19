@@ -83,6 +83,7 @@ vi.mock("@/hooks/use-billing-v2", () => ({
   usePrepaidBalance: mocks.prepaid,
 }))
 
+import { PlanDetails } from "./plan-overview"
 import { PlanOverviewSection } from "./plan-overview-section"
 
 const summary = {
@@ -789,6 +790,24 @@ describe("a summary that disagrees with the plan", () => {
 })
 
 describe("Settings plan details", () => {
+  it("lets the manage scheduled change link wrap within the card", () => {
+    const scheduledPlan = plan({
+      pending_change: {
+        id: "34971786-dd50-492b-b934-306b63764c4b",
+        plan_key: "free",
+        plan_name: "Free",
+        effective_at: "2026-11-01T00:00:00Z",
+        undoable: true,
+        pauses_running: true,
+      },
+    })
+    render(<PlanDetails plan={scheduledPlan} canManage />)
+
+    expect(
+      screen.getByRole("link", { name: "Manage scheduled change" }),
+    ).toHaveClass("whitespace-normal", "h-auto", "min-h-8", "max-w-full")
+  })
+
   it("manages Auto Reload here and says how to cancel a credit-funded plan", () => {
     mocks.plan.mockReturnValue({
       data: plan({

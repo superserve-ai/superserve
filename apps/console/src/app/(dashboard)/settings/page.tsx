@@ -321,7 +321,7 @@ export default function SettingsPage() {
                     <PlanOverviewSection summary={billingSummaryData} details />
                   </div>
                 ) : null}
-                <div className="border border-border px-4 py-4">
+                <div className="@container border border-border px-4 py-4">
                   <div className="flex items-start justify-between gap-4">
                     <div>
                       <p className="text-sm font-medium text-foreground">
@@ -338,7 +338,7 @@ export default function SettingsPage() {
                         : "Active"}
                     </span>
                   </div>
-                  <dl className="mt-4 grid gap-3 font-mono text-xs md:grid-cols-3">
+                  <dl className="mt-4 grid gap-3 font-mono text-xs wrap-anywhere @lg:grid-cols-3">
                     <div>
                       <dt className="text-muted uppercase">Compute</dt>
                       <dd className="mt-1 text-foreground">
