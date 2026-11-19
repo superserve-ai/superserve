@@ -12,7 +12,12 @@ function safeRelativePath(path: string): string {
     : "/"
 }
 
-/** Validates auth redirects because the URL parser treats `\` as `/` and strips tabs and newlines. */
+/**
+ * Returns `next` when it stays on the console, else "/". The URL parser treats
+ * `\` as `/` and drops tabs and newlines, so "/\host" or "/<tab>/host" would
+ * reach another host. Only the path is percent-decoded and checked again,
+ * because only the path can change the host.
+ */
 export function sanitizeNext(raw: string | null | undefined): string {
   if (!raw) return "/"
   if (!raw.startsWith("/")) {
@@ -21,9 +26,11 @@ export function sanitizeNext(raw: string | null | undefined): string {
       ? raw
       : "/"
   }
+  if (safeRelativePath(raw) !== raw) return "/"
 
   try {
-    let path = raw
+    const pathEnd = raw.search(/[?#]/)
+    let path = pathEnd === -1 ? raw : raw.slice(0, pathEnd)
     for (let round = 0; ; round++) {
       if (safeRelativePath(path) !== path) return "/"
       if (!path.includes("%")) break

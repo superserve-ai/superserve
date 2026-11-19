@@ -9,6 +9,7 @@ describe("sanitizeNext", () => {
     "/\t/evil",
     "/\n/evil",
     "/%5Cevil.example",
+    "/%5C%5Cevil.example?x=1",
     "/%5cevil",
     "/%2F%2Fevil.example",
     "/%252F%252Fevil",
@@ -35,10 +36,12 @@ describe("sanitizeNext", () => {
 
   it.each([
     "/sandboxes?x=1",
+    "/sandboxes?q=100%25",
     "/",
     "/yc/accept?claim=11111111-1111-4111-8111-111111111111",
     "/invite/ssinv_exampletoken",
     "/billing-usage/buy-credit/",
+    "/billing/pro/?return=%2Fsandboxes%3Fq%3D100%2525",
     "/search?q=caf%C3%A9",
     "https://console.superserve.ai/device/abc",
     "https://app.superserve.ai/device/abc",
