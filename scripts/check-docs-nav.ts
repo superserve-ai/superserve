@@ -59,6 +59,11 @@ const EXEMPT_PATHS = new Set([
   "/sandboxes/{sandbox_id}/volumes",
   "/volume-attachments/{attachment_id}",
   "/volume-attachments/{attachment_id}/token",
+  // The read-only usage API is enabled per team behind a feature flag
+  // (sandbox PR 1148) and gets public docs when it opens to all teams.
+  "/billing/usage/summary",
+  "/billing/usage/details",
+  "/billing/usage/storage-references",
 ])
 
 const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)
