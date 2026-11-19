@@ -12,10 +12,9 @@ import {
   Spinner,
 } from "@superserve/ui"
 import Link from "next/link"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 
 import { useSignOut } from "@/hooks/use-sign-out"
-import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
   listTeamsAction,
@@ -106,6 +105,7 @@ function PlanOption({
   card,
   locator,
   highlighted,
+  busy,
   submitting,
   onSubmit,
 }: {
@@ -113,6 +113,7 @@ function PlanOption({
   card: PickerCard
   locator: CheckoutLocator
   highlighted: boolean
+  busy: boolean
   submitting: SignupCheckoutOffer | null
   onSubmit: (offer: SignupCheckoutOffer) => (event: FormEvent) => void
 }) {
@@ -158,7 +159,7 @@ function PlanOption({
         type="submit"
         variant={highlighted ? "default" : "outline"}
         className="mt-auto h-11 w-full"
-        disabled={submitting !== null}
+        disabled={busy}
       >
         {submitting === plan.offer ? (
           <>
@@ -175,6 +176,8 @@ function PlanOption({
 
 // Option values pair region with id, as in the sidebar team switcher: the
 // same team id can exist in two cells.
+type SwitchAttempt = { live: boolean }
+
 function teamKey(team: { id: string; region: string }) {
   return `${team.region}:${team.id}`
 }
@@ -186,13 +189,20 @@ function teamKey(team: { id: string; region: string }) {
 function OtherTeams({
   locator,
   className,
+  busy,
+  switching,
+  onSwitchStart,
+  onSwitchEnd,
 }: {
   locator: CheckoutLocator
   className?: string
+  busy: boolean
+  switching: boolean
+  onSwitchStart: () => SwitchAttempt | null
+  onSwitchEnd: (attempt: SwitchAttempt) => boolean
 }) {
   const [teams, setTeams] = useState<TeamSummary[]>()
   const [picked, setPicked] = useState<string>()
-  const [switching, setSwitching] = useState(false)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let live = true
@@ -222,14 +232,14 @@ function OtherTeams({
     multiRegion ? `${team.name} · ${regionLabel(team.region)}` : team.name
   const selected = teams.find((team) => teamKey(team) === picked) ?? teams[0]!
   const open = async () => {
-    setSwitching(true)
+    const attempt = onSwitchStart()
+    if (!attempt) return
     setFailed(false)
     try {
       await setActiveTeamAction(selected.id, selected.region)
-      window.location.assign("/sandboxes")
+      if (attempt.live) window.location.assign("/sandboxes")
     } catch {
-      setSwitching(false)
-      setFailed(true)
+      if (onSwitchEnd(attempt)) setFailed(true)
     }
   }
   return (
@@ -244,7 +254,7 @@ function OtherTeams({
         <Select
           value={teamKey(selected)}
           onValueChange={(value) => setPicked(value as string)}
-          disabled={switching}
+          disabled={busy}
         >
           <SelectTrigger aria-label="Team to open" className="h-8 min-w-0">
             {/* Base UI's Value renders the raw option value by default. */}
@@ -264,7 +274,7 @@ function OtherTeams({
           variant="outline"
           size="sm"
           className="shrink-0"
-          disabled={switching}
+          disabled={busy}
           onClick={() => void open()}
         >
           {switching ? <Spinner size="sm" /> : null}
@@ -318,7 +328,52 @@ export function PlanPickerOptions({
   }, [account, team, key])
   const current = loaded?.key === key ? loaded : undefined
   const catalog = current?.catalog
-  const { submitting, onSubmit } = useSubmitOnce<SignupCheckoutOffer>()
+  const [submitting, setSubmitting] = useState<SignupCheckoutOffer | null>(null)
+  const [switching, setSwitching] = useState(false)
+  // Claim the navigation synchronously, before React updates the controls.
+  const pending = useRef<"checkout" | SwitchAttempt | null>(null)
+  useEffect(() => {
+    // A page restored from the back-forward cache starts with no navigation.
+    // A switch that was still running when the user left must not act later.
+    const reset = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      if (pending.current !== null && pending.current !== "checkout")
+        pending.current.live = false
+      pending.current = null
+      setSubmitting(null)
+      setSwitching(false)
+    }
+    window.addEventListener("pageshow", reset)
+    return () => window.removeEventListener("pageshow", reset)
+  }, [])
+  const busy = submitting !== null || switching
+  const onSubmit = (offer: SignupCheckoutOffer) => (event: FormEvent) => {
+    if (pending.current !== null) {
+      event.preventDefault()
+      return
+    }
+    pending.current = "checkout"
+    setSubmitting(offer)
+  }
+  const otherTeamsProps = {
+    locator,
+    busy,
+    switching,
+    onSwitchStart: () => {
+      if (pending.current !== null) return null
+      const attempt = { live: true }
+      pending.current = attempt
+      setSwitching(true)
+      return attempt
+    },
+    // Only the attempt that holds the lock can release it.
+    onSwitchEnd: (attempt: SwitchAttempt) => {
+      if (pending.current !== attempt) return false
+      pending.current = null
+      setSwitching(false)
+      return true
+    },
+  }
   const signOut = useSignOut()
 
   if (current === undefined)
@@ -335,7 +390,7 @@ export function PlanPickerOptions({
             one of them to upgrade this team.
           </p>
         )}
-        <OtherTeams locator={locator} />
+        <OtherTeams {...otherTeamsProps} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
@@ -367,7 +422,7 @@ export function PlanPickerOptions({
         {enterprise ? (
           <EnterpriseOption card={enterprise} className="w-full max-w-sm" />
         ) : null}
-        <OtherTeams locator={locator} />
+        <OtherTeams {...otherTeamsProps} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
@@ -392,7 +447,7 @@ export function PlanPickerOptions({
                 type="submit"
                 size="sm"
                 variant={highlighted(offer) ? "default" : "outline"}
-                disabled={submitting !== null}
+                disabled={busy}
               >
                 {submitting === offer ? <Spinner size="sm" /> : null}
                 {label}
@@ -400,7 +455,7 @@ export function PlanPickerOptions({
             </form>
           ))}
         </div>
-        <OtherTeams locator={locator} className="mt-5" />
+        <OtherTeams {...otherTeamsProps} className="mt-5" />
       </div>
     )
   return (
@@ -420,6 +475,7 @@ export function PlanPickerOptions({
             card={pickerCard(plan.catalog, catalog?.cards ?? [])}
             locator={locator}
             highlighted={highlighted(plan.offer)}
+            busy={busy}
             submitting={submitting}
             onSubmit={onSubmit}
           />
@@ -435,7 +491,7 @@ export function PlanPickerOptions({
           />
         ) : null}
       </div>
-      <OtherTeams locator={locator} className="mt-8" />
+      <OtherTeams {...otherTeamsProps} className="mt-8" />
     </div>
   )
 }

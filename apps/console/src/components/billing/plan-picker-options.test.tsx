@@ -277,6 +277,163 @@ describe("PlanPickerOptions", () => {
     expect(screen.getByRole("button", { name: "Open team" })).toBeTruthy()
   })
 
+  describe.each([
+    {
+      picker: "catalog",
+      offers: [
+        offer("developer_monthly", "Builder"),
+        offer("pro_monthly", "Team"),
+      ],
+      buttons: ["Choose Builder", "Choose Team"],
+    },
+    {
+      picker: "fallback",
+      offers: null,
+      buttons: ["Developer", "Pro"],
+    },
+  ])("$picker picker", ({ offers, buttons }) => {
+    async function renderPicker() {
+      mocks.offers = offers
+      mocks.teams = [{ id: "team-2", name: "Side project", region: "use" }]
+      render(<PlanPickerOptions preselected={null} locator={locator} />)
+      const open = await screen.findByRole("button", { name: "Open team" })
+      const select = screen.getByRole("combobox", { name: "Team to open" })
+      const planButtons = buttons.map((name) =>
+        screen.getByRole("button", { name }),
+      )
+      const forms = planButtons.map((button) => button.closest("form")!)
+      return { open, select, planButtons, forms }
+    }
+
+    it("blocks opening another team while checkout is submitting", async () => {
+      vi.stubGlobal("location", { ...window.location, assign: vi.fn() })
+      const { open, select, forms } = await renderPicker()
+      act(() => {
+        expect(fireEvent.submit(forms[0]!)).toBe(true)
+        fireEvent.click(open)
+      })
+      expect(open).toBeDisabled()
+      expect(select).toBeDisabled()
+      fireEvent.click(open)
+      expect(mocks.switchTeam).not.toHaveBeenCalled()
+
+      const pageshow = new Event("pageshow")
+      Object.defineProperty(pageshow, "persisted", { value: true })
+      fireEvent(window, pageshow)
+      expect(open).toBeEnabled()
+      expect(select).toBeEnabled()
+      expect(fireEvent.submit(forms[0]!)).toBe(true)
+    })
+
+    it("accepts a checkout submitted in the same moment the page returns", async () => {
+      const { open, select, forms } = await renderPicker()
+      expect(fireEvent.submit(forms[0]!)).toBe(true)
+
+      const pageshow = new Event("pageshow")
+      Object.defineProperty(pageshow, "persisted", { value: true })
+      act(() => {
+        fireEvent(window, pageshow)
+        expect(fireEvent.submit(forms[1]!)).toBe(true)
+      })
+      expect(open).toBeDisabled()
+      expect(select).toBeDisabled()
+
+      act(() => {
+        fireEvent(window, pageshow)
+      })
+      expect(open).toBeEnabled()
+      expect(fireEvent.submit(forms[0]!)).toBe(true)
+    })
+
+    it("blocks plan submissions while opening another team", async () => {
+      mocks.switchTeam.mockReturnValueOnce(new Promise(() => {}))
+      const { open, planButtons, forms } = await renderPicker()
+      act(() => {
+        fireEvent.click(open)
+        expect(fireEvent.submit(forms[0]!)).toBe(false)
+      })
+      expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
+      for (const button of planButtons) expect(button).toBeDisabled()
+      for (const form of forms) expect(fireEvent.submit(form)).toBe(false)
+    })
+
+    it("re-enables the controls when the page returns after a team switch", async () => {
+      vi.stubGlobal("location", { ...window.location, assign: vi.fn() })
+      const { open, select, planButtons, forms } = await renderPicker()
+      await act(async () => {
+        fireEvent.click(open)
+      })
+      expect(window.location.assign).toHaveBeenCalledWith("/sandboxes")
+      for (const button of planButtons) expect(button).toBeDisabled()
+
+      const pageshow = new Event("pageshow")
+      Object.defineProperty(pageshow, "persisted", { value: true })
+      fireEvent(window, pageshow)
+      for (const button of planButtons) expect(button).toBeEnabled()
+      expect(open).toBeEnabled()
+      expect(select).toBeEnabled()
+      expect(fireEvent.submit(forms[0]!)).toBe(true)
+    })
+
+    it("ignores a team switch that finishes after the page returns", async () => {
+      vi.stubGlobal("location", { ...window.location, assign: vi.fn() })
+      const settle: Array<{
+        resolve: () => void
+        reject: (error: Error) => void
+      }> = []
+      const pendingSwitch = () =>
+        new Promise<void>((resolve, reject) => {
+          settle.push({ resolve, reject })
+        })
+      mocks.switchTeam
+        .mockImplementationOnce(pendingSwitch)
+        .mockImplementationOnce(pendingSwitch)
+        .mockImplementationOnce(pendingSwitch)
+      const { open, planButtons, forms } = await renderPicker()
+      fireEvent.click(open)
+
+      const pageshow = new Event("pageshow")
+      Object.defineProperty(pageshow, "persisted", { value: true })
+      fireEvent(window, pageshow)
+      fireEvent.click(open)
+      expect(mocks.switchTeam).toHaveBeenCalledTimes(2)
+
+      // The first switch fails late: the second switch keeps the lock.
+      await act(async () => settle[0]!.reject(new Error("timed out")))
+      expect(screen.queryByRole("alert")).toBeNull()
+      for (const button of planButtons) expect(button).toBeDisabled()
+      expect(fireEvent.submit(forms[0]!)).toBe(false)
+
+      // A stale success must not navigate either.
+      fireEvent(window, pageshow)
+      fireEvent.click(open)
+      await act(async () => settle[1]!.resolve())
+      expect(window.location.assign).not.toHaveBeenCalled()
+
+      await act(async () => settle[2]!.resolve())
+      expect(window.location.assign).toHaveBeenCalledTimes(1)
+      expect(window.location.assign).toHaveBeenCalledWith("/sandboxes")
+    })
+
+    it("re-enables plan buttons when opening another team fails", async () => {
+      let reject!: (error: Error) => void
+      mocks.switchTeam.mockReturnValueOnce(
+        new Promise((_, rejectSwitch) => {
+          reject = rejectSwitch
+        }),
+      )
+      const { open, planButtons, forms } = await renderPicker()
+      fireEvent.click(open)
+      for (const button of planButtons) expect(button).toBeDisabled()
+      await act(async () => reject(new Error("not a member")))
+      expect(screen.getByRole("alert")).toHaveTextContent(
+        /couldn't open that team/,
+      )
+      for (const button of planButtons) expect(button).toBeEnabled()
+      expect(fireEvent.submit(forms[0]!)).toBe(true)
+    })
+  })
+
   it("offers no other team to a billing administrator with plans and no other team", async () => {
     mocks.offers = [offer("developer_monthly", "Builder")]
     mocks.cards = [card("developer")]
