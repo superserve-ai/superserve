@@ -147,7 +147,7 @@ function SignInContent() {
           data: { user },
           error,
         } = await supabase.auth.getUser()
-        if (cancelled) return
+        if (cancelled || !onPage.current) return
         // Only sign out on explicit auth errors (expired/invalid token), not
         // transient network failures — otherwise a flaky connection would
         // nuke a valid session on every page load.
