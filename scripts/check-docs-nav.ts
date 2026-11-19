@@ -51,6 +51,14 @@ const EXEMPT_PATHS = new Set([
   "/stripe/plan-choice",
   "/stripe/pro-checkout/recover",
   "/stripe/webhook",
+  // Volumes are a gated pilot (sandbox PR 1161) and get public docs at general
+  // availability.
+  "/volumes",
+  "/volumes/{volume_id}",
+  "/volumes/{volume_id}/attachments",
+  "/sandboxes/{sandbox_id}/volumes",
+  "/volume-attachments/{attachment_id}",
+  "/volume-attachments/{attachment_id}/token",
 ])
 
 const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)

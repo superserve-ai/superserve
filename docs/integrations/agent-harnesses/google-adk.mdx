@@ -17,7 +17,7 @@ export ANTHROPIC_API_KEY=sk-ant-...
 
 ADK needs Python 3.11 or later. The examples on this page use Claude through ADK's [LiteLLM connector](https://adk.dev/agents/models/litellm/), which reads `ANTHROPIC_API_KEY` from the environment. The LiteLLM version range is the one that ADK declares for its `extensions` extra. Install the `mcp` extra: without it, LiteLLM 1.106 fails every request that includes tools with `litellm.APIConnectionError: No module named 'mcp'`.
 
-The examples were tested with `google-adk` 2.13.0, `litellm` 1.106.2, and `superserve` 0.11.5. See [API keys](/api-key) to create a Superserve API key.
+The examples were tested with `google-adk` 2.14.1, `litellm` 1.106.2, and `superserve` 0.12.0. See [API keys](/api-key) to create a Superserve API key.
 
 <Note>
   ADK uses Gemini models by default. To use Gemini, pass a model name such as `model="gemini-3.5-flash"` instead of the `LiteLlm` object, and set `GOOGLE_API_KEY` instead of `ANTHROPIC_API_KEY`. You do not need LiteLLM for Gemini. The examples on this page were not tested with Gemini. See [Models](https://adk.dev/agents/models/) in the ADK docs.

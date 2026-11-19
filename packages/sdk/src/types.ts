@@ -6,6 +6,7 @@
  */
 
 import { SandboxError } from "./errors.js"
+import type { SandboxVolumeMount } from "./Volume.js"
 
 // ---------------------------------------------------------------------------
 // Sandbox
@@ -43,6 +44,13 @@ export interface SandboxInfo {
   memoryMaxMib?: number
   /** Memory the sandbox last held; absent when memory is fixed. */
   memoryCurrentMib?: number
+  /**
+   * How long, in seconds, memory must stay low after growing before it
+   * shrinks back. Absent when the platform default applies.
+   */
+  memoryShrinkAfterSeconds?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpuMax?: number
   createdAt: Date
   timeoutSeconds?: number
   /** Pause the sandbox after this many seconds with no activity. */
@@ -73,6 +81,8 @@ export interface ConnectionOptions {
 
 export interface SandboxCreateOptions extends ConnectionOptions {
   name: string
+  /** Existing volumes to mount before returning; independent volumes survive failures. */
+  volumes?: SandboxVolumeMount[]
   /** Template name, UUID, or Template instance. */
   fromTemplate?: string | { name?: string; id: string }
   /**
@@ -138,6 +148,8 @@ export interface SnapshotResources {
   diskMib: number
   /** Ceiling memory can grow to while running; absent when memory is fixed. */
   memoryMaxMib?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpuMax?: number
 }
 
 export interface SnapshotInfo {
@@ -380,6 +392,8 @@ export interface ApiSandboxResponse {
   memory_mib?: number
   memory_max_mib?: number | null
   memory_current_mib?: number | null
+  memory_shrink_after_seconds?: number | null
+  vcpu_max?: number | null
   access_token?: string
   routing_hint?: string
   created_at?: string
@@ -412,6 +426,7 @@ export interface ApiSnapshotResponse {
     memory_mib?: number
     disk_mib?: number
     memory_max_mib?: number | null
+    vcpu_max?: number | null
   }
   created_at?: string
   ready_at?: string | null
@@ -473,6 +488,8 @@ export function toSandboxInfo(raw: ApiSandboxResponse): SandboxInfo {
     memoryMib: raw.memory_mib ?? 0,
     memoryMaxMib: raw.memory_max_mib ?? undefined,
     memoryCurrentMib: raw.memory_current_mib ?? undefined,
+    memoryShrinkAfterSeconds: raw.memory_shrink_after_seconds ?? undefined,
+    vcpuMax: raw.vcpu_max ?? undefined,
     createdAt: new Date(raw.created_at),
     timeoutSeconds: raw.timeout_seconds ?? undefined,
     idleTimeoutSeconds: raw.idle_timeout_seconds ?? undefined,
@@ -512,6 +529,7 @@ export function toSnapshotInfo(raw: ApiSnapshotResponse): SnapshotInfo {
       memoryMib: raw.resources?.memory_mib ?? 0,
       diskMib: raw.resources?.disk_mib ?? 0,
       memoryMaxMib: raw.resources?.memory_max_mib ?? undefined,
+      vcpuMax: raw.resources?.vcpu_max ?? undefined,
     },
     createdAt: new Date(raw.created_at),
     readyAt: raw.ready_at ? new Date(raw.ready_at) : undefined,
@@ -544,6 +562,13 @@ export interface TemplateInfo {
   memoryMib: number
   /** Ceiling memory can grow to while running; absent when memory is fixed. */
   memoryMaxMib?: number
+  /**
+   * How long, in seconds, memory must stay low after growing before it
+   * shrinks back. Absent when the platform default applies.
+   */
+  memoryShrinkAfterSeconds?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpuMax?: number
   diskMib: number
   sizeBytes?: number
   errorMessage?: string
@@ -589,6 +614,19 @@ export interface TemplateCreateOptions extends ConnectionOptions {
    * fixed memory size.
    */
   memoryMaxMib?: number
+  /**
+   * How long, in seconds, a sandbox's memory must stay low after growing
+   * before it shrinks back toward `memoryMib` (60 to 1800). Requires
+   * `memoryMaxMib`. Sandboxes created from the template inherit it. Omit
+   * for the platform default.
+   */
+  memoryShrinkAfterSeconds?: number
+  /**
+   * Ceiling the CPU count can grow to while a sandbox runs; `vcpu` stays the
+   * starting count. Must exceed `vcpu`, be at most 4 times it and 32, and
+   * within the team's vCPU limit. Omit for a fixed CPU count.
+   */
+  vcpuMax?: number
   diskMib?: number
   from: string
   steps?: BuildStep[]
@@ -629,6 +667,8 @@ export interface ApiTemplateResponse {
   vcpu?: number
   memory_mib?: number
   memory_max_mib?: number | null
+  memory_shrink_after_seconds?: number | null
+  vcpu_max?: number | null
   disk_mib?: number
   size_bytes?: number
   error_message?: string
@@ -695,6 +735,8 @@ export function toTemplateInfo(
     vcpu: raw.vcpu ?? 0,
     memoryMib: raw.memory_mib ?? 0,
     memoryMaxMib: raw.memory_max_mib ?? undefined,
+    memoryShrinkAfterSeconds: raw.memory_shrink_after_seconds ?? undefined,
+    vcpuMax: raw.vcpu_max ?? undefined,
     diskMib: raw.disk_mib ?? 0,
     sizeBytes: raw.size_bytes,
     errorMessage: raw.error_message,

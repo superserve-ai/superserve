@@ -40,6 +40,8 @@ interface FakeSandbox {
   autoDeleteSeconds?: number
   timeoutSeconds?: number
   idleTimeoutSeconds?: number
+  memoryShrinkAfterSeconds?: number
+  vcpuMax?: number
   previewAccess: PreviewAccess
   publishedPorts: Map<number, PreviewAccessPolicy>
 }
@@ -179,6 +181,8 @@ export function createFakeClient(): FakeClient {
         vcpu: input.vcpu ?? 2,
         memoryMib: input.memoryMib ?? 2048,
         memoryMaxMib: input.memoryMaxMib,
+        memoryShrinkAfterSeconds: input.memoryShrinkAfterSeconds,
+        vcpuMax: input.vcpuMax,
         diskMib: input.diskMib ?? 8192,
       }
       templates.push(summary)
@@ -196,6 +200,8 @@ export function createFakeClient(): FakeClient {
         createdAt: new Date(0),
         timeoutSeconds: sb.timeoutSeconds,
         idleTimeoutSeconds: sb.idleTimeoutSeconds,
+        memoryShrinkAfterSeconds: sb.memoryShrinkAfterSeconds,
+        vcpuMax: sb.vcpuMax,
         autoDeleteSeconds: sb.autoDeleteSeconds,
         network: sb.network,
         metadata: sb.metadata,

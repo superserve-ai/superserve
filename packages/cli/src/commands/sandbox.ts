@@ -45,6 +45,8 @@ interface SandboxItem {
   vcpu_count?: number
   memory_mib?: number
   memory_max_mib?: number | null
+  memory_shrink_after_seconds?: number | null
+  vcpu_max?: number | null
   snapshot_id?: string
   source_snapshot_id?: string
   created_at?: string
@@ -144,12 +146,15 @@ function shape(s: {
   vcpu_count?: number
   memory_mib?: number
   memory_max_mib?: number | null
+  vcpu_max?: number | null
 }): string {
   if (s.vcpu_count === undefined || s.memory_mib === undefined) return "-"
+  const cpu =
+    s.vcpu_max == null ? s.vcpu_count : `${s.vcpu_count}-${s.vcpu_max}`
   const mem = formatBytes(s.memory_mib * 1024 * 1024)
   return s.memory_max_mib == null
-    ? `${s.vcpu_count} vCPU, ${mem}`
-    : `${s.vcpu_count} vCPU, ${mem}-${formatBytes(s.memory_max_mib * 1024 * 1024)}`
+    ? `${cpu} vCPU, ${mem}`
+    : `${cpu} vCPU, ${mem}-${formatBytes(s.memory_max_mib * 1024 * 1024)}`
 }
 
 function keyValues(m: Record<string, string> | undefined): string | undefined {
@@ -589,6 +594,12 @@ Examples:
         ["Name", s.name],
         ["Status", s.status, statusColor],
         ["Shape", shape(s)],
+        [
+          "Memory shrink after",
+          s.memory_shrink_after_seconds == null
+            ? undefined
+            : `${s.memory_shrink_after_seconds}s`,
+        ],
         ["Created", formatDate(s.created_at)],
         [
           "Timeout",

@@ -18,11 +18,18 @@ export function TemplateInfoGrid({ template }: { template: TemplateResponse }) {
         <div className="border-r border-border px-4 py-4">
           <p className="text-xs text-muted">Resources</p>
           <p className="mt-2 font-mono text-sm text-foreground/80 tabular-nums">
-            {template.vcpu} vCPU &middot; {formatMemory(template.memory_mib)}
+            {template.vcpu}
+            {template.vcpu_max != null && `–${template.vcpu_max}`} vCPU &middot;{" "}
+            {formatMemory(template.memory_mib)}
             {template.memory_max_mib != null &&
               `–${formatMemory(template.memory_max_mib)}`}
             &nbsp;&middot; {formatMemory(template.disk_mib)}
           </p>
+          {template.memory_shrink_after_seconds != null && (
+            <p className="mt-1 text-xs text-muted">
+              Shrinks after {template.memory_shrink_after_seconds}s low
+            </p>
+          )}
         </div>
         <div className="border-r border-border px-4 py-4">
           <p className="text-xs text-muted">Size</p>

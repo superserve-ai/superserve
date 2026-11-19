@@ -52,6 +52,8 @@ export class Template {
   readonly vcpu: number
   readonly memoryMib: number
   readonly memoryMaxMib?: number
+  readonly memoryShrinkAfterSeconds?: number
+  readonly vcpuMax?: number
   readonly diskMib: number
   readonly sizeBytes?: number
   readonly errorMessage?: string
@@ -70,6 +72,8 @@ export class Template {
     this.vcpu = info.vcpu
     this.memoryMib = info.memoryMib
     this.memoryMaxMib = info.memoryMaxMib
+    this.memoryShrinkAfterSeconds = info.memoryShrinkAfterSeconds
+    this.vcpuMax = info.vcpuMax
     this.diskMib = info.diskMib
     this.sizeBytes = info.sizeBytes
     this.errorMessage = info.errorMessage
@@ -100,6 +104,9 @@ export class Template {
     if (options.memoryMib !== undefined) body.memory_mib = options.memoryMib
     if (options.memoryMaxMib !== undefined)
       body.memory_max_mib = options.memoryMaxMib
+    if (options.memoryShrinkAfterSeconds !== undefined)
+      body.memory_shrink_after_seconds = options.memoryShrinkAfterSeconds
+    if (options.vcpuMax !== undefined) body.vcpu_max = options.vcpuMax
     if (options.diskMib !== undefined) body.disk_mib = options.diskMib
 
     const raw = await request<ApiCreateTemplateResponse>({

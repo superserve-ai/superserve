@@ -17,6 +17,8 @@ describe("toSandboxInfo", () => {
     memory_mib: 512,
     memory_max_mib: 2048,
     memory_current_mib: 1024,
+    memory_shrink_after_seconds: 300,
+    vcpu_max: 8,
     created_at: "2026-01-01T00:00:00.000Z",
     timeout_seconds: 600,
     idle_timeout_seconds: 300,
@@ -33,6 +35,8 @@ describe("toSandboxInfo", () => {
     expect(info.memoryMib).toBe(512)
     expect(info.memoryMaxMib).toBe(2048)
     expect(info.memoryCurrentMib).toBe(1024)
+    expect(info.memoryShrinkAfterSeconds).toBe(300)
+    expect(info.vcpuMax).toBe(8)
     expect(info.createdAt).toBeInstanceOf(Date)
     expect(info.createdAt.toISOString()).toBe("2026-01-01T00:00:00.000Z")
     expect(info.timeoutSeconds).toBe(600)
@@ -78,6 +82,8 @@ describe("toSandboxInfo", () => {
     expect(info.memoryMib).toBe(0)
     expect(info.memoryMaxMib).toBeUndefined()
     expect(info.memoryCurrentMib).toBeUndefined()
+    expect(info.memoryShrinkAfterSeconds).toBeUndefined()
+    expect(info.vcpuMax).toBeUndefined()
     expect(info.timeoutSeconds).toBeUndefined()
     expect(info.idleTimeoutSeconds).toBeUndefined()
     expect(info.autoDeleteSeconds).toBeUndefined()
@@ -103,6 +109,8 @@ describe("toTemplateInfo", () => {
       vcpu: 2,
       memory_mib: 2048,
       memory_max_mib: 8192,
+      memory_shrink_after_seconds: 600,
+      vcpu_max: 8,
       disk_mib: 4096,
       size_bytes: 12345,
       created_at: "2026-01-01T00:00:00Z",
@@ -114,6 +122,8 @@ describe("toTemplateInfo", () => {
     expect(info.vcpu).toBe(2)
     expect(info.memoryMib).toBe(2048)
     expect(info.memoryMaxMib).toBe(8192)
+    expect(info.memoryShrinkAfterSeconds).toBe(600)
+    expect(info.vcpuMax).toBe(8)
     expect(info.diskMib).toBe(4096)
     expect(info.sizeBytes).toBe(12345)
     expect(info.createdAt).toBeInstanceOf(Date)
@@ -132,6 +142,8 @@ describe("toTemplateInfo", () => {
       created_at: "2026-01-01T00:00:00Z",
     })
     expect(info.memoryMaxMib).toBeUndefined()
+    expect(info.memoryShrinkAfterSeconds).toBeUndefined()
+    expect(info.vcpuMax).toBeUndefined()
     expect(info.sizeBytes).toBeUndefined()
     expect(info.builtAt).toBeUndefined()
     expect(info.errorMessage).toBeUndefined()

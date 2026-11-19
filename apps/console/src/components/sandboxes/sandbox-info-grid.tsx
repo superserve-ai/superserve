@@ -368,7 +368,8 @@ export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
         <div className="border-r border-border px-4 py-4">
           <p className="text-xs text-muted">Resources</p>
           <p className="mt-2 text-sm text-foreground/80 tabular-nums">
-            {sandbox.vcpu_count} vCPU &middot;{" "}
+            {sandbox.vcpu_count}
+            {sandbox.vcpu_max != null && `–${sandbox.vcpu_max}`} vCPU &middot;{" "}
             {sandbox.memory_max_mib != null &&
             sandbox.memory_current_mib != null
               ? `${sandbox.memory_current_mib} of `
@@ -377,6 +378,11 @@ export function SandboxInfoGrid({ sandbox }: SandboxInfoGridProps) {
             {sandbox.memory_max_mib != null &&
               `–${sandbox.memory_max_mib}`} MB
           </p>
+          {sandbox.memory_shrink_after_seconds != null && (
+            <p className="mt-1 text-xs text-muted">
+              Shrinks after {sandbox.memory_shrink_after_seconds}s low
+            </p>
+          )}
         </div>
         <div className="border-r border-border px-4 py-4">
           <p className="text-xs text-muted">Timeout</p>

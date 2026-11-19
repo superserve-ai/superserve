@@ -352,7 +352,8 @@ def cursor_api(path: str, method: str = "GET", body: Any | None = None) -> Any:
     data = json.dumps(body).encode() if body is not None else None
     req = urllib.request.Request(f"{CURSOR_ENDPOINT}{path}", data=data, method=method)
     req.add_header("Authorization", f"Basic {token}")
-    req.add_header("Content-Type", "application/json")
+    if data is not None:
+        req.add_header("Content-Type", "application/json")
     try:
         with urllib.request.urlopen(req, timeout=30) as resp:
             raw = resp.read()

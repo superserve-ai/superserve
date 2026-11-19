@@ -117,5 +117,12 @@ export function useBillingPayment(
       if (mounted.current) setSubmitting(null)
     }
   }
-  return { submitting, available, openSession }
+  // Only the legacy pay-as-you-go checkout runs from here; v2 teams upgrade
+  // through the plan picker.
+  return {
+    submitting,
+    available,
+    checkoutSupported: legacyCheckout,
+    openSession,
+  }
 }

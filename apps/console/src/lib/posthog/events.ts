@@ -20,11 +20,16 @@ export const AUTH_EVENTS = {
   CLOUDFLARE_SIGNUP_OBSERVATION_FAILED:
     "auth_cloudflare_signup_observation_failed",
   SIGNUP_RECAPTCHA_OBSERVED: "auth_signup_recaptcha_observed",
+  // Observe-only Heedeo evaluation of a sign-up (lib/heedeo/observe.ts).
+  HEEDEO_SIGNUP_OBSERVED: "auth_heedeo_signup_observed",
+  HEEDEO_CAPTURE_DISCARDED: "auth_heedeo_capture_discarded",
   SIGNUP_ATTEMPT_ASSOCIATED: "auth_signup_attempt_associated",
   SIGN_OUT: "auth_sign_out",
   PASSWORD_RESET_REQUESTED: "auth_password_reset_requested",
+  PASSWORD_RESET_FAILED: "auth_password_reset_failed",
   PASSWORD_RESET_COMPLETED: "auth_password_reset_completed",
   DEVICE_AUTHORIZED: "cli_device_authorized",
+  CALLBACK_FAILED: "auth_callback_failed",
 } as const
 
 export const SANDBOX_EVENTS = {
@@ -55,7 +60,10 @@ export const FILE_EVENTS = {
 } as const
 
 export const API_KEY_EVENTS = {
+  // Server-side, after the key row is stored. Fired by mintTeamApiKey.
   CREATED: "api_key_created",
+  // Client-side, when the Create Key dialog submits (before the result).
+  CREATE_CLICKED: "api_key_create_clicked",
   COPIED: "api_key_copied",
   REVOKED: "api_key_revoked",
   BULK_REVOKED: "api_key_bulk_revoked",

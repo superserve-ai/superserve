@@ -9,7 +9,7 @@
   },
   "dependencies": {
     "@anthropic-ai/sdk": "^0.103.0",
-    "@superserve/sdk": "^0.7.0",
+    "@superserve/sdk": "^0.12.0",
     "dotenv": "^16.0.0"
   }
 }

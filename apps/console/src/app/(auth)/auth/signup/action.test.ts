@@ -161,6 +161,21 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+// Heedeo is observe-only and off unless a test turns it on.
+const mockHeedeoEnabled = vi.fn(() => false)
+const mockTakeHeedeoCapture = vi.fn()
+const mockReadHeedeoRequestContext = vi.fn()
+const mockScheduleHeedeo = vi.fn()
+vi.mock("@/lib/heedeo/observe", () => ({
+  isHeedeoObservationEnabled: () => mockHeedeoEnabled(),
+  takeHeedeoSignupCapture: (...args: unknown[]) =>
+    mockTakeHeedeoCapture(...args),
+  readHeedeoRequestContext: (...args: unknown[]) =>
+    mockReadHeedeoRequestContext(...args),
+  scheduleHeedeoSignupObservation: (...args: unknown[]) =>
+    mockScheduleHeedeo(...args),
+}))
+
 const mockAfter = vi.fn()
 vi.mock("next/server", () => ({
   after: (callback: () => void | Promise<void>) => mockAfter(callback),
@@ -258,10 +273,10 @@ describe("post-trial signup with the real Cloudflare observer", () => {
                 )
               : await beginGoogleSignup("recaptcha-token", "turnstile-token")
           expect(result.success).toBe(true)
-          expect(callbacks).toHaveLength(1)
-          await expect(
-            Promise.resolve(callbacks.shift()!()),
-          ).resolves.toBeUndefined()
+          // Google also sends its two PostHog events after the response.
+          expect(callbacks).toHaveLength(method === "email" ? 1 : 3)
+          for (const callback of callbacks.splice(0))
+            await expect(Promise.resolve(callback())).resolves.toBeUndefined()
           const attemptId =
             mockObserveCloudflareSignup.mock.lastCall![0].signupAttemptId
           expect(mockTrackEvent).toHaveBeenCalledWith(
@@ -1010,6 +1025,138 @@ describe("signUpWithEmail", () => {
     },
   )
 
+  describe("Heedeo observation", () => {
+    const capture = { status: "ok", token: "ct1.t", latencyMs: 5 }
+    const context = {
+      clientIp: "203.0.113.7",
+      headers: { ":path": "/auth/signup/" },
+    }
+    beforeEach(() => {
+      mockHeedeoEnabled.mockReset().mockReturnValue(true)
+      mockTakeHeedeoCapture.mockReset().mockResolvedValue(capture)
+      mockReadHeedeoRequestContext.mockReset().mockResolvedValue(context)
+      mockScheduleHeedeo.mockReset()
+    })
+
+    const scheduled = () => {
+      expect(mockScheduleHeedeo).toHaveBeenCalledTimes(1)
+      const observation = mockScheduleHeedeo.mock.calls[0]![0]
+      return typeof observation === "function" ? observation() : observation
+    }
+
+    it("sends the account this attempt created, read after the response", async () => {
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: {
+            id: "user-1",
+            created_at: new Date(Date.now() + 60_000).toISOString(),
+          },
+          properties: { hashed_token: "abc123" },
+        },
+        error: null,
+      })
+
+      const result = await signUpWithEmail(
+        "new@test.com",
+        "password123",
+        "Test User",
+      )
+
+      expect(result).toEqual({ success: true })
+      expect(mockReadHeedeoRequestContext).toHaveBeenCalledWith("/auth/signup/")
+      expect(scheduled()).toEqual({
+        signupAttemptId: expect.any(String),
+        signupMethod: "email",
+        email: "new@test.com",
+        userId: "user-1",
+        status: "succeeded",
+        capture,
+        request: context,
+      })
+    })
+
+    it("sends a refused attempt as failed and leaves the result unchanged", async () => {
+      mockGenerateLink.mockResolvedValue({
+        data: null,
+        error: { message: "User already registered" },
+      })
+
+      const result = await signUpWithEmail(
+        "existing@test.com",
+        "password123",
+        "Test User",
+      )
+
+      expect(result).toEqual({
+        success: false,
+        error: "An account with this email already exists.",
+      })
+      expect(scheduled()).toMatchObject({ userId: null, status: "failed" })
+    })
+
+    it("sends a retry for an older unconfirmed account as failed", async () => {
+      mockGenerateLink.mockResolvedValue({
+        data: {
+          user: { id: "existing-user", created_at: "2020-01-01T00:00:00Z" },
+          properties: { hashed_token: "abc123" },
+        },
+        error: null,
+      })
+
+      const result = await signUpWithEmail(
+        "user@example.com",
+        "password123",
+        "Test User",
+      )
+
+      expect(result).toEqual({ success: true })
+      expect(scheduled()).toMatchObject({
+        userId: null,
+        status: "failed",
+      })
+    })
+
+    it("sends a held Enterprise account as created when its link fails", async () => {
+      mockPricingVersion.mockResolvedValue("v2")
+      mockCreateUser.mockResolvedValue({
+        data: { user: { id: "user-1" } },
+        error: null,
+      })
+      mockGenerateLink.mockRejectedValueOnce(new Error("link unavailable"))
+
+      await signUpWithEmail(
+        "user@test.com",
+        "password123",
+        "Test User",
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        undefined,
+        "enterprise",
+      )
+
+      expect(scheduled()).toMatchObject({
+        userId: "user-1",
+        status: "succeeded",
+      })
+    })
+
+    it("reads nothing when off", async () => {
+      mockHeedeoEnabled.mockReturnValue(false)
+      mockGenerateLink.mockResolvedValue({
+        data: { properties: { hashed_token: "abc123" } },
+        error: null,
+      })
+
+      await signUpWithEmail("new@test.com", "password123", "Test User")
+
+      expect(mockTakeHeedeoCapture).not.toHaveBeenCalled()
+      expect(mockScheduleHeedeo).not.toHaveBeenCalled()
+    })
+  })
+
   it("returns error when email is already registered", async () => {
     mockGenerateLink.mockResolvedValue({
       data: null,
@@ -1550,7 +1697,8 @@ describe("beginGoogleSignup", () => {
       mockBeginSignupEvidenceAttempt.mock.invocationCallOrder[0],
     ).toBeLessThan(mockIssueGoogleSignupProof.mock.invocationCallOrder[0])
     expect(mockIssueGoogleSignupProof).toHaveBeenCalled()
-    expect(mockAfter).toHaveBeenCalledTimes(1)
+    // Cloudflare observation and the two PostHog events.
+    expect(mockAfter).toHaveBeenCalledTimes(3)
     expect(mockObserveCloudflareSignup).toHaveBeenCalledExactlyOnceWith(
       expect.objectContaining({
         signupAttemptId: result.signupAttemptId,
@@ -1746,7 +1894,8 @@ describe("beginGoogleSignup", () => {
 
       const result = await beginGoogleSignup("google-token", "turnstile-token")
 
-      expect(mockAfter).toHaveBeenCalledTimes(1)
+      // Cloudflare observation plus the two PostHog events.
+      expect(mockAfter).toHaveBeenCalledTimes(3)
       expect(mockObserveCloudflareSignup).not.toHaveBeenCalled()
       expect(mockVerifyRecaptcha).toHaveBeenCalledWith(
         "google-token",
@@ -1851,6 +2000,88 @@ describe("beginGoogleSignup", () => {
         entry_point: "signup",
       },
     )
+  })
+
+  describe("PostHog events", () => {
+    let queued: Array<() => void | Promise<void>>
+
+    beforeEach(() => {
+      queued = []
+      mockAfter.mockReset().mockImplementation((callback) => {
+        queued.push(callback)
+      })
+    })
+
+    // Next.js does not wait for one callback before it starts the next.
+    const runQueued = () =>
+      Promise.all(queued.splice(0).map((callback) => callback()))
+
+    it.each([
+      ["verified", { verified: true }, "auth_google_signup_captcha_verified"],
+      [
+        "low_score",
+        { verified: false, reason: "low_score" },
+        "auth_google_signup_captcha_failed",
+      ],
+    ] as const)(
+      "answers a %s check before PostHog flushes its events",
+      async (_case, recaptcha, outcomeEvent) => {
+        mockVerifyRecaptcha.mockResolvedValue(recaptcha)
+        // A flush that never ends must not hold back the answer.
+        mockTrackEvent.mockReset().mockReturnValue(new Promise(() => {}))
+
+        const result = await beginGoogleSignup(
+          "google-token",
+          undefined,
+          undefined,
+          undefined,
+          "signin",
+        )
+
+        expect(result.success).toBe(recaptcha.verified)
+        expect(mockTrackEvent).not.toHaveBeenCalled()
+        void runQueued()
+        await vi.waitFor(() => expect(mockTrackEvent).toHaveBeenCalledTimes(2))
+        expect(mockTrackEvent).toHaveBeenNthCalledWith(
+          1,
+          "auth_signup_recaptcha_observed",
+          expect.any(String),
+          expect.objectContaining({ entry_point: "signin" }),
+        )
+        expect(mockTrackEvent).toHaveBeenNthCalledWith(
+          2,
+          outcomeEvent,
+          expect.any(String),
+          expect.objectContaining({ entry_point: "signin" }),
+        )
+      },
+    )
+
+    it("answers when PostHog cannot be scheduled", async () => {
+      mockAfter.mockReset().mockImplementation((callback) => {
+        if (mockAfter.mock.calls.length > 1)
+          throw new Error("Request lifecycle unavailable")
+        queued.push(callback)
+      })
+
+      await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+        success: true,
+        signupAttemptId: expect.any(String),
+      })
+      expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
+    })
+
+    it("does not let a failed PostHog flush reject the scheduled work", async () => {
+      mockTrackEvent.mockReset().mockRejectedValue(new Error("posthog down"))
+
+      await expect(beginGoogleSignup("google-token")).resolves.toEqual({
+        success: true,
+        signupAttemptId: expect.any(String),
+      })
+      await expect(runQueued()).resolves.toBeDefined()
+      expect(mockTrackEvent).toHaveBeenCalledTimes(2)
+      expect(mockIssueGoogleSignupProof).toHaveBeenCalledOnce()
+    })
   })
 
   it("still issues proof when reCAPTCHA is not configured", async () => {

@@ -12,8 +12,10 @@ import {
   DEFAULT_NETWORK_LOG_LIMIT,
   MAX_AUTO_DELETE_SECONDS,
   MAX_NETWORK_LOG_LIMIT,
+  MAX_MEMORY_SHRINK_AFTER_SECONDS,
   MAX_TIMEOUT_SECONDS,
   MIN_IDLE_TIMEOUT_SECONDS,
+  MIN_MEMORY_SHRINK_AFTER_SECONDS,
 } from "../constants.js"
 import { formatSdkError } from "../lib/errors.js"
 import { RESERVED_PREVIEW_PORT } from "../lib/previewUrl.js"
@@ -66,6 +68,8 @@ interface TemplateCreateArgs {
   vcpu?: number
   memory_mib?: number
   memory_max_mib?: number
+  memory_shrink_after_seconds?: number
+  vcpu_max?: number
   disk_mib?: number
   run_steps?: string[]
   start_cmd?: string
@@ -290,7 +294,7 @@ export function registerLifecycleTools(
           ? templates
               .map(
                 (t) =>
-                  `${t.name}\t${t.status}\t${t.vcpu} vCPU / ${memoryText(t.memoryMib, t.memoryMaxMib)}`,
+                  `${t.name}\t${t.status}\t${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}`,
               )
               .join("\n")
           : "(no templates)"
@@ -346,6 +350,27 @@ export function registerLifecycleTools(
               "memory_mib stays the boot size. Must exceed memory_mib, be at most 4 times it, and differ " +
               "from it by a multiple of 128. Omit for a fixed memory size.",
           ),
+        memory_shrink_after_seconds: z
+          .number()
+          .int()
+          .min(MIN_MEMORY_SHRINK_AFTER_SECONDS)
+          .max(MAX_MEMORY_SHRINK_AFTER_SECONDS)
+          .optional()
+          .describe(
+            "Optional. How long, in seconds, a sandbox's memory must stay low after growing before " +
+              "it shrinks back toward memory_mib (60 to 1800). Requires memory_max_mib. Sandboxes " +
+              "created from the template inherit it. Omit for the platform default.",
+          ),
+        vcpu_max: z
+          .number()
+          .int()
+          .positive()
+          .optional()
+          .describe(
+            "Optional ceiling sandboxes from this template can grow their vCPU count to while running; " +
+              "vcpu stays the starting count. Must exceed vcpu, be at most 4 times it and at most 32. " +
+              "Omit for a fixed vCPU count.",
+          ),
         disk_mib: z
           .number()
           .int()
@@ -384,6 +409,8 @@ export function registerLifecycleTools(
       vcpu,
       memory_mib,
       memory_max_mib,
+      memory_shrink_after_seconds,
+      vcpu_max,
       disk_mib,
       run_steps,
       start_cmd,
@@ -399,13 +426,15 @@ export function registerLifecycleTools(
           vcpu,
           memoryMib: memory_mib,
           memoryMaxMib: memory_max_mib,
+          memoryShrinkAfterSeconds: memory_shrink_after_seconds,
+          vcpuMax: vcpu_max,
           diskMib: disk_mib,
           steps,
           startCmd: start_cmd,
           readyCmd: ready_cmd,
         })
         return toolOk(
-          `building template ${t.name} (${t.vcpu} vCPU / ${memoryText(t.memoryMib, t.memoryMaxMib)}), status ${t.status}. ` +
+          `building template ${t.name} (${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}), status ${t.status}. ` +
             `Poll sandbox_template_list until status is 'ready', then use from_template: "${t.name}".`,
           { template: t },
         )
@@ -483,6 +512,12 @@ export function registerLifecycleTools(
         if (i.memoryMaxMib !== undefined) {
           structured.memory_max_mib = i.memoryMaxMib
         }
+        if (i.memoryShrinkAfterSeconds !== undefined) {
+          structured.memory_shrink_after_seconds = i.memoryShrinkAfterSeconds
+        }
+        if (i.vcpuMax !== undefined) {
+          structured.vcpu_max = i.vcpuMax
+        }
         if (i.timeoutSeconds !== undefined) {
           structured.timeout_seconds = i.timeoutSeconds
         }
@@ -510,7 +545,7 @@ export function registerLifecycleTools(
           }))
         }
         return toolOk(
-          `${i.id} (${i.name}) — ${i.status}, ${i.vcpuCount} vCPU / ${memoryText(i.memoryMib, i.memoryMaxMib)}`,
+          `${i.id} (${i.name}) — ${i.status}, ${cpuText(i.vcpuCount, i.vcpuMax)} / ${memoryText(i.memoryMib, i.memoryMaxMib)}`,
           structured,
         )
       } catch (e) {
@@ -843,6 +878,10 @@ export function registerLifecycleTools(
  * Guards `.toISOString()`, which throws a RangeError on an Invalid Date — a case
  * optional chaining would not catch (the value is a Date object, just NaN).
  */
+function cpuText(min: number, max: number | undefined): string {
+  return max === undefined ? `${min} vCPU` : `${min}-${max} vCPU`
+}
+
 function memoryText(min: number, max: number | undefined): string {
   return max === undefined ? `${min} MiB` : `${min}-${max} MiB`
 }

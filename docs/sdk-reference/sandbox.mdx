@@ -509,6 +509,8 @@ interface SandboxInfo {
   memoryMib: number // boot size
   memoryMaxMib?: number // growth ceiling; absent when memory is fixed
   memoryCurrentMib?: number // memory last held; absent when memory is fixed
+  memoryShrinkAfterSeconds?: number // absent when the default applies
+  vcpuMax?: number // CPU growth ceiling; absent when the vCPU count is fixed
   createdAt: Date
   timeoutSeconds?: number
   idleTimeoutSeconds?: number
@@ -534,6 +536,8 @@ class SandboxInfo(BaseModel):
     memory_mib: int  # boot size
     memory_max_mib: int | None = None  # growth ceiling; None when memory is fixed
     memory_current_mib: int | None = None  # memory last held; None when memory is fixed
+    memory_shrink_after_seconds: int | None = None  # None when the default applies
+    vcpu_max: int | None = None  # CPU growth ceiling; None when the vCPU count is fixed
     created_at: datetime
     timeout_seconds: int | None = None
     idle_timeout_seconds: int | None = None
@@ -649,6 +653,7 @@ Sandbox methods commonly raise:
 - `ValidationError` - bad request body
 - `NotFoundError` - sandbox doesn't exist (except `kill` / `killById`, which swallow 404)
 - `ConflictError` - wrong state (e.g., pausing an already-paused sandbox, or patching `network` while paused)
+- `BillingError` - billing does not allow the sandbox to start (on create, resume, or the automatic resume in `connect`). `actionUrl` / `action_url` links to where the user can add a card and choose a plan. See [Billing errors](/errors#billing-errors-402).
 - `ServerError` - platform error
 
 See [Errors](/errors) for the full hierarchy.

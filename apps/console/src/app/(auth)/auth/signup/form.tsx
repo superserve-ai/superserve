@@ -25,8 +25,16 @@ import {
   ensureFingerprintSignupCapture,
   getFingerprintSignupDiagnostics,
 } from "@/lib/fingerprint/client"
+import {
+  captureHeedeoSignup,
+  heedeoPreloadProps,
+  settleHeedeoSignup,
+} from "@/lib/heedeo/client"
 import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
+import { captureBestEffort } from "@/lib/posthog/capture"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
+import { RECAPTCHA_SITE_KEY, getRecaptchaToken } from "@/lib/recaptcha/client"
+import { RecaptchaScript } from "@/lib/recaptcha/script"
 import { createBrowserClient } from "@/lib/supabase/client"
 
 import {
@@ -38,35 +46,8 @@ import {
   signUpWithEmail,
 } from "./action"
 
-const RECAPTCHA_SITE_KEY = process.env.NEXT_PUBLIC_RECAPTCHA_SITE_KEY
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
-
-declare global {
-  interface Window {
-    grecaptcha?: {
-      enterprise: {
-        ready: (callback: () => void) => void
-        execute: (
-          siteKey: string,
-          options: { action: string },
-        ) => Promise<string>
-      }
-    }
-  }
-}
-
-const waitForGrecaptcha = async (timeoutMs = 8000): Promise<boolean> => {
-  if (window.grecaptcha) return true
-  const start = Date.now()
-  while (Date.now() - start < timeoutMs) {
-    await new Promise((resolve) => setTimeout(resolve, 100))
-    if (window.grecaptcha) return true
-  }
-  return false
-}
-
-const RECAPTCHA_EXECUTE_TIMEOUT_MS = 8000
 
 // A failed bot-check is a retry, not a dead end: say what the user can change.
 const CAPTCHA_FAILED_MESSAGE =
@@ -96,32 +77,6 @@ const RESEND_COOLDOWN_SECONDS = 60
 const BOT_CHECK_UNAVAILABLE =
   "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
 
-const getRecaptchaToken = async (
-  action: string,
-): Promise<string | undefined> => {
-  if (!RECAPTCHA_SITE_KEY) return undefined
-  if (!(await waitForGrecaptcha())) return undefined
-  try {
-    const tokenPromise = new Promise<string>((resolve, reject) => {
-      window.grecaptcha!.enterprise.ready(() => {
-        window
-          .grecaptcha!.enterprise.execute(RECAPTCHA_SITE_KEY, { action })
-          .then(resolve)
-          .catch(reject)
-      })
-    })
-    const timeoutPromise = new Promise<never>((_, reject) =>
-      setTimeout(
-        () => reject(new Error("recaptcha_execute_timeout")),
-        RECAPTCHA_EXECUTE_TIMEOUT_MS,
-      ),
-    )
-    return await Promise.race([tokenPromise, timeoutPromise])
-  } catch {
-    return undefined
-  }
-}
-
 function sanitizeNext(raw: string | null): string {
   const next = raw ?? "/"
   if (next.startsWith("/") && !next.startsWith("//")) return next
@@ -132,6 +87,38 @@ function sanitizeNext(raw: string | null): string {
 export default function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isGoogleLoading, setIsGoogleLoading] = useState(false)
+  // One per running sign-up attempt. An attempt aborts its own when it ends,
+  // so a Heedeo capture it no longer waits for starts no identify and writes
+  // no cookie; unmounting aborts them all.
+  const heedeoAttempts = useRef(new Set<AbortController>())
+  // A recovery continuation can still start an attempt after unmount. Its
+  // capture starts aborted; the rest of the attempt runs as before.
+  const unmounted = useRef(false)
+  useEffect(() => {
+    unmounted.current = false
+    const attempts = heedeoAttempts.current
+    return () => {
+      unmounted.current = true
+      for (const attempt of attempts) attempt.abort()
+      attempts.clear()
+    }
+  }, [])
+  const startHeedeoCapture = () => {
+    const attempt = new AbortController()
+    const late = unmounted.current
+    if (late) attempt.abort()
+    else heedeoAttempts.current.add(attempt)
+    return {
+      capture: captureHeedeoSignup(undefined, attempt.signal),
+      // The page unmounted during the Heedeo wait, so the attempt starts no
+      // sign-up or redirect.
+      gone: () => !late && attempt.signal.aborted,
+      end: () => {
+        attempt.abort()
+        heedeoAttempts.current.delete(attempt)
+      },
+    }
+  }
   const [formValues, setFormValues] = useState({
     fullName: "",
     email: "",
@@ -224,6 +211,8 @@ export default function SignUpContent() {
       return
     }
     setIsLoading(true)
+    // Observe-only, beside the other checks; never fails the sign-up.
+    const heedeo = startHeedeoCapture()
     try {
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
@@ -233,11 +222,15 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "email",
+          reason: "captcha_not_loaded",
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
+      await settleHeedeoSignup(heedeo.capture)
+      if (heedeo.gone()) return
       const result = await signUpWithEmail(
         email,
         password,
@@ -281,6 +274,7 @@ export default function SignUpContent() {
     } catch {
       setErrors({ form: "Error creating account. Please try again." })
     } finally {
+      heedeo.end()
       setIsLoading(false)
     }
   }
@@ -397,6 +391,8 @@ export default function SignUpContent() {
   const handleGoogleSignIn = async (chooseAccount = false) => {
     setIsGoogleLoading(true)
     setErrors({})
+    // Observe-only, beside the other checks; never fails the sign-up.
+    const heedeo = startHeedeoCapture()
     try {
       const capture = await ensureFingerprintSignupCapture()
       const fingerprintDiagnostics = getFingerprintSignupDiagnostics()
@@ -406,9 +402,12 @@ export default function SignUpContent() {
         ? await getTurnstileToken()
         : undefined
       if (RECAPTCHA_SITE_KEY && !recaptchaToken) {
-        setErrors({
-          form: "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again.",
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: "captcha_not_loaded",
+          complete_google: isCompleteGoogleSignup,
         })
+        setErrors({ form: BOT_CHECK_UNAVAILABLE })
         return
       }
 
@@ -419,6 +418,11 @@ export default function SignUpContent() {
         fingerprintDiagnostics,
       )
       if (!proof.success) {
+        captureBestEffort(posthog, AUTH_EVENTS.SIGN_UP_FAILED, {
+          method: "google",
+          reason: proof.errorCode,
+          complete_google: isCompleteGoogleSignup,
+        })
         setErrors({
           form:
             proof.errorCode === "captcha_failed"
@@ -427,6 +431,9 @@ export default function SignUpContent() {
         })
         return
       }
+      // Only the callback reads Heedeo's cookie, so the proof does not wait.
+      await heedeo.capture
+      if (heedeo.gone()) return
       const loginHint =
         isCompleteGoogleSignup && !chooseAccount
           ? await loadRecoveryAccount()
@@ -458,6 +465,7 @@ export default function SignUpContent() {
     } catch {
       setErrors({ form: "Error signing in. Please try again." })
     } finally {
+      heedeo.end()
       setIsGoogleLoading(false)
     }
   }
@@ -491,12 +499,7 @@ export default function SignUpContent() {
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">
-      {RECAPTCHA_SITE_KEY && (
-        <Script
-          src={`https://www.google.com/recaptcha/enterprise.js?render=${RECAPTCHA_SITE_KEY}`}
-          strategy="afterInteractive"
-        />
-      )}
+      <RecaptchaScript />
       {TURNSTILE_SITE_KEY && (
         <Script src={TURNSTILE_SCRIPT_SRC} strategy="afterInteractive" />
       )}
@@ -562,6 +565,7 @@ export default function SignUpContent() {
               type="button"
               variant="outline"
               onClick={() => handleGoogleSignIn()}
+              {...heedeoPreloadProps}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
@@ -580,6 +584,7 @@ export default function SignUpContent() {
                 <button
                   type="button"
                   onClick={() => handleGoogleSignIn(true)}
+                  {...heedeoPreloadProps}
                   disabled={isGoogleLoading || isLoading}
                   className="font-medium text-foreground hover:underline disabled:opacity-50"
                 >
@@ -597,6 +602,7 @@ export default function SignUpContent() {
               type="button"
               variant="outline"
               onClick={() => handleGoogleSignIn()}
+              {...heedeoPreloadProps}
               disabled={isGoogleLoading || isLoading}
               className="w-full gap-2 border-solid font-sans tracking-normal normal-case"
             >
@@ -611,7 +617,12 @@ export default function SignUpContent() {
                 <span className="bg-surface px-3 text-muted">or</span>
               </div>
             </div>
-            <form onSubmit={handleSignUp} className="space-y-3">
+            {/* Heedeo loads on the sign-up controls, not with the page. */}
+            <form
+              onSubmit={handleSignUp}
+              className="space-y-3"
+              {...heedeoPreloadProps}
+            >
               <Input
                 type="text"
                 placeholder="Full Name"

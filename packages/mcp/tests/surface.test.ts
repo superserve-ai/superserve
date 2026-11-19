@@ -87,6 +87,24 @@ describe("network rules + sandbox_update (in-memory, fake client)", () => {
     info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
     expect(info.structured.idle_timeout_seconds).toBeUndefined()
   })
+
+  it("sandbox_info returns inherited memory_shrink_after_seconds and vcpu_max", async () => {
+    const fake = createFakeClient()
+    const c = await connect(fake.client)
+    try {
+      const created = await callTool(c.client, "sandbox_create", { name: "s" })
+      const id = created.structured.id as string
+      fake.sandboxes.get(id)!.memoryShrinkAfterSeconds = 300
+      fake.sandboxes.get(id)!.vcpuMax = 8
+
+      const info = await callTool(c.client, "sandbox_info", { sandbox_id: id })
+      expect(info.structured.memory_shrink_after_seconds).toBe(300)
+      expect(info.structured.vcpu_max).toBe(8)
+      expect(info.text).toContain("2-8 vCPU")
+    } finally {
+      await c.close()
+    }
+  })
 })
 
 describe("secrets (in-memory, fake client)", () => {
@@ -156,6 +174,8 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
       vcpu: 4,
       memory_mib: 8192,
       memory_max_mib: 16384,
+      memory_shrink_after_seconds: 600,
+      vcpu_max: 8,
       run_steps: ["pip install numpy"],
     })
     expect(r.isError).toBe(false)
@@ -163,7 +183,9 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
     expect(t.name).toBe("my-4cpu")
     expect(t.vcpu).toBe(4)
     expect(t.memoryMaxMib).toBe(16384)
-    expect(r.text).toContain("8192-16384 MiB")
+    expect(t.memoryShrinkAfterSeconds).toBe(600)
+    expect(t.vcpuMax).toBe(8)
+    expect(r.text).toContain("4-8 vCPU / 8192-16384 MiB")
     expect(t.status).toBe("building")
     // The agent is told to poll until ready before using it.
     expect(r.text).toMatch(/ready/)
