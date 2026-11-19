@@ -579,7 +579,7 @@ The UI lists only the models that OpenHands has verified. Use a model from `GET 
 
 ### Open the UI
 
-Publish port `8000` as private and get a signed URL for your browser:
+Publish port `8000` as private and get a signed URL for your browser. The example prints the URL and the backend key, so run it only in a terminal that you trust, not in CI or a shared notebook:
 
 <CodeGroup>
 ```typescript TypeScript
@@ -611,7 +611,7 @@ The agent runs its commands in the sandbox, and the conversation shows each step
 The UI can run any command in the sandbox, so protect both credentials:
 
 - The private port needs a preview credential: the signed URL, its cookie, or a header token. The backend key is a second layer that Agent Canvas checks on every API request.
-- Treat the signed URL and the backend key as secrets. Don't log them or share them.
+- Treat the signed URL and the backend key as secrets. Don't keep them in CI logs, shared notebooks, or chat.
 - Keep `--public`. Don't use `--allow-lan-session-key` or publish port `8000` as `public`.
 - To revoke browser access, call `rotatePreviewToken(8000)` / `rotate_preview_token(8000)`, then send a new signed URL.
 - The agent can reach any host that the sandbox can reach. To limit this, [restrict the network](#restrict-the-network).
