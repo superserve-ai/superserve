@@ -1495,7 +1495,7 @@ describe("auth callback", () => {
 
   it("keeps a first-time Google sign-up with an unsafe next on the console", async () => {
     googleMembershipState = { kind: "first_time" }
-    mockHasValidGoogleSignupProof.mockResolvedValue(true)
+    mockHasValidGoogleSignupProof.mockResolvedValue(false)
 
     const next = "/\\evil.example/qa"
     const response = await GET(
@@ -1504,10 +1504,12 @@ describe("auth callback", () => {
       ),
     )
 
-    const location = response.headers.get("location")!
-    expect(mockMarkGoogleSignupAttempt).toHaveBeenCalledWith("attempt-1", "u1")
-    expect(new URL(location).origin).toBe("https://console.superserve.ai")
-    expect(location).not.toContain("evil")
+    const location = new URL(response.headers.get("location")!)
+    expect(location.origin).toBe("https://console.superserve.ai")
+    expect(location.pathname).toBe("/auth/signup")
+    expect(location.searchParams.get("complete_google")).toBe("1")
+    expect(location.href).not.toContain("evil")
+    expect(location.searchParams.get("next")).toBeNull()
   })
 
   it("preserves a sandbox next with a query without a user", async () => {
