@@ -158,7 +158,8 @@ function SignInContent() {
               : nextUrl
           // Password recovery can return here with a live session and a saved team.
           await settleTeamForDestination(destination)
-          if (cancelled) return
+          // A password sign-in that finished meanwhile owns the redirect now.
+          if (cancelled || redirectOwner.current !== claim) return
           window.location.replace(destination)
         }
       } catch {
@@ -231,13 +232,10 @@ function SignInContent() {
         nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
           ? signInOfferDestination(rawOffer)
           : nextUrl
-      // The session check already leaves for the same destination.
-      if (redirectOwner.current !== null) {
-        navigating = true
-        return
-      }
       // The user left the page before sign-in finished.
       if (!mounted.current) return
+      // The new session takes over from a session check that may have
+      // settled the team of the session that was there before.
       redirectOwner.current = {}
       await settleTeamForDestination(dest)
       // The user left the page while the team was settling.

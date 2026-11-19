@@ -1110,6 +1110,54 @@ describe("SignInPage", () => {
       expect(mockReplace).toHaveBeenCalledTimes(1)
     })
 
+    it("lets a password sign-in take over from a session check for an earlier session", async () => {
+      let finishGetUser!: (value: unknown) => void
+      mockGetUser.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishGetUser = resolve
+        }),
+      )
+      let finishSignIn!: (value: unknown) => void
+      mockSignInWithPassword.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSignIn = resolve
+        }),
+      )
+      let finishEarlierSettle!: (value: null) => void
+      mockSettle.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishEarlierSettle = resolve
+        }),
+      )
+
+      render(<SignInPage />)
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "person@example.com",
+      )
+      await user.type(
+        screen.getByPlaceholderText("Password"),
+        "example-password",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+      // The earlier session is found and starts settling its team.
+      await act(async () =>
+        finishGetUser({ data: { user: { id: "earlier" } }, error: null }),
+      )
+      expect(mockSettle).toHaveBeenCalledTimes(1)
+
+      // The new password session settles its own team and redirects.
+      await act(async () => finishSignIn({ error: null }))
+      await waitFor(() => expect(mockSettle).toHaveBeenCalledTimes(2))
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledExactlyOnceWith("/"),
+      )
+
+      await act(async () => finishEarlierSettle(null))
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+    })
+
     it.each([401, 403])(
       "signs out after a %s session error without settling",
       async (status) => {
