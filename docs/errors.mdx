@@ -57,6 +57,8 @@ except SandboxError:
 ```
 </CodeGroup>
 
+A `NotFoundError` for a sandbox does not tell you whether it was deleted or never existed. To find out, see [Check whether a sandbox was deleted](/sandbox/lifecycle#check-whether-a-sandbox-was-deleted).
+
 ## Base error properties
 
 Every SDK error extends `SandboxError` and exposes:
