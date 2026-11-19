@@ -37,6 +37,7 @@ This example scores two candidate programs for the same task, each in its own sa
 
 <CodeGroup>
 ```typescript TypeScript
+import { randomUUID } from "node:crypto"
 import { Sandbox } from "@superserve/sdk"
 
 const candidates = [
@@ -46,10 +47,12 @@ const candidates = [
 
 const check = "import json\nfrom solution import add\nprint(json.dumps(add(2, 3)))\n"
 const expected = "5"
+const runId = randomUUID()
+const concurrency = 4
 
-async function score(program: string): Promise<number> {
+async function score(program: string, i: number): Promise<number> {
   const sandbox = await Sandbox.create({
-    name: "eval-trial",
+    name: `eval-trial-${runId}-${i}`,
     fromTemplate: "superserve/python-3.11",
     network: { denyOut: ["0.0.0.0/0"] },
   })
@@ -67,12 +70,17 @@ async function score(program: string): Promise<number> {
   }
 }
 
-const rewards = await Promise.all(candidates.map(score))
+const rewards: number[] = []
+for (let start = 0; start < candidates.length; start += concurrency) {
+  const batch = candidates.slice(start, start + concurrency)
+  rewards.push(...await Promise.all(batch.map((program, i) => score(program, start + i))))
+}
 console.log(rewards) // [ 1, 0 ]
 ```
 
 ```python Python
 import asyncio
+from uuid import uuid4
 
 from superserve import AsyncSandbox, NetworkConfig
 
@@ -83,11 +91,12 @@ candidates = [
 
 check = "import json\nfrom solution import add\nprint(json.dumps(add(2, 3)))\n"
 expected = "5"
+run_id = uuid4().hex
 
 
-async def score(program: str) -> float:
+async def score(program: str, i: int) -> float:
     sandbox = await AsyncSandbox.create(
-        name="eval-trial",
+        name=f"eval-trial-{run_id}-{i}",
         from_template="superserve/python-3.11",
         network=NetworkConfig(deny_out=["0.0.0.0/0"]),
     )
@@ -102,7 +111,13 @@ async def score(program: str) -> float:
 
 
 async def main() -> None:
-    rewards = await asyncio.gather(*(score(p) for p in candidates))
+    limit = asyncio.Semaphore(4)
+
+    async def score_limited(i: int, program: str) -> float:
+        async with limit:
+            return await score(program, i)
+
+    rewards = await asyncio.gather(*(score_limited(i, p) for i, p in enumerate(candidates)))
     print(rewards)  # [1.0, 0.0]
 
 
@@ -111,7 +126,10 @@ asyncio.run(main())
 </CodeGroup>
 
 - Keep the expected values out of the sandbox. Code in the sandbox can read every file there, so a check that holds the answer lets the model's code find it.
-- Past your team's active sandbox limit, `create` fails with [`too_many_sandboxes`](/errors#ratelimiterror). For large batches, limit how many trials run at the same time.
+- Each name includes a run identifier and trial index. This avoids ambiguous CLI lookups by name, including across concurrent runs.
+- TypeScript runs batches of at most four trials. Python uses `asyncio.Semaphore(4)` to limit active trials, including sandbox creation and deletion.
+- Choose a concurrency limit that leaves room for your team's other sandboxes. At the active sandbox limit, `create` fails with [`too_many_sandboxes`](/errors#ratelimiterror).
+- Each check has a 30-second command limit. Check the exit code when a command times out. See [command timeouts](/commands/overview#timeouts).
 - For a trial that runs an agent for several turns, keep the sandbox for the whole episode and delete it at the end. See [OpenEnv](/integrations/evaluations/openenv).
 
 ## Integrations
