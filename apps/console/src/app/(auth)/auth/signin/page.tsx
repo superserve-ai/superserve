@@ -74,6 +74,15 @@ function withinDeadline<T>(
   })
 }
 
+async function settleTeamForDestination(destination: string) {
+  if (!isPlainDashboardPath(destination)) return
+  try {
+    await withinDeadline(settleActiveTeamAction(), SETTLE_TEAM_CLIENT_WAIT_MS)
+  } catch {
+    // Continue sign-in if the preference cannot be settled.
+  }
+}
+
 function SignInContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [isEmailLoading, setIsEmailLoading] = useState(false)
@@ -114,7 +123,14 @@ function SignInContent() {
     ? `/auth/forgot-password?${new URLSearchParams({ next: invite })}`
     : "/auth/forgot-password"
 
+  // False once the page unmounts, so a sign-in still waiting on its checks
+  // does not navigate away from the page the user went to.
+  const mounted = useRef(false)
+  // Only one path (the session check or the form) settles the team and leaves.
+  const redirectOwner = useRef<object | null>(null)
   useEffect(() => {
+    let cancelled = false
+    let claim: object | null = null
     const checkUser = async () => {
       const supabase = createBrowserClient()
       try {
@@ -122,27 +138,43 @@ function SignInContent() {
           data: { user },
           error,
         } = await supabase.auth.getUser()
+        if (cancelled) return
         // Only sign out on explicit auth errors (expired/invalid token), not
         // transient network failures — otherwise a flaky connection would
         // nuke a valid session on every page load.
         if (error?.status === 401 || error?.status === 403) {
+          // A password sign-in that finished meanwhile has a new session.
+          if (redirectOwner.current !== null) return
           await supabase.auth.signOut()
           return
         }
-        if (user) {
+        if (user && redirectOwner.current === null) {
+          claim = {}
+          redirectOwner.current = claim
           setIsEmailLoading(true)
-          window.location.replace(
+          const destination =
             nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
               ? signInOfferDestination(rawOffer)
-              : nextUrl,
-          )
+              : nextUrl
+          // Password recovery can return here with a live session and a saved team.
+          await settleTeamForDestination(destination)
+          if (cancelled) return
+          window.location.replace(destination)
         }
       } catch {
-        setIsEmailLoading(false)
+        if (!cancelled) setIsEmailLoading(false)
         // Network error: leave the session alone.
       }
     }
     checkUser()
+    return () => {
+      cancelled = true
+      // Let the next session check, if any, take over the redirect.
+      if (claim !== null && redirectOwner.current === claim) {
+        redirectOwner.current = null
+        setIsEmailLoading(false)
+      }
+    }
   }, [nextUrl, rawOffer])
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
@@ -199,16 +231,17 @@ function SignInContent() {
         nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
           ? signInOfferDestination(rawOffer)
           : nextUrl
-      if (isPlainDashboardPath(dest)) {
-        try {
-          await withinDeadline(
-            settleActiveTeamAction(),
-            SETTLE_TEAM_CLIENT_WAIT_MS,
-          )
-        } catch {
-          // Continue sign-in if the preference cannot be settled.
-        }
+      // The session check already leaves for the same destination.
+      if (redirectOwner.current !== null) {
+        navigating = true
+        return
       }
+      // The user left the page before sign-in finished.
+      if (!mounted.current) return
+      redirectOwner.current = {}
+      await settleTeamForDestination(dest)
+      // The user left the page while the team was settling.
+      if (!mounted.current) return
       window.location.replace(dest)
       navigating = true
     } catch (err) {
@@ -278,9 +311,6 @@ function SignInContent() {
     }
   }
 
-  // False once the page unmounts, so a Google attempt still waiting on its
-  // checks does not navigate away from the page the user went to.
-  const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
     prefetchGoogleSignupCheck()
