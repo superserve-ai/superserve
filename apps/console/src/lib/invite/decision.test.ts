@@ -38,6 +38,24 @@ describe("decideInviteView", () => {
     ).toEqual({ kind: "unavailable", signedIn: true })
   })
 
+  it.each([
+    ["accepted", true, "already_member"],
+    ["accepted", false, "unavailable"],
+    ["revoked", true, "unavailable"],
+  ])(
+    "for a closed %s invitation and member=%s shows %s",
+    (status, memberOfTeam, kind) => {
+      expect(
+        decideInviteView({
+          preview: { ...preview, available: false, status },
+          viewer: matching,
+          teamState: "has_teams",
+          memberOfTeam,
+        }).kind,
+      ).toBe(kind)
+    },
+  )
+
   it("asks a signed-out visitor to create an account or sign in", () => {
     expect(
       decideInviteView({ preview, viewer: null, teamState: "unknown" }),

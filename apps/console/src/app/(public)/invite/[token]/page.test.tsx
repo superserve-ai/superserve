@@ -47,6 +47,33 @@ describe("InvitePage role copy", () => {
       expect(screen.queryByText(/join as an owner/i)).not.toBeInTheDocument()
     },
   )
+  it.each([
+    ["signed_out", "Sent to person@example.com"],
+    [
+      "confirm",
+      "Signed in as person@example.com, the address this invitation was sent to",
+    ],
+  ])("names the invited email on the %s view", async (kind, text) => {
+    mocks.load.mockResolvedValue({
+      view: {
+        kind,
+        preview: {
+          teamName: "Example team",
+          email: "person@example.com",
+          region: "use",
+          expiresAt: "2026-11-14T00:00:00Z",
+        },
+        signedInEmail: "person@example.com",
+      },
+    })
+    render(
+      await InvitePage({
+        params: Promise.resolve({ token }),
+        searchParams: Promise.resolve({}),
+      }),
+    )
+    expect(screen.getByText(text)).toBeInTheDocument()
+  })
   it("keeps legacy Owner copy without a role", async () => {
     mocks.load.mockResolvedValue({
       view: {

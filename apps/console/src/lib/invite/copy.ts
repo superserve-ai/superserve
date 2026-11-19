@@ -14,6 +14,7 @@ export const INVITE_COPY = {
     createAccount: "Create account",
     signIn: "Sign in",
     expires: (date: string) => `This invitation expires ${date}.`,
+    sentTo: (email: string) => `Sent to ${email}`,
   },
 
   confirm: {
@@ -23,7 +24,8 @@ export const INVITE_COPY = {
     join: "Join team",
     joining: "Joining...",
     notNow: "Not now",
-    signedInAs: (email: string) => `Signed in as ${email}`,
+    signedInAs: (email: string) =>
+      `Signed in as ${email}, the address this invitation was sent to`,
     notNowKeepsOpen: (date: string) =>
       `Not now keeps this invite open until ${date}.`,
     failed: "We couldn't add you to the team. Please try again.",
