@@ -1067,7 +1067,7 @@ describe("PlanUsagePage", () => {
     expect(screen.getByText("Usage Details")).toBeInTheDocument()
     expect(
       screen.getByRole("button", { name: "Yesterday" }).parentElement,
-    ).toHaveClass("flex-wrap")
+    ).toHaveClass("flex-wrap", "lg:shrink-0")
     expect(screen.queryByText(/Last updated:/i)).not.toBeInTheDocument()
     expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
     expect(screen.queryByTestId("usage-cards-grid")).not.toBeInTheDocument()
