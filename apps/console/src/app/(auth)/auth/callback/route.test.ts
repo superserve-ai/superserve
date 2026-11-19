@@ -1458,6 +1458,55 @@ describe("auth callback", () => {
     })
   })
 
+  it.each([
+    "/\\evil.example/qa",
+    "/\\\\evil",
+    "/\t/evil",
+    "/%5Cevil.example",
+    "//evil.example",
+    "https://evil.example",
+  ])(
+    "falls back to the root for unsafe next %j without a user",
+    async (next) => {
+      currentUser = null
+      const callback = "https://console.superserve.ai/auth/callback?code=abc"
+      const response = await GET(
+        new Request(`${callback}&next=${encodeURIComponent(next)}`),
+      )
+
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/",
+      )
+    },
+  )
+
+  it("redirects a signed-in user with an unsafe next to the sandbox page", async () => {
+    const next = "/\\evil.example/qa"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+      ),
+    )
+
+    expect(response.headers.get("location")).toBe(
+      "https://console.superserve.ai/sandboxes",
+    )
+  })
+
+  it("preserves a sandbox next with a query without a user", async () => {
+    currentUser = null
+    const next = "/sandboxes?x=1"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+      ),
+    )
+
+    expect(response.headers.get("location")).toBe(
+      "https://console.superserve.ai/sandboxes?x=1",
+    )
+  })
+
   it.each(["code=abc", "token_hash=token&type=signup"])(
     "preserves the YC approval locator through %s",
     async (auth) => {
