@@ -133,7 +133,7 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 
 After a delete, `GET /sandboxes/{sandbox_id}` and other calls that act on the sandbox return `404`, the same answer as for an ID that never existed. When you keep sandbox IDs in your own records, send them to [`POST /sandboxes/lookup`](/api-reference/sandboxes/look-up-the-status-of-a-batch-of-sandboxes) to find out which ones still exist. The SDKs and the CLI do not have a method for this endpoint yet, so call the REST API.
 
-Send your API key in the `X-API-Key` header to the API URL for your key's region (see [API key](/api-key)), with up to 1,000 IDs in `sandbox_ids`. The key needs the same access as listing the team's sandboxes; otherwise the request fails with `403`. The example uses `https://api.superserve.ai`, the API URL for keys without a region; replace it with your region's API URL.
+Send your API key in the `X-API-Key` header to the API URL for your key's region (see [API key](/api-key)), with up to 1,000 IDs in `sandbox_ids`. The key needs the same access as listing the team's sandboxes; otherwise the request fails with `403`. The example uses `https://api.superserve.ai`, the API URL for `ss_live_use_` keys and keys without a region. For an `ss_live_usw_` key, use `https://api-usw.superserve.ai`.
 
 ```bash
 curl -X POST https://api.superserve.ai/sandboxes/lookup \
