@@ -240,7 +240,7 @@ Throws `SandboxError` if no `buildId` is supplied and the template has no builds
 
 The stream carries log lines only while the build runs. For a build that already finished, TypeScript returns without calling `onEvent`.
 
-In Python, `stream_build_logs` raises `SandboxError("Invalid log event: missing timestamp")` when the stream ends, because the stream's final event has no timestamp. It raises after it delivered every log line, and for a finished build it raises without calling `on_event`. The example above ignores that error. `wait_until_ready(on_log=...)` doesn't raise it.
+In Python, `stream_build_logs` raises `SandboxError("Invalid log event: missing timestamp")` when the stream ends, because the stream's final event has no timestamp. It raises after it delivered every log line, and for a finished build it raises without calling `on_event`. The example above ignores that error. `wait_until_ready(on_log=...)` doesn't raise it. For a failed build, `stream_build_logs` raises `ValueError` at the build's `error` event instead; see [`BuildLogEvent`](#buildlogevent).
 
 ### `rebuild`
 
@@ -545,9 +545,11 @@ class BuildLogEvent(BaseModel):
 ```
 </CodeGroup>
 
-`stream == "system"` events are status messages from the build runner (build-step boundaries, snapshot progress). Filter them out when rendering to a user-facing console. Each event's `text` holds one line, without a trailing newline.
+`stream` is `stdout` or `stderr` for output from build steps, and `system` for status messages from the build runner (build-step boundaries, snapshot progress). Filter out `system` events when rendering to a user-facing console. Each event's `text` holds one line, without a trailing newline.
 
-The API ends each stream with a `finished: true` event that carries the terminal `status`. That event has no `timestamp`, so the SDKs don't pass it to your callback. Use `waitUntilReady` / `wait_until_ready` or `getBuild` / `get_build` for the build's final status.
+A failed build also sends one event on the `error` stream. Its `text` explains why the build failed, as `"<code>: <message>"` (for example `step_failed: step 1/1 failed after 1ms: exited with code 3`). TypeScript passes this event to your callback, although the `stream` type above doesn't list `"error"`. Python doesn't deliver it: `stream_build_logs` raises `ValueError` (`'error' is not a valid BuildLogStream`) at this event, and `wait_until_ready(on_log=...)` stops calling `on_log` there and then raises `BuildError` as usual. In both SDKs, `BuildError` from `waitUntilReady` / `wait_until_ready` carries the same failure reason in `code` and `message`.
+
+The last event of a stream has `finished: true` and a `status` of `ready`, `failed`, or `cancelled`. The server doesn't send a `timestamp` on this event, so the SDKs don't pass it to your callback. Use `waitUntilReady` / `wait_until_ready` or `getBuild` / `get_build` for the build's final status.
 
 ### `BuildStep`
 
