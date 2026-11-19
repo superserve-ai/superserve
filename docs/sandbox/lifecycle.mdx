@@ -152,7 +152,7 @@ curl -X POST https://api.superserve.ai/sandboxes/lookup \
 }
 ```
 
-Each ID you send appears once in the response:
+Each UUID you send appears once, in one of two lists:
 
 - **Exists**: the ID is in `sandboxes` with its current status, for example `active`, `paused`, or `failed`.
 - **Deleted**: the ID is in `sandboxes` with status `deleted`.
