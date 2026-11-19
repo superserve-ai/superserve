@@ -19,12 +19,14 @@ describe("sanitizeNext", () => {
     "/%0A/evil",
     "/%20/evil",
     "/%7F/evil",
+    // One decode exposes a control character in the query or fragment.
     "/sandboxes?x=%09",
-    "/sandboxes#%257F",
-    "/sandboxes?x=%2500",
     "/sandboxes?x=%0A",
     "/sandboxes?a=%&b=%09",
     "/sandboxes?a=%E0&b=%09",
+    "/sandboxes#%7F",
+    "https://console.superserve.ai/sandboxes?x=%09",
+
     "//evil.example",
     "https://evil.example",
     "http://superserve.ai",
@@ -45,6 +47,12 @@ describe("sanitizeNext", () => {
     "/sandboxes?q=100%25",
     "/sandboxes?q=my%20box",
     "/sandboxes?x=%5C",
+    // Deeper encodings are literal percent text after one decode.
+    "/sandboxes#%257F",
+    "/sandboxes?x=%2500",
+    "/snapshots/?q=%250A",
+    "/sandboxes?x=%252525252509",
+
     "/",
     "/yc/accept?claim=11111111-1111-4111-8111-111111111111",
     "/invite/ssinv_exampletoken",
