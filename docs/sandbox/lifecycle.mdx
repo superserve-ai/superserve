@@ -16,7 +16,7 @@ You may also see these short-lived states:
 - **`resuming`** - a paused sandbox is being restored to `active`.
 - **`migrating`** - the platform is moving a paused sandbox. This state is temporary. Calls that need the running sandbox, such as `connect()`, can fail with `ConflictError` (`409`) until it ends, so retry shortly.
 
-`connect()` and `resume()` wait a pause out for you; a pause still finishing after that wait answers `409` with code `sandbox_pausing` and a `Retry-After` header, so retry shortly. **`failed`** indicates the sandbox couldn't start or resume, or its VM stopped unexpectedly; the entry remains until you delete it. Deletion destroys the sandbox; calls that act on it, such as `GET /sandboxes/{sandbox_id}`, then return `404`. To find out whether a `404` means deleted or unknown, see [Check whether a sandbox was deleted](#check-whether-a-sandbox-was-deleted).
+`connect()` and `resume()` wait a pause out for you; a pause still finishing after that wait answers `409` with code `sandbox_pausing` and a `Retry-After` header, so retry shortly. **`failed`** indicates the sandbox can't run, for example because it couldn't start or resume, or its VM stopped unexpectedly; the entry remains until you delete it. Deletion destroys the sandbox; calls that act on it, such as `GET /sandboxes/{sandbox_id}`, then return `404`. To find out whether a `404` means deleted or unknown, see [Check whether a sandbox was deleted](#check-whether-a-sandbox-was-deleted).
 
 ```
 starting  →  active  →  pausing  →  paused  →  resuming  →  active
@@ -133,7 +133,7 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 
 After a delete, `GET /sandboxes/{sandbox_id}` and other calls that act on the sandbox return `404`, the same answer as for an ID that never existed. When you keep sandbox IDs in your own records, send them to [`POST /sandboxes/lookup`](/api-reference/sandboxes/look-up-the-status-of-a-batch-of-sandboxes) to find out which ones still exist. The SDKs and the CLI do not have a method for this endpoint yet, so call the REST API.
 
-Send your API key in the `X-API-Key` header to the API URL for your key's region (see [API key](/api-key)), with up to 1,000 IDs in `sandbox_ids`. The key needs the same access as listing the team's sandboxes; otherwise the request fails with `403`.
+Send your API key in the `X-API-Key` header to the API URL for your key's region (see [API key](/api-key)), with up to 1,000 IDs in `sandbox_ids`. The key needs the same access as listing the team's sandboxes; otherwise the request fails with `403`. The example uses `https://api.superserve.ai`, the API URL for keys without a region; replace it with your region's API URL.
 
 ```bash
 curl -X POST https://api.superserve.ai/sandboxes/lookup \
@@ -158,7 +158,7 @@ Each ID you send appears once in the response:
 - **Deleted**: the ID is in `sandboxes` with status `deleted`.
 - **Unknown**: the ID is in `unknown`. Your team has no sandbox with that ID in the region you sent the request to. The sandbox was never created, belongs to another team, or was created in another region. The response does not show whether another team's sandbox exists. To check IDs from another region, send them to that region's API URL with a key for that region.
 
-Entries in `sandboxes` can be in any order, so match them by `id`. The API can return the `id` in a different form from the one you sent (bare UUID or region-tagged `sb-<region>-<uuid>`), so compare the UUID part without regard to case. IDs in `unknown` come back as you sent them, in request order. Each sandbox appears once in the response, even if you send its ID more than once, but every entry you send counts toward the 1,000 limit.
+Entries in `sandboxes` can be in any order, so match them by `id`. The API can return the `id` in a different form from the one you sent (bare UUID or region-tagged `sb-<region>-<uuid>`), so compare the UUID part without regard to case. IDs in `unknown` come back as you sent them, in request order. Each UUID appears once in the response, even if you send it more than once or in both forms; in `unknown`, only the first form you sent comes back, so match `unknown` by UUID too. Every entry you send counts toward the 1,000 limit.
 
 The request fails with `400` and code `bad_request` when `sandbox_ids` is empty or missing, has more than 1,000 entries, or contains a value that is not a sandbox ID. To check more than 1,000 IDs, send them in batches.
 
