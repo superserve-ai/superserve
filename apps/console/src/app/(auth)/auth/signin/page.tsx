@@ -7,7 +7,7 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
-import { Suspense, useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
@@ -126,6 +126,15 @@ function SignInContent() {
   // False once the page unmounts, so a sign-in still waiting on its checks
   // does not navigate away from the page the user went to.
   const mounted = useRef(false)
+  // Set false while React commits the unmount, before passive cleanups run,
+  // so a sign-in step that finishes in between cannot redirect.
+  const onPage = useRef(true)
+  useLayoutEffect(() => {
+    onPage.current = true
+    return () => {
+      onPage.current = false
+    }
+  }, [])
   // Only one path (the session check or the form) settles the team and leaves.
   const redirectOwner = useRef<object | null>(null)
   useEffect(() => {
@@ -159,7 +168,8 @@ function SignInContent() {
           // Password recovery can return here with a live session and a saved team.
           await settleTeamForDestination(destination)
           // A password sign-in that finished meanwhile owns the redirect now.
-          if (cancelled || redirectOwner.current !== claim) return
+          if (cancelled || !onPage.current || redirectOwner.current !== claim)
+            return
           window.location.replace(destination)
         }
       } catch {
@@ -233,13 +243,13 @@ function SignInContent() {
           ? signInOfferDestination(rawOffer)
           : nextUrl
       // The user left the page before sign-in finished.
-      if (!mounted.current) return
+      if (!mounted.current || !onPage.current) return
       // The new session takes over from a session check that may have
       // settled the team of the session that was there before.
       redirectOwner.current = {}
       await settleTeamForDestination(dest)
       // The user left the page while the team was settling.
-      if (!mounted.current) return
+      if (!mounted.current || !onPage.current) return
       window.location.replace(dest)
       navigating = true
     } catch (err) {
