@@ -45,6 +45,12 @@ export function useBillingPayment(
     }
   }, [])
 
+  const checkoutPreferred = Boolean(
+    summary?.checkout_available && legacyCheckout,
+  )
+  const portalPreferred = Boolean(
+    summary?.portal_available && !checkoutPreferred,
+  )
   const available = Boolean(
     user &&
     summary?.permissions?.can_manage &&
@@ -83,11 +89,11 @@ export function useBillingPayment(
         (!latest || `${latest.activeRegion}:${latest.activeTeamId}` === teamKey)
       )
     }
-    setSubmitting(summary?.portal_available ? "portal" : "checkout")
+    setSubmitting(portalPreferred ? "portal" : "checkout")
     const currentUrl = new URL(window.location.href)
     try {
       let session
-      if (summary?.portal_available) {
+      if (portalPreferred) {
         const returnUrl = new URL(currentUrl)
         returnUrl.searchParams.set("billing_flow", "portal-return")
         session = await createStripeCustomerPortalSession({

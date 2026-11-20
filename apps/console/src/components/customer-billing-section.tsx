@@ -172,9 +172,9 @@ function useBillingAction(
     enabled,
   )
   const canManageBilling = Boolean(summary?.permissions?.can_manage)
-  const canOpenPortal = Boolean(summary?.portal_available)
   const canStartCheckout =
     !cardless && Boolean(summary?.checkout_available) && checkoutSupported
+  const canOpenPortal = Boolean(summary?.portal_available) && !canStartCheckout
 
   const manageLabel = canOpenPortal
     ? "Open Customer Portal"

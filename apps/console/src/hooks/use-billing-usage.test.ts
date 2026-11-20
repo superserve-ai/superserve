@@ -8,6 +8,10 @@ const runtimeTimezone = Intl.DateTimeFormat().resolvedOptions().timeZone
 
 vi.mock("@tanstack/react-query", () => ({
   useQuery,
+  useQueryClient: () => ({
+    getQueryDefaults: () => ({}),
+    getDefaultOptions: () => ({}),
+  }),
 }))
 
 vi.mock("@/hooks/use-billing-context", () => ({

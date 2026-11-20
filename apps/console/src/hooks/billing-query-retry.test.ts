@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest"
+import { describe, expect, it, vi } from "vitest"
 
 import { ApiError } from "@/lib/api/client"
 
@@ -33,5 +33,21 @@ describe("billing usage retries", () => {
 it("does not repeat a billing request after the API deadline aborts it", () => {
   expect(
     retryBillingUsageQuery(0, new DOMException("Aborted", "AbortError")),
+  ).toBe(false)
+})
+
+it("honors configured retry policies for other errors", () => {
+  const error = new Error("Network")
+  expect(retryBillingUsageQuery(0, error, false)).toBe(false)
+  expect(retryBillingUsageQuery(2, error, 2)).toBe(false)
+  const policy = vi.fn(() => true)
+  expect(retryBillingUsageQuery(4, error, policy)).toBe(true)
+  expect(policy).toHaveBeenCalledWith(4, error)
+  expect(
+    retryBillingUsageQuery(
+      0,
+      new ApiError(503, "storage_unavailable", "Unavailable"),
+      true,
+    ),
   ).toBe(false)
 })

@@ -3,9 +3,11 @@ import { Button } from "@superserve/ui"
 export function UsageUnavailable({
   onRetry,
   timedOut = false,
+  retrying = false,
 }: {
   onRetry: () => void
   timedOut?: boolean
+  retrying?: boolean
 }) {
   return (
     <section
@@ -20,7 +22,7 @@ export function UsageUnavailable({
           ? "The usage request timed out. Retry to check for updated usage and charges."
           : "Storage measurements are temporarily unavailable. Usage totals and charges cannot be shown yet."}
       </p>
-      <Button size="sm" variant="outline" onClick={onRetry}>
+      <Button size="sm" variant="outline" onClick={onRetry} disabled={retrying}>
         Retry usage
       </Button>
     </section>

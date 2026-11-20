@@ -2,6 +2,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
+import { useBillingSummary } from "@/hooks/use-billing-summary"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
 import { ApiError } from "@/lib/api/client"
 import { billingKeys } from "@/lib/api/query-keys"
@@ -14,6 +15,7 @@ const mocks = vi.hoisted(() => ({
   team: "team-a",
   scope: "self",
   manage: true,
+  planKind: "subscription" as "subscription" | "legacy_payg" | null,
 }))
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ push: vi.fn() }),
@@ -42,24 +44,27 @@ vi.mock("@/lib/api/billing-capabilities", async (original) => ({
 vi.mock("@/hooks/use-billing-v2", () => ({
   useTeamEntry: () => ({ data: null, isPending: false, isError: false }),
   useTeamPlan: () => ({
-    data: {
-      key: "pro",
-      kind: "subscription",
-      name: `Plan ${mocks.team}`,
-      limits: {
-        max_concurrent: 10,
-        max_vcpu: 4,
-        max_memory_mib: 8192,
-        max_disk_mib: 10240,
-        max_templates: null,
-      },
-      fee_cents: null,
-      included_cents: null,
-      period_start: null,
-      period_end: null,
-      effective_from: "2026-01-01T00:00:00Z",
-      pending_change: null,
-    },
+    data:
+      mocks.planKind === null
+        ? null
+        : {
+            key: "pro",
+            kind: mocks.planKind,
+            name: `Plan ${mocks.team}`,
+            limits: {
+              max_concurrent: 10,
+              max_vcpu: 4,
+              max_memory_mib: 8192,
+              max_disk_mib: 10240,
+              max_templates: null,
+            },
+            fee_cents: null,
+            included_cents: null,
+            period_start: null,
+            period_end: null,
+            effective_from: "2026-01-01T00:00:00Z",
+            pending_change: null,
+          },
     isError: false,
   }),
   useFreeAllowance: () => ({ data: undefined }),
@@ -95,7 +100,7 @@ const knownSummary = (): BillingSummaryResponse => ({
   calculated_at: "2026-11-20T00:00:00Z",
   pricing_tier: { plan_name: "Standard", currency: "USD", plan_key: "pro" },
   billing_mode: "live",
-  checkout_available: true,
+  checkout_available: false,
   portal_available: true,
   payment_setup_required: false,
   permissions: { can_view: true, can_manage: mocks.manage },
@@ -146,6 +151,7 @@ beforeEach(() => {
   mocks.team = "team-a"
   mocks.scope = "self"
   mocks.manage = true
+  mocks.planKind = "subscription"
   mocks.summary.mockReset().mockRejectedValue(unavailable())
   mocks.usage.mockReset().mockRejectedValue(unavailable())
 })
@@ -359,3 +365,84 @@ it("keeps unavailable states stable until manual recovery, then resumes polling"
     vi.useRealTimers()
   }
 })
+
+function SummaryObserver() {
+  useBillingSummary()
+  return null
+}
+
+it("retains unavailable presentation while another summary consumer refreshes, then recovers", async () => {
+  vi.useFakeTimers()
+  try {
+    let recover!: (value: BillingSummaryResponse) => void
+    mocks.summary.mockRejectedValueOnce(unavailable()).mockImplementationOnce(
+      () =>
+        new Promise((resolve) => {
+          recover = resolve
+        }),
+    )
+    render(
+      <QueryClientProvider client={client}>
+        <PlanUsagePageClient />
+        <SummaryObserver />
+      </QueryClientProvider>,
+    )
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(10)
+    })
+    expect(
+      screen.getAllByRole("region", { name: "Usage unavailable" }),
+    ).toHaveLength(2)
+    await act(async () => {
+      await vi.advanceTimersByTimeAsync(60_000)
+    })
+    expect(mocks.summary).toHaveBeenCalledTimes(2)
+    expect(
+      screen.getAllByRole("region", { name: "Usage unavailable" }),
+    ).toHaveLength(2)
+    expect(
+      screen.getAllByRole("button", { name: "Retry usage" })[0],
+    ).toBeDisabled()
+    await act(async () => {
+      recover(knownSummary())
+      await vi.advanceTimersByTimeAsync(10)
+    })
+    expect(screen.getByTestId("billing-statement")).toBeInTheDocument()
+    expect(
+      screen.getAllByRole("region", { name: "Usage unavailable" }),
+    ).toHaveLength(1)
+  } finally {
+    vi.useRealTimers()
+  }
+})
+
+it.each([null, "legacy_payg"] as const)(
+  "exposes authorized legacy setup for ended accounts with %s assignment and unknown usage",
+  async (kind) => {
+    mocks.planKind = kind
+    mocks.capabilities.mockResolvedValue({
+      ...capabilities(),
+      account: {
+        ...account,
+        checkout_available: true,
+        portal_available: false,
+        subscription_status: "canceled",
+        trial_ended: true,
+      },
+    })
+    render(page())
+    expect(
+      await screen.findByRole("button", { name: "Set Up Billing" }),
+    ).toBeEnabled()
+    expect(
+      screen.queryByRole("button", { name: "Open Customer Portal" }),
+    ).not.toBeInTheDocument()
+    expect(
+      screen.getAllByRole("region", { name: "Usage unavailable" }),
+    ).toHaveLength(2)
+    expect(screen.queryByTestId("billing-statement")).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/\$0|Credits remaining|Cost so far/),
+    ).not.toBeInTheDocument()
+  },
+)
