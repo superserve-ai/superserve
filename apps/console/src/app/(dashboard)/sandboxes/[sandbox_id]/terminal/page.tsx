@@ -6,7 +6,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 
 import { EmptyState } from "@/components/empty-state"
-import { ErrorState } from "@/components/error-state"
+import { ErrorState, errorStateMessage } from "@/components/error-state"
 import { TerminalTabs } from "@/components/sandboxes/terminal-tabs"
 import { useResumeSandbox, useSandbox } from "@/hooks/use-sandboxes"
 import { STATUS_BADGE_VARIANT, STATUS_LABEL } from "@/lib/sandbox-utils"
@@ -49,7 +49,8 @@ export default function TerminalPage() {
           </Link>
         </div>
         <ErrorState
-          message={error?.message ?? "Sandbox not found"}
+          error={error}
+          message={errorStateMessage(error, "Sandbox not found")}
           onRetry={() => refetch()}
         />
       </div>

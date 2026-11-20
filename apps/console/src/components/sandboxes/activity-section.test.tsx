@@ -6,24 +6,24 @@ import { ActivitySection } from "./activity-section"
 describe("ActivitySection", () => {
   it("shows activity query failures instead of an empty state", () => {
     const onRetry = vi.fn()
+    const error = new Error(
+      "An error occurred in the Server Components render. The specific message is omitted in production builds to avoid leaking sensitive details.",
+    )
 
     render(
       <ActivitySection
         activity={undefined}
         isPending={false}
-        error={
-          new Error(
-            "Forbidden: platform activity read access required while viewing another team",
-          )
-        }
+        error={error}
         onRetry={onRetry}
       />,
     )
 
     expect(screen.getByText("Unable to load activity")).toBeInTheDocument()
     expect(
-      screen.getByText(/platform activity read access required/i),
+      screen.getByText("Activity couldn’t be loaded. Please try again."),
     ).toBeInTheDocument()
+    expect(screen.queryByText(error.message)).not.toBeInTheDocument()
     expect(screen.queryByText("No Activity")).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole("button", { name: "Try Again" }))

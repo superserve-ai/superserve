@@ -25,10 +25,7 @@ export default function DashboardError({
           Complete signup with Google
         </Link>
       ) : (
-        <ErrorState
-          message={error.message || "Something went wrong"}
-          onRetry={reset}
-        />
+        <ErrorState error={error} onRetry={reset} />
       )}
     </div>
   )

@@ -70,7 +70,7 @@ function SnapshotsPageContent() {
     return (
       <div className="flex h-full flex-col">
         <PageHeader title="Snapshots" />
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState error={error} onRetry={() => refetch()} />
       </div>
     )
   }
