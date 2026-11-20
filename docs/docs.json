@@ -315,6 +315,7 @@
               "GET /sandboxes",
               "POST /sandboxes",
               "GET /sandboxes/{sandbox_id}",
+              "GET /sandboxes/{sandbox_id}/metrics",
               "POST /sandboxes/lookup",
               "PATCH /sandboxes/{sandbox_id}",
               "DELETE /sandboxes/{sandbox_id}",
