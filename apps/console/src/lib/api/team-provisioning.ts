@@ -6,6 +6,12 @@ import {
   type EnterpriseProvisioningAuthority,
 } from "@/lib/admin/enterprise-provisioning-authority"
 import {
+  accountTeamFallbackName,
+  accountTeamFallbackOperationId,
+} from "@/lib/api/account-team-name"
+import {
+  PromotionEvidenceError,
+  type PreparedPromotionTeam,
   recoverPromotionTeamForEnterprise,
   preparePromotionTeamForEnterprise,
   completePromotionTeamForEnterprise,
@@ -370,9 +376,15 @@ async function provisionTeamFor(
   if (!operationId && region !== DEFAULT_REGION)
     throw new Error("Team creation requires its original operation identifier")
   const locator = { userId, region, operationId: operationId ?? userId }
+  const fallbackLocator =
+    operationId === undefined && !enterpriseAuthority
+      ? { ...locator, operationId: accountTeamFallbackOperationId(userId) }
+      : undefined
   let prepared = enterpriseAuthority
     ? await recoverPromotionTeamForEnterprise(locator, enterpriseAuthority)
     : await recoverPromotionTeam(locator)
+  if (prepared?.state === "prepared" && fallbackLocator)
+    prepared = (await recoverPromotionTeam(fallbackLocator)) ?? prepared
   if (!prepared) {
     if (!operationId && !firstTeam)
       throw new Error("No initial team creation to recover")
@@ -398,20 +410,45 @@ async function provisionTeamFor(
         )
       : await preparePromotionTeam(preparation)
   }
-  if (prepared.authorityUnavailable) {
-    // Repair only the regional FK target. The persisted no-credit decision
-    // remains unchanged even if canonical publication failed before profile creation.
-    const { error } = await admin
-      .from("profile")
-      .upsert(
-        { id: userId, email: user.email ?? "" },
-        { onConflict: "id", ignoreDuplicates: true },
-      )
-    if (error) throw new Error("Failed to repair regional profile")
+  async function complete(attempt: PreparedPromotionTeam) {
+    if (attempt.authorityUnavailable) {
+      // Repair only the regional FK target. The persisted no-credit decision
+      // remains unchanged even if canonical publication failed before profile creation.
+      const { error } = await admin
+        .from("profile")
+        .upsert(
+          { id: userId, email: user.email ?? "" },
+          { onConflict: "id", ignoreDuplicates: true },
+        )
+      if (error) throw new Error("Failed to repair regional profile")
+    }
+    return enterpriseAuthority
+      ? completePromotionTeamForEnterprise(attempt, enterpriseAuthority)
+      : completePromotionTeam(attempt)
   }
-  const completed = enterpriseAuthority
-    ? await completePromotionTeamForEnterprise(prepared, enterpriseAuthority)
-    : await completePromotionTeam(prepared)
+  let completed: PreparedPromotionTeam
+  try {
+    completed = await complete(prepared)
+  } catch (error) {
+    if (
+      !fallbackLocator ||
+      prepared.operationId !== locator.operationId ||
+      prepared.state !== "prepared" ||
+      !(error instanceof PromotionEvidenceError) ||
+      error.code !== "team_name_conflict"
+    )
+      throw error
+    // The stored decision is authoritative on retry; do not republish it.
+    // The primary stays completable: the control plane cannot supersede it, so
+    // a concurrent request can still complete it if the name is freed meanwhile.
+    prepared = await preparePromotionTeam({
+      ...fallbackLocator,
+      name: accountTeamFallbackName(user.email ?? userId, userId),
+      authorityUnavailable: prepared.authorityUnavailable,
+      additionalTeam: prepared.additionalTeam,
+    })
+    completed = await complete(prepared)
+  }
   if (completed.state === "deleted")
     throw new Error("This team creation has already been deleted")
   const team = { id: completed.teamId, name: completed.name }

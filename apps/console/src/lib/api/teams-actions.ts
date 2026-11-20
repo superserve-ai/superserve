@@ -74,7 +74,7 @@ export async function listTeamsAction(): Promise<TeamDirectoryResponse> {
   // still offers the conversion after the user switches to an account team.
   const owned = await Promise.all(
     teams
-      .filter((t) => isPersonalTeam(t, user.email))
+      .filter((t) => isPersonalTeam(t, user))
       .map(async (team) => {
         try {
           return (await ownsTeam(team.region, user.id, team.id)) ? team : null
@@ -178,8 +178,7 @@ export async function createTeamAction(
       return teamConversionUnavailable()
     // A retry after the converted response was lost finds the new name.
     if (target.name !== trimmed) {
-      if (!isPersonalTeam(target, user.email))
-        return teamConversionUnavailable()
+      if (!isPersonalTeam(target, user)) return teamConversionUnavailable()
       const renamed = await renameTeam(
         targetRegion,
         target.id,

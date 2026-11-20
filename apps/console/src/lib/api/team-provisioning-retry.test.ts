@@ -1,15 +1,32 @@
 import type { User } from "@supabase/supabase-js"
-import { beforeEach, expect, it, vi } from "vitest"
+import { beforeEach, describe, expect, it, vi } from "vitest"
+
+import {
+  accountTeamFallbackName,
+  accountTeamFallbackOperationId,
+} from "./account-team-name"
+import {
+  PromotionEvidenceError,
+  type PreparedPromotionTeam,
+} from "./promotion-device-evidence"
+
 const mocks = vi.hoisted(() => ({
   publish: vi.fn(),
   recover: vi.fn(),
   prepare: vi.fn(),
   complete: vi.fn(),
+  repairProfile: vi.fn(),
 }))
 vi.mock("./promotion-publication", () => ({
   publishAccountPromotion: mocks.publish,
 }))
 vi.mock("./promotion-device-evidence", () => ({
+  PromotionEvidenceError: class extends Error {
+    constructor(readonly code: string) {
+      super(code)
+      this.name = "PromotionEvidenceError"
+    }
+  },
   recoverPromotionTeam: mocks.recover,
   preparePromotionTeam: mocks.prepare,
   completePromotionTeam: mocks.complete,
@@ -66,7 +83,7 @@ function from(table: string) {
             error: null,
           },
     single: async () => ({ data: { id: "owner-role" }, error: null }),
-    upsert: async () => ({ error: null }),
+    upsert: mocks.repairProfile,
     insert: async (input: Record<string, unknown>) => {
       if (table === failTable) return { error: { message: "write failed" } }
       const existing = rows.get(table) ?? []
@@ -101,6 +118,7 @@ beforeEach(() => {
   rows.clear()
   failTable = undefined
   prepared = null
+  mocks.repairProfile.mockResolvedValue({ error: null })
   mocks.publish.mockResolvedValue({ authorityUnavailable: true })
   mocks.recover.mockImplementation(async () => prepared)
   mocks.prepare.mockImplementation(
@@ -225,4 +243,219 @@ it("marks a team additional when another cell holds the user's Free team", async
   expect(mocks.prepare).toHaveBeenLastCalledWith(
     expect.objectContaining({ additionalTeam: true }),
   )
+})
+
+describe("automatic first-team name conflicts", () => {
+  const primaryLocator = {
+    userId: user.id,
+    region: "use",
+    operationId: user.id,
+  }
+  const fallbackLocator = {
+    ...primaryLocator,
+    operationId: accountTeamFallbackOperationId(user.id),
+  }
+  const fallbackName = accountTeamFallbackName(user.email!, user.id)
+  const fallbackTeamId = "44444444-4444-4444-8444-444444444444"
+  const primary: PreparedPromotionTeam = {
+    ...primaryLocator,
+    teamId,
+    attemptId: "backend-attempt",
+    createdAt: "2026-11-01T00:00:00Z",
+    name: user.email!,
+    state: "prepared",
+    authorityUnavailable: true,
+    additionalTeam: false,
+    outcome: null,
+    reason: null,
+  }
+  const fallback: PreparedPromotionTeam = {
+    ...primary,
+    ...fallbackLocator,
+    teamId: fallbackTeamId,
+    attemptId: "fallback-attempt",
+    name: fallbackName,
+  }
+  function initial() {
+    return provisionTeam("use", user.id, user.email!, user.email!, {
+      user,
+      observedAt: "2026-11-01T00:00:00Z",
+    })
+  }
+
+  it.each([
+    { authorityUnavailable: false, additionalTeam: false },
+    { authorityUnavailable: true, additionalTeam: false },
+    { authorityUnavailable: false, additionalTeam: true },
+    { authorityUnavailable: true, additionalTeam: true },
+  ])(
+    "preserves the prepared decision %j when the primary name is taken",
+    async (decision) => {
+      const primaryAttempt = { ...primary, ...decision }
+      const fallbackAttempt = { ...fallback, ...decision }
+      mocks.publish.mockResolvedValue({
+        authorityUnavailable: !decision.authorityUnavailable,
+      })
+      mocks.prepare
+        .mockResolvedValueOnce(primaryAttempt)
+        .mockResolvedValueOnce(fallbackAttempt)
+      mocks.complete.mockRejectedValueOnce(
+        new PromotionEvidenceError("team_name_conflict"),
+      )
+
+      await expect(initial()).resolves.toEqual({
+        id: fallbackTeamId,
+        name: fallbackName,
+        region: "use",
+      })
+      expect(mocks.recover.mock.calls).toEqual([[primaryLocator]])
+      expect(mocks.publish).toHaveBeenCalledTimes(1)
+      expect(mocks.prepare).toHaveBeenCalledTimes(2)
+      expect(mocks.prepare).toHaveBeenLastCalledWith({
+        ...fallbackLocator,
+        name: fallbackName,
+        ...decision,
+      })
+      expect(mocks.complete.mock.calls).toEqual([
+        [primaryAttempt],
+        [fallbackAttempt],
+      ])
+      expect(rows.get("team_member")).toEqual([
+        { team_id: fallbackTeamId, profile_id: user.id, role: "owner" },
+      ])
+      expect(rows.get("team_memberships")).toEqual([
+        {
+          id: fallbackTeamId,
+          team_id: fallbackTeamId,
+          user_id: user.id,
+          status: "active",
+        },
+      ])
+      expect(rows.get("user_role_assignments")).toEqual([
+        {
+          id: fallbackTeamId,
+          team_id: fallbackTeamId,
+          user_id: user.id,
+          role_id: "owner-role",
+          scope_type: "team",
+        },
+      ])
+      if (decision.authorityUnavailable) {
+        expect(mocks.repairProfile).toHaveBeenCalledTimes(2)
+        expect(mocks.repairProfile.mock.invocationCallOrder[0]).toBeLessThan(
+          mocks.complete.mock.invocationCallOrder[0],
+        )
+        expect(mocks.repairProfile.mock.invocationCallOrder[1]).toBeLessThan(
+          mocks.complete.mock.invocationCallOrder[1],
+        )
+      } else {
+        expect(mocks.repairProfile).not.toHaveBeenCalled()
+      }
+    },
+  )
+
+  it("recovers an already-stuck primary without publishing again", async () => {
+    mocks.recover.mockResolvedValueOnce(primary).mockResolvedValueOnce(null)
+    mocks.prepare.mockResolvedValueOnce(fallback)
+    mocks.complete.mockRejectedValueOnce(
+      new PromotionEvidenceError("team_name_conflict"),
+    )
+
+    await expect(initial()).resolves.toEqual({
+      id: fallbackTeamId,
+      name: fallbackName,
+      region: "use",
+    })
+    expect(mocks.recover.mock.calls).toEqual([
+      [primaryLocator],
+      [fallbackLocator],
+    ])
+    expect(mocks.publish).not.toHaveBeenCalled()
+    expect(mocks.prepare).toHaveBeenCalledExactlyOnceWith({
+      ...fallbackLocator,
+      name: fallbackName,
+      authorityUnavailable: primary.authorityUnavailable,
+      additionalTeam: primary.additionalTeam,
+    })
+    expect(mocks.complete.mock.calls).toEqual([[primary], [fallback]])
+  })
+
+  it.each(["prepared", "completed"] as const)(
+    "uses an existing %s fallback without completing the primary",
+    async (state) => {
+      const recovered = { ...fallback, state }
+      mocks.recover
+        .mockResolvedValueOnce({ ...primary, authorityUnavailable: false })
+        .mockResolvedValueOnce(recovered)
+
+      await expect(initial()).resolves.toEqual({
+        id: fallbackTeamId,
+        name: fallbackName,
+        region: "use",
+      })
+      expect(mocks.recover.mock.calls).toEqual([
+        [primaryLocator],
+        [fallbackLocator],
+      ])
+      expect(mocks.complete).toHaveBeenCalledExactlyOnceWith(recovered)
+      expect(mocks.prepare).not.toHaveBeenCalled()
+      expect(mocks.publish).not.toHaveBeenCalled()
+      expect(mocks.repairProfile.mock.invocationCallOrder[0]).toBeLessThan(
+        mocks.complete.mock.invocationCallOrder[0],
+      )
+    },
+  )
+
+  it.each(["completed", "deleted"] as const)(
+    "keeps the existing behavior for a %s primary",
+    async (state) => {
+      const recovered = { ...primary, state }
+      mocks.recover.mockResolvedValueOnce(recovered)
+      mocks.complete.mockResolvedValueOnce(recovered)
+
+      if (state === "deleted")
+        await expect(initial()).rejects.toThrow("already been deleted")
+      else
+        await expect(initial()).resolves.toMatchObject({
+          id: teamId,
+          name: user.email,
+        })
+      expect(mocks.recover).toHaveBeenCalledExactlyOnceWith(primaryLocator)
+      expect(mocks.complete).toHaveBeenCalledExactlyOnceWith(recovered)
+      expect(mocks.prepare).not.toHaveBeenCalled()
+      expect(mocks.publish).not.toHaveBeenCalled()
+    },
+  )
+
+  it("propagates a fallback name conflict without another attempt", async () => {
+    const conflict = new PromotionEvidenceError("team_name_conflict")
+    mocks.recover.mockResolvedValueOnce(primary).mockResolvedValueOnce(null)
+    mocks.prepare.mockResolvedValueOnce(fallback)
+    mocks.complete.mockRejectedValue(conflict)
+
+    await expect(initial()).rejects.toBe(conflict)
+    expect(mocks.prepare).toHaveBeenCalledTimes(1)
+    expect(mocks.complete.mock.calls).toEqual([[primary], [fallback]])
+    expect(rows.size).toBe(0)
+  })
+
+  it("propagates an explicit creation name conflict without a fallback", async () => {
+    const conflict = new PromotionEvidenceError("team_name_conflict")
+    mocks.complete.mockRejectedValueOnce(conflict)
+
+    await expect(create(user.email!, operationId)).rejects.toBe(conflict)
+    expect(mocks.recover).toHaveBeenCalledExactlyOnceWith({
+      ...primaryLocator,
+      operationId,
+    })
+    expect(mocks.prepare).toHaveBeenCalledExactlyOnceWith({
+      ...primaryLocator,
+      operationId,
+      name: user.email,
+      authorityUnavailable: true,
+      additionalTeam: false,
+    })
+    expect(mocks.complete).toHaveBeenCalledTimes(1)
+    expect(rows.size).toBe(0)
+  })
 })
