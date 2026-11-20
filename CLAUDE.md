@@ -91,6 +91,29 @@ The console has a deliberate austere, technical aesthetic:
 - Platform is `Superserve`; CLI tool is `superserve`
 - Never "Claude" standalone — always "Claude Agent" or "Claude Agent SDK"
 
+## PR reviews and merging
+
+QM and other authorized independent automated reviewers may review and approve both ordinary and protected PRs after they review the current changes. Use an identity GitHub accepts for the required independent review; neither the author nor another agent using the author's credentials can approve their own PR. Required reviews, blocking findings, and CI still apply. A bot approval never counts as, or replaces, a human approval where GitHub requires one. Do not bypass these rules.
+
+An ordinary PR changes no protected path. Once its required reviews and CI pass and it is up to date with `main`, the owning agent may merge it. First verify that the agent owns the PR; a shared login does not establish ownership. Read-only reviewers do not merge.
+
+## Protected paths
+
+`.github/protected-paths` lists the paths that automation must not merge to `main` without a human. It uses CODEOWNERS syntax, but GitHub does not read it, so it adds no code-owner approval requirement. Do not add a `CODEOWNERS` file: code-owner review is on in the rulesets for `main`, so such a file would make every owned path need an owner approval. The list is the only source of protected paths, but it is not the only human-review rule: the repository rulesets on `main` also require human reviews for other paths, and GitHub applies all of them. Today the list covers:
+
+- The protected-path list, `CLAUDE.md`, and the executable CI and npm, PyPI and docs release workflows with their scripts. PR templates are not protected.
+- Console request authentication, the sign-in and sign-up reCAPTCHA and Turnstile checks, security headers, env config, and the Supabase admin and regional service-role clients
+- Every console server action and route handler, the `lib/api` server actions, and staff admin
+- Team permissions, invitations, API keys, and secrets
+- Billing, checkout, plans, signup offers, promotional credits, and device fingerprint evidence
+- `LICENSE`
+
+A protected PR needs the required independent review and a human merge decision. An authorized human may merge their own PR after an independent review and CI pass. Agents may create, update, and review these PRs, but must not merge them directly or with an administrator merge, turn on auto-merge, or use a human's credentials to authorize their merge. The `Protected Paths` check only lists the protected paths that a PR changes; it does not require reviews or authorize merges. A mixed PR is protected too, including when it deletes or moves a protected file.
+
+- Merging `main` into the PR branch to keep it current is fine.
+- Never bypass a gate or protection, or weaken CI.
+- Adding, removing, or re-owning a protected path is itself a protected change.
+
 ## Git
 
 - Single-line commit messages

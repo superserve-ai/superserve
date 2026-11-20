@@ -72,6 +72,7 @@ const SHRINK_AFTER_MAX = 1800
 
 const LIVE_MEMORY_DOCS_URL =
   "https://docs.superserve.ai/sandbox/live-memory-resizing"
+const LIVE_CPU_DOCS_URL = "https://docs.superserve.ai/sandbox/live-cpu-resizing"
 
 const focusRing =
   "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
@@ -115,6 +116,12 @@ function maxMemorySteps(
         (s - memory) % MEMORY_GROWTH_STEP_MIB === 0,
     )
     .toSorted((a, b) => a - b)
+}
+
+// Whole vCPUs above the starting count, up to min(4x it, the plan limit).
+function maxVcpuSteps(vcpu: number, vcpuLimit: number): number[] {
+  const top = Math.min(4 * vcpu, vcpuLimit)
+  return Array.from({ length: Math.max(0, top - vcpu) }, (_, i) => vcpu + i + 1)
 }
 
 // The offered step closest to a pick from below, so a cap that shrinks under
@@ -291,13 +298,27 @@ function ResourceRow({
 interface GrowthChoiceProps {
   growing: boolean
   canGrow: boolean
-  upTo: number
+  upTo: string
+  // The resource row's label, so each group is named for what it resizes.
+  resourceLabelId: string
+  docsUrl: string
+  docsLabel: string
+  blockedHint: string
   onChange: (grow: boolean) => void
 }
 
-// Fixed vs live memory resizing, as native radios styled like the console's
+// Fixed vs live resizing, as native radios styled like the console's
 // segmented buttons: arrow keys move between them and the group has a name.
-function GrowthChoice({ growing, canGrow, upTo, onChange }: GrowthChoiceProps) {
+function GrowthChoice({
+  growing,
+  canGrow,
+  upTo,
+  resourceLabelId,
+  docsUrl,
+  docsLabel,
+  blockedHint,
+  onChange,
+}: GrowthChoiceProps) {
   const id = useId()
   const labelId = `${id}-label`
   const hintId = `${id}-hint`
@@ -312,7 +333,7 @@ function GrowthChoice({ growing, canGrow, upTo, onChange }: GrowthChoiceProps) {
     )
   const options = [
     { grow: false, text: "Fixed" },
-    { grow: true, text: canGrow ? `Up to ${formatMib(upTo)}` : "At limit" },
+    { grow: true, text: canGrow ? `Up to ${upTo}` : "At limit" },
   ]
   return (
     <>
@@ -322,10 +343,10 @@ function GrowthChoice({ growing, canGrow, upTo, onChange }: GrowthChoiceProps) {
             Auto resize
           </span>
           <a
-            href={LIVE_MEMORY_DOCS_URL}
+            href={docsUrl}
             target="_blank"
             rel="noreferrer"
-            aria-label="Live memory resizing docs (opens in a new tab)"
+            aria-label={`${docsLabel} (opens in a new tab)`}
             className={cn(
               "text-muted transition-colors hover:text-foreground",
               focusRing,
@@ -336,7 +357,7 @@ function GrowthChoice({ growing, canGrow, upTo, onChange }: GrowthChoiceProps) {
         </div>
         <div
           role="radiogroup"
-          aria-labelledby={labelId}
+          aria-labelledby={`${resourceLabelId} ${labelId}`}
           aria-describedby={canGrow ? undefined : hintId}
           className="flex w-[10.5rem] divide-x divide-dashed divide-control border border-dashed border-control"
         >
@@ -358,8 +379,7 @@ function GrowthChoice({ growing, canGrow, upTo, onChange }: GrowthChoiceProps) {
       </div>
       {!canGrow && (
         <p id={hintId} className="mt-1.5 pl-3 text-xs text-muted">
-          Growth needs at least 128 MB of room between boot memory and your
-          limit. Lower boot memory to turn it on.
+          {blockedHint}
         </p>
       )}
     </>
@@ -536,6 +556,8 @@ export function CreateTemplateDialog({
   const [memoryMaxPick, setMemoryMax] = useState(2048)
   // Empty means the platform default; only sent with a max memory.
   const [shrinkAfter, setShrinkAfter] = useState("")
+  const [cpuGrowth, setCpuGrowth] = useState(false)
+  const [vcpuMaxPick, setVcpuMax] = useState(2)
   const [codeOpen, setCodeOpen] = useState(false)
   // Picks are clamped at render rather than rewritten, so a cap or boot size
   // change always shows, and submits, a shape the API accepts.
@@ -553,6 +575,12 @@ export function CreateTemplateDialog({
   if (growth && !canGrow) setGrowth(false)
   const memoryMax =
     growth && canGrow ? clampTo(memoryMaxPick, memoryMaxSteps) : null
+  const vcpuMaxSteps = maxVcpuSteps(vcpu, vcpuLimit)
+  const canGrowCpu = vcpuMaxSteps.length > 0
+  const cpuCeiling = canGrowCpu ? vcpuMaxSteps[vcpuMaxSteps.length - 1] : 0
+  if (cpuGrowth && !canGrowCpu) setCpuGrowth(false)
+  const vcpuMax =
+    cpuGrowth && canGrowCpu ? clampTo(vcpuMaxPick, vcpuMaxSteps) : null
   const [errors, setErrors] = useState<{
     name?: string
     image?: string
@@ -568,6 +596,8 @@ export function CreateTemplateDialog({
     setGrowth(false)
     setMemoryMax(2048)
     setShrinkAfter("")
+    setCpuGrowth(false)
+    setVcpuMax(2)
     setCodeOpen(false)
     setErrors({})
   }
@@ -591,6 +621,7 @@ export function CreateTemplateDialog({
     name: trimmedName,
     from: trimmedImage,
     vcpu,
+    vcpuMax,
     memoryMib: memory,
     memoryMaxMib: memoryMax,
     memoryShrinkAfterSeconds: sendShrinkAfter
@@ -672,7 +703,7 @@ export function CreateTemplateDialog({
     caps?.max_memory_mib == null ||
     caps?.max_disk_mib == null
   const summary = [
-    formatVcpu(vcpu),
+    vcpuMax === null ? formatVcpu(vcpu) : `${vcpu}→${formatVcpu(vcpuMax)}`,
     memoryMax === null
       ? formatMib(memory)
       : `${formatMib(memory)}→${formatMib(memoryMax)}`,
@@ -781,7 +812,7 @@ export function CreateTemplateDialog({
               </span>
             </div>
             <div className="divide-y divide-dashed divide-border">
-              <div className="py-2">
+              <div className="space-y-1 py-2">
                 <ResourceRow
                   label="vCPU"
                   labelId={`${ids}-vcpu`}
@@ -797,6 +828,48 @@ export function CreateTemplateDialog({
                     format={formatVcpu}
                   />
                 </ResourceRow>
+                <GrowthChoice
+                  growing={vcpuMax !== null}
+                  canGrow={canGrowCpu}
+                  upTo={formatVcpu(vcpuMax ?? cpuCeiling)}
+                  resourceLabelId={`${ids}-vcpu`}
+                  docsUrl={LIVE_CPU_DOCS_URL}
+                  docsLabel="Live CPU resizing docs"
+                  blockedHint="Growth needs room between vCPU and your limit. Lower vCPU to turn it on."
+                  onChange={(grow) => {
+                    setCpuGrowth(grow)
+                    if (grow) setVcpuMax(cpuCeiling)
+                  }}
+                />
+                {vcpuMax !== null && (
+                  <div className={ROW_GRID}>
+                    <div className="border-l border-dashed border-control pl-3">
+                      <span
+                        id={`${ids}-vcpu-max`}
+                        className="text-sm text-foreground"
+                      >
+                        Max vCPU
+                      </span>
+                      <span className="block font-mono text-xs text-muted sm:hidden">
+                        up to {formatVcpu(cpuCeiling)}
+                      </span>
+                    </div>
+                    <Stepper
+                      label="Max vCPU"
+                      labelledBy={`${ids}-vcpu-max`}
+                      steps={vcpuMaxSteps}
+                      value={vcpuMax}
+                      onChange={setVcpuMax}
+                      format={formatVcpu}
+                    />
+                    <span
+                      className="hidden text-right font-mono text-xs text-muted tabular-nums sm:block"
+                      title="Up to 4× vCPU, within your plan"
+                    >
+                      {formatVcpu(cpuCeiling)}
+                    </span>
+                  </div>
+                )}
               </div>
               <div className="space-y-1 py-2">
                 <ResourceRow
@@ -817,7 +890,11 @@ export function CreateTemplateDialog({
                 <GrowthChoice
                   growing={memoryMax !== null}
                   canGrow={canGrow}
-                  upTo={memoryMax ?? growthCeiling}
+                  upTo={formatMib(memoryMax ?? growthCeiling)}
+                  resourceLabelId={`${ids}-memory`}
+                  docsUrl={LIVE_MEMORY_DOCS_URL}
+                  docsLabel="Live memory resizing docs"
+                  blockedHint="Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on."
                   onChange={(grow) => {
                     setGrowth(grow)
                     // Start at the ceiling the option names; step down below.

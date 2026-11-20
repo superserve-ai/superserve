@@ -1,0 +1,71 @@
+# Protected paths. A PR that changes one of these paths needs a human merge
+# decision; no bot may merge it (see "Protected paths" in CLAUDE.md). Independent
+# automated reviews are allowed. The owners identify maintainers.
+#
+# This file uses CODEOWNERS syntax, but GitHub does not read it, so it adds no
+# code-owner approval requirement. Do not add a CODEOWNERS file: code-owner
+# review is on in the rulesets for main. Start each pattern with "/" and list
+# individual @users. The last matching line wins, and a line without owners
+# leaves the path unprotected.
+
+# Merge policy and executable CI: the npm, PyPI and docs release workflows, their
+# scripts, this file, and the agent rules. PR templates do not change enforcement.
+/.github/protected-paths @awille-ai @meAmitPatil @pavitrabhalla
+/.github/workflows/ @awille-ai @meAmitPatil @pavitrabhalla
+/CLAUDE.md @awille-ai @meAmitPatil @pavitrabhalla
+
+# Console request authentication, security headers, and the regional
+# service-role clients and tokens.
+/apps/console/src/middleware.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/next.config.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/env.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/supabase/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/cells.ts @awille-ai @meAmitPatil @pavitrabhalla
+
+# Server routes: the API proxy that mints keys, team management, CLI device login, checkout.
+/apps/console/src/app/api/ @awille-ai @meAmitPatil @pavitrabhalla
+
+# Every server action and route handler in the app tree (sign-in, device login,
+# invitations, onboarding payment, offers), and the server actions that use the
+# Supabase admin client.
+/apps/console/src/app/**/*action.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/**/*actions.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/**/route.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/*-actions.ts @awille-ai @meAmitPatil @pavitrabhalla
+
+# Sign-in, sign-up, their reCAPTCHA and Turnstile abuse checks, and staff admin.
+/apps/console/src/app/(auth)/auth/callback/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/auth/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/recaptcha/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/cloudflare/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/(auth)/auth/signin/google-signup-check.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/admin/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/app/(dashboard)/admin/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/admin/ @awille-ai @meAmitPatil @pavitrabhalla
+
+# Team permissions, invitations, API keys, and secrets.
+/apps/console/src/lib/invite/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/active-team* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/team-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/teams-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/api-key* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/proxy-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/secrets.ts @awille-ai @meAmitPatil @pavitrabhalla
+
+# Billing, checkout, plans, signup offers, promotional credits, and the device
+# evidence that offers rely on.
+/apps/console/src/lib/billing/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/billing* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/checkout-intent.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/plan-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/legacy-plan-entry.ts @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/prepaid* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/signup-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/starter-checkout-recovery* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/api/promotion-* @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/fingerprint/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/yc/ @awille-ai @meAmitPatil @pavitrabhalla
+/apps/console/src/lib/yc-claims.ts @awille-ai @meAmitPatil @pavitrabhalla
+
+# The license.
+/LICENSE @awille-ai @meAmitPatil @pavitrabhalla

@@ -104,6 +104,19 @@ Only sandboxes from a template built with `memoryMaxMib` set can grow; leave it 
 
 For how sandboxes grow, shrink and are billed, see [Live memory resizing](/sandbox/live-memory-resizing).
 
+### Growing CPU
+
+Set `vcpuMax` to let sandboxes get more CPU under load, up to that many vCPUs. `vcpu` stays the minimum a sandbox starts with. `vcpuMax` takes whole vCPUs and must be greater than `vcpu`, at most 4 times it, at most 32, and within your plan's vCPU limit.
+
+```typescript
+vcpu: 1,
+vcpuMax: 4,
+```
+
+Only sandboxes from a template built with `vcpuMax` set can grow; leave it out for a fixed vCPU count. The [CLI](/cli#build-a-template) takes the same value as `--vcpu-max`, and the [MCP server](/integrations/mcp) as `vcpu_max` on `sandbox_template_create`.
+
+For how sandboxes scale up, drop back and are billed, see [Live CPU resizing](/sandbox/live-cpu-resizing).
+
 ## Build error codes
 
 When a build lands on `failed`, `BuildError.code` carries one of these stable identifiers (the SDK parses it from the `"<code>: <detail>"` prefix on `errorMessage`):

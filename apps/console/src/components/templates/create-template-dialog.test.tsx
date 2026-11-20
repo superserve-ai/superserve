@@ -1,4 +1,10 @@
-import { fireEvent, render, screen, waitFor } from "@testing-library/react"
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 const mocks = vi.hoisted(() => ({
@@ -16,19 +22,17 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({
+  useTeamEffectiveLimits: () => ({
     data:
       mocks.planState === "legacy"
         ? null
         : mocks.planState === "missing"
           ? undefined
           : {
-              limits: {
-                max_templates: mocks.cap,
-                max_memory_mib: mocks.memoryCap,
-                max_vcpu: mocks.vcpuCap,
-                max_disk_mib: mocks.diskCap,
-              },
+              max_templates: mocks.cap,
+              max_memory_mib: mocks.memoryCap,
+              max_vcpu: mocks.vcpuCap,
+              max_disk_mib: mocks.diskCap,
             },
     isSuccess: mocks.querySuccess,
     isError: mocks.queryError,
@@ -281,7 +285,12 @@ describe("resource ranges follow the team's plan caps", () => {
   })
 })
 
-const radio = (name: string | RegExp) => screen.getByRole("radio", { name })
+const growthGroup = (resource: string) =>
+  screen.getByRole("radiogroup", { name: `${resource} Auto resize` })
+const radio = (name: string | RegExp) =>
+  within(growthGroup("Memory")).getByRole("radio", { name })
+const cpuRadio = (name: string | RegExp) =>
+  within(growthGroup("vCPU")).getByRole("radio", { name })
 
 describe("memory growth", () => {
   beforeEach(() => {
@@ -292,9 +301,7 @@ describe("memory growth", () => {
 
   it("is fixed by default and sends no ceiling", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    expect(
-      screen.getByRole("radiogroup", { name: "Auto resize" }),
-    ).toBeInTheDocument()
+    expect(growthGroup("Memory")).toBeInTheDocument()
     expect(radio("Fixed")).toBeChecked()
     expect(radio("Up to 4 GB")).not.toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
@@ -351,7 +358,7 @@ describe("memory growth", () => {
     expect(radio("At limit")).toBeDisabled()
     expect(radio("Fixed")).toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
-    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+    expect(growthGroup("Memory")).toHaveAccessibleDescription(
       "Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on.",
     )
     // Room to grow again doesn't re-enable it without the user.
@@ -394,7 +401,7 @@ describe("memory growth", () => {
     expect(radio("At limit")).toBeDisabled()
     expect(radio("Fixed")).toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
-    expect(screen.getByRole("radiogroup")).toHaveAccessibleDescription(
+    expect(growthGroup("Memory")).toHaveAccessibleDescription(
       "Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on.",
     )
     // A raised limit doesn't turn growth back on without the user.
@@ -428,6 +435,60 @@ describe("memory growth", () => {
       memory_max_mib: 4096,
       memory_shrink_after_seconds: 300,
     })
+  })
+})
+
+describe("CPU growth", () => {
+  beforeEach(() => {
+    mocks.cap = 10
+    mocks.vcpuCap = 32
+    mocks.create.mockResolvedValue({ id: "created-template" })
+  })
+
+  it("is fixed by default and sends no ceiling", async () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    expect(cpuRadio("Fixed")).toBeChecked()
+    expect(screen.queryByRole("spinbutton", { name: "Max vCPU" })).toBeNull()
+    expect(await submit()).not.toHaveProperty("vcpu_max")
+  })
+
+  it("offers whole vCPUs up to 4x the count, within the plan", async () => {
+    mocks.vcpuCap = 6
+    render(<CreateTemplateDialog open hideTrigger />)
+    press("Increase vCPU")
+    // 2 vCPU under a 6 vCPU cap: the cap wins over 4x.
+    fireEvent.click(cpuRadio("Up to 6 vCPU"))
+    expect(spin("Max vCPU")).toHaveAttribute("aria-valuenow", "6")
+    expect(spin("Max vCPU")).toHaveAttribute("aria-valuemin", "3")
+    expect(spin("Max vCPU")).toHaveAttribute("aria-valuemax", "6")
+    press("Decrease Max vCPU")
+    expect(cpuRadio("Up to 5 vCPU")).toBeChecked()
+    expect(await submit()).toMatchObject({ vcpu: 2, vcpu_max: 5 })
+  })
+
+  it("turns off visibly when vCPU reaches the cap", async () => {
+    mocks.vcpuCap = 2
+    render(<CreateTemplateDialog open hideTrigger />)
+    fireEvent.click(cpuRadio("Up to 2 vCPU"))
+    press("Increase vCPU")
+    expect(cpuRadio("At limit")).toBeDisabled()
+    expect(cpuRadio("Fixed")).toBeChecked()
+    expect(growthGroup("vCPU")).toHaveAccessibleDescription(
+      "Growth needs room between vCPU and your limit. Lower vCPU to turn it on.",
+    )
+    press("Decrease vCPU")
+    expect(cpuRadio("Fixed")).toBeChecked()
+    expect(await submit()).not.toHaveProperty("vcpu_max")
+  })
+
+  it("links to the live CPU resizing docs", () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    expect(
+      screen.getByRole("link", { name: /Live CPU resizing docs/ }),
+    ).toHaveAttribute(
+      "href",
+      "https://docs.superserve.ai/sandbox/live-cpu-resizing",
+    )
   })
 })
 

@@ -1,0 +1,37 @@
+name: Protected Paths
+
+# Diagnostic only: lists the paths in the base branch's .github/protected-paths
+# that a PR changes. It never fails on review state, and it is not the human merge gate.
+# GitHub rulesets and required reviews still apply.
+on:
+  # edited covers a change of base branch, which changes the diff and the rules.
+  pull_request:
+    types: [opened, synchronize, reopened, edited]
+  merge_group:
+    types: [checks_requested]
+
+permissions:
+  contents: read
+  pull-requests: read
+
+jobs:
+  protected-paths:
+    name: Protected Paths
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        if: github.event_name != 'merge_group'
+
+      # Also fails on a protected-path pattern that matches no file, and if a
+      # CODEOWNERS file exists.
+      - name: Test the check
+        if: github.event_name != 'merge_group'
+        run: python3 -m unittest discover -s .github/workflows/scripts -p 'test_protected_paths.py'
+
+      - name: Report paths requiring a human merge decision
+        if: github.event_name != 'merge_group'
+        run: python3 .github/workflows/scripts/protected_paths.py
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}

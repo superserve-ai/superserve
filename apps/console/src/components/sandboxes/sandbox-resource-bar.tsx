@@ -27,7 +27,10 @@ export function SandboxResourceBar({ sandbox }: SandboxResourceBarProps) {
   }[] = [
     {
       label: "vCPU",
-      value: String(sandbox.vcpu_count),
+      value:
+        sandbox.vcpu_max == null
+          ? String(sandbox.vcpu_count)
+          : `${sandbox.vcpu_count}–${sandbox.vcpu_max}`,
     },
     {
       label: "Memory",
