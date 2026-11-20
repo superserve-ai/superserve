@@ -1025,6 +1025,72 @@ describe("signUpWithEmail", () => {
     },
   )
 
+  it.each([
+    [
+      "no token",
+      { verified: false, providerOutcome: "rejected", reason: "missing_token" },
+    ],
+    [
+      "an invalid token",
+      { verified: false, providerOutcome: "rejected", reason: "invalid_token" },
+    ],
+  ])("refuses email signup with %s", async (_label, recaptcha) => {
+    mockVerifyRecaptcha.mockResolvedValue(recaptcha)
+
+    const result = await signUpWithEmail(
+      "user@test.com",
+      "Password123",
+      "Test User",
+    )
+
+    expect(result).toEqual({
+      success: false,
+      error: "We couldn't verify you're human. Please try again.",
+      errorCode: "captcha_failed",
+    })
+    expect(mockGenerateLink).not.toHaveBeenCalled()
+    expect(mockSendEmail).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    ["Password1".padEnd(73, "x"), "Use 72 characters or fewer."],
+    [
+      "Password1" + "é".repeat(32),
+      "Use 72 characters or fewer. Accented letters, symbols, and emoji count as more than one.",
+    ],
+  ])(
+    "refuses a password over 72 bytes before any other check",
+    async (password, error) => {
+      const result = await signUpWithEmail(
+        "user@test.com",
+        password,
+        "Test User",
+        "recaptcha-token",
+      )
+
+      expect(result).toEqual({ success: false, error })
+      expect(mockVerifyRecaptcha).not.toHaveBeenCalled()
+      expect(mockGenerateLink).not.toHaveBeenCalled()
+    },
+  )
+
+  it("accepts a password of exactly 72 bytes", async () => {
+    mockGenerateLink.mockResolvedValue({
+      data: { properties: { hashed_token: "abc123" } },
+      error: null,
+    })
+    mockSendEmail.mockResolvedValue({ success: true })
+
+    const result = await signUpWithEmail(
+      "user@test.com",
+      "Password1".padEnd(72, "x"),
+      "Test User",
+      "recaptcha-token",
+    )
+
+    expect(result).toEqual({ success: true })
+  })
+
   describe("Heedeo observation", () => {
     const capture = { status: "ok", token: "ct1.t", latencyMs: 5 }
     const context = {

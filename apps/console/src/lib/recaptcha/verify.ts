@@ -48,7 +48,39 @@ const getScoreThreshold = (): number => {
 // reCAPTCHA Enterprise. A fully unconfigured integration and transient
 // availability failures fail open; partial configuration, rejected requests,
 // and credential/configuration failures fail closed so they cannot silently
-// disable the abuse control.
+// disable the abuse control. A production deployment with no keys still
+// passes, but logs an error so the lost keys are visible.
+
+const MISSING_CONFIG_LOG_INTERVAL_MS = 60_000
+let lastMissingConfigLogAt: number | undefined
+
+/**
+ * Whether this deployment should have reCAPTCHA keys: Vercel production, or
+ * any other production build that is not a Vercel preview or development
+ * deployment.
+ */
+function expectsRecaptcha(): boolean {
+  const vercelEnv = process.env.VERCEL_ENV
+  if (vercelEnv === "production") return true
+  if (vercelEnv === "preview" || vercelEnv === "development") return false
+  return process.env.NODE_ENV === "production"
+}
+
+/** Logs the missing keys at most once a minute per server instance. */
+function logMissingConfiguration() {
+  if (!expectsRecaptcha()) return
+  const now = Date.now()
+  if (
+    lastMissingConfigLogAt !== undefined &&
+    now - lastMissingConfigLogAt < MISSING_CONFIG_LOG_INTERVAL_MS
+  )
+    return
+  lastMissingConfigLogAt = now
+  console.error(
+    "reCAPTCHA is not configured in production: RECAPTCHA_API_KEY, RECAPTCHA_PROJECT_ID and NEXT_PUBLIC_RECAPTCHA_SITE_KEY are all missing, so every reCAPTCHA check passes unverified",
+  )
+}
+
 export const verifyRecaptcha = async (
   // Server actions expose an RPC endpoint with no runtime type enforcement —
   // a caller can send any JSON, not just what the TS signature promises.
@@ -77,6 +109,7 @@ export const verifyRecaptcha = async (
 
   const configuredValues = [apiKey, projectId, siteKey].filter(Boolean).length
   if (configuredValues === 0) {
+    logMissingConfiguration()
     return { verified: true, providerOutcome: "unconfigured" }
   }
   if (configuredValues < 3) {

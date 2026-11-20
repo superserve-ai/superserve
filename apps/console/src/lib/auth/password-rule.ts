@@ -14,15 +14,24 @@ const REQUIRED_PARTS = [
 
 const MAX_PASSWORD_BYTES = 72
 
+/**
+ * The length error for a password over bcrypt's 72-byte limit, or null. Server
+ * actions use it too, because a direct call can skip the browser check.
+ */
+export function passwordTooLongError(password: string): string | null {
+  if (new TextEncoder().encode(password).length <= MAX_PASSWORD_BYTES)
+    return null
+  return [...password].length > MAX_PASSWORD_BYTES
+    ? "Use 72 characters or fewer."
+    : "Use 72 characters or fewer. Accented letters, symbols, and emoji count as more than one."
+}
+
 /** The first problem with a new password, or null when it passes. */
 export function passwordRuleError(password: string): string | null {
   if (!password) return "Password is required."
   if (password.length < 8) return "Must be at least 8 characters."
-  if (new TextEncoder().encode(password).length > MAX_PASSWORD_BYTES) {
-    return [...password].length > MAX_PASSWORD_BYTES
-      ? "Use 72 characters or fewer."
-      : "Use 72 characters or fewer. Accented letters, symbols, and emoji count as more than one."
-  }
+  const tooLong = passwordTooLongError(password)
+  if (tooLong) return tooLong
   const missing = REQUIRED_PARTS.filter(
     ({ pattern }) => !pattern.test(password),
   ).map(({ label }) => label)
