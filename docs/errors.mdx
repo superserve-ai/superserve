@@ -16,7 +16,7 @@ Every error raised by the SDK extends a common base class - `SandboxError` in Ty
 | `NotFoundError` | `NotFoundError` | `404` | Sandbox or resource does not exist. |
 | `ConflictError` | `ConflictError` | `409` | Sandbox is not in a valid state for the operation (e.g., pausing an already-paused sandbox, or patching `network` rules while paused). |
 | `BillingError` | `BillingError` | `402` | The team's billing or plan does not allow the sandbox to start. Branch on `code` and show `actionUrl` / `action_url` (see [Billing errors](#billing-errors-402)). |
-| `RateLimitError` | `RateLimitError` | `429` | Rate limit or per-team quota reached. Branch on `code` (see below). |
+| `RateLimitError` | `RateLimitError` | `429` | Request rate limit, per-team quota, or host capacity reached. Branch on `code` (see below). |
 | `TimeoutError` | `SandboxTimeoutError` | - | The SDK stopped waiting for a response. A command that reaches its own timeout doesn't throw: it returns exit code `124`. |
 | `ServerError` | `ServerError` | `5xx` | Platform error - usually transient (500/502/503/504). GET/DELETE requests auto-retry with exponential backoff. |
 
@@ -112,11 +112,20 @@ Raised on `429` responses. Branch on `code` to distinguish the variant:
 | Code | Endpoint(s) | Meaning |
 |---|---|---|
 | `rate_limited` | any | The request budget is used up (see [Request rate limits](#request-rate-limits)). Wait the number of seconds in `Retry-After`, then retry. |
+| `host_capacity` | Sandbox create or resume | The selected host is at capacity. The response includes `Retry-After: 2`; wait 2 seconds before retrying. See [Host capacity](#host-capacity). |
 | `too_many_builds` | `POST /templates` | Team has reached its concurrent build limit. Wait for an active build to finish. |
 | `too_many_templates` | `POST /templates` | Team has reached its total template count limit. Delete one or contact support. |
 | `too_many_sandboxes` | `POST /sandboxes` | Team has reached its active sandbox count limit. Pause/delete one or contact support. |
 
-The error `message` already includes the cap and a contact-support hint, so surfacing it directly to users is usually fine.
+For per-team quota errors, the error `message` already includes the cap and a contact-support hint, so surfacing it directly to users is usually fine.
+
+### Host capacity
+
+When a host refuses a sandbox create or resume because it is at capacity, the API returns HTTP `429` with `error.code: "host_capacity"`. The response includes `Retry-After: 2`, which tells the caller to wait 2 seconds before retrying.
+
+A retried create gets a new placement decision and may use another host. A retried resume uses the sandbox's existing host; it does not move the sandbox to another host. Independent database failures remain `5xx` server errors, not `host_capacity` responses.
+
+The SDK exposes this response as `RateLimitError` with `code` set to `host_capacity`. The SDK does not automatically retry `POST` or `PATCH` requests. Handle create and explicit resume retries in your application, as described in [Retries](#retries).
 
 ### Request rate limits
 
@@ -147,7 +156,7 @@ To stay within the budget:
 - On a `429` with code `rate_limited`, wait the number of seconds in `Retry-After`, then send the next request. On that `429`, `RateLimit` shows `r=0` and a `t` equal to `Retry-After`. `Retry-After` is the wait for one request, not for a full bucket.
 - To pace a batch, send no more than `r` requests within `t` seconds, then read `RateLimit` again. To start a large batch with a full bucket, wait the number of seconds in `RateLimit-Reset`.
 - Read the scope in `RateLimit-Policy`. Behind a shared NAT or proxy, the `ip` bucket can refuse a request even when your team is below its own limit.
-- A `429` with any other code, such as `too_many_sandboxes`, comes from a limit of that endpoint and has no `Retry-After`. Its rate-limit headers describe the request budget, not the limit that refused the request, so do not use them to time a retry.
+- A `429` with code `host_capacity` includes `Retry-After: 2` for host capacity, not the request budget. Other endpoint limits, such as `too_many_sandboxes`, have no `Retry-After`. Their rate-limit headers describe the request budget, not the limit that refused the request, so do not use those headers to time a retry.
 
 File and command operations go directly to the sandbox, not to `https://api.superserve.ai`, so their responses do not have these headers.
 
