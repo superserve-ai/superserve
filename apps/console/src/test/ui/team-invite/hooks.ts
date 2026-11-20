@@ -24,6 +24,9 @@ export function useDisplayedTeam() {
 export function useLeaveScope() {
   return fixtureTeam
 }
+export function useTeamName(scope: TeamScope | null) {
+  return scope ? "Example Team" : undefined
+}
 const timestamp = "2026-11-07T12:00:00Z"
 const management: TeamManagementResponse = {
   team_id: fixtureTeam.teamId,
@@ -115,7 +118,18 @@ export function useTeamInvitations() {
   }
 }
 export function useTeams() {
-  return { data: { teams: [{ id: fixtureTeam.teamId }, { id: "other-team" }] } }
+  return {
+    data: {
+      teams: [
+        {
+          id: fixtureTeam.teamId,
+          region: fixtureTeam.region,
+          name: "Example Team",
+        },
+        { id: "other-team", region: fixtureTeam.region, name: "Other Team" },
+      ],
+    },
+  }
 }
 export function useUser() {
   return { user: { id: "you", app_metadata: {} } }
@@ -127,6 +141,7 @@ const mutation = () => ({
   isPending: false,
 })
 export const useAssignTeamRole = mutation
+export const useChangeTeamRole = mutation
 export const useRevokeTeamRole = mutation
 export const useRemoveTeamMember = mutation
 export const useResendInvitation = mutation

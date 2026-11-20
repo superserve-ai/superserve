@@ -101,7 +101,7 @@ try {
           await new Promise(resolve => setTimeout(resolve, 100));
         }
         await document.fonts.ready;
-        return { text: document.body.innerText, roles: Array.from(document.querySelectorAll('select[aria-label^="Role for"]'), select => ({ value: select.value, label: select.selectedOptions[0].textContent })), mono: getComputedStyle(document.querySelector('button')).fontFamily };
+        return { text: document.body.innerText, roles: Array.from(document.querySelectorAll('[role="combobox"][aria-label^="Role for"]'), trigger => trigger.textContent.trim()), mono: getComputedStyle(document.querySelector('button')).fontFamily };
       })()`,
       awaitPromise: true,
       returnByValue: true,
@@ -116,18 +116,15 @@ try {
     if (scenario === "modal") {
       assert.deepEqual(
         result.result.value.roles,
-        Array.from({ length: 4 }, () => ({
-          value: "team_admin",
-          label: "Team admin",
-        })),
+        Array.from({ length: 4 }, () => "Team admin"),
       )
     }
     if (scenario === "results") {
       assert.deepEqual(result.result.value.roles, [
-        { value: "team_admin", label: "Team admin" },
-        { value: "viewer", label: "Viewer" },
-        { value: "billing_admin", label: "Billing admin" },
-        { value: "user_admin", label: "User admin" },
+        "Team admin",
+        "Viewer",
+        "Billing admin",
+        "User admin",
       ])
       assert.ok(result.result.value.text.includes("Already a member"))
       assert.ok(result.result.value.text.includes("Already invited"))
