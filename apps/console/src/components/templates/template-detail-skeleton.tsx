@@ -4,15 +4,15 @@ export function TemplateDetailSkeleton() {
       {/* Header */}
       <div className="flex h-14 items-center justify-between border-b border-border px-6">
         <div className="flex items-center gap-3">
-          <div className="h-4 w-20 animate-pulse bg-muted/20" />
+          <div className="h-4 w-20 bg-muted/20 motion-safe:animate-pulse" />
           <span className="text-muted">/</span>
-          <div className="h-4 w-32 animate-pulse bg-muted/20" />
-          <div className="h-5 w-16 animate-pulse bg-muted/20" />
+          <div className="h-4 w-32 bg-muted/20 motion-safe:animate-pulse" />
+          <div className="h-5 w-16 bg-muted/20 motion-safe:animate-pulse" />
         </div>
         <div className="flex items-center gap-2">
-          <div className="h-8 w-32 animate-pulse bg-muted/20" />
-          <div className="h-8 w-20 animate-pulse bg-muted/20" />
-          <div className="h-8 w-20 animate-pulse bg-muted/20" />
+          <div className="h-8 w-32 bg-muted/20 motion-safe:animate-pulse" />
+          <div className="h-8 w-20 bg-muted/20 motion-safe:animate-pulse" />
+          <div className="h-8 w-20 bg-muted/20 motion-safe:animate-pulse" />
         </div>
       </div>
 
@@ -24,8 +24,8 @@ export function TemplateDetailSkeleton() {
               key={i}
               className={`px-4 py-4 ${i < 3 ? "border-r border-border" : ""}`}
             >
-              <div className="mb-2 h-3 w-16 animate-pulse bg-muted/20" />
-              <div className="h-4 w-28 animate-pulse bg-muted/20" />
+              <div className="mb-2 h-3 w-16 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-4 w-28 bg-muted/20 motion-safe:animate-pulse" />
             </div>
           ))}
         </div>
@@ -33,17 +33,17 @@ export function TemplateDetailSkeleton() {
         {/* Current build section */}
         <div className="flex h-10 items-center justify-between border-b border-border px-4">
           <div className="flex items-center gap-3">
-            <div className="h-3.5 w-24 animate-pulse bg-muted/20" />
-            <div className="h-5 w-20 animate-pulse bg-muted/20" />
+            <div className="h-3.5 w-24 bg-muted/20 motion-safe:animate-pulse" />
+            <div className="h-5 w-20 bg-muted/20 motion-safe:animate-pulse" />
           </div>
         </div>
         <div className="border-b border-border p-4">
-          <div className="h-40 animate-pulse border border-dashed border-border" />
+          <div className="h-40 border border-dashed border-border motion-safe:animate-pulse" />
         </div>
 
         {/* Build history section */}
         <div className="flex h-10 items-center border-b border-border px-4">
-          <div className="h-3.5 w-24 animate-pulse bg-muted/20" />
+          <div className="h-3.5 w-24 bg-muted/20 motion-safe:animate-pulse" />
         </div>
         <div className="border-b border-border">
           {Array.from({ length: 3 }).map((_, i) => (
@@ -51,9 +51,9 @@ export function TemplateDetailSkeleton() {
               key={i}
               className="flex items-center gap-3 border-b border-border px-4 py-3 last:border-b-0"
             >
-              <div className="size-3.5 animate-pulse bg-muted/20" />
-              <div className="h-5 w-16 animate-pulse bg-muted/20" />
-              <div className="h-3 w-24 animate-pulse bg-muted/20" />
+              <div className="size-3.5 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-5 w-16 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-3 w-24 bg-muted/20 motion-safe:animate-pulse" />
             </div>
           ))}
         </div>

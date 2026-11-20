@@ -39,11 +39,11 @@ function DetailSkeleton() {
   return (
     <div className="flex h-full flex-col">
       <div className="flex h-10 items-center border-b border-border px-4">
-        <div className="h-3 w-40 animate-pulse bg-muted/20" />
+        <div className="h-3 w-40 bg-muted/20 motion-safe:animate-pulse" />
       </div>
       <div className="border-b border-border bg-foreground/[0.02] px-4 py-6">
-        <div className="h-6 w-48 animate-pulse bg-muted/30" />
-        <div className="mt-2 h-3 w-64 animate-pulse bg-muted/20" />
+        <div className="h-6 w-48 bg-muted/30 motion-safe:animate-pulse" />
+        <div className="mt-2 h-3 w-64 bg-muted/20 motion-safe:animate-pulse" />
       </div>
       <div className="grid grid-cols-2 border-b border-border">
         {Array.from({ length: 2 }).map((_, i) => (
@@ -52,12 +52,12 @@ function DetailSkeleton() {
             className={i === 0 ? "border-r border-border" : undefined}
           >
             <div className="flex h-10 items-center border-b border-border px-4">
-              <div className="h-2.5 w-16 animate-pulse bg-muted/20" />
+              <div className="h-2.5 w-16 bg-muted/20 motion-safe:animate-pulse" />
             </div>
             <div className="space-y-3 px-4 py-4">
-              <div className="h-3 w-40 animate-pulse bg-muted/20" />
-              <div className="h-3 w-28 animate-pulse bg-muted/20" />
-              <div className="h-3 w-32 animate-pulse bg-muted/20" />
+              <div className="h-3 w-40 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-3 w-28 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-3 w-32 bg-muted/20 motion-safe:animate-pulse" />
             </div>
           </div>
         ))}
@@ -181,7 +181,7 @@ export function AdminSandboxDetailClient({
               {cfg.pulse && (
                 <span
                   className={cn(
-                    "absolute inline-flex size-full animate-ping rounded-full opacity-75",
+                    "absolute inline-flex size-full rounded-full opacity-75 motion-safe:animate-ping",
                     cfg.dot,
                   )}
                 />

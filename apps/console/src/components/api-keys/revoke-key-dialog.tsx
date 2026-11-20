@@ -11,8 +11,9 @@ import {
   Field,
   Input,
 } from "@superserve/ui"
-import { motion } from "motion/react"
 import { useState } from "react"
+
+import { Spinner } from "@/components/icons"
 
 interface RevokeKeyDialogProps {
   open: boolean
@@ -110,15 +111,7 @@ export function RevokeKeyDialog({
               disabled={!isMatch || isPending}
             >
               {isPending ? (
-                <motion.div
-                  className="h-4 w-4 rounded-full border-2 border-current border-t-transparent"
-                  animate={{ rotate: 360 }}
-                  transition={{
-                    duration: 0.8,
-                    repeat: Number.POSITIVE_INFINITY,
-                    ease: "linear",
-                  }}
-                />
+                <Spinner className="h-4 w-4 border-current" />
               ) : null}
               Revoke
             </Button>

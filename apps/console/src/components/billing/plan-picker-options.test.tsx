@@ -452,6 +452,11 @@ it("never shows the previous team's offers on forms for a new team", async () =>
   rerender(<PlanPickerOptions preselected="developer" locator={other} />)
   expect(screen.queryByRole("form", { name: "Team A price plan" })).toBeNull()
   expect(screen.queryByRole("button")).toBeNull()
+  expect(screen.getByText("Loading plans…")).toHaveClass("text-sm text-muted")
+  expect(screen.getAllByRole("status")).toHaveLength(1)
+  expect(screen.getByRole("status", { name: "Loading" })).toHaveClass(
+    "rounded-full border-primary border-t-transparent",
+  )
   await act(async () =>
     resolve({
       offers: [
@@ -462,4 +467,5 @@ it("never shows the previous team's offers on forms for a new team", async () =>
   )
   const form = await screen.findByRole("form", { name: "Team B price plan" })
   expect(form.getAttribute("action")).toContain("team=use%3Ateam-2")
+  expect(screen.queryByText("Loading plans…")).toBeNull()
 })

@@ -9,6 +9,7 @@ import { Suspense, useEffect, useRef, useState } from "react"
 
 import { PlanPickerOptions } from "@/components/billing/plan-picker-options"
 import { CornerBrackets } from "@/components/corner-brackets"
+import { Spinner } from "@/components/icons"
 import { getTrialOutcomeAction } from "@/lib/billing/plan-offers-actions"
 import {
   type CheckoutLocator,
@@ -231,7 +232,10 @@ export default function ChoosePlanPage() {
     <Suspense
       fallback={
         <div className="flex min-h-screen items-center justify-center">
-          <div className="h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
+          <div className="flex items-center gap-2">
+            <Spinner className="border-primary" />
+            <span className="text-sm text-muted">Loading plans…</span>
+          </div>
         </div>
       }
     >

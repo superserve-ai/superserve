@@ -12,11 +12,11 @@ import { beforeEach, describe, expect, it, vi } from "vitest"
 
 // Mocks — see src/test/mocks.tsx for shared helpers; dialog uses more
 // than the common set, so define here.
-vi.mock("@superserve/ui", async () => {
+vi.mock("@superserve/ui", async (importOriginal) => {
+  const { cn } = await importOriginal<typeof import("@superserve/ui")>()
   const actual = await import("react")
   return {
-    cn: (...classes: Array<string | undefined | false>) =>
-      classes.filter(Boolean).join(" "),
+    cn,
     Button: (props: React.JSX.IntrinsicElements["button"]) => (
       <button type="button" {...props} />
     ),
@@ -57,16 +57,6 @@ vi.mock("@superserve/ui", async () => {
     __actual: actual,
   }
 })
-
-vi.mock("motion/react", () => ({
-  motion: {
-    div: (props: React.JSX.IntrinsicElements["div"]) => <div {...props} />,
-  },
-}))
-
-vi.mock("@phosphor-icons/react", () => ({
-  WarningIcon: () => <span>warn</span>,
-}))
 
 import { DeleteSandboxDialog } from "./delete-sandbox-dialog"
 
@@ -132,6 +122,28 @@ describe("DeleteSandboxDialog — single", () => {
     await user.click(screen.getByRole("button", { name: "Cancel" }))
     expect(onOpenChange).toHaveBeenCalledWith(false)
     expect(onConfirm).not.toHaveBeenCalled()
+  })
+
+  it("shows an accessible small spinner and disables actions while loading", () => {
+    render(
+      <DeleteSandboxDialog
+        open={true}
+        onOpenChange={onOpenChange}
+        onConfirm={onConfirm}
+        sandboxName="prod-api"
+        isLoading
+      />,
+    )
+
+    expect(
+      screen.getByRole("button", { name: "Loading Delete" }),
+    ).toBeDisabled()
+    expect(screen.getByRole("button", { name: "Cancel" })).toBeDisabled()
+    const spinner = screen.getByRole("status", { name: "Loading" })
+    expect(spinner).toHaveClass("h-4 w-4 border-current border-t-transparent")
+    for (const className of ["h-5", "w-5", "border-white"]) {
+      expect(spinner).not.toHaveClass(className)
+    }
   })
 })
 
