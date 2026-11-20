@@ -4,8 +4,9 @@ import { Badge, cn } from "@superserve/ui"
 import type { ReactNode } from "react"
 
 import {
-  billingCredits,
+  creditsRemaining,
   currencyCode,
+  formatCreditsRemaining,
   formatCurrency,
 } from "@/components/billing-summary"
 import { CornerBrackets } from "@/components/corner-brackets"
@@ -82,7 +83,7 @@ export function CurrentPlan({
 }) {
   const plan = summary.plan
   const currency = currencyCode(summary)
-  const remaining = billingCredits(summary).remaining
+  const remaining = creditsRemaining(summary)
   return (
     <section
       aria-label="Plan and credits"
@@ -129,7 +130,7 @@ export function CurrentPlan({
         >
           {remaining == null
             ? "Unavailable"
-            : formatCurrency(remaining, currency)}
+            : formatCreditsRemaining(remaining, currency)}
         </p>
         <p className="text-sm text-muted">
           {creditNote(plan, remaining, currency)}

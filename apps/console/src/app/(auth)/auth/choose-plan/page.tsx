@@ -59,16 +59,27 @@ const TRIAL_COPY: Record<TrialOutcome, string> = {
   unknown: MESSAGES.trial_ended,
 }
 
-// Says which trial state the team is in only once its summary confirms it.
-// Until that is known nothing is shown, so the copy never flips. A summary the
-// console cannot read, or one with no trial reason, keeps the neutral message,
-// so neither a load failure nor an unexplained block is shown as a denial.
-function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
-  const account = locator?.account
-  const team = locator?.team
+// What plan_picker_viewed reports as its reason for a trial_ended picker, so
+// a trial that was used up, one the account never got, and one a required
+// check could not confirm stay apart in analytics as they do in the copy.
+const TRIAL_VIEW_REASON: Record<TrialOutcome, string> = {
+  ended: "trial_ended",
+  unavailable: "trial_unavailable",
+  check_unavailable: "trial_check_unavailable",
+  unknown: "trial_reason_unknown",
+}
+
+// The team's trial outcome once its summary is read: undefined while it
+// loads, null when there is no team to read or the console can't read it.
+function useTrialOutcome(
+  locator: CheckoutLocator | null,
+  enabled: boolean,
+): TrialOutcome | null | undefined {
+  const account = enabled ? locator?.account : undefined
+  const team = enabled ? locator?.team : undefined
   const key = account && team ? `${account}/${team}` : null
   // Tagged with the team it was read for, so a previous team's result is never
-  // shown while another team's balance loads.
+  // used while another team's balance loads.
   const [read, setRead] = useState<{
     key: string
     outcome: TrialOutcome | null
@@ -83,11 +94,105 @@ function TrialEndedMessage({ locator }: { locator: CheckoutLocator | null }) {
       })
     return () => {
       current = false
+      // A picker that leaves trial_ended and comes back waits for a fresh read.
+      setRead(null)
     }
   }, [account, team, key])
-  if (key === null) return MESSAGES.trial_ended
-  if (read?.key !== key) return null
-  return read.outcome ? TRIAL_COPY[read.outcome] : MESSAGES.trial_ended
+  if (key === null) return null
+  return read?.key === key ? read.outcome : undefined
+}
+
+// Says which trial state the team is in only once its summary confirms it.
+// Until that is known nothing is shown, so the copy never flips. A summary the
+// console cannot read, or one with no trial reason, keeps the neutral message,
+// so a load failure is never shown as a denial.
+function TrialEndedMessage({
+  outcome,
+}: {
+  outcome: TrialOutcome | null | undefined
+}) {
+  if (outcome === undefined) return null
+  return outcome ? TRIAL_COPY[outcome] : MESSAGES.trial_ended
+}
+
+interface PickerView {
+  reason: string
+  requested_offer: string
+  plan_options_requested: boolean
+}
+
+interface PickerVisit {
+  identity: string
+  view: PickerView
+}
+
+function recordPickerView(
+  recorded: { current: string | null },
+  { identity, view }: PickerVisit,
+) {
+  if (recorded.current === identity) return
+  recorded.current = identity
+  try {
+    posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
+  } catch {
+    /* Analytics never controls the picker. */
+  }
+}
+
+// Records plan_picker_viewed once per picker visit; identity names the visit.
+// The ref keeps StrictMode's effect replay, and a view that loads after its
+// fallback was sent, from recording the visit twice. view is null while the
+// visit is still loading; fallback is then recorded if the visit changes,
+// closes or the page unloads first, so no visit is lost.
+function usePlanPickerView(
+  view: PickerView | null,
+  fallback: PickerView | null,
+  identity: string,
+) {
+  const recorded = useRef<string | null>(null)
+  const pending = useRef<PickerVisit | null>(null)
+  const mounted = useRef(false)
+  const viewKey = view && JSON.stringify(view)
+  const fallbackKey = fallback && JSON.stringify(fallback)
+  useEffect(() => {
+    const waiting = pending.current
+    pending.current = null
+    if (waiting && waiting.identity !== identity) {
+      recordPickerView(recorded, waiting)
+    }
+    if (viewKey) {
+      recordPickerView(recorded, {
+        identity,
+        view: JSON.parse(viewKey) as PickerView,
+      })
+    } else if (fallbackKey) {
+      pending.current = {
+        identity,
+        view: JSON.parse(fallbackKey) as PickerView,
+      }
+    }
+  }, [identity, viewKey, fallbackKey])
+  useEffect(() => {
+    mounted.current = true
+    const flush = () => {
+      const waiting = pending.current
+      pending.current = null
+      if (waiting) recordPickerView(recorded, waiting)
+    }
+    // React cleanup does not run when the document unloads. PostHog sends its
+    // queued events by beacon from its own pagehide listener; a capture
+    // listener on window runs before it, so this view joins that queue.
+    window.addEventListener("pagehide", flush, { capture: true })
+    return () => {
+      window.removeEventListener("pagehide", flush, { capture: true })
+      mounted.current = false
+      // StrictMode runs this cleanup and mounts again at once, so only a
+      // picker that is still unmounted after the timeout has really closed.
+      setTimeout(() => {
+        if (!mounted.current) flush()
+      }, 0)
+    }
+  }, [])
 }
 
 function ChoosePlanContent() {
@@ -110,31 +215,33 @@ function ChoosePlanContent() {
         : null
 
   const picking = locator !== null && reason !== "checkout_elsewhere"
+  const trialEnded = reason === "trial_ended" && !settling
+  const trialOutcome = useTrialOutcome(locator, trialEnded)
   useEffect(() => {
     if (settling) router.replace(settling)
   }, [settling, router])
   // New teams start on a trial, so this picker, not /onboarding/plan, is where
   // most customers first see plans. $pageview alone does not say why.
   // plan_options_requested says the page asked for plans; billing permissions
-  // or an empty catalog can still hide them. The ref keeps StrictMode's effect
-  // replay from recording the same picker state twice.
-  const recordedView = useRef<string | null>(null)
-  useEffect(() => {
-    if (settling) return
-    const view = {
-      reason,
-      requested_offer: preselected ?? "not_specified",
-      plan_options_requested: picking,
-    }
-    const key = JSON.stringify(view)
-    if (recordedView.current === key) return
-    recordedView.current = key
-    try {
-      posthog.capture(PLAN_PICKER_EVENTS.VIEWED, view)
-    } catch {
-      /* Analytics never controls the picker. */
-    }
-  }, [settling, reason, preselected, picking])
+  // or an empty catalog can still hide them. A trial_ended picker waits for
+  // the team's trial outcome so its reason says which one it is, and records
+  // an unknown trial reason if it changes or closes first.
+  const shown = {
+    requested_offer: preselected ?? "not_specified",
+    plan_options_requested: picking,
+  }
+  usePlanPickerView(
+    settling || (trialEnded && trialOutcome === undefined)
+      ? null
+      : {
+          ...shown,
+          reason: trialEnded
+            ? TRIAL_VIEW_REASON[trialOutcome ?? "unknown"]
+            : reason,
+        },
+    settling ? null : { ...shown, reason: TRIAL_VIEW_REASON.unknown },
+    JSON.stringify({ ...shown, reason, team: locator?.team ?? null }),
+  )
   if (settling) return null
 
   return (
@@ -163,7 +270,7 @@ function ChoosePlanContent() {
           </h1>
           <p className="mt-2 text-center text-xs text-muted">
             {reason === "trial_ended" ? (
-              <TrialEndedMessage locator={locator} />
+              <TrialEndedMessage outcome={trialOutcome} />
             ) : (
               MESSAGES[reason]
             )}
