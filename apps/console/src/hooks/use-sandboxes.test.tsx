@@ -38,6 +38,11 @@ vi.mock("@superserve/ui", () => ({
   useToast: () => ({ addToast: mockAddToast }),
 }))
 
+const mockCapture = vi.fn()
+vi.mock("posthog-js/react", () => ({
+  usePostHog: () => ({ capture: mockCapture }),
+}))
+
 import {
   useBulkDeleteSandboxes,
   useCreateSandbox,
@@ -80,6 +85,153 @@ const cachedList = (
   queryClient: QueryClient,
 ): PagedResult<SandboxResponse> | undefined =>
   queryClient.getQueryData<PagedResult<SandboxResponse>>(listKey)
+
+const TRIAL_URL = "https://console.superserve.ai/plan-usage"
+const trialExhausted = () =>
+  new ApiError(
+    402,
+    "trial_exhausted",
+    `Your free trial credit is used up. Add a card and choose a plan to keep using sandboxes: ${TRIAL_URL}`,
+    TRIAL_URL,
+  )
+
+describe("billing block toasts", () => {
+  const assign = vi.fn()
+  beforeEach(() => {
+    mockCreate.mockReset()
+    mockResume.mockReset()
+    mockAddToast.mockReset()
+    mockCapture.mockReset()
+    assign.mockReset()
+    vi.spyOn(window, "location", "get").mockReturnValue({
+      ...window.location,
+      origin: "https://console.superserve.ai",
+      assign,
+    })
+  })
+  afterEach(() => {
+    vi.restoreAllMocks()
+  })
+
+  it("turns a create 402 into a toast with a working plan button", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockCreate.mockRejectedValue(trialExhausted())
+    const { result } = renderHook(() => useCreateSandbox(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: "x" }).catch(() => {})
+    })
+
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledOnce())
+    const toast = mockAddToast.mock.calls[0][0]
+    expect(toast).toMatchObject({
+      title: "Free trial credit used up",
+      description:
+        "Your free trial credit is used up. Add a card and choose a plan to keep using sandboxes.",
+      variant: "error",
+    })
+    expect(JSON.stringify(toast)).not.toContain("http")
+    expect(toast.actions).toHaveLength(1)
+    expect(toast.actions[0].label).toBe("Add card / choose plan")
+    expect(mockCapture).toHaveBeenCalledWith("billing_block_shown", {
+      reason: "trial_used_up",
+      code: "trial_exhausted",
+      surface: "create",
+    })
+
+    toast.actions[0].onClick()
+    expect(assign).toHaveBeenCalledWith("/billing-usage/")
+    expect(mockCapture).toHaveBeenCalledWith("billing_block_action_clicked", {
+      reason: "trial_used_up",
+      code: "trial_exhausted",
+      surface: "create",
+    })
+  })
+
+  it.each([
+    ["trial_unavailable", "trial_denied", "Free trial not available"],
+    [
+      "trial_check_unavailable",
+      "system_unavailable",
+      "Free trial not confirmed",
+    ],
+  ])("keeps a resume %s apart as %s", async (code, reason, title) => {
+    const { wrapper } = createQueryWrapper()
+    mockResume.mockRejectedValue(new ApiError(402, code, ""))
+    const { result } = renderHook(() => useResumeSandbox(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync("sbx-1").catch(() => {})
+    })
+
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledOnce())
+    expect(mockAddToast.mock.calls[0][0]).toMatchObject({ title })
+    expect(mockCapture).toHaveBeenCalledWith("billing_block_shown", {
+      reason,
+      code,
+      surface: "resume",
+    })
+    mockAddToast.mock.calls[0][0].actions[0].onClick()
+    expect(assign).toHaveBeenCalledWith("/billing-usage/")
+  })
+
+  it("sends a foreign action_url to the billing page instead", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockResume.mockRejectedValue(
+      new ApiError(402, "trial_exhausted", "x", "https://evil.example.com/"),
+    )
+    const { result } = renderHook(() => useResumeSandbox(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync("sbx-1").catch(() => {})
+    })
+
+    await waitFor(() => expect(mockAddToast).toHaveBeenCalledOnce())
+    mockAddToast.mock.calls[0][0].actions[0].onClick()
+    expect(assign).toHaveBeenCalledWith("/billing-usage/")
+  })
+
+  it.each([
+    [
+      "free_allowance_exhausted",
+      "The Free plan's daily compute allowance is used up. Sandboxes can start again when it resets, or upgrade for unlimited runtime.",
+    ],
+    [
+      "sandbox_exceeds_plan_limits",
+      "This sandbox is larger than your plan allows. Upgrade your plan or use a smaller template.",
+    ],
+  ])("keeps the plain error toast for a %s 402", async (code, message) => {
+    const { wrapper } = createQueryWrapper()
+    mockCreate.mockRejectedValue(new ApiError(402, code, message))
+    const { result } = renderHook(() => useCreateSandbox(), { wrapper })
+
+    await act(async () => {
+      await result.current.mutateAsync({ name: "x" }).catch(() => {})
+    })
+
+    await waitFor(() =>
+      expect(mockAddToast).toHaveBeenCalledWith(message, "error"),
+    )
+    expect(mockCapture).not.toHaveBeenCalled()
+  })
+
+  it("shows no toast when the page shows the billing block itself", async () => {
+    const { wrapper } = createQueryWrapper()
+    mockResume.mockRejectedValue(trialExhausted())
+    const { result } = renderHook(
+      () => useResumeSandbox({ billingBlockToast: false }),
+      { wrapper },
+    )
+
+    await act(async () => {
+      await result.current.mutateAsync("sbx-1").catch(() => {})
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(mockAddToast).not.toHaveBeenCalled()
+    expect(mockCapture).not.toHaveBeenCalled()
+  })
+})
 
 describe("useCreateSandbox", () => {
   beforeEach(() => {
