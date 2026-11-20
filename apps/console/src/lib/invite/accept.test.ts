@@ -120,6 +120,32 @@ describe("loadInviteView", () => {
     })
   })
 
+  it("tells a member who reopens an accepted invitation that they joined", async () => {
+    mocks.preview.mockResolvedValue({
+      ok: true,
+      preview: { ...preview, status: "accepted", available: false },
+    })
+    mocks.completed.mockResolvedValue({
+      memberships: [{ teamId: "team-1", region: "use" }],
+      degradedRegions: [],
+    })
+
+    expect((await loadInviteView(token)).view.kind).toBe("already_member")
+  })
+
+  it("shows an accepted invitation as unavailable to a non-member", async () => {
+    mocks.preview.mockResolvedValue({
+      ok: true,
+      preview: { ...preview, status: "accepted", available: false },
+    })
+    mocks.completed.mockResolvedValue({
+      memberships: [{ teamId: "team-1", region: "usw" }],
+      degradedRegions: [],
+    })
+
+    expect((await loadInviteView(token)).view.kind).toBe("unavailable")
+  })
+
   it("asks an account that already has a team to confirm", async () => {
     mocks.completed.mockResolvedValue({
       memberships: [{ teamId: "t0", region: "use" }],

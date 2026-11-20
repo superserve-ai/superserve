@@ -95,6 +95,7 @@ function InviteBody({ view, token }: { view: InviteView; token: string }) {
               </Button>
             </form>
           </div>
+          <Small>{INVITE_COPY.signedOut.sentTo(preview.email)}</Small>
           <Small>
             {regionLabel(preview.region)} ·{" "}
             {INVITE_COPY.signedOut.expires(formatInviteDate(preview.expiresAt))}

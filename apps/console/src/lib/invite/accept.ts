@@ -47,19 +47,31 @@ export interface InviteUser {
 // after its email be created. The read is fresh and cross-region: a cached
 // (or substituted) directory could still say "no team" after the account joined one, and a
 // degraded read must never count as "no team".
-async function readTeamState(userId: string): Promise<InviteTeamState> {
+async function readTeamState(
+  userId: string,
+  team: { teamId: string; region: string } | null,
+): Promise<{ state: InviteTeamState; memberOfTeam: boolean }> {
   try {
     const directory = await listTeamMembershipsForUserDetailed(userId, {
       strict: true,
     })
     const completed = await completedMemberships(userId, directory)
-    if (completed.memberships.length > 0) return "has_teams"
-    return directory.degradedRegions.length > 0 ||
+    const memberOfTeam =
+      team !== null &&
+      completed.memberships.some(
+        (m) => m.teamId === team.teamId && m.region === team.region,
+      )
+    if (completed.memberships.length > 0) {
+      return { state: "has_teams", memberOfTeam }
+    }
+    const state =
+      directory.degradedRegions.length > 0 ||
       completed.degradedRegions.length > 0
-      ? "unknown"
-      : "none"
+        ? "unknown"
+        : "none"
+    return { state, memberOfTeam }
   } catch {
-    return "unknown"
+    return { state: "unknown", memberOfTeam: false }
   }
 }
 
@@ -76,12 +88,17 @@ export async function loadInviteView(
     user && user.email
       ? { email: user.email, emailVerified: Boolean(user.email_confirmed_at) }
       : null
+  const preview = previewResult.ok ? previewResult.preview : null
+  const { state: teamState, memberOfTeam } = user
+    ? await readTeamState(user.id, preview)
+    : { state: "unknown" as const, memberOfTeam: false }
   const view = decideInviteView({
-    preview: previewResult.ok ? previewResult.preview : null,
+    preview,
     viewer,
-    teamState: user ? await readTeamState(user.id) : "unknown",
+    teamState,
     intent: user ? await hasInviteIntent(token) : false,
     failure,
+    memberOfTeam,
   })
   return {
     view,

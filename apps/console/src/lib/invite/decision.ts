@@ -59,9 +59,23 @@ export function decideInviteView(input: {
   // This browser started sign-up or sign-in from this invite page.
   intent?: boolean
   failure?: InviteFailure | null
+  // The signed-in account is an active member of the inviting team.
+  memberOfTeam?: boolean
 }): InviteView {
-  const { preview, viewer, teamState, intent = false, failure } = input
+  const {
+    preview,
+    viewer,
+    teamState,
+    intent = false,
+    failure,
+    memberOfTeam = false,
+  } = input
   if (!preview || !preview.available) {
+    // An accepted invitation is closed for good, but a member who reopens
+    // the link should learn they are on the team, not that the link is dead.
+    if (preview?.status === "accepted" && viewer && memberOfTeam) {
+      return { kind: "already_member", preview }
+    }
     return { kind: "unavailable", signedIn: viewer !== null }
   }
   if (!viewer) return { kind: "signed_out", preview }
