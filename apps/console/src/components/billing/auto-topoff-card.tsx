@@ -2,11 +2,14 @@
 
 import { Button, Field, Input, Switch, useToast } from "@superserve/ui"
 import { useQueryClient } from "@tanstack/react-query"
+import Link from "next/link"
 import { useEffect, useState } from "react"
 
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import { usePrepaidCredit } from "@/hooks/use-prepaid-credit"
+import { canBuyFundedCredit } from "@/lib/api/billing-capabilities"
+import { BUY_CREDIT_PATH } from "@/lib/api/billing-v2"
 import {
   type PrepaidCreditSummary,
   setPrepaidAutoRecharge,
@@ -36,12 +39,15 @@ export function AutoTopoffCard({
   canManage,
   allowEntry,
   allowDisable,
+  buyCreditHref,
 }: {
   data: PrepaidCreditSummary
   topoff: PlanTopoff
   canManage: boolean
   allowEntry: boolean
   allowDisable: boolean
+  // Where to buy the credit that saves a card, when that is another page.
+  buyCreditHref?: string
 }) {
   const { teamKey, cacheScope } = useBillingContext()
   const queryClient = useQueryClient()
@@ -112,7 +118,14 @@ export function AutoTopoffCard({
       />
       {allowEntry && !canEnable && (
         <p className="text-sm text-muted">
-          Buy credit once to save a card, then you can turn on Auto Reload.
+          {buyCreditHref ? (
+            <Link href={buyCreditHref} className="underline underline-offset-4">
+              Buy credit
+            </Link>
+          ) : (
+            "Buy credit"
+          )}{" "}
+          once to save a card, then you can turn on Auto Reload.
         </p>
       )}
       {enabled && (
@@ -214,6 +227,11 @@ export function AutoTopoffSettings({
         canManage={canManage}
         allowEntry={allowEntry}
         allowDisable={allowDisable}
+        buyCreditHref={
+          canManage && canBuyFundedCredit(capabilities.data)
+            ? BUY_CREDIT_PATH
+            : undefined
+        }
       />
     </div>
   )

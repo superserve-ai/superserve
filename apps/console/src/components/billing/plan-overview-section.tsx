@@ -13,7 +13,11 @@ import {
 } from "@/hooks/use-billing-v2"
 import { useLegacyPlanTransition } from "@/hooks/use-legacy-plan-transition"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
-import { canStartAnyPlan, canStartPlan } from "@/lib/api/billing-capabilities"
+import {
+  canBuyFundedCredit,
+  canStartAnyPlan,
+  canStartPlan,
+} from "@/lib/api/billing-capabilities"
 import { fundedByCredit, planTopoff } from "@/lib/api/billing-v2"
 
 import { AutoTopoffSettings } from "./auto-topoff-card"
@@ -169,7 +173,9 @@ export function PlanOverviewSection({
       canPurchase={
         plan.kind === "free"
           ? canStartAnyPlan(capabilities.data)
-          : canStartPlan(capabilities.data, plan)
+          : funded
+            ? canBuyFundedCredit(capabilities.data)
+            : canStartPlan(capabilities.data, plan)
       }
       billingControls={billingControls}
     />
