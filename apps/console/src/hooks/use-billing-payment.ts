@@ -4,10 +4,10 @@ import { useToast } from "@superserve/ui"
 import { type QueryClient, useQueryClient } from "@tanstack/react-query"
 import { useEffect, useLayoutEffect, useRef, useState } from "react"
 
+import type { BillingActionState } from "@/components/billing/billing-account-state"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useUser } from "@/hooks/use-user"
-import type { BillingSummaryResponse } from "@/lib/api/billing"
 import {
   createStripeCheckoutSession,
   createStripeCustomerPortalSession,
@@ -19,7 +19,7 @@ import type { TeamDirectoryResponse } from "@/lib/api/teams-actions"
 const paymentRequests = new WeakSet<QueryClient>()
 
 export function useBillingPayment(
-  summary: BillingSummaryResponse | null | undefined,
+  summary: BillingActionState | null | undefined,
   teamKey: string | null,
 ) {
   const capabilities = useBillingCapabilities()

@@ -2,6 +2,10 @@
 
 import { useQuery } from "@tanstack/react-query"
 
+import {
+  isBillingUsageUnavailable,
+  retryBillingUsageQuery,
+} from "@/hooks/billing-query-retry"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import {
   getBillingPricing,
@@ -98,9 +102,15 @@ export function useBillingUsage(
     queryFn: legacySignature
       ? () => getBillingUsageAction(start, end)
       : () => getBillingUsageSeries({ start, end, granularity, timezone }),
+    retry: retryBillingUsageQuery,
     enabled: enabled && ready,
     staleTime: overlapsRecentUsage ? 30_000 : 30 * 60_000,
-    refetchInterval: overlapsRecentUsage ? 60_000 : false,
+    refetchInterval: (query) =>
+      overlapsRecentUsage && !isBillingUsageUnavailable(query.state.error)
+        ? 60_000
+        : false,
+    refetchOnWindowFocus: (query) =>
+      !isBillingUsageUnavailable(query.state.error),
     refetchIntervalInBackground: false,
   })
 }

@@ -2,6 +2,10 @@
 
 import { type UseQueryResult, useQuery } from "@tanstack/react-query"
 
+import {
+  isBillingUsageUnavailable,
+  retryBillingUsageQuery,
+} from "@/hooks/billing-query-retry"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import {
   getBillingSummary,
@@ -20,9 +24,13 @@ export function useBillingSummary(
         ? billingKeys.summary({ cacheScope, teamKey })
         : billingKeys.summary({ cacheScope, teamKey: "unresolved" }),
     queryFn: getBillingSummary,
+    retry: retryBillingUsageQuery,
     enabled: enabled && ready,
     staleTime: 60_000,
-    refetchInterval: 60_000,
+    refetchInterval: (query) =>
+      isBillingUsageUnavailable(query.state.error) ? false : 60_000,
+    refetchOnWindowFocus: (query) =>
+      !isBillingUsageUnavailable(query.state.error),
     refetchIntervalInBackground: false,
   })
 }

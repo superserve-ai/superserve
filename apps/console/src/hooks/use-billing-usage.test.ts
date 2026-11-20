@@ -52,7 +52,7 @@ describe("useBillingUsage", () => {
     expect(useQuery).toHaveBeenCalledWith(
       expect.objectContaining({
         staleTime: 30_000,
-        refetchInterval: 60_000,
+        refetchInterval: expect.any(Function),
         queryKey: [
           "billing",
           "usage-series",
@@ -65,6 +65,11 @@ describe("useBillingUsage", () => {
         ],
       }),
     )
+    expect(
+      useQuery.mock.calls
+        .at(-1)?.[0]
+        .refetchInterval({ state: { error: null } }),
+    ).toBe(60_000)
     vi.useRealTimers()
   })
 
@@ -81,7 +86,7 @@ describe("useBillingUsage", () => {
     expect(useQuery).toHaveBeenCalledWith(
       expect.objectContaining({
         staleTime: 30 * 60_000,
-        refetchInterval: false,
+        refetchInterval: expect.any(Function),
         queryKey: [
           "billing",
           "usage-series",
@@ -94,6 +99,11 @@ describe("useBillingUsage", () => {
         ],
       }),
     )
+    expect(
+      useQuery.mock.calls
+        .at(-1)?.[0]
+        .refetchInterval({ state: { error: null } }),
+    ).toBe(false)
     vi.useRealTimers()
   })
 
