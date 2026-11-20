@@ -62,14 +62,33 @@ export interface MembershipDirectory {
   degradedRegions: string[]
 }
 
+async function fetchMembershipDirectory(
+  userId: string,
+): Promise<MembershipDirectory> {
+  const { items, degradedRegions } = await acrossCells(async (region) => {
+    const admin = cellFor(region).createAdminClient()
+    return membershipTeamIdsInCell(admin, userId).then((teamIds) =>
+      teamIds.map((teamId) => ({ teamId, region })),
+    )
+  })
+  return { memberships: items, degradedRegions }
+}
+
 /**
  * Membership lookup that also reports which cells could not be read. Use
  * this wherever "how many teams does this user have" changes behavior.
  */
 export async function listTeamMembershipsForUserDetailed(
   userId: string,
-  opts?: { maxAgeMs?: number; strict?: boolean },
+  opts?: {
+    maxAgeMs?: number
+    strict?: boolean
+    // False always reads fresh without reading or updating the shared cache.
+    publish?: boolean
+  },
 ): Promise<MembershipDirectory> {
+  if (opts?.publish === false) return fetchMembershipDirectory(userId)
+
   // Strict reads are for decisions that must fail closed: they never take a
   // cached or in-flight result, and a degraded cell is never papered over
   // with another read's answer.
@@ -103,25 +122,15 @@ export async function listTeamMembershipsForUserDetailed(
   const hadConcurrentFetch = (cacheEntry.inFlight ?? 0) > 0
   cacheEntry.inFlight = (cacheEntry.inFlight ?? 0) + 1
 
-  const promise = acrossCells(async (region) => {
-    const admin = cellFor(region).createAdminClient()
-    return membershipTeamIdsInCell(admin, userId).then((teamIds) =>
-      teamIds.map((teamId) => ({ teamId, region })),
-    )
-  }).then(({ items, degradedRegions }) => {
-    const result: MembershipDirectory = {
-      memberships: items,
-      degradedRegions,
-    }
-
+  const promise = fetchMembershipDirectory(userId).then((result) => {
     // When overlapping forced-fresh reads race, a degraded empty response
     // must not replace a concurrent healthy empty response. Otherwise callers
     // can observe different answers for the same read burst.
     if (
       !strict &&
       hadConcurrentFetch &&
-      items.length === 0 &&
-      degradedRegions.length > 0 &&
+      result.memberships.length === 0 &&
+      result.degradedRegions.length > 0 &&
       cacheEntry.lastResult &&
       cacheEntry.lastResult.memberships.length === 0 &&
       cacheEntry.lastResult.degradedRegions.length === 0
