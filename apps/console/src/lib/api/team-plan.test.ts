@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { teamPlanSchema } from "./billing-v2"
+import { teamEffectiveLimitsSchema, teamPlanSchema } from "./billing-v2"
 
 const response = {
   plan: {
@@ -76,5 +76,48 @@ describe("customer plan response", () => {
       undoable: true,
       pauses_running: true,
     })
+  })
+})
+
+describe("effective team limits", () => {
+  const limits = {
+    max_concurrent: 2000,
+    max_vcpu: 16,
+    max_memory_mib: 65536,
+    max_disk_mib: 51200,
+    max_templates: 100,
+  }
+
+  it("reads unassigned team overrides without inventing a plan", () => {
+    const wire = { ...response, plan: null, effective_limits: limits }
+    expect(teamEffectiveLimitsSchema.parse(wire)).toEqual(limits)
+    expect(teamPlanSchema.parse(wire)).toBeNull()
+  })
+
+  it("prefers resolved limits over assignment limits", () => {
+    expect(
+      teamEffectiveLimitsSchema.parse({
+        ...response,
+        effective_limits: { ...limits, max_templates: 0 },
+      }),
+    ).toEqual({ ...limits, max_templates: 0 })
+  })
+
+  it("supports API deployments that only expose assigned plan limits", () => {
+    expect(teamEffectiveLimitsSchema.parse(response)).toEqual(
+      response.plan.limits,
+    )
+    expect(
+      teamEffectiveLimitsSchema.parse({ ...response, plan: null }),
+    ).toBeNull()
+  })
+
+  it("rejects malformed effective limits instead of silently using lower plan caps", () => {
+    expect(() =>
+      teamEffectiveLimitsSchema.parse({
+        ...response,
+        effective_limits: { ...limits, max_vcpu: "16" },
+      }),
+    ).toThrow()
   })
 })

@@ -10,6 +10,7 @@ import {
   freeAllowanceSchema,
   prepaidBalanceSchema,
   teamEntrySchema,
+  teamEffectiveLimitsSchema,
   teamPlanSchema,
 } from "@/lib/api/billing-v2"
 import { apiClient } from "@/lib/api/client"
@@ -41,6 +42,10 @@ function useBillingV2Resource<T>(
 
 export function useTeamPlan(enabled: boolean) {
   return useBillingV2Resource("plan", teamPlanSchema, enabled)
+}
+
+export function useTeamEffectiveLimits(enabled: boolean) {
+  return useBillingV2Resource("plan", teamEffectiveLimitsSchema, enabled)
 }
 
 export function useTeamEntry(enabled: boolean) {
