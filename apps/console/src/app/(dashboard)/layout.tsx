@@ -9,6 +9,7 @@ import { SessionExpiryRedirect } from "@/components/layout/session-expiry-redire
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
 import { SignupPlanGate } from "@/components/onboarding/signup-plan-gate"
 import { QueryProvider } from "@/components/query-provider"
+import { TrialCheckAnnouncer } from "@/components/trial-billing-banner"
 import {
   getImpersonationContext,
   hasImpersonationCookie,
@@ -63,7 +64,10 @@ export default async function DashboardLayout({
       <SignupPlanGate>
         <DashboardShell
           globalBanner={
-            unavailable ? <PlanUnavailableBanner /> : <PlanBanner />
+            <>
+              <TrialCheckAnnouncer />
+              {unavailable ? <PlanUnavailableBanner /> : <PlanBanner />}
+            </>
           }
           banner={<ImpersonationBanner context={impersonationContext} />}
         >

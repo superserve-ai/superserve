@@ -1,7 +1,7 @@
 "use client"
 
 import { Button, cn } from "@superserve/ui"
-import { useCallback, useSyncExternalStore } from "react"
+import { useCallback, useEffect, useSyncExternalStore } from "react"
 
 import {
   BannerShell,
@@ -121,6 +121,55 @@ export function trialStage(
     : "trial"
 }
 
+const TRIAL_CHECK_UNAVAILABLE =
+  "We couldn't confirm your free trial, maybe because a blocker stopped a sign-up check. Upgrade to run sandboxes."
+
+// Screen readers do not reliably announce a live region that mounts with its
+// text, and the trial banner mounts only after billing data loads. The
+// dashboard keeps TrialCheckAnnouncer mounted and empty, and the banner puts
+// the trial check message into it while that message shows. The text is
+// cleared after a short time so that browse mode does not read it twice.
+const ANNOUNCEMENT_MS = 7_000
+let announcement = ""
+const announcementListeners = new Set<() => void>()
+
+function setAnnouncement(next: string) {
+  announcement = next
+  for (const listener of announcementListeners) listener()
+}
+
+function subscribeAnnouncement(listener: () => void) {
+  announcementListeners.add(listener)
+  return () => {
+    announcementListeners.delete(listener)
+  }
+}
+
+export function TrialCheckAnnouncer() {
+  const text = useSyncExternalStore(
+    subscribeAnnouncement,
+    () => announcement,
+    () => "",
+  )
+  return (
+    <p aria-live="polite" className="sr-only">
+      {text}
+    </p>
+  )
+}
+
+function useAnnouncement(text: string | null) {
+  useEffect(() => {
+    if (!text) return
+    setAnnouncement(text)
+    const timer = setTimeout(() => setAnnouncement(""), ANNOUNCEMENT_MS)
+    return () => {
+      clearTimeout(timer)
+      setAnnouncement("")
+    }
+  }, [text])
+}
+
 function TrialEntryBanner({
   entry,
   summary,
@@ -140,6 +189,9 @@ function TrialEntryBanner({
   )
   const remaining = formatUsd(summary.trial?.remaining_usd)
   const canManage = scope === "self" && summary.permissions.can_manage
+  useAnnouncement(
+    stage === "check_unavailable" ? TRIAL_CHECK_UNAVAILABLE : null,
+  )
   return (
     <BannerShell
       tone={stage === "trial" ? "info" : "danger"}
@@ -174,10 +226,7 @@ function TrialEntryBanner({
       ) : stage === "unknown" ? (
         <>Upgrade to run sandboxes.</>
       ) : stage === "check_unavailable" ? (
-        <>
-          We couldn&apos;t confirm the free trial for this account because a
-          required check didn&apos;t complete. Upgrade to run sandboxes.
-        </>
+        TRIAL_CHECK_UNAVAILABLE
       ) : stage === "ended" ? (
         <>
           Your free trial has ended. Your sandboxes are paused. A sandbox set to
@@ -254,9 +303,8 @@ function LegacyTrialBanner({ summary }: { summary: BillingSummaryResponse }) {
       <p className="min-w-0 flex-1 basis-72">
         {block === "trial_check_unavailable" ? (
           <>
-            We couldn&apos;t confirm the free trial for this account because a
-            required check didn&apos;t complete. Add a payment method to run
-            sandboxes.
+            We couldn&apos;t confirm your free trial, maybe because a blocker
+            stopped a sign-up check. Add a payment method to run sandboxes.
           </>
         ) : block === "trial_exhausted" ? (
           <>
