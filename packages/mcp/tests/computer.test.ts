@@ -276,6 +276,20 @@ describe("sandbox_computer (in-memory, fake client)", () => {
     expect(res.content[0].text).toContain("coordinate")
   })
 
+  it("a coordinate that is not exactly [x, y] is rejected before any input", async () => {
+    for (const coordinate of [[1], [1, 2, 3], [-1, 2], [1.5, 2]]) {
+      const res = await callRaw({ action: "left_click", coordinate })
+      expect(res.isError).toBe(true)
+    }
+    const drag = await callRaw({
+      action: "left_click_drag",
+      start_coordinate: [1, 2, 3],
+      coordinate: [4, 5],
+    })
+    expect(drag.isError).toBe(true)
+    expect(fake.desktopBatches).toEqual([])
+  })
+
   it("unknown sandbox is a tool error", async () => {
     const res = await callTool(conn.client, "sandbox_computer", {
       sandbox_id: "sbx-missing",
