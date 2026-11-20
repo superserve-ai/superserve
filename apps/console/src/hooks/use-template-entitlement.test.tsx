@@ -1,5 +1,12 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, renderHook, waitFor } from "@testing-library/react"
+import {
+  act,
+  fireEvent,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, expect, it, vi } from "vitest"
 
@@ -16,6 +23,17 @@ vi.mock("./use-billing-context", () => ({
   }),
 }))
 vi.mock("@/lib/api/client", () => ({ apiClient: state.api }))
+vi.mock("@/hooks/use-templates", () => ({
+  useCreateTemplate: () => ({ mutateAsync: vi.fn() }),
+}))
+vi.mock("next/navigation", () => ({ useRouter: () => ({ push: vi.fn() }) }))
+vi.mock("@superserve/ui", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@superserve/ui")>()),
+  HighlightedCode: ({ code }: { code: string }) => <pre>{code}</pre>,
+}))
+import { CreateTemplateDialog } from "@/components/templates/create-template-dialog"
+
+import { useTeamPlan } from "./use-billing-v2"
 import { useTemplateEntitlement } from "./use-template-entitlement"
 const response = (cap: number | null) => ({
   plan: {
@@ -65,5 +83,63 @@ it("does not leak a cached positive entitlement into another team's pending zero
   await waitFor(() => expect(hook.result.current.status).toBe("allowed"))
   expect(state.api).toHaveBeenCalledTimes(2)
   hook.unmount()
+  client.clear()
+})
+
+it("uses legacy effective limits in the dialog while keeping plan identity null", async () => {
+  const limits = {
+    max_concurrent: 2000,
+    max_vcpu: 16,
+    max_memory_mib: 65536,
+    max_disk_mib: 51200,
+    max_templates: 100,
+  }
+  state.api.mockResolvedValue({
+    ...response(10),
+    plan: null,
+    effective_limits: limits,
+  })
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  })
+  const wrapper = ({ children }: { children: ReactNode }) => (
+    <QueryClientProvider client={client}>{children}</QueryClientProvider>
+  )
+  const plan = renderHook(() => useTeamPlan(true), { wrapper })
+  const view = render(<CreateTemplateDialog open hideTrigger />, { wrapper })
+  await waitFor(() =>
+    expect(screen.getByRole("spinbutton", { name: "vCPU" })).toHaveAttribute(
+      "aria-valuemax",
+      "16",
+    ),
+  )
+  expect(screen.getByRole("spinbutton", { name: "Memory" })).toHaveAttribute(
+    "aria-valuemax",
+    "65536",
+  )
+  fireEvent.keyDown(screen.getByRole("spinbutton", { name: "vCPU" }), {
+    key: "End",
+  })
+  expect(screen.getByRole("spinbutton", { name: "vCPU" })).toHaveAttribute(
+    "aria-valuenow",
+    "16",
+  )
+  expect(plan.result.current.data).toBeNull()
+  expect(state.api).toHaveBeenCalledOnce()
+
+  state.api.mockResolvedValue({
+    ...response(10),
+    plan: null,
+    effective_limits: { ...limits, max_templates: 0 },
+  })
+  await act(async () => {
+    await plan.result.current.refetch()
+  })
+  await waitFor(() => expect(screen.queryByRole("dialog")).toBeNull())
+  expect(
+    screen.getByText("Your plan does not include template creation."),
+  ).toBeInTheDocument()
+  view.unmount()
+  plan.unmount()
   client.clear()
 })

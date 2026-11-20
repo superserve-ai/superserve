@@ -22,19 +22,17 @@ const mocks = vi.hoisted(() => ({
   push: vi.fn(),
 }))
 vi.mock("@/hooks/use-billing-v2", () => ({
-  useTeamPlan: () => ({
+  useTeamEffectiveLimits: () => ({
     data:
       mocks.planState === "legacy"
         ? null
         : mocks.planState === "missing"
           ? undefined
           : {
-              limits: {
-                max_templates: mocks.cap,
-                max_memory_mib: mocks.memoryCap,
-                max_vcpu: mocks.vcpuCap,
-                max_disk_mib: mocks.diskCap,
-              },
+              max_templates: mocks.cap,
+              max_memory_mib: mocks.memoryCap,
+              max_vcpu: mocks.vcpuCap,
+              max_disk_mib: mocks.diskCap,
             },
     isSuccess: mocks.querySuccess,
     isError: mocks.queryError,
