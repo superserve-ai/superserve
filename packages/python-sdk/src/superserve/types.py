@@ -28,6 +28,70 @@ class SandboxStatus(str, Enum):
     DELETED = "deleted"
 
 
+SandboxMeasurementSource = Literal["live", "last_known"]
+SandboxMetricsStatus = Literal[
+    "starting", "active", "pausing", "paused", "resuming", "migrating", "failed"
+]
+
+
+class SandboxCpuUsage(BaseModel):
+    """Average consumed vCPUs over the actual observation window."""
+
+    used_vcpus: float
+    sampled_at: datetime
+    window_seconds: float
+    source: SandboxMeasurementSource
+
+
+class SandboxCpuMetrics(BaseModel):
+    configured_vcpus: float
+    effective_vcpus: Optional[float]
+    limit_vcpus: float
+    usage: Optional[SandboxCpuUsage]
+
+
+class SandboxMemoryUsage(BaseModel):
+    """Guest MemTotal minus MemAvailable, in bytes."""
+
+    used_bytes: int
+    sampled_at: datetime
+    source: SandboxMeasurementSource
+
+
+class SandboxMemoryMetrics(BaseModel):
+    configured_bytes: int
+    effective_bytes: Optional[int]
+    limit_bytes: int
+    usage: Optional[SandboxMemoryUsage]
+
+
+class SandboxDiskUsage(BaseModel):
+    """Guest root filesystem capacity and usage, independent of disk allocation."""
+
+    total_bytes: int
+    used_bytes: int
+    available_bytes: int
+    sampled_at: datetime
+    source: SandboxMeasurementSource
+
+
+class SandboxDiskMetrics(BaseModel):
+    configured_bytes: int
+    effective_bytes: Optional[int]
+    limit_bytes: int
+    usage: Optional[SandboxDiskUsage]
+
+
+class SandboxMetrics(BaseModel):
+    """Raw values with independent sample times; source is not a freshness guarantee."""
+
+    id: str
+    status: SandboxMetricsStatus
+    cpu: SandboxCpuMetrics
+    memory: SandboxMemoryMetrics
+    disk: SandboxDiskMetrics
+
+
 class PreviewAccess(str, Enum):
     LEGACY_PUBLIC = "legacy_public"
     PUBLIC = "public"

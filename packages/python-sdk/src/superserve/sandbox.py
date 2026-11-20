@@ -61,6 +61,7 @@ from .types import (
     PreviewToken,
     PublishedPreviewPort,
     SandboxInfo,
+    SandboxMetrics,
     SandboxSecretBinding,
     SandboxStatus,
     SnapshotInfo,
@@ -418,6 +419,23 @@ class Sandbox:
         return [to_sandbox_info(item) for item in raw]
 
     @classmethod
+    def get_metrics_by_id(
+        cls,
+        sandbox_id: str,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> SandboxMetrics:
+        """Read cached measurements by ID without activating or resuming the VM."""
+        config = resolve_config(api_key=api_key, base_url=base_url)
+        raw = api_request(
+            "GET",
+            f"{config.base_url}/sandboxes/{sandbox_id}/metrics",
+            headers={"X-API-Key": config.api_key},
+        )
+        return SandboxMetrics.model_validate(raw)
+
+    @classmethod
     def kill_by_id(
         cls,
         sandbox_id: str,
@@ -488,6 +506,17 @@ class Sandbox:
             raise SandboxError(
                 f"Sandbox {self.id!r} has been deleted; create or connect to a new one."
             )
+
+    def get_metrics(self) -> SandboxMetrics:
+        """Read cached observations, including last-known data for inactive VMs."""
+        self._require_not_deleted()
+        raw = api_request(
+            "GET",
+            f"{self._config.base_url}/sandboxes/{self.id}/metrics",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+        return SandboxMetrics.model_validate(raw)
 
     def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""

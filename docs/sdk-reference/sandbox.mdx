@@ -176,6 +176,31 @@ Sandbox.update_by_id("7a3f2b8c-1234-...", auto_delete_seconds=3600)
 
 </CodeGroup>
 
+### `Sandbox.getMetricsById` / `Sandbox.get_metrics_by_id`
+
+Read cached CPU, memory, and guest root filesystem measurements directly by sandbox ID. This sends `GET /sandboxes/{id}/metrics` with the control-plane API key; it does not connect, activate, or resume the sandbox. Use it for paused and failed sandboxes as well as active ones.
+
+<CodeGroup>
+```typescript TypeScript
+const metrics = await Sandbox.getMetricsById(sandboxId, {
+  apiKey: process.env.SUPERSERVE_API_KEY,
+  // signal: abortController.signal,
+})
+```
+
+```python Python
+from superserve import Sandbox, AsyncSandbox
+
+metrics = Sandbox.get_metrics_by_id(sandbox_id)
+metrics = await AsyncSandbox.get_metrics_by_id(sandbox_id)
+```
+
+</CodeGroup>
+
+Returns `SandboxMetrics`: `id`, `status`, and `cpu`, `memory`, `disk` resource models. Each resource includes configured allocation, nullable effective allocation, an enforced limit, and nullable `usage`. CPU usage is average consumed vCPUs over `windowSeconds` / `window_seconds`; memory and disk values are bytes. Disk usage also includes filesystem capacity and available bytes, which may differ from configured disk size.
+
+Each non-null usage has its own `sampledAt` (`Date` in TypeScript) / `sampled_at` (`datetime` in Python) and `source` (`live` or `last_known`). These are original observation times; provenance does not guarantee freshness. Unknown observations remain `null` / `None`, and zero usage stays zero. No percentages are calculated. All metrics types are exported from the public packages.
+
 ## Methods on `sandbox`
 
 ### `getInfo` / `get_info`
@@ -191,6 +216,23 @@ console.log(info.status)  // e.g. "active" — see SandboxStatus
 ```python Python
 info = sandbox.get_info()
 print(info.status.value)  # e.g. "active" — see SandboxStatus
+```
+
+</CodeGroup>
+
+### `getMetrics` / `get_metrics`
+
+Read the same cached measurements using an existing sandbox handle and its control-plane credentials. This does not refresh a data-plane token or resume the VM. Prefer the by-ID method when you do not already have a handle, so obtaining one does not activate the sandbox.
+
+<CodeGroup>
+```typescript TypeScript
+const metrics = await sandbox.getMetrics()
+// Optional cancellation: sandbox.getMetrics({ signal: abortController.signal })
+```
+
+```python Python
+metrics = sandbox.get_metrics()
+metrics = await async_sandbox.get_metrics()
 ```
 
 </CodeGroup>
