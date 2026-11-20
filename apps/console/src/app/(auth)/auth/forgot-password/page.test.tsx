@@ -112,11 +112,9 @@ describe("ForgotPasswordPage", () => {
 
     submit()
 
-    expect(
-      await screen.findByText(
-        "Our bot check couldn't finish. Refresh the page and try again. If it still fails, turn off ad or content blockers for this site.",
-      ),
-    ).toBeTruthy()
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Our bot check couldn't finish. Turn off ad blockers for this site, then refresh the page.",
+    )
     expect(mockSendPasswordResetEmail).not.toHaveBeenCalled()
     expect(mockCapture).toHaveBeenCalledExactlyOnceWith(
       "auth_password_reset_failed",
@@ -234,6 +232,39 @@ describe("ForgotPasswordPage when recording a failure throws", () => {
         screen.getByRole("button", { name: "Send reset link" }),
       ).toHaveProperty("disabled", false),
     )
+  })
+
+  it("clears the error alert while retrying and restores it on the same failure", async () => {
+    const failure = {
+      success: false,
+      error: "Too many reset requests. Try again in a few minutes.",
+      errorCode: "rate_limited",
+    }
+    let resolveRetry!: (value: typeof failure) => void
+    mockSendPasswordResetEmail
+      .mockResolvedValueOnce(failure)
+      .mockReturnValueOnce(
+        new Promise<typeof failure>((resolve) => {
+          resolveRetry = resolve
+        }),
+      )
+
+    submit()
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(failure.error)
+    expect(screen.getAllByRole("alert")).toHaveLength(1)
+
+    fireEvent.click(screen.getByRole("button", { name: "Send reset link" }))
+
+    await waitFor(() =>
+      expect(mockSendPasswordResetEmail).toHaveBeenCalledTimes(2),
+    )
+    expect(screen.queryByRole("alert")).not.toBeInTheDocument()
+
+    resolveRetry(failure)
+
+    expect(await screen.findByRole("alert")).toHaveTextContent(failure.error)
+    expect(screen.getAllByRole("alert")).toHaveLength(1)
   })
 })
 
