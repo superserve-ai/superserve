@@ -24,6 +24,7 @@ describe("ApiError", () => {
     expect(err.status).toBe(403)
     expect(err.code).toBe("forbidden")
     expect(err.message).toBe("Access denied")
+    expect(err.messageFromBody).toBe(false)
     expect(err.name).toBe("ApiError")
     expect(err).toBeInstanceOf(Error)
   })
@@ -117,6 +118,7 @@ describe("apiClient", () => {
         status: 429,
         code: "quota_exceeded",
         message: "Plan limit reached",
+        messageFromBody: true,
       })
     }
   })
@@ -137,8 +139,29 @@ describe("apiClient", () => {
       const apiErr = err as ApiError
       expect(apiErr.status).toBe(500)
       expect(apiErr.code).toBe("unknown_error")
+      expect(apiErr.message).toBe("Internal Server Error")
+      expect(apiErr.messageFromBody).toBe(false)
     }
   })
+
+  it.each([undefined, "", " \t\n "])(
+    "uses statusText when the JSON error message is %j",
+    async (message) => {
+      fetchSpy.mockResolvedValue(
+        new Response(
+          JSON.stringify({ error: { code: "not_found", message } }),
+          { status: 404, statusText: "Not Found" },
+        ),
+      )
+
+      await expect(apiClient("/sandboxes")).rejects.toMatchObject({
+        status: 404,
+        code: "not_found",
+        message: "Not Found",
+        messageFromBody: false,
+      })
+    },
+  )
 
   it("includes an AbortSignal so requests can be cancelled on timeout", async () => {
     fetchSpy.mockResolvedValue(new Response("{}", { status: 200 }))
