@@ -12,10 +12,9 @@ import {
   Spinner,
 } from "@superserve/ui"
 import Link from "next/link"
-import { type FormEvent, useEffect, useState } from "react"
+import { type FormEvent, useEffect, useRef, useState } from "react"
 
 import { useSignOut } from "@/hooks/use-sign-out"
-import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
 import {
   listTeamsAction,
@@ -106,6 +105,7 @@ function PlanOption({
   card,
   locator,
   highlighted,
+  busy,
   submitting,
   onSubmit,
 }: {
@@ -113,6 +113,7 @@ function PlanOption({
   card: PickerCard
   locator: CheckoutLocator
   highlighted: boolean
+  busy: boolean
   submitting: SignupCheckoutOffer | null
   onSubmit: (offer: SignupCheckoutOffer) => (event: FormEvent) => void
 }) {
@@ -158,7 +159,7 @@ function PlanOption({
         type="submit"
         variant={highlighted ? "default" : "outline"}
         className="mt-auto h-11 w-full"
-        disabled={submitting !== null}
+        disabled={busy}
       >
         {submitting === plan.offer ? (
           <>
@@ -175,17 +176,33 @@ function PlanOption({
 
 // Option values pair region with id, as in the sidebar team switcher: the
 // same team id can exist in two cells.
+type SwitchAttempt = { live: boolean }
+
 function teamKey(team: { id: string; region: string }) {
   return `${team.region}:${team.id}`
 }
 
-// The user's other teams, so someone who can't buy a plan for this team can
-// carry on in one of theirs. One dropdown keeps the page short however many
-// teams there are. Nothing shows while they load or can't be read.
-function OtherTeams({ locator }: { locator: CheckoutLocator }) {
+// The user's other teams, so anyone on this gate can carry on in one of
+// theirs instead of buying a plan here. One dropdown keeps the page short
+// however many teams there are. Nothing shows while they load or can't be
+// read, or when the user has no other team.
+function OtherTeams({
+  locator,
+  className,
+  busy,
+  switching,
+  onSwitchStart,
+  onSwitchEnd,
+}: {
+  locator: CheckoutLocator
+  className?: string
+  busy: boolean
+  switching: boolean
+  onSwitchStart: () => SwitchAttempt | null
+  onSwitchEnd: (attempt: SwitchAttempt) => boolean
+}) {
   const [teams, setTeams] = useState<TeamSummary[]>()
   const [picked, setPicked] = useState<string>()
-  const [switching, setSwitching] = useState(false)
   const [failed, setFailed] = useState(false)
   useEffect(() => {
     let live = true
@@ -215,24 +232,29 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
     multiRegion ? `${team.name} · ${regionLabel(team.region)}` : team.name
   const selected = teams.find((team) => teamKey(team) === picked) ?? teams[0]!
   const open = async () => {
-    setSwitching(true)
+    const attempt = onSwitchStart()
+    if (!attempt) return
     setFailed(false)
     try {
       await setActiveTeamAction(selected.id, selected.region)
-      window.location.assign("/sandboxes")
+      if (attempt.live) window.location.assign("/sandboxes")
     } catch {
-      setSwitching(false)
-      setFailed(true)
+      if (onSwitchEnd(attempt)) setFailed(true)
     }
   }
   return (
-    <div className="flex w-80 max-w-full flex-col items-center gap-2">
+    <div
+      className={cn(
+        "flex w-80 max-w-full flex-col items-center gap-2",
+        className,
+      )}
+    >
       <p className="text-center text-sm text-muted">Or open another team:</p>
       <div className="flex w-full gap-2">
         <Select
           value={teamKey(selected)}
           onValueChange={(value) => setPicked(value as string)}
-          disabled={switching}
+          disabled={busy}
         >
           <SelectTrigger aria-label="Team to open" className="h-8 min-w-0">
             {/* Base UI's Value renders the raw option value by default. */}
@@ -252,7 +274,7 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
           variant="outline"
           size="sm"
           className="shrink-0"
-          disabled={switching}
+          disabled={busy}
           onClick={() => void open()}
         >
           {switching ? <Spinner size="sm" /> : null}
@@ -306,7 +328,52 @@ export function PlanPickerOptions({
   }, [account, team, key])
   const current = loaded?.key === key ? loaded : undefined
   const catalog = current?.catalog
-  const { submitting, onSubmit } = useSubmitOnce<SignupCheckoutOffer>()
+  const [submitting, setSubmitting] = useState<SignupCheckoutOffer | null>(null)
+  const [switching, setSwitching] = useState(false)
+  // Claim the navigation synchronously, before React updates the controls.
+  const pending = useRef<"checkout" | SwitchAttempt | null>(null)
+  useEffect(() => {
+    // A page restored from the back-forward cache starts with no navigation.
+    // A switch that was still running when the user left must not act later.
+    const reset = (event: PageTransitionEvent) => {
+      if (!event.persisted) return
+      if (pending.current !== null && pending.current !== "checkout")
+        pending.current.live = false
+      pending.current = null
+      setSubmitting(null)
+      setSwitching(false)
+    }
+    window.addEventListener("pageshow", reset)
+    return () => window.removeEventListener("pageshow", reset)
+  }, [])
+  const busy = submitting !== null || switching
+  const onSubmit = (offer: SignupCheckoutOffer) => (event: FormEvent) => {
+    if (pending.current !== null) {
+      event.preventDefault()
+      return
+    }
+    pending.current = "checkout"
+    setSubmitting(offer)
+  }
+  const otherTeamsProps = {
+    locator,
+    busy,
+    switching,
+    onSwitchStart: () => {
+      if (pending.current !== null) return null
+      const attempt = { live: true }
+      pending.current = attempt
+      setSwitching(true)
+      return attempt
+    },
+    // Only the attempt that holds the lock can release it.
+    onSwitchEnd: (attempt: SwitchAttempt) => {
+      if (pending.current !== attempt) return false
+      pending.current = null
+      setSwitching(false)
+      return true
+    },
+  }
   const signOut = useSignOut()
 
   if (current === undefined)
@@ -323,7 +390,7 @@ export function PlanPickerOptions({
             one of them to upgrade this team.
           </p>
         )}
-        <OtherTeams locator={locator} />
+        <OtherTeams {...otherTeamsProps} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
@@ -355,7 +422,7 @@ export function PlanPickerOptions({
         {enterprise ? (
           <EnterpriseOption card={enterprise} className="w-full max-w-sm" />
         ) : null}
-        <OtherTeams locator={locator} />
+        <OtherTeams {...otherTeamsProps} />
         <Button variant="outline" size="sm" onClick={() => void signOut()}>
           Sign out
         </Button>
@@ -367,55 +434,64 @@ export function PlanPickerOptions({
   )
   if (listed.length === 0)
     return (
-      <div className="mt-5 flex gap-2">
-        {plans.map(({ offer, label }) => (
-          <form
-            key={offer}
-            method="post"
-            action={signupCheckoutPath(offer, locator)}
-            onSubmit={onSubmit(offer)}
-          >
-            <Button
-              type="submit"
-              size="sm"
-              variant={highlighted(offer) ? "default" : "outline"}
-              disabled={submitting !== null}
+      <div className="flex flex-col items-center">
+        <div className="mt-5 flex gap-2">
+          {plans.map(({ offer, label }) => (
+            <form
+              key={offer}
+              method="post"
+              action={signupCheckoutPath(offer, locator)}
+              onSubmit={onSubmit(offer)}
             >
-              {submitting === offer ? <Spinner size="sm" /> : null}
-              {label}
-            </Button>
-          </form>
-        ))}
+              <Button
+                type="submit"
+                size="sm"
+                variant={highlighted(offer) ? "default" : "outline"}
+                disabled={busy}
+              >
+                {submitting === offer ? <Spinner size="sm" /> : null}
+                {label}
+              </Button>
+            </form>
+          ))}
+        </div>
+        <OtherTeams {...otherTeamsProps} className="mt-5" />
       </div>
     )
   return (
-    <div
-      className={cn(
-        "mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2",
-        listed.length + (enterprise ? 1 : 0) > 2
-          ? "lg:grid-cols-3"
-          : "max-w-3xl",
-      )}
-    >
-      {listed.map((plan) => (
-        <PlanOption
-          key={plan.offer}
-          plan={plan}
-          card={pickerCard(plan.catalog, catalog?.cards ?? [])}
-          locator={locator}
-          highlighted={highlighted(plan.offer)}
-          submitting={submitting}
-          onSubmit={onSubmit}
-        />
-      ))}
-      {enterprise ? (
-        <EnterpriseOption
-          card={enterprise}
-          className={
-            listed.length % 2 === 0 ? "md:col-span-2 lg:col-span-1" : undefined
-          }
-        />
-      ) : null}
+    <div className="flex w-full flex-col items-center">
+      <div
+        className={cn(
+          "mt-8 grid w-full grid-cols-1 gap-4 md:grid-cols-2",
+          listed.length + (enterprise ? 1 : 0) > 2
+            ? "lg:grid-cols-3"
+            : "max-w-3xl",
+        )}
+      >
+        {listed.map((plan) => (
+          <PlanOption
+            key={plan.offer}
+            plan={plan}
+            card={pickerCard(plan.catalog, catalog?.cards ?? [])}
+            locator={locator}
+            highlighted={highlighted(plan.offer)}
+            busy={busy}
+            submitting={submitting}
+            onSubmit={onSubmit}
+          />
+        ))}
+        {enterprise ? (
+          <EnterpriseOption
+            card={enterprise}
+            className={
+              listed.length % 2 === 0
+                ? "md:col-span-2 lg:col-span-1"
+                : undefined
+            }
+          />
+        ) : null}
+      </div>
+      <OtherTeams {...otherTeamsProps} className="mt-8" />
     </div>
   )
 }
