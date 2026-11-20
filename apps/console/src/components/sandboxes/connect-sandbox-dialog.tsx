@@ -19,8 +19,9 @@ import {
   HighlightedCode,
 } from "@superserve/ui"
 import { motion } from "motion/react"
+import Link from "next/link"
 import { useRouter } from "next/navigation"
-import { useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { useApiKeys, useCreateApiKey } from "@/hooks/use-api-keys"
@@ -39,28 +40,24 @@ export const INSTALL_COMMANDS: Record<Language, string> = {
 
 export function getConnectSnippet(
   language: Language,
-  apiKey: string,
   sandboxId: string,
 ): string {
-  const key = apiKey || "ss_live_xxxxxxxx..."
-
   if (language === "typescript") {
-    return `import { Sandbox } from "@superserve/sdk"
+    return `// Set your API key in your shell first:
+// export SUPERSERVE_API_KEY=ss_live_...
+import { Sandbox } from "@superserve/sdk"
 
-const sandbox = await Sandbox.connect("${sandboxId}", {
-  apiKey: "${key}",
-})
+const sandbox = await Sandbox.connect("${sandboxId}")
 
 const result = await sandbox.commands.run("echo 'Hello from Superserve!'")
 console.log(result.stdout)`
   }
 
-  return `from superserve import Sandbox
+  return `# Set your API key in your shell first:
+# export SUPERSERVE_API_KEY=ss_live_...
+from superserve import Sandbox
 
-sandbox = Sandbox.connect(
-    "${sandboxId}",
-    api_key="${key}",
-)
+sandbox = Sandbox.connect("${sandboxId}")
 
 result = sandbox.commands.run("echo 'Hello from Superserve!'")
 print(result.stdout)`
@@ -109,15 +106,27 @@ export function ConnectSandboxDialog({
   const { data: existingKeys } = useApiKeys()
   const [copiedKey, setCopiedKey] = useState(false)
 
+  const { isPending: isLoadingKeys } = useApiKeys()
+
   // Check if user has a non-dashboard API key
   const userKey = existingKeys?.find((k) => !k.name.startsWith("__console_"))
   const newlyCreatedKey = createKeyMutation.data?.key ?? ""
-  const snippetKey = newlyCreatedKey || (userKey ? "YOUR_API_KEY" : "")
   const hasKey = !!userKey || !!newlyCreatedKey
+  const apiKeyStep = !hasKey || newlyCreatedKey ? 1 : 0
+  const installStep = apiKeyStep + 1
+  const runStep = installStep + 1
 
   const handleCreateKey = () => {
     createKeyMutation.mutate("SDK Key")
   }
+
+  const copyKeyButtonRef = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    if (newlyCreatedKey) {
+      copyKeyButtonRef.current?.focus()
+    }
+  }, [newlyCreatedKey])
 
   const handleCopyKey = async () => {
     if (!newlyCreatedKey) return
@@ -130,7 +139,7 @@ export function ConnectSandboxDialog({
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogPopup className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>Connect to Sandbox</DialogTitle>
+          <DialogTitle>Connect to this sandbox from code</DialogTitle>
         </DialogHeader>
 
         {/* Language Tabs */}
@@ -193,19 +202,19 @@ export function ConnectSandboxDialog({
           {!hasKey && (
             <div className="space-y-2">
               <span className="block text-sm font-medium text-foreground">
-                API Key
+                {apiKeyStep}. Create an API key
               </span>
               <p className="text-xs text-muted">
-                Create an API key to authenticate with the SDK
+                Your code uses an API key to create, pause, and resume
+                sandboxes. The key shows one time only. Copy it when it appears.
               </p>
               <Button
                 onClick={handleCreateKey}
-                variant="outline"
                 size="sm"
-                disabled={createKeyMutation.isPending}
+                disabled={isLoadingKeys || createKeyMutation.isPending}
               >
                 <PlusIcon className="size-3.5" weight="light" />
-                {createKeyMutation.isPending ? "Creating..." : "Create API Key"}
+                {createKeyMutation.isPending ? "Creating..." : "Create API key"}
               </Button>
             </div>
           )}
@@ -213,7 +222,7 @@ export function ConnectSandboxDialog({
           {newlyCreatedKey && (
             <div className="space-y-3">
               <span className="block text-sm font-medium text-foreground">
-                API Key
+                {apiKeyStep}. Copy your API key
               </span>
               <div className="flex items-center gap-2 border border-border bg-background px-4 py-3">
                 <KeyIcon
@@ -224,10 +233,11 @@ export function ConnectSandboxDialog({
                   {newlyCreatedKey}
                 </code>
                 <button
+                  ref={copyKeyButtonRef}
                   type="button"
                   onClick={handleCopyKey}
                   aria-label={copiedKey ? "Copied" : "Copy API key"}
-                  className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground"
+                  className="shrink-0 cursor-pointer text-muted transition-colors hover:text-foreground focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
                 >
                   {copiedKey ? (
                     <CheckIcon className="size-4 text-success" weight="light" />
@@ -237,7 +247,8 @@ export function ConnectSandboxDialog({
                 </button>
               </div>
               <Alert variant="warning">
-                Make sure to copy your API key — it won&apos;t be shown again.
+                Copy this API key now. You cannot see it again after you close
+                this dialog.
               </Alert>
             </div>
           )}
@@ -245,7 +256,7 @@ export function ConnectSandboxDialog({
           {/* Install SDK */}
           <div className="space-y-2">
             <span className="block text-sm font-medium text-foreground">
-              Install SDK
+              {installStep}. Install the SDK
             </span>
             <div className="flex items-start border border-dashed border-border bg-background px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -261,19 +272,35 @@ export function ConnectSandboxDialog({
           {/* Connect & Run */}
           <div className="space-y-2">
             <span className="block text-sm font-medium text-foreground">
-              Connect and Run
+              {runStep}. Run this code
             </span>
-            <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
-              <div className="min-w-0 flex-1">
-                <HighlightedCode
-                  code={getConnectSnippet(language, snippetKey, sandboxId)}
-                  lang={language}
-                />
+            {hasKey && !newlyCreatedKey && (
+              <p className="text-xs text-muted">
+                Use one of your API keys. Manage keys on the{" "}
+                <Link
+                  href="/api-keys/"
+                  className="text-foreground underline underline-offset-4 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+                >
+                  API keys page
+                </Link>
+                .
+              </p>
+            )}
+            {hasKey ? (
+              <div className="flex max-h-[180px] items-start overflow-y-auto border border-dashed border-border bg-background px-4 py-3">
+                <div className="min-w-0 flex-1">
+                  <HighlightedCode
+                    code={getConnectSnippet(language, sandboxId)}
+                    lang={language}
+                  />
+                </div>
+                <CopyButton text={getConnectSnippet(language, sandboxId)} />
               </div>
-              <CopyButton
-                text={getConnectSnippet(language, snippetKey, sandboxId)}
-              />
-            </div>
+            ) : (
+              <p className="text-xs text-muted">
+                Create an API key in step 1 to see this code.
+              </p>
+            )}
           </div>
         </div>
 
@@ -285,7 +312,12 @@ export function ConnectSandboxDialog({
             <TerminalIcon className="size-3.5" weight="light" />
             Open Terminal
           </Button>
-          <Button onClick={() => onOpenChange(false)}>Done</Button>
+          <Button
+            variant={hasKey ? "default" : "outline"}
+            onClick={() => onOpenChange(false)}
+          >
+            Done
+          </Button>
         </DialogFooter>
       </DialogPopup>
     </Dialog>
