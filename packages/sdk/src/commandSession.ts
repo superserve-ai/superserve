@@ -244,10 +244,11 @@ class Session implements CommandSession {
         const onAbort = () => this._abort()
         signal.addEventListener("abort", onAbort, { once: true })
         // Drop the listener once settled so a reused signal doesn't retain
-        // every finished session.
-        void this._result.finally(() =>
-          signal.removeEventListener("abort", onAbort),
-        )
+        // every finished session. Handle both outcomes: `.finally()` would
+        // return a promise that re-rejects with nothing attached to it, which
+        // is an unhandled rejection whenever the session fails or is aborted.
+        const cleanup = () => signal.removeEventListener("abort", onAbort)
+        void this._result.then(cleanup, cleanup)
       }
     }
   }
