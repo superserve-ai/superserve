@@ -30,6 +30,12 @@ export const CALLBACK_FAILURE_REASONS = [
   "signup_blocked",
   // A new Enterprise Google signup could not be placed on hold.
   "enterprise_hold_failed",
+  // The confirm page posted back after its saved email link was gone (it
+  // expired, or the cookie was missing or invalid).
+  "email_link_expired",
+  // The confirm page's post was not from this site or had the wrong CSRF
+  // value; the page offers a fresh button.
+  "email_link_rejected",
 ] as const
 
 /**
