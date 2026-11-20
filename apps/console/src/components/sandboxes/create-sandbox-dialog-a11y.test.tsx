@@ -75,7 +75,7 @@ it("switches sources after translation replaces both source text nodes", async (
   )
 
   const template = screen.getByRole("button", { name: "Template" })
-  const snapshot = screen.getByRole("button", { name: "Snapshot", exact: true })
+  const snapshot = screen.getByRole("button", { name: "Snapshot" })
   for (const [button, translated] of [
     [template, "Imagen"],
     [snapshot, "Instantánea"],
