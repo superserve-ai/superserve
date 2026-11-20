@@ -1,11 +1,11 @@
 "use client"
 
 import { useBillingContext } from "./use-billing-context"
-import { useTeamPlan } from "./use-billing-v2"
+import { useTeamEffectiveLimits } from "./use-billing-v2"
 
 export function useTemplateEntitlement() {
   const context = useBillingContext()
-  const query = useTeamPlan(context.ready)
+  const query = useTeamEffectiveLimits(context.ready)
   const status =
     !context.ready || context.teamKey === null
       ? "loading"
@@ -13,12 +13,9 @@ export function useTemplateEntitlement() {
         ? "error"
         : !query.isSuccess || query.data === undefined
           ? "loading"
-          : query.data?.limits.max_templates === 0
+          : query.data?.max_templates === 0
             ? "unavailable"
             : "allowed"
-  // The plan's per-sandbox caps, so the create dialog only offers shapes the
-  // backend would accept for this team. Absent while loading or for teams
-  // whose plan reports no cap.
-  const limits = query.isSuccess ? (query.data?.limits ?? null) : null
+  const limits = query.isSuccess ? (query.data ?? null) : null
   return { status, retry: query.refetch, limits }
 }
