@@ -19,6 +19,7 @@ import {
   GOOGLE_SIGNUP_RECOVERY_URL,
   requiresGoogleSignupRecovery,
 } from "@/lib/api/client"
+import { isCuratedTeamCreationError } from "@/lib/api/team-creation-errors"
 import { regionLabel } from "@/lib/format"
 
 /**
@@ -74,7 +75,12 @@ export function TeamsSection() {
             window.location.assign(GOOGLE_SIGNUP_RECOVERY_URL)
             return
           }
-          addToast(error.message || "Failed to create team", "error")
+          if (isCuratedTeamCreationError(error)) {
+            addToast(error.message, "error")
+            return
+          }
+          console.error("Failed to create team:", error)
+          addToast("Failed to create team. Try again.", "error")
         },
       },
     )

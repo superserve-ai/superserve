@@ -44,7 +44,7 @@ def verify(browser, scenario):
             expect(page.locator('[aria-label="Active team"]')).to_have_count(0)
         else:
             if scenario.startswith('uncertain'):
-                expect(page.get_by_text('Something went wrong. Please try again.', exact=True)).to_be_visible()
+                expect(page.get_by_text('Failed to create team. Try again.', exact=True)).to_be_visible()
                 expect(name).to_have_value('West fixture team')
                 expect(page.get_by_role('button', name='Create Team', exact=True)).to_be_enabled()
                 expect(page.get_by_text('Team West fixture team created in US West', exact=True)).to_have_count(0)

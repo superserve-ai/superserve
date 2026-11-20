@@ -17,9 +17,10 @@ vi.mock("@/hooks/use-user", () => ({
 }))
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { act, renderHook, waitFor } from "@testing-library/react"
-import { afterEach, beforeEach, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import type { BillingSummaryResponse } from "@/lib/api/billing"
+import { ApiError } from "@/lib/api/client"
 import {
   apiKeyKeys,
   billingKeys,
@@ -163,6 +164,67 @@ it("keeps the current team when creation returns a signup denial", async () => {
   expect(
     client.getQueryData<TeamDirectoryResponse>(teamKeys.directory()),
   ).toEqual(directory)
+})
+
+describe.each([
+  { mode: "creation", convertTeamId: undefined },
+  { mode: "conversion", convertTeamId: "b" },
+])("pending $mode intent", ({ convertTeamId }) => {
+  it.each([
+    ["invalid_team_name", "Team name is required"],
+    ["region_unavailable", "Region usw is not available"],
+    [
+      "account_team_unconfirmed",
+      "Could not read your account team. Try again.",
+    ],
+  ])(
+    "preserves the intent after %s and reuses it on retry",
+    async (code, message) => {
+      const key = convertTeamId
+        ? "superserve:team-conversion:u1"
+        : "superserve:team-creation:u1:usw"
+      const stored = JSON.stringify({
+        operationId: "11111111-1111-4111-8111-111111111111",
+        name: "acme",
+        ...(convertTeamId ? { region: "usw", convertTeamId } : {}),
+      })
+      sessionStorage.setItem(key, stored)
+      mocks.create
+        .mockResolvedValueOnce({ code, message })
+        .mockResolvedValueOnce({ ...teamB, name: "acme" })
+      mocks.directory.mockResolvedValue(directory)
+      const { result } = setup()
+
+      await act(async () => {
+        await expect(
+          result.current.create.mutateAsync({
+            name: "acme",
+            region: "usw",
+            convertTeamId,
+          }),
+        ).rejects.toEqual(new ApiError(403, code, message))
+      })
+
+      expect(sessionStorage.getItem(key)).toBe(stored)
+      expect(
+        client.getQueryData<TeamDirectoryResponse>(teamKeys.directory()),
+      ).toEqual(directory)
+
+      // A retry also resumes a conversion the form no longer offers.
+      await act(async () => {
+        await expect(
+          result.current.create.mutateAsync({ name: "acme", region: "usw" }),
+        ).resolves.toEqual({
+          team: { ...teamB, name: "acme" },
+          converted: Boolean(convertTeamId),
+        })
+      })
+
+      const [first, second] = mocks.create.mock.calls
+      expect(second).toEqual(first)
+      expect(sessionStorage.getItem(key)).toBeNull()
+    },
+  )
 })
 
 it.each([false, true])(
