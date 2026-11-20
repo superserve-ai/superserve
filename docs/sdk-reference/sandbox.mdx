@@ -95,7 +95,7 @@ sandbox = Sandbox.create(
 | `autoDeleteSeconds` / `auto_delete_seconds` | `number`                 | Delete the sandbox once continuously paused for this many seconds (max 30 days, `0` = delete on pause). See [Lifecycle](/sandbox/lifecycle#auto-delete).                                                                                           |
 | `metadata`                                  | `Record<string, string>` | String tags.                                                                                                                                                                                                                                       |
 | `envVars` / `env_vars`                      | `Record<string, string>` | Env vars injected into every process.                                                                                                                                                                                                              |
-| `secrets`                                   | `Record<string, string>` | Bind secrets to env vars (`ENV_VAR → secret name`). The agent sees a stand-in token; the real credential is attached to outbound requests. See [Secrets](/secrets/overview).                                                                       |
+| `secrets`                                   | `Record<string, string>` | Bind secrets to env vars (`ENV_VAR → secret name`). The agent sees a stand-in token; the real credential is attached to outbound requests. Each secret must already exist in your team: if it does not, `create` raises `ValidationError` with code `secret_not_found` (HTTP `400`) and no sandbox is created. See [Secrets](/secrets/overview). |
 | `network`                                   | `NetworkConfig`          | Egress allow/deny rules.                                                                                                                                                                                                                           |
 | `previewAccess` / `preview_access`          | `"public" \| "private"`  | Enable explicit publication and set the default access for newly published ports. Each port can override it. Omit to use strict `public`; `legacy_public` is only returned for pre-migration sandboxes. See [Preview URLs](/sandbox/preview-urls). |
 | `apiKey` / `api_key`                        | `string`                 | Overrides `SUPERSERVE_API_KEY`.                                                                                                                                                                                                                    |
@@ -199,6 +199,8 @@ print(info.status.value)  # e.g. "active" — see SandboxStatus
 
 Checkpoint the VM state to disk. Returns once the pause is accepted; the sandbox transitions to `pausing` and then `paused` on its own. Pass `wait` to return once it is `paused`.
 
+Needs an `active` sandbox. On a sandbox that is already `pausing` or `paused`, `pause` raises `ConflictError` (`409`), with or without `wait`. It does not wait for the earlier pause to finish.
+
 | Option                               | Type          | Description                                                                                                        |
 | ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
 | `wait`                               | `boolean`     | Return once the sandbox is `paused` rather than once the pause is accepted. A sandbox configured to delete on pause counts as done once it is deleted. Default `false`. |
@@ -252,6 +254,8 @@ List this sandbox's snapshots, newest first. Takes `limit` and `offset`. Returns
 ### `resume`
 
 Restore a paused sandbox. A pause still in progress is waited out first, under the same controls as `pause` with `wait`. The backend rotates the per-sandbox access token; the SDK re-injects it into `sandbox.files` transparently.
+
+On a sandbox that is already `active`, `resume` raises `ConflictError` (`409`).
 
 | Option                               | Type          | Description                                                                                                        |
 | ------------------------------------ | ------------- | ------------------------------------------------------------------------------------------------------------------ |
@@ -650,9 +654,9 @@ See [Errors](/errors).
 Sandbox methods commonly raise:
 
 - `AuthenticationError` - missing or invalid API key
-- `ValidationError` - bad request body
+- `ValidationError` - bad request body, or a `secrets` entry on `create` that names a secret your team does not have (code `secret_not_found`)
 - `NotFoundError` - sandbox doesn't exist (except `kill` / `killById`, which swallow 404)
-- `ConflictError` - wrong state (e.g., pausing an already-paused sandbox, or patching `network` while paused)
+- `ConflictError` - wrong state (e.g., pausing a `pausing` or `paused` sandbox, resuming an `active` sandbox, or patching `network` while paused)
 - `BillingError` - billing does not allow the sandbox to start (on create, resume, or the automatic resume in `connect`). `actionUrl` / `action_url` links to where the user can add a card and choose a plan. See [Billing errors](/errors#billing-errors-402).
 - `ServerError` - platform error
 
