@@ -69,6 +69,10 @@ startCmd: "python server.py"
 
 The snapshot captures the running process, so sandboxes restored from this template come up with it already live.
 
+The process keeps running in each sandbox until it exits or the sandbox is killed. Its output is not kept, so redirect it to a file if you need logs, for example `python server.py > /tmp/server.log 2>&1`.
+
+`startCmd` runs with `/bin/sh -c`. If it can't be launched, the build fails with `start_cmd_failed`. A command that starts and then exits doesn't fail the build, so use `readyCmd` to check that the process is up.
+
 ## `readyCmd`: readiness probe
 
 ```typescript
