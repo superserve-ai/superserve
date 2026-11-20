@@ -27,6 +27,10 @@ export function markSigningOut() {
   signingOut = true
 }
 
+export function clearSigningOut() {
+  signingOut = false
+}
+
 // An open tab outlives its session; send it to sign-in instead of letting
 // every request fail with an error screen.
 export function SessionExpiryRedirect() {
