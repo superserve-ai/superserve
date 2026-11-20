@@ -749,10 +749,9 @@ describe("TeamClient", () => {
       expect(
         screen.getByRole("button", { name: "Revoke" }),
       ).toHaveAccessibleDescription("A team needs at least one owner.")
-      expect(screen.getByRole("button", { name: "Revoke" })).toHaveAttribute(
-        "title",
-        "A team needs at least one owner.",
-      )
+      expect(
+        screen.getByRole("button", { name: "Revoke" }),
+      ).not.toHaveAttribute("title")
       const revokeReason = document.getElementById("owner-reason-assignment-1")
       expect(revokeReason).toBeVisible()
       expect(revokeReason).not.toHaveClass("sr-only")
@@ -919,6 +918,14 @@ describe("TeamClient", () => {
     render(<TeamClient />)
     expect(screen.getByRole("button", { name: "Leave team" })).toBeDisabled()
     expect(
+      screen.getByRole("button", { name: "Leave team" }),
+    ).not.toHaveAttribute("title")
+    expect(
+      screen.getByRole("button", { name: "Leave team" }),
+    ).toHaveAccessibleDescription(
+      "Make another member an owner before leaving.",
+    )
+    expect(
       screen.getByText("Make another member an owner before leaving."),
     ).toBeInTheDocument()
   })
@@ -938,6 +945,9 @@ describe("TeamClient", () => {
     })
     render(<TeamClient />)
     expect(screen.getByRole("button", { name: "Leave team" })).toBeEnabled()
+    expect(
+      screen.getByRole("button", { name: "Leave team" }),
+    ).not.toHaveAttribute("aria-describedby")
     expect(
       screen.queryByText("Make another member an owner before leaving."),
     ).not.toBeInTheDocument()
@@ -1167,7 +1177,7 @@ describe("TeamClient", () => {
 
       const invite = screen.getByRole("button", { name: /^invite$/i })
       expect(invite).toBeDisabled()
-      expect(invite).toHaveAttribute("title", "Upgrade to invite members")
+      expect(invite).not.toHaveAttribute("title")
       expect(
         screen.getAllByText("Upgrade to invite members").length,
       ).toBeGreaterThan(0)
