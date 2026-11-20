@@ -1,9 +1,17 @@
 import { ToastProvider } from "@superserve/ui"
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
-import { act, renderHook, screen, waitFor } from "@testing-library/react"
+import {
+  act,
+  render,
+  renderHook,
+  screen,
+  waitFor,
+} from "@testing-library/react"
 import type { ReactNode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { TeamClient } from "@/app/(dashboard)/team/team-client"
+import { QueryProvider } from "@/components/query-provider"
 import { ApiError } from "@/lib/api/client"
 import { teamKeys } from "@/lib/api/query-keys"
 import type { TeamRoleAssignment } from "@/lib/api/team-management"
@@ -36,6 +44,12 @@ vi.mock("@/lib/api/team-invitations-actions", () => ({
   revokeInvitationAction: mocks.revoke,
   leaveTeamAction: mocks.leave,
 }))
+vi.mock("@/hooks/use-user", () => ({
+  useUser: () => ({ user: null, loading: false, error: null }),
+}))
+vi.mock("next/navigation", () => ({
+  useRouter: () => ({ replace: vi.fn() }),
+}))
 
 import {
   useAssignTeamRole,
@@ -48,6 +62,7 @@ import {
   useResendInvitation,
   useRevokeInvitation,
   useRevokeTeamRole,
+  useTeamManagement,
 } from "./use-team-management"
 
 const team = { teamId: "captured-team", region: "use" }
@@ -59,6 +74,46 @@ function wrapper({ children }: { children: ReactNode }) {
     </QueryClientProvider>
   )
 }
+
+describe("team management", () => {
+  it("shows the no-access notice immediately without retrying a 403", async () => {
+    vi.clearAllMocks()
+    mocks.management.mockRejectedValue(
+      new ApiError(403, "forbidden", "Permission denied"),
+    )
+    mocks.directory.mockResolvedValue({
+      teams: [],
+      regions: [],
+      activeTeamId: null,
+      activeRegion: null,
+    })
+    render(
+      <QueryProvider>
+        <ToastProvider>
+          <TeamClient />
+        </ToastProvider>
+      </QueryProvider>,
+    )
+
+    expect(
+      await screen.findByText(/Your role can't view team members/),
+    ).toBeInTheDocument()
+    expect(mocks.management).toHaveBeenCalledTimes(1)
+  })
+
+  it.each([401, 409])("does not retry a %s", async (status) => {
+    vi.clearAllMocks()
+    mocks.management.mockRejectedValue(
+      new ApiError(status, "error", "Request failed"),
+    )
+    const { result } = renderHook(() => useTeamManagement(), {
+      wrapper: QueryProvider,
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(mocks.management).toHaveBeenCalledTimes(1)
+  })
+})
 
 describe("displayed team scope", () => {
   it.each(["use", "usw", null])(
@@ -155,7 +210,7 @@ describe("leave scope", () => {
     async (status, expected) => {
       vi.clearAllMocks()
       const client = new QueryClient({
-        defaultOptions: { queries: { staleTime: Infinity, retry: false } },
+        defaultOptions: { queries: { staleTime: Infinity, retryDelay: 0 } },
       })
       client.setQueryData(teamKeys.directory(), {
         activeTeamId: team.teamId,

@@ -165,6 +165,14 @@ export function useTeamManagement() {
   return useQuery({
     queryKey: teamManagementKeys.all,
     queryFn: getTeamManagement,
+    // The client default skips 401/409; a 403 is permanent and the page
+    // renders it as a no-access notice.
+    retry: (failureCount, error) => {
+      const status = error instanceof ApiError ? error.status : 0
+      return (
+        status !== 401 && status !== 403 && status !== 409 && failureCount < 3
+      )
+    },
   })
 }
 
