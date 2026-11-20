@@ -7,12 +7,15 @@ import Link from "next/link"
 import { useSearchParams } from "next/navigation"
 import Script from "next/script"
 import { usePostHog } from "posthog-js/react"
-import { Suspense, useEffect, useRef, useState } from "react"
+import { Suspense, useEffect, useLayoutEffect, useRef, useState } from "react"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
+import { settleActiveTeamAction } from "@/lib/api/teams-actions"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { isPlainDashboardPath } from "@/lib/auth/plain-dashboard-path"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import {
@@ -40,6 +43,12 @@ import {
 } from "./google-signup-check"
 import { sendSignInLink } from "./link-action"
 
+const SERVER_ACTION_ROUND_TRIP_MS = 1500
+// The server gives up after TEAM_SELECTION_DEADLINE_MS. The extra time covers
+// the server action request, the cookie write, and the response.
+const SETTLE_TEAM_CLIENT_WAIT_MS =
+  TEAM_SELECTION_DEADLINE_MS + SERVER_ACTION_ROUND_TRIP_MS
+
 type RecoveryOption = "magic_link" | "google" | "forgot_password"
 
 /**
@@ -63,6 +72,15 @@ function withinDeadline<T>(
       },
     )
   })
+}
+
+async function settleTeamForDestination(destination: string) {
+  if (!isPlainDashboardPath(destination)) return
+  try {
+    await withinDeadline(settleActiveTeamAction(), SETTLE_TEAM_CLIENT_WAIT_MS)
+  } catch {
+    // Continue sign-in if the preference cannot be settled.
+  }
 }
 
 function SignInContent() {
@@ -105,7 +123,23 @@ function SignInContent() {
     ? `/auth/forgot-password?${new URLSearchParams({ next: invite })}`
     : "/auth/forgot-password"
 
+  // False once the page unmounts, so a sign-in still waiting on its checks
+  // does not navigate away from the page the user went to.
+  const mounted = useRef(false)
+  // Set false while React commits the unmount, before passive cleanups run,
+  // so a sign-in step that finishes in between cannot redirect.
+  const onPage = useRef(true)
+  useLayoutEffect(() => {
+    onPage.current = true
+    return () => {
+      onPage.current = false
+    }
+  }, [])
+  // Only one path (the session check or the form) settles the team and leaves.
+  const redirectOwner = useRef<object | null>(null)
   useEffect(() => {
+    let cancelled = false
+    let claim: object | null = null
     const checkUser = async () => {
       const supabase = createBrowserClient()
       try {
@@ -113,27 +147,45 @@ function SignInContent() {
           data: { user },
           error,
         } = await supabase.auth.getUser()
+        if (cancelled || !onPage.current) return
         // Only sign out on explicit auth errors (expired/invalid token), not
         // transient network failures — otherwise a flaky connection would
         // nuke a valid session on every page load.
         if (error?.status === 401 || error?.status === 403) {
+          // A password sign-in that finished meanwhile has a new session.
+          if (redirectOwner.current !== null) return
           await supabase.auth.signOut()
           return
         }
-        if (user) {
+        if (user && redirectOwner.current === null) {
+          claim = {}
+          redirectOwner.current = claim
           setIsEmailLoading(true)
-          window.location.replace(
+          const destination =
             nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
               ? signInOfferDestination(rawOffer)
-              : nextUrl,
-          )
+              : nextUrl
+          // Password recovery can return here with a live session and a saved team.
+          await settleTeamForDestination(destination)
+          // A password sign-in that finished meanwhile owns the redirect now.
+          if (cancelled || !onPage.current || redirectOwner.current !== claim)
+            return
+          window.location.replace(destination)
         }
       } catch {
-        setIsEmailLoading(false)
+        if (!cancelled) setIsEmailLoading(false)
         // Network error: leave the session alone.
       }
     }
     checkUser()
+    return () => {
+      cancelled = true
+      // Let the next session check, if any, take over the redirect.
+      if (claim !== null && redirectOwner.current === claim) {
+        redirectOwner.current = null
+        setIsEmailLoading(false)
+      }
+    }
   }, [nextUrl, rawOffer])
 
   const handleEmailSignIn = async (e: React.FormEvent) => {
@@ -186,11 +238,19 @@ function SignInContent() {
       }
       posthog.capture(AUTH_EVENTS.SIGN_IN_COMPLETED, { method: "email" })
       // Discard routes prefetched before the session cookies were set.
-      window.location.replace(
+      const dest =
         nextUrl === "/" && isSelfServeSignupOffer(rawOffer)
           ? signInOfferDestination(rawOffer)
-          : nextUrl,
-      )
+          : nextUrl
+      // The user left the page before sign-in finished.
+      if (!mounted.current || !onPage.current) return
+      // The new session takes over from a session check that may have
+      // settled the team of the session that was there before.
+      redirectOwner.current = {}
+      await settleTeamForDestination(dest)
+      // The user left the page while the team was settling.
+      if (!mounted.current || !onPage.current) return
+      window.location.replace(dest)
       navigating = true
     } catch (err) {
       setErrors({
@@ -259,9 +319,6 @@ function SignInContent() {
     }
   }
 
-  // False once the page unmounts, so a Google attempt still waiting on its
-  // checks does not navigate away from the page the user went to.
-  const mounted = useRef(false)
   useEffect(() => {
     mounted.current = true
     prefetchGoogleSignupCheck()

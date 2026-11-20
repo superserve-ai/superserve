@@ -32,6 +32,8 @@ vi.mock("@/lib/api/team-provisioning", () => ({
 }))
 
 import {
+  savedTeamSelection,
+  orderTeamsOldestFirst,
   parseTeamSelection,
   pickActiveTeam,
   resolveActiveTeam,
@@ -158,4 +160,36 @@ describe("resolveActiveTeam", () => {
       })
     },
   )
+})
+
+it("parses only string metadata", () => {
+  expect(
+    savedTeamSelection({ user_metadata: { active_team: "use:team-a" } }),
+  ).toEqual({ region: "use", teamId: "team-a" })
+  for (const value of [null, 42, {}, "bad"])
+    expect(
+      savedTeamSelection({ user_metadata: { active_team: value } }),
+    ).toBeNull()
+})
+it("orders dates oldest first, unknown last, ties by region and id", () => {
+  const teams = [
+    { region: "usw", teamId: "unknown" },
+    { region: "usw", teamId: "team-b" },
+    { region: "use", teamId: "team-b" },
+    { region: "use", teamId: "team-a" },
+    { region: "use", teamId: "oldest" },
+  ]
+  const dates = new Map(
+    teams.slice(1).map((t) => [serializeTeamSelection(t), "2021-01-01"]),
+  )
+  dates.set("use:oldest", "2020-01-01")
+  expect(
+    orderTeamsOldestFirst(teams, dates).map(serializeTeamSelection),
+  ).toEqual([
+    "use:oldest",
+    "use:team-a",
+    "use:team-b",
+    "usw:team-b",
+    "usw:unknown",
+  ])
 })

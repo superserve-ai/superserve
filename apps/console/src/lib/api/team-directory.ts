@@ -414,3 +414,35 @@ export async function findTeamById(teamId: string): Promise<TeamRecord | null> {
 
   return fallback
 }
+
+/** Failed cell reads leave creation dates unknown. */
+export async function readTeamCreationDates(
+  memberships: TeamMembership[],
+): Promise<Map<string, string>> {
+  const dates = new Map<string, string>()
+  const regions = [...new Set(memberships.map((team) => team.region))]
+  await Promise.all(
+    regions.map(async (region) => {
+      try {
+        const ids = memberships
+          .filter((team) => team.region === region)
+          .map((team) => team.teamId)
+        const admin = cellFor(region).createAdminClient()
+        for (let i = 0; i < ids.length; i += 200) {
+          const { data, error } = await admin
+            .from("team")
+            .select("id, created_at")
+            .in("id", ids.slice(i, i + 200))
+          if (error) continue
+          for (const team of data ?? []) {
+            if (typeof team.created_at === "string")
+              dates.set(`${region}:${team.id}`, team.created_at)
+          }
+        }
+      } catch {
+        // Missing dates sort after known dates.
+      }
+    }),
+  )
+  return dates
+}

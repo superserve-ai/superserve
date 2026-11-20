@@ -106,6 +106,24 @@ beforeEach(() => {
   })
 })
 
+it("redirects the selected team with an ended trial to choose-plan", async () => {
+  m.read.mockResolvedValue({
+    ...ACTIVE,
+    state: "legacy",
+    offer: null,
+    entryState: "trial_ended",
+    requestedOffer: "developer",
+  })
+  await expect(renderLayout()).rejects.toThrow(
+    "/auth/choose-plan/?reason=trial_ended&offer=developer&account=owner&team=use%3Ateam",
+  )
+  expect(m.read).toHaveBeenCalledWith(
+    "owner",
+    { teamId: "team", region: "use" },
+    undefined,
+  )
+})
+
 describe("dashboard layout when the plan read fails", () => {
   it("renders the console with a plan notice when the read keeps failing", async () => {
     m.read.mockRejectedValue(new Error("Unable to check your plan."))

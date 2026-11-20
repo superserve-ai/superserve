@@ -1,7 +1,20 @@
-import { render, screen, waitFor, within } from "@testing-library/react"
+const mockSettle = vi.fn().mockResolvedValue(null)
+vi.mock("@/lib/api/teams-actions", () => ({
+  settleActiveTeamAction: (...args: unknown[]) => mockSettle(...args),
+}))
+import {
+  act,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react"
 import userEvent from "@testing-library/user-event"
+import { StrictMode } from "react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
 import { AUTH_MESSAGES } from "@/lib/auth/sign-in-messages"
 
 // --- Mocks ---
@@ -189,6 +202,7 @@ describe("SignInPage", () => {
   })
 
   beforeEach(() => {
+    mockSettle.mockReset().mockResolvedValue(null)
     mockReplace = vi
       .spyOn(window.location, "replace")
       .mockImplementation(() => {})
@@ -228,6 +242,9 @@ describe("SignInPage", () => {
     await user.type(screen.getByPlaceholderText("Password"), "example-password")
     await user.click(screen.getByRole("button", { name: "Sign In" }))
     await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(destination))
+    expect(mockSettle).toHaveBeenCalledTimes(
+      destination === "/sandboxes" ? 1 : 0,
+    )
   })
 
   it("keeps selected intent for an already signed-in customer", async () => {
@@ -253,6 +270,9 @@ describe("SignInPage", () => {
       })
       render(<SignInPage />)
       await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(destination))
+      expect(mockSettle).toHaveBeenCalledTimes(
+        destination === "/sandboxes" ? 1 : 0,
+      )
     },
   )
 
@@ -347,6 +367,7 @@ describe("SignInPage", () => {
   })
 
   it("redirects to next URL after successful login", async () => {
+    mockSettle.mockRejectedValueOnce(Error("unavailable"))
     searchParamsMap = { next: "/sandboxes?view=active#list" }
     mockSignInWithPassword.mockResolvedValue({ error: null })
     render(<SignInPage />)
@@ -361,6 +382,37 @@ describe("SignInPage", () => {
     await waitFor(() => {
       expect(mockReplace).toHaveBeenCalledWith("/sandboxes?view=active#list")
     })
+  })
+
+  it("redirects after three seconds when settling the active team stalls", async () => {
+    searchParamsMap = { next: "/sandboxes?view=active#list" }
+    mockSignInWithPassword.mockResolvedValue({ error: null })
+    mockSettle.mockReturnValueOnce(new Promise(() => {}))
+    render(<SignInPage />)
+
+    await user.type(
+      await screen.findByPlaceholderText("Email"),
+      "test@test.com",
+    )
+    await user.type(screen.getByPlaceholderText("Password"), "password123")
+
+    vi.useFakeTimers()
+    try {
+      await act(async () => {
+        fireEvent.click(screen.getByRole("button", { name: "Sign In" }))
+      })
+      expect(mockSettle).toHaveBeenCalledTimes(1)
+
+      await act(() =>
+        vi.advanceTimersByTimeAsync(TEAM_SELECTION_DEADLINE_MS + 1500 - 1),
+      )
+      expect(mockReplace).not.toHaveBeenCalled()
+
+      await act(() => vi.advanceTimersByTimeAsync(1))
+      expect(mockReplace).toHaveBeenCalledWith("/sandboxes?view=active#list")
+    } finally {
+      vi.useRealTimers()
+    }
   })
 
   it.each([
@@ -800,17 +852,326 @@ describe("SignInPage", () => {
     ).toHaveAttribute("href", "/auth/forgot-password")
   })
 
-  it("redirects if user already has a valid session", async () => {
-    mockGetUser.mockResolvedValue({
-      data: { user: { id: "123" } },
-      error: null,
+  describe("existing session", () => {
+    beforeEach(() => {
+      mockGetUser.mockResolvedValue({
+        data: { user: { id: "123" } },
+        error: null,
+      })
     })
 
-    render(<SignInPage />)
+    it("waits for the active team before redirecting to the default destination", async () => {
+      let finishSettle!: (value: null) => void
+      mockSettle.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSettle = resolve
+        }),
+      )
 
-    await waitFor(() => {
-      expect(mockReplace).toHaveBeenCalledWith("/")
+      await act(async () => {
+        render(<SignInPage />)
+      })
+      expect(mockSettle).toHaveBeenCalledTimes(1)
+      expect(mockReplace).not.toHaveBeenCalled()
+
+      await act(async () => finishSettle(null))
+      expect(mockReplace).toHaveBeenCalledExactlyOnceWith("/")
     })
+
+    it("redirects at the deadline when settling the active team stalls", async () => {
+      mockSettle.mockReturnValueOnce(new Promise(() => {}))
+
+      vi.useFakeTimers()
+      try {
+        await act(async () => {
+          render(<SignInPage />)
+        })
+        expect(mockSettle).toHaveBeenCalledTimes(1)
+
+        await act(() =>
+          vi.advanceTimersByTimeAsync(TEAM_SELECTION_DEADLINE_MS + 1500 - 1),
+        )
+        expect(mockReplace).not.toHaveBeenCalled()
+
+        await act(() => vi.advanceTimersByTimeAsync(1))
+        expect(mockReplace).toHaveBeenCalledExactlyOnceWith("/")
+      } finally {
+        vi.useRealTimers()
+      }
+    })
+
+    it("skips settling the active team for an invite destination", async () => {
+      const next = "/invite/ssinv_exampletoken"
+      searchParamsMap = { next }
+      render(<SignInPage />)
+
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith(next))
+      expect(mockSettle).not.toHaveBeenCalled()
+    })
+
+    it("does not redirect when the page closes while settling the active team", async () => {
+      let finishSettle!: (value: null) => void
+      mockSettle.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSettle = resolve
+        }),
+      )
+
+      const { unmount } = render(<SignInPage />)
+      await waitFor(() => expect(mockSettle).toHaveBeenCalledTimes(1))
+      unmount()
+
+      await act(async () => finishSettle(null))
+      expect(mockReplace).not.toHaveBeenCalled()
+    })
+
+    it("redirects to the new destination when it changes while settling", async () => {
+      let finishFirst!: (value: null) => void
+      mockSettle.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishFirst = resolve
+        }),
+      )
+
+      const { rerender } = render(<SignInPage />)
+      await waitFor(() => expect(mockSettle).toHaveBeenCalledTimes(1))
+
+      searchParamsMap = { next: "/sandboxes" }
+      rerender(<SignInPage />)
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledExactlyOnceWith("/sandboxes"),
+      )
+
+      await act(async () => finishFirst(null))
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+    })
+
+    it("re-enables the form when the destination changes and the session is gone", async () => {
+      mockSettle.mockReturnValueOnce(new Promise(() => {}))
+
+      const { rerender } = render(<SignInPage />)
+      await waitFor(() => expect(mockSettle).toHaveBeenCalledTimes(1))
+
+      mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
+      searchParamsMap = { next: "/sandboxes" }
+      rerender(<SignInPage />)
+
+      await waitFor(() =>
+        expect(screen.getByRole("button", { name: "Sign In" })).toBeEnabled(),
+      )
+      expect(mockReplace).not.toHaveBeenCalled()
+    })
+
+    it("keeps a new password session when a stale session check fails", async () => {
+      let finishGetUser!: (value: unknown) => void
+      mockGetUser.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishGetUser = resolve
+        }),
+      )
+      mockSignInWithPassword.mockResolvedValue({ error: null })
+
+      render(<SignInPage />)
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "person@example.com",
+      )
+      await user.type(
+        screen.getByPlaceholderText("Password"),
+        "example-password",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+
+      await act(async () =>
+        finishGetUser({ data: { user: null }, error: { status: 401 } }),
+      )
+      expect(mockSignOut).not.toHaveBeenCalled()
+    })
+
+    it("does not redirect a password sign-in after the page closed", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
+      let finishSettle!: (value: null) => void
+      mockSettle.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSettle = resolve
+        }),
+      )
+      mockSignInWithPassword.mockResolvedValue({ error: null })
+
+      const { unmount } = render(<SignInPage />)
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "person@example.com",
+      )
+      await user.type(
+        screen.getByPlaceholderText("Password"),
+        "example-password",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+      await waitFor(() => expect(mockSettle).toHaveBeenCalledTimes(1))
+      unmount()
+
+      await act(async () => finishSettle(null))
+      expect(mockReplace).not.toHaveBeenCalled()
+    })
+
+    it("ignores a stale 401 from a replayed session check", async () => {
+      let finishFirst!: (value: unknown) => void
+      mockGetUser.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishFirst = resolve
+        }),
+      )
+
+      render(
+        <StrictMode>
+          <SignInPage />
+        </StrictMode>,
+      )
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+
+      await act(async () =>
+        finishFirst({ data: { user: null }, error: { status: 401 } }),
+      )
+      expect(mockSignOut).not.toHaveBeenCalled()
+      expect(mockSettle).toHaveBeenCalledTimes(1)
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+    })
+
+    it("does not settle a password sign-in that finishes after the page closed", async () => {
+      mockGetUser.mockResolvedValue({ data: { user: null }, error: null })
+      let finishSignIn!: (value: unknown) => void
+      mockSignInWithPassword.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSignIn = resolve
+        }),
+      )
+
+      const { unmount } = render(<SignInPage />)
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "person@example.com",
+      )
+      await user.type(
+        screen.getByPlaceholderText("Password"),
+        "example-password",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+      unmount()
+
+      await act(async () => finishSignIn({ error: null }))
+      expect(mockSettle).not.toHaveBeenCalled()
+      expect(mockReplace).not.toHaveBeenCalled()
+    })
+
+    it("does not sign out after a late session error once the page closed", async () => {
+      let finishGetUser!: (value: unknown) => void
+      mockGetUser.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishGetUser = resolve
+        }),
+      )
+
+      const { unmount } = render(<SignInPage />)
+      unmount()
+
+      await act(async () =>
+        finishGetUser({ data: { user: null }, error: { status: 401 } }),
+      )
+      expect(mockSignOut).not.toHaveBeenCalled()
+    })
+
+    it("settles and redirects once when the form signs in during the session check", async () => {
+      let finishGetUser!: (value: unknown) => void
+      mockGetUser.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishGetUser = resolve
+        }),
+      )
+      mockSignInWithPassword.mockResolvedValue({ error: null })
+
+      render(<SignInPage />)
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "person@example.com",
+      )
+      await user.type(
+        screen.getByPlaceholderText("Password"),
+        "example-password",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+      await waitFor(() => expect(mockReplace).toHaveBeenCalledWith("/"))
+
+      await act(async () =>
+        finishGetUser({ data: { user: { id: "123" } }, error: null }),
+      )
+      expect(mockSettle).toHaveBeenCalledTimes(1)
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+    })
+
+    it("lets a password sign-in take over from a session check for an earlier session", async () => {
+      let finishGetUser!: (value: unknown) => void
+      mockGetUser.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishGetUser = resolve
+        }),
+      )
+      let finishSignIn!: (value: unknown) => void
+      mockSignInWithPassword.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishSignIn = resolve
+        }),
+      )
+      let finishEarlierSettle!: (value: null) => void
+      mockSettle.mockReturnValueOnce(
+        new Promise((resolve) => {
+          finishEarlierSettle = resolve
+        }),
+      )
+
+      render(<SignInPage />)
+      await user.type(
+        await screen.findByPlaceholderText("Email"),
+        "person@example.com",
+      )
+      await user.type(
+        screen.getByPlaceholderText("Password"),
+        "example-password",
+      )
+      await user.click(screen.getByRole("button", { name: "Sign In" }))
+
+      // The earlier session is found and starts settling its team.
+      await act(async () =>
+        finishGetUser({ data: { user: { id: "earlier" } }, error: null }),
+      )
+      expect(mockSettle).toHaveBeenCalledTimes(1)
+
+      // The new password session settles its own team and redirects.
+      await act(async () => finishSignIn({ error: null }))
+      await waitFor(() => expect(mockSettle).toHaveBeenCalledTimes(2))
+      await waitFor(() =>
+        expect(mockReplace).toHaveBeenCalledExactlyOnceWith("/"),
+      )
+
+      await act(async () => finishEarlierSettle(null))
+      expect(mockReplace).toHaveBeenCalledTimes(1)
+    })
+
+    it.each([401, 403])(
+      "signs out after a %s session error without settling",
+      async (status) => {
+        mockGetUser.mockResolvedValue({
+          data: { user: null },
+          error: { status },
+        })
+        render(<SignInPage />)
+
+        await waitFor(() => expect(mockSignOut).toHaveBeenCalledTimes(1))
+        expect(mockSettle).not.toHaveBeenCalled()
+        expect(mockReplace).not.toHaveBeenCalled()
+      },
+    )
   })
 
   it("does not sign out on transient errors in the session check", async () => {

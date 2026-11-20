@@ -1,9 +1,20 @@
+const mockSettle = vi.fn().mockResolvedValue(null)
+vi.mock("@/lib/api/settle-active-team", () => ({
+  settleTeamSelection: (...args: unknown[]) => mockSettle(...args),
+}))
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
+const mockReadSignupPlan = vi.fn()
+vi.mock("@/lib/api/signup-plan-read", () => ({
+  readSignupPlan: (...args: unknown[]) => mockReadSignupPlan(...args),
+}))
+
+const mockUpdateUser = vi.fn().mockResolvedValue({ error: null })
 const mockPublishPromotionIdentity = vi.fn(async (..._args: unknown[]) => {})
 let currentUser: {
   id: string
   email: string
+  user_metadata?: Record<string, unknown>
   app_metadata?: { provider?: string; providers?: string[] }
 } | null = {
   id: "u1",
@@ -13,6 +24,7 @@ let currentUser: {
 vi.mock("@/lib/supabase/server", () => ({
   createServerClient: async () => ({
     auth: {
+      updateUser: mockUpdateUser,
       getUser: async () => ({
         data: { user: currentUser },
       }),
@@ -305,6 +317,7 @@ vi.mock("next/headers", () => ({
   }),
 }))
 
+import { TEAM_SELECTION_DEADLINE_MS } from "@/lib/api/team-selection-limits"
 import { GoogleSignupRecoveryRequiredError } from "@/lib/auth/google-signup-proof"
 import {
   SignupRestrictedError,
@@ -860,11 +873,90 @@ describe("active team", () => {
     ])
   })
 
+  it("explicitly switches to a team that still needs a plan", async () => {
+    mockReadSignupPlan.mockResolvedValue({ state: "selecting" })
+    await setActiveTeamAction("team-w", "usw")
+    expect(cookieSets).toEqual([
+      { name: "ss-active-team", value: "usw:team-w" },
+    ])
+    expect(mockUpdateUser).toHaveBeenLastCalledWith({
+      data: { active_team: "usw:team-w" },
+    })
+    expect(mockReadSignupPlan).not.toHaveBeenCalled()
+  })
+
+  it("saves metadata after the cookie", async () => {
+    currentUser = { id: "u1", email: "user@example.com" }
+    mockUpdateUser.mockImplementationOnce(async () => {
+      expect(cookieSets).toEqual([
+        { name: "ss-active-team", value: "usw:team-w" },
+      ])
+      return { error: null }
+    })
+    await setActiveTeamAction("team-w", "usw")
+    expect(mockUpdateUser).toHaveBeenLastCalledWith({
+      data: { active_team: "usw:team-w" },
+    })
+  })
+  it("allows switching when the metadata write times out", async () => {
+    vi.useFakeTimers()
+    const log = vi.spyOn(console, "error").mockImplementation(() => {})
+    try {
+      mockUpdateUser.mockImplementationOnce(() => new Promise(() => {}))
+      const resolved = vi.fn()
+      const switched = setActiveTeamAction("team-w", "usw").then(resolved)
+
+      await vi.advanceTimersByTimeAsync(TEAM_SELECTION_DEADLINE_MS - 1)
+      expect(cookieSets).toEqual([
+        { name: "ss-active-team", value: "usw:team-w" },
+      ])
+      expect(resolved).not.toHaveBeenCalled()
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(resolved).toHaveBeenCalledOnce()
+      await expect(switched).resolves.toBeUndefined()
+      expect(log).toHaveBeenCalledWith("Could not save active team preference")
+    } finally {
+      vi.useRealTimers()
+      log.mockRestore()
+    }
+  })
+
+  it("skips unchanged metadata", async () => {
+    currentUser = {
+      id: "u1",
+      email: "user@example.com",
+      user_metadata: { active_team: "usw:team-w" },
+    }
+    mockUpdateUser.mockClear()
+    await setActiveTeamAction("team-w", "usw")
+    expect(mockUpdateUser).not.toHaveBeenCalled()
+  })
+  it.each(["error", "throw"])(
+    "allows switching when metadata fails: %s",
+    async (failure) => {
+      currentUser = { id: "u1", email: "user@example.com" }
+      const log = vi.spyOn(console, "error").mockImplementation(() => {})
+      if (failure === "throw")
+        mockUpdateUser.mockRejectedValueOnce(Error("unavailable"))
+      else
+        mockUpdateUser.mockResolvedValueOnce({
+          error: { message: "unavailable" },
+        })
+      await expect(
+        setActiveTeamAction("team-w", "usw"),
+      ).resolves.toBeUndefined()
+      expect(cookieSets).toHaveLength(1)
+      log.mockRestore()
+    },
+  )
   it("setActiveTeamAction rejects a team the user is not in", async () => {
+    mockUpdateUser.mockClear()
     await expect(setActiveTeamAction("intruder", "usw")).rejects.toThrow(
       "not a member",
     )
     expect(cookieSets).toEqual([])
+    expect(mockUpdateUser).not.toHaveBeenCalled()
   })
 
   it("hides an orphaned membership and rejects selecting it", async () => {
