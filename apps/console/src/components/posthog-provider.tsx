@@ -12,6 +12,7 @@ import {
   scrubPersistedInviteTokens,
   syncRecordingWithAddress,
 } from "@/lib/invite-token-redaction"
+import { restrictCreateMeasurement } from "@/lib/posthog/create-measurement"
 
 if (typeof window !== "undefined") {
   const apiKey = process.env.NEXT_PUBLIC_POSTHOG_KEY
@@ -33,7 +34,7 @@ if (typeof window !== "undefined") {
         // of every event, whatever put the token there.
         before_send: (event) => {
           scrubPersistedInviteTokens(posthog)
-          return redactInviteTokensFromEvent(event)
+          return restrictCreateMeasurement(redactInviteTokensFromEvent(event))
         },
         loaded: (ph) => {
           scrubPersistedInviteTokens(ph)

@@ -113,6 +113,49 @@ describe("api proxy /api/[...path]", () => {
     vi.mocked(getImpersonationContext).mockResolvedValue(null)
   })
 
+  it.each([
+    ["POST", ["sandboxes"], "10000000-0000-4000-8000-000000000001", true],
+    ["POST", ["sandboxes"], "invalid-private-input", false],
+    ["GET", ["sandboxes"], "10000000-0000-4000-8000-000000000001", false],
+    [
+      "POST",
+      ["sandboxes", "abc", "resume"],
+      "10000000-0000-4000-8000-000000000001",
+      false,
+    ],
+  ])(
+    "forwards validated correlation only on Create: %s %s",
+    async (method, path, attempt, forwarded) => {
+      const requestId = "20000000-0000-4000-8000-000000000002"
+      fetchSpy.mockResolvedValue(
+        new Response("{}", {
+          status: 201,
+          headers: { "X-Request-ID": requestId },
+        }),
+      )
+      const response = await (method === "GET" ? GET : POST)(
+        req(method, path, {
+          headers: {
+            "X-Sandbox-Create-Attempt-ID": attempt,
+            "X-Request-ID": "client-supplied",
+            "X-API-Key": "untrusted",
+            cookie: "private",
+          },
+        }),
+        params(path),
+      )
+      expect(response.status).toBe(201)
+      expect(response.headers.get("X-Request-ID")).toBe(requestId)
+      const headers = fetchSpy.mock.calls[0][1].headers as Headers
+      expect(headers.get("X-Sandbox-Create-Attempt-ID")).toBe(
+        forwarded ? attempt : null,
+      )
+      expect(headers.get("X-Request-ID")).toBeNull()
+      expect(headers.get("cookie")).toBeNull()
+      expect(headers.get("X-API-Key")).toBe("ss_live_test_key")
+    },
+  )
+
   it("forwards team capabilities only through authenticated billing reads", async () => {
     fetchSpy.mockResolvedValue(
       new Response(JSON.stringify({ schema_version: 1 }), { status: 200 }),

@@ -12,6 +12,7 @@ import {
 
 import { useQueryScope } from "@/components/query-provider"
 import { ApiError, type PagedResult } from "@/lib/api/client"
+import type { CreateMeasurement } from "@/lib/api/create-measurement"
 import { sandboxKeys } from "@/lib/api/query-keys"
 import {
   attachSandboxSecret,
@@ -118,12 +119,17 @@ export function useSandboxMemory(
 
 // --- Mutations ----------------------------------------------------------
 
-export function useCreateSandbox() {
+export function useCreateSandbox(measurement?: {
+  current: CreateMeasurement | null
+}) {
   const queryClient = useQueryClient()
   const { addToast } = useToast()
 
   return useMutation({
-    mutationFn: (data: CreateSandboxRequest) => createSandbox(data),
+    mutationFn: (data: CreateSandboxRequest) =>
+      measurement?.current
+        ? createSandbox(data, measurement.current)
+        : createSandbox(data),
     onSuccess: (newSandbox) => {
       // A new sandbox lands on page 1 under the default created_at-desc sort;
       // refetch the lists rather than guessing its slot under the active

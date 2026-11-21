@@ -33,6 +33,9 @@ export const AUTH_EVENTS = {
 } as const
 
 export const SANDBOX_EVENTS = {
+  CREATE_DIALOG_OPENED: "sandbox_create_dialog_opened",
+  CREATE_SUBMITTED: "sandbox_create_submitted",
+  CREATE_CLIENT_RESULT: "sandbox_create_client_result",
   CREATED: "sandbox_created",
   PAUSED: "sandbox_paused",
   RESUMED: "sandbox_resumed",
