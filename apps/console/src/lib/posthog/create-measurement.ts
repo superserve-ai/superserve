@@ -43,6 +43,9 @@ export function restrictCreateMeasurement<
       ),
     ),
   }
+  // The SDK overwrites the capture-time person flag before before_send.
+  clean.properties.$process_person_profile = false
+  clean.properties.$geoip_disable = true
   // `token` is the existing SDK ingestion credential, not a measured property.
   // Removing it prevents delivery. Never copy application credentials here.
   Reflect.deleteProperty(clean, "$set")

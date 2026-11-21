@@ -13,6 +13,8 @@ it("removes automatic URL, input, attribution and person enrichment only from ne
       emitter: "console_browser",
       flow_id: "flow",
       attempt_id: "attempt",
+      $process_person_profile: true,
+      $geoip_disable: false,
       $current_url: "https://example.com/private",
       $referrer: "private",
       first_landing_path: "/private",
@@ -33,6 +35,8 @@ it("removes automatic URL, input, attribution and person enrichment only from ne
       emitter: "console_browser",
       flow_id: "flow",
       attempt_id: "attempt",
+      $process_person_profile: false,
+      $geoip_disable: true,
     },
   })
   const legacy = { ...event, event: "sandbox_created" }
