@@ -93,6 +93,10 @@ superserve template create my-growable-env --from python:3.11 \
 
 </CodeGroup>
 
+With the [MCP server](/integrations/mcp), pass `memory_shrink_after_seconds` to `sandbox_template_create`.
+
+Requires SDK 0.12.1+ (`@superserve/sdk` and `superserve`), CLI 2.3.0+, and MCP 0.4.1+ (`@superserve/mcp`). Older TypeScript SDK and MCP versions ignore `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` and show no error, so the template gets the default.
+
 A longer wait suits workloads that burst repeatedly, so the sandbox doesn't shrink between bursts. You're billed for the grown memory while the sandbox holds it, so a longer wait costs more. The value appears on the template and sandbox as `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds`; it's absent when the default applies.
 
 ## Billing
