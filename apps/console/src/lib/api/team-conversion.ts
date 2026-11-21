@@ -1,15 +1,21 @@
+import { isReplacementTeamName } from "@/lib/api/replacement-team"
 import { cellFor } from "@/lib/cells"
 
 const TEAM_OWNER_ROLE = "team_owner"
 
 // First login provisions the account's own team and names it after the
-// user's email (see proxy-auth). Creating a team from that account renames
-// this team in place, so its sandboxes, keys, plan, and billing carry over.
+// user's email (see proxy-auth), with a suffix when it replaces a team the
+// user was removed from. Creating a team from that account renames this team
+// in place, so its sandboxes, keys, plan, and billing carry over.
 export function isPersonalTeam(
   team: { name: string },
   email: string | undefined,
 ): boolean {
-  return !!email && team.name.toLowerCase() === email.toLowerCase()
+  return (
+    !!email &&
+    (team.name.toLowerCase() === email.toLowerCase() ||
+      isReplacementTeamName(team.name, email))
+  )
 }
 
 // The control plane authorizes by RBAC: once the user has an RBAC membership

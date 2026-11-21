@@ -145,7 +145,15 @@ export async function createTeamAction(
   const observedAt = new Date().toISOString()
   if (!user) throw new Error("Not authenticated")
 
-  if (!operationId || operationId === user.id)
+  // Only client v4 IDs are accepted: derived replacement locators use version 5
+  // IDs, and another account must not be able to reserve them first.
+  if (
+    !operationId ||
+    operationId === user.id ||
+    !/^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/.test(
+      operationId,
+    )
+  )
     throw new Error("A distinct team creation operation is required")
   const trimmed = name.trim()
   if (!trimmed) throw new Error("Team name is required")

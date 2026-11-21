@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto"
+
 import type { User } from "@supabase/supabase-js"
 
 import {
@@ -12,11 +14,17 @@ import {
   recoverPromotionTeam,
   preparePromotionTeam,
   completePromotionTeam,
+  PromotionEvidenceError,
+  type PreparedPromotionTeam,
 } from "@/lib/api/promotion-device-evidence"
 import {
   publishAccountPromotion,
   publishEnterpriseAccountPromotion,
 } from "@/lib/api/promotion-publication"
+import {
+  replacementTeamName,
+  replacementTeamOperationId,
+} from "@/lib/api/replacement-team"
 import {
   listTeamMembershipsForUserDetailed,
   type MembershipDirectory,
@@ -346,6 +354,46 @@ export async function provisionHeldApplicantTeam(
   )
 }
 
+async function followRemovedAccountTeams(
+  locator: { userId: string; region: string; operationId: string },
+  prepared: PreparedPromotionTeam | null,
+  name: string,
+) {
+  const admin = cellFor(locator.region).createAdminClient()
+  const originalName = name
+  let hops = 0
+  while (prepared?.state === "completed") {
+    const { data: memberships, error } = await admin
+      .from("team_memberships")
+      .select("status")
+      .eq("user_id", locator.userId)
+      .eq("team_id", prepared.teamId)
+    if (error)
+      throw new Error(
+        `Unable to check removed team membership: ${error.message}`,
+      )
+    // Missing rows can need retrying; active rows still grant access. Existing
+    // inactive or invited rows must stay untouched while we create a replacement.
+    if (
+      !memberships?.length ||
+      memberships.some((membership) => membership.status === "active")
+    )
+      break
+    if (hops === 10)
+      throw new Error("Removed team replacement chain exceeds 10 hops")
+    hops += 1
+    locator = {
+      ...locator,
+      operationId: replacementTeamOperationId(locator.userId, prepared.teamId),
+    }
+    // Team names are unique: others must not be able to derive the suffix
+    // and take the replacement name before it is created.
+    name = replacementTeamName(originalName, randomUUID())
+    prepared = await recoverPromotionTeam(locator)
+  }
+  return { locator, prepared, name }
+}
+
 async function provisionTeamFor(
   region: string,
   user: User,
@@ -369,10 +417,17 @@ async function provisionTeamFor(
   // Explicit creations must retain a separate locator before calling this boundary.
   if (!operationId && region !== DEFAULT_REGION)
     throw new Error("Team creation requires its original operation identifier")
-  const locator = { userId, region, operationId: operationId ?? userId }
+  let locator = { userId, region, operationId: operationId ?? userId }
   let prepared = enterpriseAuthority
     ? await recoverPromotionTeamForEnterprise(locator, enterpriseAuthority)
     : await recoverPromotionTeam(locator)
+  if (operationId === undefined && !enterpriseAuthority) {
+    ;({ locator, prepared, name } = await followRemovedAccountTeams(
+      locator,
+      prepared,
+      name,
+    ))
+  }
   if (!prepared) {
     if (!operationId && !firstTeam)
       throw new Error("No initial team creation to recover")
@@ -391,12 +446,26 @@ async function provisionTeamFor(
       additionalTeam:
         !enterpriseAuthority && (await holdsFreeTeamElsewhere(userId, region)),
     }
-    prepared = enterpriseAuthority
-      ? await preparePromotionTeamForEnterprise(
-          preparation,
-          enterpriseAuthority,
-        )
-      : await preparePromotionTeam(preparation)
+    try {
+      prepared = enterpriseAuthority
+        ? await preparePromotionTeamForEnterprise(
+            preparation,
+            enterpriseAuthority,
+          )
+        : await preparePromotionTeam(preparation)
+    } catch (error) {
+      if (
+        operationId !== undefined ||
+        enterpriseAuthority ||
+        locator.operationId === userId ||
+        !(error instanceof PromotionEvidenceError) ||
+        error.code !== "creation_conflict"
+      )
+        throw error
+      // A concurrent replacement can bind this locator to its random name first.
+      prepared = await recoverPromotionTeam(locator)
+      if (!prepared) throw error
+    }
   }
   if (prepared.authorityUnavailable) {
     // Repair only the regional FK target. The persisted no-credit decision
