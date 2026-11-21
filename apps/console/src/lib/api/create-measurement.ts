@@ -9,6 +9,13 @@ export function correlationId(value: unknown): string | null {
     : null
 }
 
+export function createdSandboxUuid(value: unknown): string | null {
+  if (typeof value !== "string" || value.length > 57) return null
+  // Match the public ID convention without importing data-plane URL config.
+  const publicId = /^sb-[a-z0-9]{1,17}-([0-9a-f-]{36})$/i.exec(value)
+  return correlationId(publicId?.[0] === value ? publicId[1] : value)
+}
+
 const safeCodes = new Set([
   "trial_exhausted",
   "trial_unavailable",

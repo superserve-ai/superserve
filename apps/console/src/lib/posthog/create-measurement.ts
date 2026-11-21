@@ -30,6 +30,22 @@ const properties = new Set([
   "$process_person_profile",
 ])
 
+export interface CreateIdentity {
+  distinct_id?: string
+  $groups: Record<string, unknown>
+}
+
+export function snapshotCreateIdentity(posthog: PostHog): CreateIdentity {
+  try {
+    return {
+      distinct_id: posthog.get_distinct_id(),
+      $groups: { ...posthog.getGroups() },
+    }
+  } catch {
+    return { $groups: {} }
+  }
+}
+
 /** Runs last in before_send, after the SDK adds automatic properties. */
 export function restrictCreateMeasurement<
   T extends { event: string; properties: Record<string, unknown> },
@@ -59,6 +75,7 @@ export function captureCreateMeasurement(
   flowId: string | null,
   attemptId?: string | null,
   result?: CreateClientResult,
+  identity?: CreateIdentity,
 ) {
   try {
     posthog.capture(event, {
@@ -68,6 +85,7 @@ export function captureCreateMeasurement(
       flow_id: flowId,
       ...(attemptId ? { attempt_id: attemptId } : {}),
       ...result,
+      ...identity,
       $process_person_profile: false,
     })
   } catch {

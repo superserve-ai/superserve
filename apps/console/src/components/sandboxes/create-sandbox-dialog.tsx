@@ -40,6 +40,7 @@ import { captureBestEffort } from "@/lib/posthog/capture"
 import {
   captureCreateMeasurement,
   newCreateCorrelationId,
+  snapshotCreateIdentity,
 } from "@/lib/posthog/create-measurement"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
@@ -599,11 +600,14 @@ export function CreateSandboxDialog({
     if (!open || createMutation.isPending || submitPending.current) return
     const attemptId = newCreateCorrelationId()
     const attemptFlowId = flowId.current
+    const attemptIdentity = snapshotCreateIdentity(posthog)
     captureCreateMeasurement(
       posthog,
       SANDBOX_EVENTS.CREATE_SUBMITTED,
       attemptFlowId,
       attemptId,
+      undefined,
+      attemptIdentity,
     )
     const validationRejected = () =>
       captureCreateMeasurement(
@@ -619,6 +623,7 @@ export function CreateSandboxDialog({
           error_code: "validation_failed",
           sandbox_id: null,
         },
+        attemptIdentity,
       )
     if (!name.trim()) {
       validationRejected()
@@ -679,6 +684,7 @@ export function CreateSandboxDialog({
           attemptFlowId,
           attemptId,
           result,
+          attemptIdentity,
         ),
     }
     createMutation.mutate(payload, {

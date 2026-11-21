@@ -10,6 +10,20 @@ afterEach(() => vi.unstubAllGlobals())
 
 it.each([
   [201, JSON.stringify({ id: sandboxId }), "http_success", sandboxId, null],
+  [
+    201,
+    JSON.stringify({ id: `sb-usw-${sandboxId}` }),
+    "http_success",
+    sandboxId,
+    null,
+  ],
+  [
+    201,
+    JSON.stringify({ id: `sb-usw-${sandboxId}\n` }),
+    "response_decode_unknown",
+    null,
+    "unknown",
+  ],
   [201, "{}", "response_decode_unknown", null, "unknown"],
   [
     200,

@@ -1,5 +1,6 @@
 import {
   correlationId,
+  createdSandboxUuid,
   createErrorCode,
   type CreateClientResult,
   type CreateMeasurement,
@@ -170,7 +171,7 @@ export async function apiClientCreate<T>(
     )
     const id =
       data && typeof data === "object" && "id" in data
-        ? correlationId(data.id)
+        ? createdSandboxUuid(data.id)
         : null
     if (result.http_status === 201 && id) {
       result.outcome = "http_success"
