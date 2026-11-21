@@ -227,7 +227,9 @@ memory · 8192 MiB disk**.
 - Optional template `vcpuMax` / `vcpu_max` lets sandboxes get more CPU under load, up to
   that many vCPUs (`vcpu` stays the minimum); it drops back when idle and is billed by the
   allowance granted. Whole vCPUs: it must exceed `vcpu`, be at most 4x it and 32, and within
-  the plan limit. Omit it for a fixed vCPU count; sandboxes and snapshots inherit it.
+  the plan limit. Omit it for a fixed vCPU count; sandboxes and snapshots inherit it. Needs
+  SDK 0.13.0+; older TS SDKs silently ignore it. In the sandbox, `nproc` shows the current
+  allowance, while `os.cpu_count()` shows `vcpuMax`.
 - `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
   team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,

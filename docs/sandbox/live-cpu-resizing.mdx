@@ -8,7 +8,7 @@ Agent workloads spend much of their time waiting: on a model, on the network, on
 
 ## Turn it on
 
-CPU resizing is set per template. Set `vcpuMax` alongside `vcpu`: `vcpu` is the minimum a sandbox starts with, and `vcpuMax` is the most it can grow to. Sandboxes from that template, and sandboxes created from snapshots of them, use the same range.
+CPU resizing is set per template. Set `vcpuMax` alongside `vcpu`: `vcpu` is the minimum a sandbox starts with, and `vcpuMax` is the most it can grow to. Sandboxes from that template, and sandboxes created from snapshots of them, use the same range. A sandbox keeps the range when you pause and resume it.
 
 <CodeGroup>
 
@@ -43,7 +43,20 @@ superserve template create my-scaling-env --from python:3.11 \
 
 With the [MCP server](/integrations/mcp), pass `vcpu_max` to `sandbox_template_create`.
 
-`vcpuMax` takes whole vCPUs. It must be greater than `vcpu`, at most 4 times it, at most 32, and within your plan's vCPU limit. See [Growing CPU](/templates/build-spec#growing-cpu). Templates without it keep a fixed vCPU count.
+Requires SDK 0.13.0+ (`@superserve/sdk` and `superserve`), CLI 2.4.0+, and MCP 0.5.0+ (`@superserve/mcp`). Older TypeScript SDK and MCP versions ignore `vcpuMax` / `vcpu_max` and show no error, so the template gets a fixed vCPU count. Older Python SDKs raise `TypeError` for `vcpu_max`, and older CLIs reject `--vcpu-max` as an unknown option.
+
+`vcpuMax` takes whole vCPUs. It must be greater than `vcpu`, at most 4 times it, at most 32, and within your plan's vCPU limit. Your plan's maximum vCPU count caps `vcpuMax` the same way it caps `vcpu`; see [Resource limits](/templates/build-spec#resource-limits) and [Growing CPU](/templates/build-spec#growing-cpu). Templates without it keep a fixed vCPU count.
+
+A value that breaks a rule fails with `ValidationError` (HTTP `400`), and no template is created:
+
+| Value | Error message |
+| --- | --- |
+| Not greater than `vcpu` | `vcpu_max must be greater than vcpu` |
+| More than 4 times `vcpu` | `vcpu_max must be at most 4 times vcpu` |
+| More than 32 | `vcpu_max must be at most 32` |
+| More than your plan's vCPU limit | `vcpu_max must be at most <max> (your team's limit); contact support@superserve.ai for higher` |
+
+The CLI checks the first three rules before it sends the request, for example `error: Max vCPU must be greater than vCPU (1) and at most 4 times it.`
 
 You can combine it with [live memory resizing](/sandbox/live-memory-resizing) on the same template.
 
@@ -76,3 +89,19 @@ print(info.vcpu_count, info.vcpu_max)
 </CodeGroup>
 
 `vcpuCount` / `vcpu_count` is the minimum and `vcpuMax` / `vcpu_max` is the ceiling. `vcpuMax` isn't set for sandboxes with a fixed vCPU count. Templates and snapshots report the same range. The console shows it as a range, for example **1–4 vCPU**.
+
+Inside the sandbox, `nproc` shows how many vCPUs the sandbox can use now. It starts at `vcpu`, rises under load, and drops back when the sandbox is idle. `/proc/cpuinfo` and Python's `os.cpu_count()` always list `vcpuMax` vCPUs.
+
+<CodeGroup>
+
+```typescript TypeScript
+const result = await sandbox.commands.run("nproc")
+console.log(result.stdout) // "1" while idle on a 1-4 vCPU sandbox
+```
+
+```python Python
+result = sandbox.commands.run("nproc")
+print(result.stdout)  # "1" while idle on a 1-4 vCPU sandbox
+```
+
+</CodeGroup>

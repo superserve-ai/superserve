@@ -262,7 +262,7 @@ The sandbox sees a proxy token; the platform swaps in the real credential only f
 | `name` | Template name in your team's namespace. Can't start with `superserve/`. |
 | `from` | Base image, for example `python:3.11` or `ubuntu:24.04`. |
 | `vcpu` | vCPUs for sandboxes from this template. Default `1`. |
-| `vcpu_max` | Optional ceiling in whole vCPUs that sandboxes can grow their CPU to under load. Omit it for a fixed vCPU count. |
+| `vcpu_max` | Optional ceiling in whole vCPUs that sandboxes can grow their CPU to under load. Omit it for a fixed vCPU count. Requires MCP 0.5.0+; older versions ignore it and show no error. |
 | `memory_mib` | Memory in MiB that sandboxes boot with. Default `1024`. |
 | `memory_max_mib` | Optional ceiling in MiB that sandboxes can grow memory to while running. Omit it for a fixed memory size. |
 | `memory_shrink_after_seconds` | Optional. How long, in seconds, memory must stay low after growing before it shrinks back (60 to 1800). Requires `memory_max_mib`. When unset, the default (about one minute) applies. |
