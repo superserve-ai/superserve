@@ -11,17 +11,22 @@ export function useDialogOpen() {
   return useContext(DialogOpenContext)
 }
 
+const PointerDismissalDisabledContext = createContext(false)
+
 interface DialogProps {
   children: React.ReactNode
   open?: boolean
   onOpenChange?: (open: boolean) => void
   defaultOpen?: boolean
+  /** Prevents pointer presses outside the dialog from closing it. */
+  disablePointerDismissal?: boolean
 }
 
 function Dialog({
   children,
   open: controlledOpen,
   onOpenChange,
+  disablePointerDismissal = false,
   ...props
 }: DialogProps) {
   const [uncontrolledOpen, setUncontrolledOpen] = useState(false)
@@ -31,6 +36,7 @@ function Dialog({
   return (
     <DialogPrimitive.Root
       {...props}
+      disablePointerDismissal={disablePointerDismissal}
       open={open}
       onOpenChange={(value) => {
         if (!isControlled) setUncontrolledOpen(value)
@@ -38,7 +44,11 @@ function Dialog({
       }}
     >
       <DialogOpenContext.Provider value={open}>
-        {children}
+        <PointerDismissalDisabledContext.Provider
+          value={disablePointerDismissal}
+        >
+          {children}
+        </PointerDismissalDisabledContext.Provider>
       </DialogOpenContext.Provider>
     </DialogPrimitive.Root>
   )
@@ -51,9 +61,19 @@ function DialogPopup({
   children,
   ...props
 }: React.ComponentProps<typeof DialogPrimitive.Popup>) {
+  const pointerDismissalDisabled = useContext(PointerDismissalDisabledContext)
   return (
     <DialogPrimitive.Portal>
-      <DialogPrimitive.Backdrop className="ss-dialog-backdrop fixed inset-0 z-50 bg-black/50 backdrop-blur-sm" />
+      <DialogPrimitive.Backdrop
+        className="ss-dialog-backdrop fixed inset-0 z-50 bg-black/50 backdrop-blur-sm"
+        // A press on a backdrop that does not close the dialog would
+        // otherwise move focus to the page behind it.
+        onMouseDown={
+          pointerDismissalDisabled
+            ? (event) => event.preventDefault()
+            : undefined
+        }
+      />
       <DialogPrimitive.Popup
         className={cn(
           "ss-dialog-popup fixed top-1/2 left-1/2 z-50 w-full max-w-md border border-dashed border-border bg-surface/80 shadow-lg backdrop-blur-xl",
