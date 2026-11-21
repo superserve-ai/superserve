@@ -447,6 +447,7 @@ export function PlanDetails({
             <Button
               size="sm"
               variant="outline"
+              className="h-auto min-h-8 max-w-full py-1 whitespace-normal"
               render={<Link href={UPGRADE_PATH} />}
             >
               Manage scheduled change
