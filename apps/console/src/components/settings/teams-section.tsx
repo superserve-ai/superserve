@@ -82,7 +82,7 @@ export function TeamsSection() {
 
   return (
     <>
-      <div className="grid grid-cols-[240px_1fr] gap-12 px-8 py-8">
+      <div className="grid grid-cols-1 gap-6 px-6 py-6 @2xl:grid-cols-[240px_minmax(0,1fr)] @2xl:gap-12 @2xl:px-8 @2xl:py-8">
         <div>
           <h2 className="text-base font-medium text-foreground">Teams</h2>
           <p className="mt-1 text-xs text-muted">
@@ -100,8 +100,10 @@ export function TeamsSection() {
                   key={`${team.region}:${team.id}`}
                   className="flex items-center justify-between gap-3 border-b border-dashed border-border px-4 py-3 last:border-b-0"
                 >
-                  <span className="text-sm text-foreground">{team.name}</span>
-                  <span className="flex items-center gap-3">
+                  <span className="min-w-0 text-sm wrap-anywhere text-foreground">
+                    {team.name}
+                  </span>
+                  <span className="flex shrink-0 items-center gap-3">
                     {/* Switching lives in the sidebar team dropdown; this
                         directory only marks which team is active. */}
                     {isActive && (
