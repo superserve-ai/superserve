@@ -89,6 +89,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
             target="_blank"
             rel="noopener noreferrer"
             className={className}
+            aria-label={isCollapsed ? item.label : undefined}
             onMouseEnter={() => setHoveredHref(item.href)}
           >
             {inner}
@@ -98,6 +99,7 @@ export function SidebarNav({ items, groupId }: SidebarNavProps) {
             key={item.href}
             href={item.href}
             className={className}
+            aria-label={isCollapsed ? item.label : undefined}
             aria-current={isActive ? "page" : undefined}
             onMouseEnter={() => setHoveredHref(item.href)}
           >
