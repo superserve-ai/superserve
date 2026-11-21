@@ -44,6 +44,9 @@ const mocks = vi.hoisted(() => ({
 vi.mock("@/components/trial-billing-banner", () => ({
   TrialBillingBanner: () => <div data-testid="legacy-banner" />,
 }))
+vi.mock("@/components/billing/trial-runway-warning", () => ({
+  TrialRunwayWarning: ({ fallback }: { fallback: React.ReactNode }) => fallback,
+}))
 vi.mock("@/hooks/use-pricing-version", () => ({
   usePricingVersion: mocks.version,
 }))
