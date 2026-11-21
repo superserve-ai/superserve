@@ -1,0 +1,80 @@
+name: Superserve Runner Trial
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "apps/**"
+      - "packages/**"
+      - "docs/**"
+      - "guides/**"
+      - "scripts/**"
+      - "tests/**"
+      - "package.json"
+      - "bun.lock"
+      - "turbo.json"
+      - ".github/workflows/**"
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      runner_label:
+        description: Runner label to qualify before enabling automatic trials
+        type: string
+        default: superserve-platform-autoscale
+
+permissions:
+  contents: read
+
+concurrency:
+  group: superserve-runner-trial-${{ github.event_name }}-${{ github.event.pull_request.number || (github.event_name == 'workflow_dispatch' && github.run_id) || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  ci:
+    name: Lint, typecheck, test, build (Superserve trial)
+    if: >-
+      (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) &&
+      (vars.SUPERSERVE_RUNNER_LABEL != '' || github.event_name == 'workflow_dispatch')
+    runs-on: ${{ inputs.runner_label || vars.SUPERSERVE_RUNNER_LABEL || 'superserve-platform-autoscale' }}
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Bun
+        uses: oven-sh/setup-bun@v2
+
+      - name: Setup uv
+        uses: astral-sh/setup-uv@v6
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Format check
+        run: bun run format:check
+
+      - name: Typecheck
+        run: bun run typecheck
+
+      - name: Check docs nav matches OpenAPI spec
+        run: bun run docs:check-nav
+
+      - name: Test
+        run: bun run test
+
+      - name: Build
+        run: bun run build
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v5
+        with:
+          node-version: "22"
+
+      - name: Smoke-test the CLI bundle
+        env:
+          SUPERSERVE_TELEMETRY: "0"
+        run: node packages/cli/dist/index.js --help
