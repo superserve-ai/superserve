@@ -158,3 +158,38 @@ it("offers an upgrade from the default plans when only unrelated offers are list
   )
   expect(canStartAnyPlan(upgradesOffSale)).toBe(false)
 })
+
+const account = {
+  billing_mode: "live",
+  permissions: { can_view: true, can_manage: true },
+  checkout_available: true,
+  portal_available: false,
+  subscription_status: null,
+  trial_ended: false,
+}
+it("accepts optional account metadata and distinguishes missing from failed reads", () => {
+  const key = `use:${team}`
+  expect(
+    parseBillingCapabilities(wire("legacy", true), key).account,
+  ).toBeUndefined()
+  expect(
+    parseBillingCapabilities({ ...wire("legacy", true), account: null }, key)
+      .account,
+  ).toBeNull()
+  expect(
+    parseBillingCapabilities({ ...wire("legacy", true), account }, key).account,
+  ).toEqual(account)
+})
+it.each([
+  { ...account, permissions: { can_view: true } },
+  { ...account, portal_available: "true" },
+  { ...account, billing_mode: "unknown" },
+  { ...account, subscription_status: 1 },
+])("rejects malformed independent account authority", (account) => {
+  expect(() =>
+    parseBillingCapabilities(
+      { ...wire("legacy", true), account },
+      `use:${team}`,
+    ),
+  ).toThrow()
+})

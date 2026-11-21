@@ -1,7 +1,11 @@
 "use client"
 
-import { useQuery } from "@tanstack/react-query"
+import { useQuery, useQueryClient } from "@tanstack/react-query"
 
+import {
+  isBillingUsageUnavailable,
+  retryBillingUsageQuery,
+} from "@/hooks/billing-query-retry"
 import { useBillingContext } from "@/hooks/use-billing-context"
 import {
   getBillingPricing,
@@ -63,44 +67,55 @@ export function useBillingUsage(
   const overlapsRecentUsage =
     periodEnd.getTime() > Date.now() - RECENT_USAGE_WINDOW_MS
 
+  const client = useQueryClient()
+  const queryKey = legacySignature
+    ? teamKey !== null
+      ? billingKeys.usage({
+          cacheScope,
+          teamKey,
+          periodStart: start,
+          periodEnd: end,
+        })
+      : billingKeys.usage({
+          cacheScope,
+          teamKey: "unresolved",
+          periodStart: start,
+          periodEnd: end,
+        })
+    : teamKey !== null
+      ? billingKeys.usageSeries({
+          cacheScope,
+          teamKey,
+          start,
+          end,
+          granularity,
+          timezone,
+        })
+      : billingKeys.usageSeries({
+          cacheScope,
+          teamKey: "unresolved",
+          start,
+          end,
+          granularity,
+          timezone,
+        })
+  const retry =
+    client.getQueryDefaults(queryKey).retry ??
+    client.getDefaultOptions().queries?.retry
   return useQuery<BillingUsageResponse | BillingUsageSeriesResponse>({
-    queryKey: legacySignature
-      ? teamKey !== null
-        ? billingKeys.usage({
-            cacheScope,
-            teamKey,
-            periodStart: start,
-            periodEnd: end,
-          })
-        : billingKeys.usage({
-            cacheScope,
-            teamKey: "unresolved",
-            periodStart: start,
-            periodEnd: end,
-          })
-      : teamKey !== null
-        ? billingKeys.usageSeries({
-            cacheScope,
-            teamKey,
-            start,
-            end,
-            granularity,
-            timezone,
-          })
-        : billingKeys.usageSeries({
-            cacheScope,
-            teamKey: "unresolved",
-            start,
-            end,
-            granularity,
-            timezone,
-          }),
+    queryKey,
     queryFn: legacySignature
       ? () => getBillingUsageAction(start, end)
       : () => getBillingUsageSeries({ start, end, granularity, timezone }),
+    retry: (count, error) => retryBillingUsageQuery(count, error, retry),
     enabled: enabled && ready,
     staleTime: overlapsRecentUsage ? 30_000 : 30 * 60_000,
-    refetchInterval: overlapsRecentUsage ? 60_000 : false,
+    refetchInterval: (query) =>
+      overlapsRecentUsage && !isBillingUsageUnavailable(query.state.error)
+        ? 60_000
+        : false,
+    refetchOnWindowFocus: (query) =>
+      !isBillingUsageUnavailable(query.state.error),
     refetchIntervalInBackground: false,
   })
 }
