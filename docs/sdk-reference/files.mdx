@@ -38,7 +38,7 @@ with open("local-image.png", "rb") as f:
 |---|---|---|
 | `path` | `string` / `str` | Absolute destination path. |
 | `content` | `FileInput` / `str \| bytes` | File contents. See accepted types below. |
-| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout. |
+| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout, in milliseconds (TypeScript) or seconds (Python). Defaults to 30 seconds. |
 | `signal` | `AbortSignal` | TypeScript only - abort the request. |
 
 **Accepted content types:**
@@ -65,6 +65,8 @@ await sandbox.files.write("/app/large.bin", buffer, {
 })
 ```
 
+An aborted call rejects with `SandboxError`.
+
 ## `read`
 
 Read a file as raw bytes.
@@ -85,7 +87,7 @@ data: bytes = sandbox.files.read("/app/image.png")
 |---|---|---|
 | `path` | `string` / `str` | Absolute file path. |
 | `maxBytes` / `max_bytes` | `number` / `int` | Optional download size limit in bytes. Defaults to 2 GiB. A larger file fails with `ValidationError`. |
-| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout. |
+| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout, in milliseconds (TypeScript) or seconds (Python). Defaults to 30 seconds. |
 | `signal` | `AbortSignal` | TypeScript only - abort the request. |
 
 ## `readText` / `read_text`
@@ -93,6 +95,10 @@ data: bytes = sandbox.files.read("/app/image.png")
 Read a file and decode as UTF-8. Takes `path`, `timeoutMs` / `timeout`, and
 `signal` (TypeScript only). The download size limit is fixed at the 2 GiB
 default; use `read` with `maxBytes` / `max_bytes` to set a different limit.
+
+If the file is not valid UTF-8, TypeScript replaces each invalid byte sequence
+with U+FFFD, and Python raises `UnicodeDecodeError`. Use `read` to get the raw
+bytes.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -131,7 +137,7 @@ with open("output.zip", "wb") as f:
 |---|---|---|
 | `path` | `string` / `str` | Absolute directory path to archive. |
 | `maxBytes` / `max_bytes` | `number` / `int` | Optional size limit in bytes for the returned archive. Defaults to 2 GiB. A larger archive fails with `ValidationError`. |
-| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout. Large directories can exceed the 30s default. |
+| `timeoutMs` / `timeout` | `number` / `float` | Optional request timeout, in milliseconds (TypeScript) or seconds (Python). Defaults to 30 seconds. Large directories can take longer. |
 | `signal` | `AbortSignal` | TypeScript only - abort the request. |
 
 The server decides file-vs-directory: if `path` points at a regular file, its
@@ -170,9 +176,11 @@ print(round_tripped == original)  # True
 Commonly raised:
 
 - `NotFoundError` - file or directory does not exist (on read / downloadDir)
+- `NotFoundError` - the sandbox was deleted
 - `ValidationError` - invalid path (relative, contains `..`, or malformed)
+- `ValidationError` - `read` on a directory (use `downloadDir` / `download_dir`), or `write` to `/`
 - `ValidationError` - a download is larger than `maxBytes` / `max_bytes` (default 2 GiB)
-- `AuthenticationError` - access token invalid or sandbox was deleted
+- `AuthenticationError` - the API key or the sandbox access token is invalid
 - `TimeoutError` / `SandboxTimeoutError` - the optional timeout elapsed
 
 See [Errors](/errors) for the full hierarchy.
