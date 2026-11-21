@@ -1458,6 +1458,74 @@ describe("auth callback", () => {
     })
   })
 
+  it.each([
+    "/\\evil.example/qa",
+    "/\\\\evil",
+    "/\t/evil",
+    "/%5Cevil.example",
+    "//evil.example",
+    "https://evil.example",
+  ])(
+    "falls back to the root for unsafe next %j without a user",
+    async (next) => {
+      currentUser = null
+      const callback = "https://console.superserve.ai/auth/callback?code=abc"
+      const response = await GET(
+        new Request(`${callback}&next=${encodeURIComponent(next)}`),
+      )
+
+      expect(response.headers.get("location")).toBe(
+        "https://console.superserve.ai/",
+      )
+    },
+  )
+
+  it("keeps a Google sign-in with next=/\\evil.example/qa on the console", async () => {
+    const next = "/\\evil.example/qa"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+      ),
+    )
+
+    const location = new URL(response.headers.get("location")!)
+    expect(location.origin).toBe("https://console.superserve.ai")
+    expect(location.pathname).toBe("/sandboxes")
+  })
+
+  it("keeps a first-time Google sign-up with an unsafe next on the console", async () => {
+    googleMembershipState = { kind: "first_time" }
+    mockHasValidGoogleSignupProof.mockResolvedValue(false)
+
+    const next = "/\\evil.example/qa"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1&next=${encodeURIComponent(next)}`,
+      ),
+    )
+
+    const location = new URL(response.headers.get("location")!)
+    expect(location.origin).toBe("https://console.superserve.ai")
+    expect(location.pathname).toBe("/auth/signup")
+    expect(location.searchParams.get("complete_google")).toBe("1")
+    expect(location.href).not.toContain("evil")
+    expect(location.searchParams.get("next")).toBeNull()
+  })
+
+  it("preserves a sandbox next with a query without a user", async () => {
+    currentUser = null
+    const next = "/sandboxes?x=1"
+    const response = await GET(
+      new Request(
+        `https://console.superserve.ai/auth/callback?code=abc&next=${encodeURIComponent(next)}`,
+      ),
+    )
+
+    expect(response.headers.get("location")).toBe(
+      "https://console.superserve.ai/sandboxes?x=1",
+    )
+  })
+
   it.each(["code=abc", "token_hash=token&type=signup"])(
     "preserves the YC approval locator through %s",
     async (auth) => {

@@ -14,6 +14,7 @@ import { DitherBackground } from "@/components/dither-background"
 import { GoogleIcon, Spinner } from "@/components/icons"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { sanitizeNext } from "@/lib/auth/safe-next"
 import { SIGNUP_OFFER_PARAM } from "@/lib/auth/signup-offer"
 import {
   TURNSTILE_SCRIPT_SRC,
@@ -46,9 +47,6 @@ import {
   signUpWithEmail,
 } from "./action"
 
-const TRUSTED_REDIRECT_PATTERN =
-  /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
-
 // A failed bot-check is a retry, not a dead end: say what the user can change.
 const CAPTCHA_FAILED_MESSAGE =
   "We couldn't verify this browser. Turn off any VPN or ad blocker for this site and try again, or use another browser."
@@ -76,13 +74,6 @@ const GOOGLE_RECOVERY_AUTO_WINDOW_MS = 10 * 60 * 1000
 const RESEND_COOLDOWN_SECONDS = 60
 const BOT_CHECK_UNAVAILABLE =
   "We couldn't load our bot-check. If you're using a content or ad blocker, please disable it for this site and try again."
-
-function sanitizeNext(raw: string | null): string {
-  const next = raw ?? "/"
-  if (next.startsWith("/") && !next.startsWith("//")) return next
-  if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
-  return "/"
-}
 
 export default function SignUpContent() {
   const [isLoading, setIsLoading] = useState(false)

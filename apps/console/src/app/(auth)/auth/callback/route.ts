@@ -37,6 +37,7 @@ import {
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
 import { PLAN_OFFER_COOKIE } from "@/lib/auth/plan-preselection"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
+import { sanitizeNext } from "@/lib/auth/safe-next"
 import {
   isActiveSignupEvidenceAttempt,
   readSignupEvidence,
@@ -104,22 +105,12 @@ import {
   staffCookieOptions,
 } from "@/lib/yc/staff-session"
 
-const TRUSTED_REDIRECT_PATTERN =
-  /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
-
 function buildRedirectUrl(origin: string, path: string): string {
   const base =
     process.env.VERCEL_ENV === "preview"
       ? origin
       : process.env.NEXT_PUBLIC_APP_URL || origin
   return new URL(path, base).toString()
-}
-
-function sanitizeNext(raw: string | null): string {
-  const next = raw ?? "/"
-  if (next.startsWith("/") && !next.startsWith("//")) return next
-  if (TRUSTED_REDIRECT_PATTERN.test(next)) return next
-  return "/"
 }
 
 /**

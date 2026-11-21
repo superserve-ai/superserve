@@ -336,6 +336,34 @@ describe("SignUpPage", () => {
     ).toBeInTheDocument()
   })
 
+  it.each([
+    "/\\evil.example/qa",
+    "/\\\\evil",
+    "/\t/evil",
+    "/%5Cevil.example",
+    "//evil.example",
+    "https://evil.example",
+  ])("omits unsafe next %j from the sign-in link", async (next) => {
+    mockSearchParams = new URLSearchParams({ next })
+    render(<SignUpPage />)
+
+    const link = await screen.findByRole("link", { name: "Sign in" })
+    expect(link).toHaveAttribute("href", "/auth/signin")
+  })
+
+  it("preserves a sandbox destination with a query in the sign-in link", async () => {
+    const next = "/sandboxes?x=1"
+    mockSearchParams = new URLSearchParams({ next })
+    render(<SignUpPage />)
+
+    const link = await screen.findByRole("link", { name: "Sign in" })
+    const url = new URL(
+      link.getAttribute("href")!,
+      "https://console.example.test",
+    )
+    expect(url.searchParams.get("next")).toBe(next)
+  })
+
   it("preserves the claim destination when switching to sign in", async () => {
     mockSearchParams = new URLSearchParams("offer=yc_2026&next=%2Fyc%2Fclaim")
     render(<SignUpPage />)
@@ -1569,6 +1597,39 @@ describe("SignUpPage with reCAPTCHA configured", () => {
         },
       })
     })
+  })
+
+  it("drops an unsafe next when completing signup with Google", async () => {
+    mockSearchParams = new URLSearchParams({
+      complete_google: "1",
+      offer: "yc_2026",
+      next: "/\\evil.example/qa",
+    })
+    mockSignInWithOAuth.mockClear()
+    ;(window as { grecaptcha?: unknown }).grecaptcha = {
+      enterprise: {
+        ready: (callback: () => void) => callback(),
+        execute: () => Promise.resolve("google-token"),
+      },
+    }
+    const { default: ConfiguredSignUpPage } = await import("./page")
+    render(<ConfiguredSignUpPage />)
+
+    await user.click(
+      await screen.findByRole("button", {
+        name: /Complete signup with Google/,
+      }),
+    )
+
+    await waitFor(() => {
+      expect(mockSignInWithOAuth).toHaveBeenCalledTimes(1)
+    })
+    const callback = new URL(
+      mockSignInWithOAuth.mock.lastCall![0].options.redirectTo,
+    )
+    expect(callback.pathname).toBe("/auth/callback")
+    expect(callback.searchParams.get("offer")).toBe("yc_2026")
+    expect(callback.searchParams.has("next")).toBe(false)
   })
 
   it("submits with a token once reCAPTCHA succeeds", async () => {
