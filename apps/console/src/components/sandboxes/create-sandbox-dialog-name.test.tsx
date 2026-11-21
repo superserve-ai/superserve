@@ -127,7 +127,7 @@ it.each([
 
   expect(focusState).toHaveBeenCalledExactlyOnceWith("true", nameError)
   expect(mutate).not.toHaveBeenCalled()
-  expect(capture).not.toHaveBeenCalled()
+  expect(capture).not.toHaveBeenCalledWith("sandbox_created", expect.anything())
   expect(getFieldError()).toBeVisible()
   expect(input).toHaveAttribute("aria-invalid", "true")
   expect(input).toHaveAccessibleDescription(nameError)
@@ -298,7 +298,7 @@ it("does not submit a name typed during the closing transition", () => {
   fireEvent.click(create)
 
   expect(mutate).not.toHaveBeenCalled()
-  expect(capture).not.toHaveBeenCalled()
+  expect(capture).not.toHaveBeenCalledWith("sandbox_created", expect.anything())
 })
 
 it("prefills a fresh name after an edit during the closing transition", () => {

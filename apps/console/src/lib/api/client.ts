@@ -1,3 +1,11 @@
+import {
+  correlationId,
+  createdSandboxUuid,
+  createErrorCode,
+  type CreateClientResult,
+  type CreateMeasurement,
+} from "./create-measurement"
+
 export class ApiError extends Error {
   status: number
   code: string
@@ -51,6 +59,7 @@ async function request<R>(
   options: RequestInit,
   read: (response: Response) => Promise<R>,
   timeoutMs = 30_000,
+  observeResponse?: (response: Response) => void,
 ): Promise<R> {
   const url = `${getBaseUrl()}${normalizePath(path)}`
 
@@ -72,6 +81,7 @@ async function request<R>(
       headers,
       signal: controller.signal,
     })
+    observeResponse?.(response)
 
     if (!response.ok) {
       let code = "unknown_error"
@@ -126,6 +136,60 @@ export async function apiClientWithHeaders<T>(
     data: (response.status === 204 ? undefined : await response.json()) as T,
     headers: response.headers,
   }))
+}
+
+/** Create-only observation leaves existing response and error values unchanged. */
+export async function apiClientCreate<T>(
+  options: RequestInit,
+  measurement: CreateMeasurement,
+): Promise<T> {
+  const result: CreateClientResult = {
+    outcome: "transport_unknown",
+    request_dispatched: true,
+    request_id: null,
+    http_status: null,
+    error_code: "unknown",
+    sandbox_id: null,
+  }
+  const headers = new Headers(options.headers)
+  const attemptId = correlationId(measurement.attemptId)
+  if (attemptId) headers.set("X-Sandbox-Create-Attempt-ID", attemptId)
+  try {
+    const data = await request<T>(
+      "/sandboxes",
+      { ...options, headers },
+      async (response) => {
+        if (response.status === 204) return undefined as T
+        return response.json() as Promise<T>
+      },
+      30_000,
+      (response) => {
+        result.http_status = response.status
+        result.request_id = correlationId(response.headers.get("X-Request-ID"))
+        result.outcome = response.ok ? "response_decode_unknown" : "http_error"
+      },
+    )
+    const id =
+      data && typeof data === "object" && "id" in data
+        ? createdSandboxUuid(data.id)
+        : null
+    if (result.http_status === 201 && id) {
+      result.outcome = "http_success"
+      result.sandbox_id = id
+      result.error_code = null
+    }
+    return data
+  } catch (error) {
+    if (error instanceof ApiError)
+      result.error_code = createErrorCode(error.code)
+    throw error
+  } finally {
+    try {
+      measurement.onResult(result)
+    } catch {
+      /* Telemetry cannot change Create. */
+    }
+  }
 }
 
 /**

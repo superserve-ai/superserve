@@ -318,6 +318,19 @@ async function proxyRequest(
   }
 
   const headers = new Headers()
+  // This metadata is optional and has no authority outside Create measurement.
+  if (joinedPath === "sandboxes" && request.method === "POST") {
+    const attemptId = request.headers.get("X-Sandbox-Create-Attempt-ID")
+    if (
+      attemptId &&
+      attemptId.length === 36 &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        attemptId,
+      )
+    ) {
+      headers.set("X-Sandbox-Create-Attempt-ID", attemptId)
+    }
+  }
   for (const [key, value] of request.headers.entries()) {
     const lowerKey = key.toLowerCase()
     if (!skipKeyInjection && lowerKey === "authorization") {

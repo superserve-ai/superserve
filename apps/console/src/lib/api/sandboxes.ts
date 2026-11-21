@@ -1,6 +1,12 @@
 import { registerPreviewTokenQueryParam } from "@/lib/preview-token-redaction"
 
-import { apiClient, apiClientList, type PagedResult } from "./client"
+import {
+  apiClient,
+  apiClientCreate,
+  apiClientList,
+  type PagedResult,
+} from "./client"
+import type { CreateMeasurement } from "./create-measurement"
 import type {
   CreateSandboxRequest,
   PreviewAccessPolicy,
@@ -39,7 +45,16 @@ export async function getSandbox(id: string): Promise<SandboxResponse> {
 
 export async function createSandbox(
   data: CreateSandboxRequest,
+  measurement?: CreateMeasurement | null,
 ): Promise<SandboxResponse> {
+  if (measurement)
+    return apiClientCreate<SandboxResponse>(
+      {
+        method: "POST",
+        body: JSON.stringify(data),
+      },
+      measurement,
+    )
   return apiClient<SandboxResponse>("/sandboxes", {
     method: "POST",
     body: JSON.stringify(data),

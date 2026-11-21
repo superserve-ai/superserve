@@ -34,7 +34,14 @@ import { snapshotLabel } from "@/components/snapshots/snapshot-status-badge"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { useSnapshots } from "@/hooks/use-snapshots"
 import { useTemplates } from "@/hooks/use-templates"
+import type { CreateMeasurement } from "@/lib/api/create-measurement"
 import type { CreateSandboxRequest, PreviewAccessPolicy } from "@/lib/api/types"
+import { captureBestEffort } from "@/lib/posthog/capture"
+import {
+  captureCreateMeasurement,
+  newCreateCorrelationId,
+  snapshotCreateIdentity,
+} from "@/lib/posthog/create-measurement"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
@@ -446,6 +453,21 @@ export function CreateSandboxDialog({
   const [internalOpen, setInternalOpen] = useState(false)
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
+  const flowId = useRef<string | null>(null)
+  const wasOpen = useRef(false)
+  const submitPending = useRef(false)
+  const measurement = useRef<CreateMeasurement | null>(null)
+  useLayoutEffect(() => {
+    if (open && !wasOpen.current) {
+      flowId.current = newCreateCorrelationId()
+      captureCreateMeasurement(
+        posthog,
+        SANDBOX_EVENTS.CREATE_DIALOG_OPENED,
+        flowId.current,
+      )
+    }
+    wasOpen.current = open
+  }, [open, posthog])
   const [name, setName] = useState("")
   const [nameError, setNameError] = useState<string>()
   const nameInputRef = useRef<HTMLInputElement>(null)
@@ -551,7 +573,7 @@ export function CreateSandboxDialog({
   const selectedSnapshot = readySnapshots.find((s) => s.id === snapshotId)
   const fromSnapshot = source === "snapshot"
 
-  const createMutation = useCreateSandbox()
+  const createMutation = useCreateSandbox(measurement)
   const { addToast } = useToast()
 
   const handleReset = () => {
@@ -575,8 +597,36 @@ export function CreateSandboxDialog({
 
   const handleCreate = () => {
     // Ignore a late click or Enter during the closing animation.
-    if (!open) return
+    if (!open || createMutation.isPending || submitPending.current) return
+    const attemptId = newCreateCorrelationId()
+    const attemptFlowId = flowId.current
+    const attemptIdentity = snapshotCreateIdentity(posthog)
+    captureCreateMeasurement(
+      posthog,
+      SANDBOX_EVENTS.CREATE_SUBMITTED,
+      attemptFlowId,
+      attemptId,
+      undefined,
+      attemptIdentity,
+    )
+    const validationRejected = () =>
+      captureCreateMeasurement(
+        posthog,
+        SANDBOX_EVENTS.CREATE_CLIENT_RESULT,
+        attemptFlowId,
+        attemptId,
+        {
+          outcome: "validation_rejected",
+          request_dispatched: false,
+          request_id: null,
+          http_status: null,
+          error_code: "validation_failed",
+          sandbox_id: null,
+        },
+        attemptIdentity,
+      )
     if (!name.trim()) {
+      validationRejected()
       flushSync(() => setNameError("Enter a name for this sandbox."))
       nameInputRef.current?.focus()
       return
@@ -599,11 +649,12 @@ export function CreateSandboxDialog({
         snapshotId: fromSnapshot ? snapshotId : undefined,
       })
     } catch (e) {
+      validationRejected()
       addToast(e instanceof Error ? e.message : "Invalid input", "error")
       return
     }
 
-    posthog.capture(SANDBOX_EVENTS.CREATED, {
+    captureBestEffort(posthog, SANDBOX_EVENTS.CREATED, {
       has_timeout: !!timeout,
       has_idle_timeout: !!idleTimeout,
       has_auto_delete: !!autoDelete,
@@ -623,11 +674,27 @@ export function CreateSandboxDialog({
       preview_access: payload.preview_access,
     })
 
+    submitPending.current = true
+    measurement.current = {
+      attemptId,
+      onResult: (result) =>
+        captureCreateMeasurement(
+          posthog,
+          SANDBOX_EVENTS.CREATE_CLIENT_RESULT,
+          attemptFlowId,
+          attemptId,
+          result,
+          attemptIdentity,
+        ),
+    }
     createMutation.mutate(payload, {
       onSuccess: (sandbox) => {
         setOpen(false)
         handleReset()
         onCreated?.(sandbox.id)
+      },
+      onSettled: () => {
+        submitPending.current = false
       },
     })
   }
