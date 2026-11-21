@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import { ConflictError } from "../src/errors.js"
 import { Template } from "../src/Template.js"
+import type { BuildLogEvent, BuildLogStream } from "../src/types.js"
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -95,6 +96,63 @@ describe("Template.streamBuildLogs", () => {
       { stream: "stdout", text: "hello" },
       { stream: "system", text: "done" },
     ])
+  })
+
+  it("delivers the final event, which has no timestamp", async () => {
+    const t = await makeTemplate()
+    const stream = sseStream([
+      'data: {"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"ready","finished":false}',
+      "",
+      'data: {"finished":true,"status":"ready","stream":"system","text":"build ready"}',
+      "",
+    ])
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(stream, { status: 200 })),
+    )
+
+    const events: BuildLogEvent[] = []
+    await t.streamBuildLogs({ onEvent: (ev) => events.push(ev) })
+
+    expect(events.map((ev) => ev.text)).toEqual(["ready", "build ready"])
+    expect(events[1].finished).toBe(true)
+    expect(events[1].status).toBe("ready")
+    expect(events[1].timestamp).toBeInstanceOf(Date)
+  })
+
+  it("delivers the error stream of a failed build", async () => {
+    // Event sequence the server sends for a build whose step exits non-zero.
+    const t = await makeTemplate()
+    const stream = sseStream([
+      'data: {"timestamp":"2026-01-01T00:00:00Z","stream":"system","text":"Step 1/1"}',
+      "",
+      'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"stdout","text":"boom"}',
+      "",
+      'data: {"timestamp":"2026-01-01T00:00:01Z","stream":"stderr","text":"oops"}',
+      "",
+      'data: {"timestamp":"2026-01-01T00:00:02Z","stream":"error","text":"step_failed: step 1/1 failed after 1ms: exited with code 3"}',
+      "",
+      'data: {"finished":true,"status":"failed","stream":"system","text":"build failed"}',
+      "",
+    ])
+    vi.stubGlobal(
+      "fetch",
+      vi.fn(async () => new Response(stream, { status: 200 })),
+    )
+
+    const events: BuildLogEvent[] = []
+    await t.streamBuildLogs({ onEvent: (ev) => events.push(ev) })
+
+    const expected: BuildLogStream[] = [
+      "system",
+      "stdout",
+      "stderr",
+      "error",
+      "system",
+    ]
+    expect(events.map((ev) => ev.stream)).toEqual(expected)
+    expect(events[3].text).toMatch(/^step_failed: /)
+    expect(events[4].status).toBe("failed")
   })
 
   it("uses provided buildId when passed", async () => {

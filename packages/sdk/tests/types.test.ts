@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest"
 
 import {
+  type BuildLogStream,
   buildStepsToApi,
   toBuildLogEvent,
   toSandboxInfo,
@@ -294,10 +295,29 @@ describe("toBuildLogEvent", () => {
     expect(ev.text).toBe("")
   })
 
-  it("throws on missing timestamp", () => {
-    expect(() => toBuildLogEvent({ stream: "stdout", text: "x" })).toThrow(
-      /missing timestamp/,
-    )
+  it("uses the receive time when timestamp is absent", () => {
+    const before = Date.now()
+    const ev = toBuildLogEvent({
+      finished: true,
+      status: "ready",
+      stream: "system",
+      text: "build ready",
+    })
+    expect(ev.timestamp).toBeInstanceOf(Date)
+    expect(ev.timestamp.getTime()).toBeGreaterThanOrEqual(before)
+    expect(ev.timestamp.getTime()).toBeLessThanOrEqual(Date.now())
+    expect(ev.finished).toBe(true)
+    expect(ev.status).toBe("ready")
+  })
+
+  it("keeps the error stream", () => {
+    const ev = toBuildLogEvent({
+      timestamp: "2026-01-01T00:00:00Z",
+      stream: "error",
+      text: "step_failed: step 1/1 failed after 1ms: exited with code 3",
+    })
+    const stream: BuildLogStream = "error"
+    expect(ev.stream).toBe(stream)
   })
 
   it("throws on missing stream", () => {

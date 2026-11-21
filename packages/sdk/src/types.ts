@@ -550,7 +550,11 @@ export type TemplateBuildStatus =
   | "failed"
   | "cancelled"
 
-export type BuildLogStream = "stdout" | "stderr" | "system"
+/**
+ * `error` carries the build failure line, as `"<code>: <message>"`. Values
+ * the server adds later are passed through unchanged.
+ */
+export type BuildLogStream = "stdout" | "stderr" | "system" | "error"
 
 export interface TemplateInfo {
   id: string
@@ -778,15 +782,14 @@ export function toTemplateBuildInfo(
 }
 
 export function toBuildLogEvent(raw: ApiBuildLogEvent): BuildLogEvent {
-  if (!raw.timestamp) {
-    throw new SandboxError("Invalid log event: missing timestamp")
-  }
   if (!raw.stream) {
     throw new SandboxError("Invalid log event: missing stream")
   }
 
   return {
-    timestamp: new Date(raw.timestamp),
+    // The final event (`finished: true`) carries no server timestamp; use
+    // the time it was received so the stream does not drop it.
+    timestamp: raw.timestamp ? new Date(raw.timestamp) : new Date(),
     stream: raw.stream as BuildLogStream,
     text: raw.text ?? "",
     finished: raw.finished,

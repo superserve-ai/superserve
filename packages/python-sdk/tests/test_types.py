@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 import pytest
 from superserve.errors import SandboxError
 from superserve.types import (
+    BuildLogStream,
     EnvStep,
     EnvStepValue,
     NetworkConfig,
@@ -249,6 +250,48 @@ class TestToBuildLogEvent:
         assert ev.text == "hello"
         assert ev.finished is True
         assert ev.status == "ready"
+
+    def test_missing_timestamp_uses_receive_time(self) -> None:
+        before = datetime.now(timezone.utc)
+        ev = to_build_log_event(
+            {
+                "finished": True,
+                "status": "ready",
+                "stream": "system",
+                "text": "build ready",
+            }
+        )
+        assert before <= ev.timestamp <= datetime.now(timezone.utc)
+        assert ev.finished is True
+        assert ev.status == "ready"
+
+    def test_error_stream(self) -> None:
+        ev = to_build_log_event(
+            {
+                "timestamp": "2026-01-01T00:00:00Z",
+                "stream": "error",
+                "text": "step_failed: step 1/1 failed after 1ms: exited with code 3",
+            }
+        )
+        assert ev.stream is BuildLogStream.ERROR
+
+    def test_unknown_stream_is_kept(self) -> None:
+        ev = to_build_log_event(
+            {"timestamp": "2026-01-01T00:00:00Z", "stream": "debug", "text": "x"}
+        )
+        assert isinstance(ev.stream, BuildLogStream)
+        assert ev.stream.value == "debug"
+        assert ev.stream == "debug"
+        assert [m.value for m in BuildLogStream] == [
+            "stdout",
+            "stderr",
+            "system",
+            "error",
+        ]
+
+    def test_missing_stream_raises(self) -> None:
+        with pytest.raises(SandboxError, match="missing stream"):
+            to_build_log_event({"timestamp": "2026-01-01T00:00:00Z", "text": "x"})
 
 
 class TestBuildStepsToApi:
