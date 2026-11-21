@@ -11,7 +11,7 @@ export const badgeMeta: ComponentMeta = {
   props: [
     {
       name: "variant",
-      type: '"default" | "success" | "warning" | "destructive" | "muted"',
+      type: '"default" | "active" | "success" | "info" | "warning" | "destructive" | "muted"',
       default: '"default"',
       description: "The visual style.",
     },
@@ -28,14 +28,18 @@ export const badgeMeta: ComponentMeta = {
       preview: (
         <div className="flex flex-wrap items-center gap-2">
           <Badge variant="default">Default</Badge>
+          <Badge variant="active">Active</Badge>
           <Badge variant="success">Success</Badge>
+          <Badge variant="info">Info</Badge>
           <Badge variant="warning">Warning</Badge>
           <Badge variant="destructive">Destructive</Badge>
           <Badge variant="muted">Muted</Badge>
         </div>
       ),
       code: `<Badge variant="default">Default</Badge>
+<Badge variant="active">Active</Badge>
 <Badge variant="success">Success</Badge>
+<Badge variant="info">Info</Badge>
 <Badge variant="warning">Warning</Badge>
 <Badge variant="destructive">Destructive</Badge>
 <Badge variant="muted">Muted</Badge>`,
@@ -47,8 +51,14 @@ export const badgeMeta: ComponentMeta = {
           <Badge variant="default" dot>
             Default
           </Badge>
+          <Badge variant="active" dot>
+            Active
+          </Badge>
           <Badge variant="success" dot>
             Success
+          </Badge>
+          <Badge variant="info" dot>
+            Info
           </Badge>
           <Badge variant="warning" dot>
             Warning
@@ -62,7 +72,9 @@ export const badgeMeta: ComponentMeta = {
         </div>
       ),
       code: `<Badge variant="default" dot>Default</Badge>
+<Badge variant="active" dot>Active</Badge>
 <Badge variant="success" dot>Success</Badge>
+<Badge variant="info" dot>Info</Badge>
 <Badge variant="warning" dot>Warning</Badge>
 <Badge variant="destructive" dot>Destructive</Badge>
 <Badge variant="muted" dot>Muted</Badge>`,

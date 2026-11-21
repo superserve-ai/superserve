@@ -20,6 +20,8 @@ export interface NavItem {
   label: string
   href: string
   icon: Icon
+  /** Resting icon color for non-active items; the active item is always mint. */
+  iconClassName?: string
   external?: boolean
 }
 
@@ -48,12 +50,37 @@ export const adminBillingNavItem: NavItem = {
 }
 
 export const mainNavItems: NavItem[] = [
-  { label: "Sandboxes", href: "/sandboxes", icon: CubeIcon },
-  { label: "Templates", href: "/templates", icon: StackIcon },
-  { label: "Secrets", href: "/secrets", icon: LockKeyIcon },
-  { label: "Snapshots", href: "/snapshots", icon: CameraIcon },
+  {
+    label: "Sandboxes",
+    href: "/sandboxes",
+    icon: CubeIcon,
+    iconClassName: "text-info",
+  },
+  {
+    label: "Templates",
+    href: "/templates",
+    icon: StackIcon,
+    iconClassName: "text-ecosystem",
+  },
+  {
+    label: "Secrets",
+    href: "/secrets",
+    icon: LockKeyIcon,
+    iconClassName: "text-attention",
+  },
+  {
+    label: "Snapshots",
+    href: "/snapshots",
+    icon: CameraIcon,
+    iconClassName: "text-ecosystem",
+  },
   { label: "Audit Logs", href: "/audit-logs", icon: ClipboardTextIcon },
-  { label: "API Keys", href: "/api-keys", icon: KeyIcon },
+  {
+    label: "API Keys",
+    href: "/api-keys",
+    icon: KeyIcon,
+    iconClassName: "text-attention",
+  },
   { label: "Billing & Usage", href: "/billing-usage", icon: ChartBarIcon },
   { label: "Settings", href: "/settings", icon: GearIcon },
 ]
