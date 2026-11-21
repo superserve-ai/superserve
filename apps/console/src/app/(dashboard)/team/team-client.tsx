@@ -284,7 +284,7 @@ function MemberList({
   onRemove?: (member: TeamMember) => void
 }) {
   return (
-    <ul className="mt-4 divide-y divide-dashed divide-border border border-dashed border-border">
+    <ul className="@container mt-4 divide-y divide-dashed divide-border border border-dashed border-border">
       {members.map((member) => (
         <li
           key={member.user_id}
@@ -298,7 +298,7 @@ function MemberList({
               .join("")
               .toUpperCase()}
           </span>
-          <div className="min-w-0 flex-1">
+          <div className="min-w-0 flex-1 basis-[min(10rem,100%_-_2.75rem)] @2xl:basis-0">
             <div className="flex items-center gap-2 text-sm">
               <span className="min-w-0 break-all">
                 {member.full_name || "Team member"}

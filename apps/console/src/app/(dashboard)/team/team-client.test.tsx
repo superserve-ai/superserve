@@ -292,6 +292,20 @@ describe("TeamClient", () => {
     ).not.toBeInTheDocument()
   })
 
+  it("lets role pills wrap below member names on narrow screens", () => {
+    render(<TeamClient />)
+
+    for (const member of baseManagement.members) {
+      const name = screen.getByText(member.full_name || "Team member")
+      expect(name.parentElement?.parentElement).toHaveClass(
+        "flex-1",
+        "basis-[min(10rem,100%_-_2.75rem)]",
+        "@2xl:basis-0",
+      )
+      expect(name.closest("ul")).toHaveClass("@container")
+    }
+  })
+
   it.each(["hidden", "enabled", "blocked_free_plan"] as const)(
     "shows the no-invite explanation only for hidden state: %s",
     (state) => {
@@ -441,6 +455,18 @@ describe("TeamClient", () => {
       expect(
         screen.queryByRole("button", { name: /revoke invitation/i }),
       ).not.toBeInTheDocument()
+    })
+
+    it("gives pending invitation emails room on narrow screens", () => {
+      render(<TeamClient />)
+
+      const email = screen.getByText(pendingInvitation.email)
+      expect(email.closest("ul")).toHaveClass("@container")
+      expect(email.parentElement).toHaveClass(
+        "flex-1",
+        "basis-[min(10rem,100%_-_2rem)]",
+        "@2xl:basis-0",
+      )
     })
 
     it("hides Resend but keeps Revoke on a Free plan team", () => {

@@ -181,7 +181,7 @@ export function InvitationsSection({
           </Button>
         </div>
       ) : (
-        <ul className="mt-4 divide-y divide-dashed divide-border border border-dashed border-border">
+        <ul className="@container mt-4 divide-y divide-dashed divide-border border border-dashed border-border">
           {invitations.map((invitation) => (
             <li
               key={invitation.id}
@@ -191,7 +191,7 @@ export function InvitationsSection({
                 className="size-5 shrink-0 text-muted"
                 weight="light"
               />
-              <div className="min-w-0 flex-1">
+              <div className="min-w-0 flex-1 basis-[min(10rem,100%_-_2rem)] @2xl:basis-0">
                 <span data-mask className="text-sm break-all">
                   {invitation.email}
                 </span>
