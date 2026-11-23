@@ -584,7 +584,8 @@ try {
 - Use `getInfo()` for current state — the instance `status`/`metadata` are stale snapshots.
 - `update({ metadata })` **replaces** the whole map; omitted keys are dropped.
 - `vcpu`/`memoryMib` on `create()` only work within a template range; a template without
-  one returns `400`, one built before size selection returns `409` (rebuild it). No `disk`.
+  one returns `400`, one built before size selection returns `409` (rebuild it), and a size
+  above the plan's limits returns `402` (`sandbox_exceeds_plan_limits`). No `disk`.
 - `Template.create()` returns when the build is _queued_; boot a sandbox only **after**
   `waitUntilReady()` resolves.
 - The command timeout is a hard limit, not an idle timeout: output doesn't reset it, and at

@@ -87,7 +87,7 @@ With the [MCP server](/integrations/mcp), pass `vcpu` and `memory_mib` to `sandb
 
 - **`vcpu`** is a whole number of vCPUs from the template's `vcpu` to its `vcpuMax`, both included.
 - **`memoryMib`** is a size in MiB from the template's `memoryMib` to its `memoryMaxMib`, both included, in 2 MiB steps from the minimum. For a 2048–8192 MiB template, 6144 works and 6145 doesn't.
-- Both must also be within your plan's limits. See [Resource limits](/templates/build-spec#resource-limits).
+- Both must also be within your plan's limits, or the request fails with a `402`. See [Resource limits](/templates/build-spec#resource-limits).
 
 ## Fixed and growable
 
@@ -115,13 +115,14 @@ Had you passed only `vcpu: 3`, memory would still range from 2048 to 8192 MiB.
 
 ## Forks
 
-A sandbox created from a [snapshot](/sandbox/snapshots) keeps the size of the sandbox it was taken from. If that sandbox was created with a chosen memory size, you can pass a different `memoryMib` / `memory_mib` with `fromSnapshot` / `from_snapshot`, within the snapshot's memory range. Choosing `vcpu` for a fork isn't available yet; omit it to keep the snapshot's vCPU count.
+A sandbox created from a [snapshot](/sandbox/snapshots) keeps the size of the sandbox it was taken from. If that sandbox was created with a chosen memory size, you can pass a different `memoryMib` / `memory_mib` with `fromSnapshot` / `from_snapshot`, within the snapshot's memory range.
 
 ## Errors
 
 | Status | Error | When |
 | --- | --- | --- |
-| `400` | `ValidationError` | The value is outside the template's range or plan limits, or the template has no range for that dimension. System templates such as `superserve/base` have none. |
+| `400` | `ValidationError` | The value is outside the template's range, or the template has no range for that dimension. System templates such as `superserve/base` have none. |
+| `402` | `BillingError` with code `sandbox_exceeds_plan_limits` | The value is within the template's range but above your plan's limits. See [Billing errors](/errors#billing-errors-402). |
 | `409` | `ConflictError` | The template was built before size selection was available. [Rebuild it](/templates/lifecycle), or omit `vcpu` and `memoryMib` to use its defaults. |
 | `429` | `RateLimitError` with code `host_capacity` | The host has no room for that size right now. Retry after a short wait. |
 
