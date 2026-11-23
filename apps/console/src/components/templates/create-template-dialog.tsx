@@ -5,9 +5,6 @@ import {
   CheckIcon,
   CodeIcon,
   CopyIcon,
-  MinusIcon,
-  PlusIcon,
-  QuestionIcon,
 } from "@phosphor-icons/react"
 import {
   Button,
@@ -31,6 +28,15 @@ import Link from "next/link"
 import { useRouter } from "next/navigation"
 import { useId, useMemo, useRef, useState } from "react"
 
+import {
+  focusRing,
+  formatMib,
+  formatVcpu,
+  ROW_GRID,
+  SegmentedChoice,
+  Stepper,
+  SubRow,
+} from "@/components/size-controls"
 import { useTemplateEntitlement } from "@/hooks/use-template-entitlement"
 import { useCreateTemplate } from "@/hooks/use-templates"
 import { ApiError } from "@/lib/api/client"
@@ -70,12 +76,7 @@ const NAME_RE = /^[a-z0-9][a-z0-9-]*$/
 const SHRINK_AFTER_MIN = 60
 const SHRINK_AFTER_MAX = 1800
 
-const LIVE_MEMORY_DOCS_URL =
-  "https://docs.superserve.ai/sandbox/live-memory-resizing"
-const LIVE_CPU_DOCS_URL = "https://docs.superserve.ai/sandbox/live-cpu-resizing"
-
-const focusRing =
-  "focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
+const SIZE_DOCS_URL = "https://docs.superserve.ai/sandbox/size"
 
 function limitOf(
   cap: number | null | undefined,
@@ -150,95 +151,6 @@ function validateImage(image: string): string | null {
   return null
 }
 
-function formatMib(mib: number): string {
-  return mib >= 1024 ? `${Number((mib / 1024).toFixed(2))} GB` : `${mib} MB`
-}
-
-function formatVcpu(n: number): string {
-  return `${n} vCPU`
-}
-
-interface StepperProps {
-  label: string
-  labelledBy: string
-  steps: readonly number[]
-  value: number
-  onChange: (value: number) => void
-  format: (value: number) => string
-}
-
-function Stepper({
-  label,
-  labelledBy,
-  steps,
-  value,
-  onChange,
-  format,
-}: StepperProps) {
-  const index = steps.indexOf(value)
-  const last = steps.length - 1
-  const go = (i: number) => onChange(steps[Math.max(0, Math.min(last, i))])
-  const iconButton = cn(
-    "flex size-9 cursor-pointer items-center justify-center text-muted transition-colors hover:text-foreground disabled:cursor-not-allowed disabled:opacity-30",
-    focusRing,
-  )
-  return (
-    <div className="flex shrink-0 items-center border border-dashed border-control">
-      <button
-        type="button"
-        aria-label={`Decrease ${label}`}
-        disabled={index <= 0}
-        onClick={() => go(index - 1)}
-        className={iconButton}
-      >
-        <MinusIcon className="size-3.5" weight="light" />
-      </button>
-      <div
-        // oxlint-disable-next-line jsx-a11y/prefer-tag-over-role -- steps are uneven, which a number input can't express
-        role="spinbutton"
-        tabIndex={0}
-        aria-labelledby={labelledBy}
-        aria-valuenow={value}
-        aria-valuemin={steps[0]}
-        aria-valuemax={steps[last]}
-        aria-valuetext={format(value)}
-        onKeyDown={(e) => {
-          const next = {
-            ArrowUp: index + 1,
-            ArrowRight: index + 1,
-            ArrowDown: index - 1,
-            ArrowLeft: index - 1,
-            Home: 0,
-            End: last,
-          }[e.key]
-          if (next === undefined) return
-          e.preventDefault()
-          go(next)
-        }}
-        className={cn(
-          "flex h-9 w-24 items-center justify-center border-x border-dashed border-control font-mono text-sm text-foreground tabular-nums",
-          focusRing,
-        )}
-      >
-        {format(value)}
-      </div>
-      <button
-        type="button"
-        aria-label={`Increase ${label}`}
-        disabled={index >= last}
-        onClick={() => go(index + 1)}
-        className={iconButton}
-      >
-        <PlusIcon className="size-3.5" weight="light" />
-      </button>
-    </div>
-  )
-}
-
-// Label | control | plan max. On a phone the plan max moves under the label.
-const ROW_GRID =
-  "grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_auto_4.5rem]"
-
 function PlanMax({
   cap,
   text,
@@ -295,94 +207,33 @@ function ResourceRow({
   )
 }
 
-interface GrowthChoiceProps {
-  growing: boolean
-  canGrow: boolean
-  upTo: string
-  // The resource row's label, so each group is named for what it resizes.
-  resourceLabelId: string
-  docsUrl: string
-  docsLabel: string
-  blockedHint: string
-  onChange: (grow: boolean) => void
-}
-
-// Fixed vs live resizing, as native radios styled like the console's
-// segmented buttons: arrow keys move between them and the group has a name.
-function GrowthChoice({
-  growing,
-  canGrow,
-  upTo,
+// Fixed size vs a range the sandboxes from this template can size within.
+function SizeModeToggle({
+  isRange,
+  canRange,
   resourceLabelId,
-  docsUrl,
-  docsLabel,
-  blockedHint,
+  hintId,
   onChange,
-}: GrowthChoiceProps) {
-  const id = useId()
-  const labelId = `${id}-label`
-  const hintId = `${id}-hint`
-  const segment = (selected: boolean) =>
-    cn(
-      "flex h-8 flex-1 cursor-pointer items-center justify-center px-2 font-mono text-xs whitespace-nowrap uppercase tabular-nums transition-colors",
-      "has-[:focus-visible]:relative has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-border-focus",
-      "has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-30",
-      selected
-        ? "bg-foreground text-background"
-        : "text-muted hover:text-foreground",
-    )
-  const options = [
-    { grow: false, text: "Fixed" },
-    { grow: true, text: canGrow ? `Up to ${upTo}` : "At limit" },
-  ]
+}: {
+  isRange: boolean
+  canRange: boolean
+  // The resource row's label, so each group is named for what it sizes.
+  resourceLabelId: string
+  // Visible note explaining a disabled range, read with the group.
+  hintId: string
+  onChange: (range: boolean) => void
+}) {
   return (
-    <>
-      <div className={ROW_GRID}>
-        <div className="flex items-center gap-1.5 border-l border-dashed border-control pl-3">
-          <span id={labelId} className="text-sm text-foreground">
-            Auto resize
-          </span>
-          <a
-            href={docsUrl}
-            target="_blank"
-            rel="noreferrer"
-            aria-label={`${docsLabel} (opens in a new tab)`}
-            className={cn(
-              "text-muted transition-colors hover:text-foreground",
-              focusRing,
-            )}
-          >
-            <QuestionIcon className="size-3.5" weight="light" />
-          </a>
-        </div>
-        <div
-          role="radiogroup"
-          aria-labelledby={`${resourceLabelId} ${labelId}`}
-          aria-describedby={canGrow ? undefined : hintId}
-          className="flex w-[10.5rem] divide-x divide-dashed divide-control border border-dashed border-control"
-        >
-          {options.map((o) => (
-            <label key={o.text} className={segment(growing === o.grow)}>
-              <input
-                type="radio"
-                name={id}
-                className="sr-only"
-                checked={growing === o.grow}
-                disabled={o.grow && !canGrow}
-                onChange={() => onChange(o.grow)}
-              />
-              {o.text}
-            </label>
-          ))}
-        </div>
-        <span className="hidden sm:block" />
-      </div>
-      {!canGrow && (
-        <p id={hintId} className="mt-1.5 pl-3 text-xs text-muted">
-          {blockedHint}
-        </p>
-      )}
-    </>
+    <SegmentedChoice
+      value={isRange}
+      onChange={onChange}
+      labelledBy={resourceLabelId}
+      describedBy={canRange ? undefined : hintId}
+      options={[
+        { value: false, text: "Fixed size" },
+        { value: true, text: "Range", disabled: !canRange },
+      ]}
+    />
   )
 }
 
@@ -703,10 +554,10 @@ export function CreateTemplateDialog({
     caps?.max_memory_mib == null ||
     caps?.max_disk_mib == null
   const summary = [
-    vcpuMax === null ? formatVcpu(vcpu) : `${vcpu}→${formatVcpu(vcpuMax)}`,
+    vcpuMax === null ? formatVcpu(vcpu) : `${vcpu}–${formatVcpu(vcpuMax)}`,
     memoryMax === null
       ? formatMib(memory)
-      : `${formatMib(memory)}→${formatMib(memoryMax)}`,
+      : `${formatMib(memory)}–${formatMib(memoryMax)}`,
     `${formatMib(disk)} disk`,
   ].join(" · ")
 
@@ -819,6 +670,18 @@ export function CreateTemplateDialog({
                   cap={caps?.max_vcpu}
                   limitText={String(vcpuLimit)}
                 >
+                  <SizeModeToggle
+                    isRange={vcpuMax !== null}
+                    canRange={canGrowCpu}
+                    resourceLabelId={`${ids}-vcpu`}
+                    hintId={`${ids}-vcpu-hint`}
+                    onChange={(range) => {
+                      setCpuGrowth(range)
+                      if (range) setVcpuMax(cpuCeiling)
+                    }}
+                  />
+                </ResourceRow>
+                <SubRow label={vcpuMax === null ? "Size" : "From"}>
                   <Stepper
                     label="vCPU"
                     labelledBy={`${ids}-vcpu`}
@@ -827,48 +690,26 @@ export function CreateTemplateDialog({
                     onChange={setVcpu}
                     format={formatVcpu}
                   />
-                </ResourceRow>
-                <GrowthChoice
-                  growing={vcpuMax !== null}
-                  canGrow={canGrowCpu}
-                  upTo={formatVcpu(vcpuMax ?? cpuCeiling)}
-                  resourceLabelId={`${ids}-vcpu`}
-                  docsUrl={LIVE_CPU_DOCS_URL}
-                  docsLabel="Live CPU resizing docs"
-                  blockedHint="Growth needs room between vCPU and your limit. Lower vCPU to turn it on."
-                  onChange={(grow) => {
-                    setCpuGrowth(grow)
-                    if (grow) setVcpuMax(cpuCeiling)
-                  }}
-                />
+                </SubRow>
                 {vcpuMax !== null && (
-                  <div className={ROW_GRID}>
-                    <div className="border-l border-dashed border-control pl-3">
-                      <span
-                        id={`${ids}-vcpu-max`}
-                        className="text-sm text-foreground"
-                      >
-                        Max vCPU
-                      </span>
-                      <span className="block font-mono text-xs text-muted sm:hidden">
-                        up to {formatVcpu(cpuCeiling)}
-                      </span>
-                    </div>
+                  <SubRow label="To" note={`max ${formatVcpu(cpuCeiling)}`}>
                     <Stepper
                       label="Max vCPU"
-                      labelledBy={`${ids}-vcpu-max`}
                       steps={vcpuMaxSteps}
                       value={vcpuMax}
                       onChange={setVcpuMax}
                       format={formatVcpu}
                     />
-                    <span
-                      className="hidden text-right font-mono text-xs text-muted tabular-nums sm:block"
-                      title="Up to 4× vCPU, within your plan"
-                    >
-                      {formatVcpu(cpuCeiling)}
-                    </span>
-                  </div>
+                  </SubRow>
+                )}
+                {!canGrowCpu && (
+                  <p
+                    id={`${ids}-vcpu-hint`}
+                    className="pl-3 text-xs text-muted"
+                  >
+                    A range needs room between vCPU and your limit. Lower vCPU
+                    to use one.
+                  </p>
                 )}
               </div>
               <div className="space-y-1 py-2">
@@ -878,6 +719,19 @@ export function CreateTemplateDialog({
                   cap={caps?.max_memory_mib}
                   limitText={formatMib(memoryLimit)}
                 >
+                  <SizeModeToggle
+                    isRange={memoryMax !== null}
+                    canRange={canGrow}
+                    resourceLabelId={`${ids}-memory`}
+                    hintId={`${ids}-memory-hint`}
+                    onChange={(range) => {
+                      setGrowth(range)
+                      // Start at the widest range; step down below.
+                      if (range) setMemoryMax(growthCeiling)
+                    }}
+                  />
+                </ResourceRow>
+                <SubRow label={memoryMax === null ? "Size" : "From"}>
                   <Stepper
                     label="Memory"
                     labelledBy={`${ids}-memory`}
@@ -886,49 +740,26 @@ export function CreateTemplateDialog({
                     onChange={setMemory}
                     format={formatMib}
                   />
-                </ResourceRow>
-                <GrowthChoice
-                  growing={memoryMax !== null}
-                  canGrow={canGrow}
-                  upTo={formatMib(memoryMax ?? growthCeiling)}
-                  resourceLabelId={`${ids}-memory`}
-                  docsUrl={LIVE_MEMORY_DOCS_URL}
-                  docsLabel="Live memory resizing docs"
-                  blockedHint="Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on."
-                  onChange={(grow) => {
-                    setGrowth(grow)
-                    // Start at the ceiling the option names; step down below.
-                    if (grow) setMemoryMax(growthCeiling)
-                  }}
-                />
+                </SubRow>
                 {memoryMax !== null && (
-                  <div className={ROW_GRID}>
-                    <div className="border-l border-dashed border-control pl-3">
-                      <span
-                        id={`${ids}-memory-max`}
-                        className="text-sm text-foreground"
-                      >
-                        Max memory
-                      </span>
-                      <span className="block font-mono text-xs text-muted sm:hidden">
-                        up to {formatMib(growthCeiling)}
-                      </span>
-                    </div>
+                  <SubRow label="To" note={`max ${formatMib(growthCeiling)}`}>
                     <Stepper
                       label="Max memory"
-                      labelledBy={`${ids}-memory-max`}
                       steps={memoryMaxSteps}
                       value={memoryMax}
                       onChange={setMemoryMax}
                       format={formatMib}
                     />
-                    <span
-                      className="hidden text-right font-mono text-xs text-muted tabular-nums sm:block"
-                      title="Up to 4× boot memory, within your plan"
-                    >
-                      {formatMib(growthCeiling)}
-                    </span>
-                  </div>
+                  </SubRow>
+                )}
+                {!canGrow && (
+                  <p
+                    id={`${ids}-memory-hint`}
+                    className="pl-3 text-xs text-muted"
+                  >
+                    A range needs at least 128 MB of room between memory and
+                    your limit. Lower memory to use one.
+                  </p>
                 )}
                 {memoryMax !== null && (
                   <div className={ROW_GRID}>
@@ -972,6 +803,23 @@ export function CreateTemplateDialog({
                 </ResourceRow>
               </div>
             </div>
+            {(vcpuMax !== null || memoryMax !== null) && (
+              <p className="mt-2 text-xs text-muted">
+                Range: each sandbox can pick a fixed size within it, or
+                auto-resize as load changes.{" "}
+                <a
+                  href={SIZE_DOCS_URL}
+                  target="_blank"
+                  rel="noreferrer"
+                  className={cn(
+                    "text-foreground underline decoration-dashed underline-offset-2",
+                    focusRing,
+                  )}
+                >
+                  Sandbox sizes docs
+                </a>
+              </p>
+            )}
             <p className="mt-2 text-xs text-muted">
               Size the disk for the image plus everything your build installs.
               {anyUnreported && (

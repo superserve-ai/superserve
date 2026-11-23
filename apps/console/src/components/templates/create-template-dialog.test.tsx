@@ -286,7 +286,7 @@ describe("resource ranges follow the team's plan caps", () => {
 })
 
 const growthGroup = (resource: string) =>
-  screen.getByRole("radiogroup", { name: `${resource} Auto resize` })
+  screen.getByRole("radiogroup", { name: resource })
 const radio = (name: string | RegExp) =>
   within(growthGroup("Memory")).getByRole("radio", { name })
 const cpuRadio = (name: string | RegExp) =>
@@ -302,8 +302,8 @@ describe("memory growth", () => {
   it("is fixed by default and sends no ceiling", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
     expect(growthGroup("Memory")).toBeInTheDocument()
-    expect(radio("Fixed")).toBeChecked()
-    expect(radio("Up to 4 GB")).not.toBeChecked()
+    expect(radio("Fixed size")).toBeChecked()
+    expect(radio("Range")).not.toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
     expect(await submit()).not.toHaveProperty("memory_max_mib")
   })
@@ -312,14 +312,15 @@ describe("memory growth", () => {
     mocks.memoryCap = 3072
     render(<CreateTemplateDialog open hideTrigger />)
     // 1 GB boot under a 3 GB cap: the cap wins over 4x.
-    fireEvent.click(radio("Up to 3 GB"))
-    expect(radio("Up to 3 GB")).toBeChecked()
+    fireEvent.click(radio("Range"))
+    expect(radio("Range")).toBeChecked()
     expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "3072")
     expect(spin("Max memory")).toHaveAttribute("aria-valuemin", "2048")
     expect(spin("Max memory")).toHaveAttribute("aria-valuemax", "3072")
     // A lower ceiling is one step down, and the option follows it.
     press("Decrease Max memory")
-    expect(radio("Up to 2 GB")).toBeChecked()
+    expect(radio("Range")).toBeChecked()
+    expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "2048")
     expect(await submit()).toMatchObject({
       memory_mib: 1024,
       memory_max_mib: 2048,
@@ -328,7 +329,7 @@ describe("memory growth", () => {
 
   it("keeps the ceiling valid as boot memory changes", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(radio("Up to 4 GB"))
+    fireEvent.click(radio("Range"))
     expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "4096")
     // Dropping to 512 MB pulls the ceiling down to 4x, 2 GB.
     press("Decrease Memory")
@@ -344,8 +345,8 @@ describe("memory growth", () => {
 
   it("goes back to fixed and drops the ceiling", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(radio("Up to 4 GB"))
-    fireEvent.click(radio("Fixed"))
+    fireEvent.click(radio("Range"))
+    fireEvent.click(radio("Fixed size"))
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
     expect(await submit()).not.toHaveProperty("memory_max_mib")
   })
@@ -353,34 +354,34 @@ describe("memory growth", () => {
   it("turns off visibly when boot memory reaches the cap", async () => {
     mocks.memoryCap = 2048
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(radio("Up to 2 GB"))
+    fireEvent.click(radio("Range"))
     press("Increase Memory")
-    expect(radio("At limit")).toBeDisabled()
-    expect(radio("Fixed")).toBeChecked()
+    expect(radio("Range")).toBeDisabled()
+    expect(radio("Fixed size")).toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
     expect(growthGroup("Memory")).toHaveAccessibleDescription(
-      "Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on.",
+      "A range needs at least 128 MB of room between memory and your limit. Lower memory to use one.",
     )
     // Room to grow again doesn't re-enable it without the user.
     press("Decrease Memory")
-    expect(radio("Fixed")).toBeChecked()
+    expect(radio("Fixed size")).toBeChecked()
     expect(await submit()).not.toHaveProperty("memory_max_mib")
   })
 
   it("clamps the ceiling when the plan limit drops while growth is on", async () => {
     const { rerender } = render(<CreateTemplateDialog open hideTrigger />)
     press("Increase Memory")
-    fireEvent.click(radio("Up to 8 GB"))
+    fireEvent.click(radio("Range"))
     expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "8192")
     // A 6 GB limit is under 4x the 2 GB boot, so the limit is the new ceiling.
     mocks.memoryCap = 6144
     rerender(<CreateTemplateDialog open hideTrigger />)
-    expect(radio("Up to 6 GB")).toBeChecked()
+    expect(radio("Range")).toBeChecked()
     expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "6144")
     expect(spin("Max memory")).toHaveAttribute("aria-valuemax", "6144")
     mocks.memoryCap = 3072
     rerender(<CreateTemplateDialog open hideTrigger />)
-    expect(radio("Up to 3 GB")).toBeChecked()
+    expect(radio("Range")).toBeChecked()
     expect(spin("Max memory")).toHaveAttribute("aria-valuenow", "3072")
     expect(spin("Memory")).toHaveAttribute("aria-valuenow", "2048")
     expect(await submit()).toMatchObject({
@@ -392,39 +393,44 @@ describe("memory growth", () => {
   it("shows the limit state when the plan limit drops to boot memory", async () => {
     const { rerender } = render(<CreateTemplateDialog open hideTrigger />)
     press("Increase Memory", 2)
-    fireEvent.click(radio("Up to 16 GB"))
+    fireEvent.click(radio("Range"))
     // The limit falls below the 4 GB boot size, so boot memory clamps to it
     // and there is no room left to grow.
     mocks.memoryCap = 2048
     rerender(<CreateTemplateDialog open hideTrigger />)
     expect(spin("Memory")).toHaveAttribute("aria-valuenow", "2048")
-    expect(radio("At limit")).toBeDisabled()
-    expect(radio("Fixed")).toBeChecked()
+    expect(radio("Range")).toBeDisabled()
+    expect(radio("Fixed size")).toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max memory" })).toBeNull()
     expect(growthGroup("Memory")).toHaveAccessibleDescription(
-      "Growth needs at least 128 MB of room between boot memory and your limit. Lower boot memory to turn it on.",
+      "A range needs at least 128 MB of room between memory and your limit. Lower memory to use one.",
     )
     // A raised limit doesn't turn growth back on without the user.
     mocks.memoryCap = 8192
     rerender(<CreateTemplateDialog open hideTrigger />)
-    expect(radio("Fixed")).toBeChecked()
+    expect(radio("Fixed size")).toBeChecked()
     expect(await submit()).not.toHaveProperty("memory_max_mib")
   })
 
-  it("links to the live memory resizing docs", () => {
+  it("explains a range and links to the sandbox size docs only while one is set", () => {
     render(<CreateTemplateDialog open hideTrigger />)
+    expect(screen.queryByText(/each sandbox can pick a fixed size/)).toBeNull()
+    fireEvent.click(radio("Range"))
     expect(
-      screen.getByRole("link", { name: /Live memory resizing docs/ }),
-    ).toHaveAttribute(
-      "href",
-      "https://docs.superserve.ai/sandbox/live-memory-resizing",
-    )
+      screen.getByText(
+        /Range: each sandbox can pick a fixed size within it, or auto-resize as load changes\./,
+      ),
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole("link", { name: "Sandbox sizes docs" }),
+    ).toHaveAttribute("href", "https://docs.superserve.ai/sandbox/size")
+    expect(screen.getByText("1 GB–4 GB", { exact: false })).toBeInTheDocument()
   })
 
   it("sends shrink-after only with growth and within 60 to 1800 seconds", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
     expect(screen.queryByLabelText("Shrink after (seconds)")).toBeNull()
-    fireEvent.click(radio("Up to 4 GB"))
+    fireEvent.click(radio("Range"))
     const shrinkAfter = screen.getByLabelText("Shrink after (seconds)")
     fireEvent.change(shrinkAfter, { target: { value: "30" } })
     expect(
@@ -447,7 +453,7 @@ describe("CPU growth", () => {
 
   it("is fixed by default and sends no ceiling", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    expect(cpuRadio("Fixed")).toBeChecked()
+    expect(cpuRadio("Fixed size")).toBeChecked()
     expect(screen.queryByRole("spinbutton", { name: "Max vCPU" })).toBeNull()
     expect(await submit()).not.toHaveProperty("vcpu_max")
   })
@@ -457,38 +463,37 @@ describe("CPU growth", () => {
     render(<CreateTemplateDialog open hideTrigger />)
     press("Increase vCPU")
     // 2 vCPU under a 6 vCPU cap: the cap wins over 4x.
-    fireEvent.click(cpuRadio("Up to 6 vCPU"))
+    fireEvent.click(cpuRadio("Range"))
     expect(spin("Max vCPU")).toHaveAttribute("aria-valuenow", "6")
     expect(spin("Max vCPU")).toHaveAttribute("aria-valuemin", "3")
     expect(spin("Max vCPU")).toHaveAttribute("aria-valuemax", "6")
     press("Decrease Max vCPU")
-    expect(cpuRadio("Up to 5 vCPU")).toBeChecked()
+    expect(spin("Max vCPU")).toHaveAttribute("aria-valuenow", "5")
     expect(await submit()).toMatchObject({ vcpu: 2, vcpu_max: 5 })
   })
 
   it("turns off visibly when vCPU reaches the cap", async () => {
     mocks.vcpuCap = 2
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(cpuRadio("Up to 2 vCPU"))
+    fireEvent.click(cpuRadio("Range"))
     press("Increase vCPU")
-    expect(cpuRadio("At limit")).toBeDisabled()
-    expect(cpuRadio("Fixed")).toBeChecked()
+    expect(cpuRadio("Range")).toBeDisabled()
+    expect(cpuRadio("Fixed size")).toBeChecked()
     expect(growthGroup("vCPU")).toHaveAccessibleDescription(
-      "Growth needs room between vCPU and your limit. Lower vCPU to turn it on.",
+      "A range needs room between vCPU and your limit. Lower vCPU to use one.",
     )
     press("Decrease vCPU")
-    expect(cpuRadio("Fixed")).toBeChecked()
+    expect(cpuRadio("Fixed size")).toBeChecked()
     expect(await submit()).not.toHaveProperty("vcpu_max")
   })
 
-  it("links to the live CPU resizing docs", () => {
+  it("shows a range in the footer summary", () => {
     render(<CreateTemplateDialog open hideTrigger />)
+    expect(screen.getByText(/^1 vCPU · 1 GB · 4 GB disk$/)).toBeInTheDocument()
+    fireEvent.click(cpuRadio("Range"))
     expect(
-      screen.getByRole("link", { name: /Live CPU resizing docs/ }),
-    ).toHaveAttribute(
-      "href",
-      "https://docs.superserve.ai/sandbox/live-cpu-resizing",
-    )
+      screen.getByText(/^1–4 vCPU · 1 GB · 4 GB disk$/),
+    ).toBeInTheDocument()
   })
 })
 
@@ -527,7 +532,7 @@ describe("view as code", () => {
     expect(code()).toContain("superserve template create python-ml")
     expect(code()).toContain("--from python:3.12-slim")
     expect(code()).not.toContain("--memory-max")
-    fireEvent.click(radio("Up to 4 GB"))
+    fireEvent.click(radio("Range"))
     expect(code()).toContain("--memory-max 4G")
   })
 
@@ -562,7 +567,7 @@ describe("view as code", () => {
 
   it("submits the same shape the code shows", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
-    fireEvent.click(radio("Up to 4 GB"))
+    fireEvent.click(radio("Range"))
     expect(await submit()).toEqual({
       name: "sized-template",
       vcpu: 1,
