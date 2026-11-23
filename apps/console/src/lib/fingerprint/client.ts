@@ -3,6 +3,7 @@ import { createSignupFingerprintAttempt } from "@/app/(auth)/auth/signup/action"
 import { FINGERPRINT_SIGNUP_COOKIE } from "./constants"
 import {
   sanitizeDiagnostic,
+  sdkDiagnosticDetails,
   sdkDiagnosticReason,
   type BrowserFingerprintDiagnostics,
   type FingerprintDiagnostic,
@@ -253,6 +254,7 @@ export function ensureFingerprintSignupCapture(): Promise<
         capture_attempt_id: attemptId,
         provider_event_id: eventId,
         elapsed_ms: Date.now() - startedAt,
+        ...(stage === "capture" ? sdkDiagnosticDetails(error) : {}),
       })
       return { unavailable: true as const }
     })

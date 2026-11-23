@@ -23,6 +23,7 @@ export async function trackEvent(
   event: string,
   distinctId: string,
   properties?: Record<string, any>,
+  timestamp?: Date,
 ) {
   const client = getPostHogClient()
   if (!client) {
@@ -35,6 +36,7 @@ export async function trackEvent(
       distinctId,
       event,
       properties: properties || {},
+      ...(timestamp ? { timestamp } : {}),
     })
     await client.flush()
   } catch (error) {
