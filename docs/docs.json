@@ -61,7 +61,10 @@
       "destination": "/quickstart#where-to-go-next",
       "permanent": true
     },
-    { "source": "/sandbox/memory", "destination": "/sandbox/live-memory-resizing" },
+    {
+      "source": "/sandbox/memory",
+      "destination": "/sandbox/live-memory-resizing"
+    },
     {
       "source": "/integrations/managed-agents/claude-managed-agents",
       "destination": "/integrations/agent-platforms/claude-managed-agents",
@@ -125,9 +128,9 @@
             "group": "Sandbox",
             "pages": [
               "sandbox/create",
-              "sandbox/size",
               "sandbox/connect",
               "sandbox/lifecycle",
+              "sandbox/size",
               "sandbox/live-memory-resizing",
               "sandbox/live-cpu-resizing",
               "sandbox/snapshots",

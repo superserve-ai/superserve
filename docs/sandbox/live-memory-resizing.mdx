@@ -6,6 +6,8 @@ description: "Sandboxes that grow for bursty workloads and shrink back when they
 
 Most agent workloads aren't steady. A sandbox might idle at a few hundred MB, then need several GB for a build, a test suite, loading a dataset or starting a model, then drop back down. Live memory resizing lets a sandbox grow for those bursts and shrink afterwards. You don't have to size every sandbox for its peak, and you don't pay for the peak while it's idle.
 
+To keep a sandbox at one memory size instead, choose a [custom size](/sandbox/size).
+
 ## Turn it on
 
 Set `memoryMaxMib` on a template alongside `memoryMib`. Sandboxes from that template start at `memoryMib` and can grow up to `memoryMaxMib`.

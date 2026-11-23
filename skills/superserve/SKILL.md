@@ -202,9 +202,10 @@ to rediscover boxes you created earlier.
 
 ## System specs & defaults
 
-A sandbox **inherits its VM shape from its template**. If the template has a CPU range
-(`vcpu`..`vcpuMax`) or memory range (`memoryMib`..`memoryMaxMib`), `create()` can pick a
-fixed `vcpu` / `memoryMib` (`memory_mib`) within it (memory in 2 MiB steps from the minimum);
+A sandbox **inherits its VM shape from its template** (Auto: with a CPU range
+`vcpu`..`vcpuMax` or memory range `memoryMib`..`memoryMaxMib`, it starts at the minimum and
+grows with load). For a custom size, `create()` can pick a fixed `vcpu` / `memoryMib`
+(`memory_mib`) within the range (memory in 2 MiB steps from the minimum);
 otherwise boot from (or build) a different template. With `fromSnapshot`, `vcpu` works within
 the CPU range the snapshot recorded from its template, and `memoryMib` for snapshots of
 sandboxes created with a chosen memory size. There is no `disk` argument. The default template `superserve/base` (`ubuntu:24.04`) is **2 vCPU · 4096 MiB
@@ -585,8 +586,8 @@ try {
 - Check `exitCode`; the SDK only throws for transport/API failures, not command failures.
 - Use `getInfo()` for current state — the instance `status`/`metadata` are stale snapshots.
 - `update({ metadata })` **replaces** the whole map; omitted keys are dropped.
-- `vcpu`/`memoryMib` on `create()` only work within a template range; a template without
-  one returns `400`, one built before size selection returns `409` (rebuild it), and a size
+- `vcpu`/`memoryMib` on `create()` only work within the source's range; a template without
+  one returns `400`, one built before custom sizes returns `409` (rebuild it), and a size
   above the plan's limits returns `402` (`sandbox_exceeds_plan_limits`). No `disk`.
 - `Template.create()` returns when the build is _queued_; boot a sandbox only **after**
   `waitUntilReady()` resolves.

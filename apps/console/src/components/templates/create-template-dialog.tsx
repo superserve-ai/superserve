@@ -816,7 +816,7 @@ export function CreateTemplateDialog({
                     focusRing,
                   )}
                 >
-                  Sandbox sizes docs
+                  Custom size docs
                 </a>
               </p>
             )}

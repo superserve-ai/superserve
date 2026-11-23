@@ -422,7 +422,7 @@ describe("memory growth", () => {
       ),
     ).toBeInTheDocument()
     expect(
-      screen.getByRole("link", { name: "Sandbox sizes docs" }),
+      screen.getByRole("link", { name: "Custom size docs" }),
     ).toHaveAttribute("href", "https://docs.superserve.ai/sandbox/size")
     expect(screen.getByText("1 GB–4 GB", { exact: false })).toBeInTheDocument()
   })
