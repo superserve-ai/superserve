@@ -329,6 +329,8 @@ export class Sandbox {
           ? options.fromSnapshot
           : options.fromSnapshot.id
     }
+    if (options.vcpu !== undefined) body.vcpu = options.vcpu
+    if (options.memoryMib !== undefined) body.memory_mib = options.memoryMib
     if (options.metadata !== undefined) body.metadata = options.metadata
     if (options.envVars !== undefined) body.env_vars = options.envVars
     if (options.secrets !== undefined) body.secrets = options.secrets

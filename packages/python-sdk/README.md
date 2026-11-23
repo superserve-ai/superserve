@@ -30,6 +30,23 @@ text = sandbox.files.read_text("/app/data.txt")
 sandbox.kill()
 ```
 
+## Sandbox size
+
+A template built with a CPU or memory range (`vcpu`..`vcpu_max`,
+`memory_mib`..`memory_max_mib`) lets each sandbox pick a fixed size within it:
+
+```python
+sandbox = Sandbox.create(
+    name="build",
+    from_template="my-env",
+    vcpu=4,
+    memory_mib=8192,
+)
+```
+
+Omit either to inherit the template's configuration. See
+[Choose CPU and memory](https://docs.superserve.ai/sandbox/size).
+
 ## Preview URLs
 
 Choose the default access for new ports, publish only the ports you intend to

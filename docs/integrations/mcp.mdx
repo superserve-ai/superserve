@@ -187,7 +187,7 @@ Same tools and behavior as the local server — the only difference is transport
 
 | Tool                         | What it does                                                                                                                |
 | ---------------------------- | --------------------------------------------------------------------------------------------------------------------------- |
-| `sandbox_create`             | Create a new sandbox; returns its `id`. Accepts `secrets`, egress rules, `preview_access`, and `idle_timeout_seconds`.      |
+| `sandbox_create`             | Create a new sandbox; returns its `id`. Accepts `secrets`, egress rules, `preview_access`, `idle_timeout_seconds`, and `vcpu`/`memory_mib`.      |
 | `sandbox_update`             | Change metadata, egress rules, lifecycle windows such as `idle_timeout_seconds` (`null` turns it off), or `preview_access`. |
 | `sandbox_list`               | List your sandboxes (active and paused), filterable by metadata.                                                            |
 | `sandbox_info`               | Get one sandbox's status, resources, metadata, network rules, and secret bindings. Read-only.                               |
@@ -253,7 +253,7 @@ When it's done, the agent can `sandbox_pause` (state preserved, cheaper to keep 
 
 The sandbox sees a proxy token; the platform swaps in the real credential only for outbound requests to the secret's allowed hosts.
 
-**Templates.** A sandbox inherits its vCPU/memory/disk from its template and can't override them at `sandbox_create` time. To get a specific shape (say, a 4 vCPU sandbox) or preinstalled software, build a template with `sandbox_template_create`, then poll `sandbox_template_list` until its `status` is `ready` before passing it as `from_template`.
+**Templates.** A sandbox inherits its vCPU/memory/disk from its template. If the template has a CPU or memory range, `sandbox_create` can pick a fixed `vcpu` or `memory_mib` within it; see [Choose CPU and memory](/sandbox/size). To get a specific shape (say, a 4 vCPU sandbox) or preinstalled software, build a template with `sandbox_template_create`, then poll `sandbox_template_list` until its `status` is `ready` before passing it as `from_template`.
 
 `sandbox_template_create` takes:
 

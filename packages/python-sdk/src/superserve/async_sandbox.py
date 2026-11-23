@@ -237,6 +237,8 @@ class AsyncSandbox:
         volumes: Sequence[SandboxVolumeMount] | None = None,
         from_template: "str | Template | AsyncTemplate | None" = None,
         from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
+        vcpu: int | None = None,
+        memory_mib: int | None = None,
         timeout_seconds: int | None = None,
         idle_timeout_seconds: int | None = None,
         auto_delete_seconds: int | None = None,
@@ -258,6 +260,14 @@ class AsyncSandbox:
         many seconds with no activity: running commands, open terminals and
         command streams, file operations and preview traffic all count as
         activity. Off when omitted.
+
+        ``vcpu`` and ``memory_mib`` choose a fixed size for this sandbox within
+        the source's range: ``vcpu`` within the template's CPU range (both ends
+        included), ``memory_mib`` within its memory range in 2 MiB steps from
+        the minimum. The template must be built with that range; ``memory_mib``
+        also works with a snapshot of a sandbox created with a fixed RAM size.
+        The chosen size is fixed for the sandbox's life. Omit to inherit the
+        source's configuration.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
@@ -284,6 +294,10 @@ class AsyncSandbox:
             body["from_snapshot"] = (
                 from_snapshot if isinstance(from_snapshot, str) else from_snapshot.id
             )
+        if vcpu is not None:
+            body["vcpu"] = vcpu
+        if memory_mib is not None:
+            body["memory_mib"] = memory_mib
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
         if idle_timeout_seconds is not None:

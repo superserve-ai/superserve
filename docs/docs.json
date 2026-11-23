@@ -125,6 +125,7 @@
             "group": "Sandbox",
             "pages": [
               "sandbox/create",
+              "sandbox/size",
               "sandbox/connect",
               "sandbox/lifecycle",
               "sandbox/live-memory-resizing",

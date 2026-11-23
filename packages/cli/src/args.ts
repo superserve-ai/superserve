@@ -58,6 +58,18 @@ export function parseInteger(
   return n
 }
 
+/** `2048` / `512M` / `2G` / `8GiB` → MiB. */
+export function parseMib(input: string, flag: string): number {
+  const m = /^(\d+(?:\.\d+)?)\s*(m|mi|mib|mb|g|gi|gib|gb)?$/i.exec(input.trim())
+  const mib = m ? Number(m[1]) * (/^g/i.test(m[2] ?? "") ? 1024 : 1) : NaN
+  if (!Number.isInteger(mib)) {
+    throw usageError(
+      `Invalid ${flag} "${input}": use MiB (2048) or a size like 512M, 2G, 8GiB.`,
+    )
+  }
+  return mib
+}
+
 /** Require an absolute sandbox path, as the API does. */
 export function sandboxPath(p: string): string {
   if (!p.startsWith("/")) {

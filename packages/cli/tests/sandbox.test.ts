@@ -24,6 +24,10 @@ describe("sandbox", () => {
         "dev",
         "-t",
         "superserve/python-3.11",
+        "--vcpu",
+        "3",
+        "--memory",
+        "6G",
         "--timeout",
         "30m",
         "--idle-timeout",
@@ -55,6 +59,8 @@ describe("sandbox", () => {
     expect(r.requests[0].json()).toEqual({
       name: "dev",
       from_template: "superserve/python-3.11",
+      vcpu: 3,
+      memory_mib: 6144,
       timeout_seconds: 1800,
       idle_timeout_seconds: 600,
       auto_delete_seconds: 0,
@@ -86,6 +92,10 @@ describe("sandbox", () => {
       ["--idle-timeout", "30s"],
       ["--idle-timeout", "8d"],
       ["--auto-delete", "31d"],
+      ["--vcpu", "0"],
+      ["--vcpu", "1.5"],
+      ["--memory", "128M"],
+      ["--memory", "2X"],
     ]) {
       const r = await runCli(["sandbox", "create", ...args])
       expect(r.exitCode).toBe(2)

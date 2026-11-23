@@ -1,0 +1,132 @@
+---
+title: "Choose CPU and memory"
+sidebarTitle: CPU and memory
+description: "Pick a sandbox's vCPU count and memory at create time, within the range its template allows."
+---
+
+A sandbox inherits its vCPU count and memory from its template. When the template is built with a range, you can instead choose a size for each sandbox when you create it: one template can then serve a small sandbox for a quick script and a large one for a build, without building a template per size.
+
+Requires SDK 0.14.0+ (`@superserve/sdk` and `superserve`), CLI 2.5.0+ and MCP 0.6.0+ (`@superserve/mcp`).
+
+## Build a template with a range
+
+The range comes from the template. Set `vcpuMax` above `vcpu` for a CPU range, and `memoryMaxMib` above `memoryMib` for a memory range. See [Growing CPU](/templates/build-spec#growing-cpu) and [Growing memory](/templates/build-spec#growing-memory) for the rules.
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "my-env",
+  from: "python:3.11",
+  vcpu: 1,
+  vcpuMax: 4,
+  memoryMib: 2048,
+  memoryMaxMib: 8192,
+})
+await template.waitUntilReady()
+```
+
+```python Python
+from superserve import Template
+
+template = Template.create(
+    name="my-env",
+    from_="python:3.11",
+    vcpu=1,
+    vcpu_max=4,
+    memory_mib=2048,
+    memory_max_mib=8192,
+)
+template.wait_until_ready()
+```
+
+```bash CLI
+superserve template create my-env --from python:3.11 \
+  --vcpu 1 --vcpu-max 4 --memory 2G --memory-max 8G
+```
+
+</CodeGroup>
+
+## Choose a size
+
+Pass `vcpu` and `memoryMib` / `memory_mib` with `fromTemplate` / `from_template`. You can pass either one or both.
+
+<CodeGroup>
+
+```typescript TypeScript
+import { Sandbox } from "@superserve/sdk"
+
+const sandbox = await Sandbox.create({
+  name: "build",
+  fromTemplate: "my-env",
+  vcpu: 3,
+  memoryMib: 6144,
+})
+```
+
+```python Python
+from superserve import Sandbox
+
+sandbox = Sandbox.create(
+    name="build",
+    from_template="my-env",
+    vcpu=3,
+    memory_mib=6144,
+)
+```
+
+```bash CLI
+superserve sandbox create --name build --template my-env --vcpu 3 --memory 6G
+```
+
+</CodeGroup>
+
+With the [MCP server](/integrations/mcp), pass `vcpu` and `memory_mib` to `sandbox_create`.
+
+- **`vcpu`** is a whole number of vCPUs from the template's `vcpu` to its `vcpuMax`, both included.
+- **`memoryMib`** is a size in MiB from the template's `memoryMib` to its `memoryMaxMib`, both included, in 2 MiB steps from the minimum. For a 2048–8192 MiB template, 6144 works and 6145 doesn't.
+- Both must also be within your plan's limits. See [Resource limits](/templates/build-spec#resource-limits).
+
+## Fixed and growable
+
+A size you choose is fixed for the life of the sandbox, including after pause and resume. The dimension you don't choose keeps the template's range, so it can still grow under load with [live CPU resizing](/sandbox/live-cpu-resizing) or [live memory resizing](/sandbox/live-memory-resizing).
+
+In the example above both are chosen, so the sandbox has a fixed 3 vCPU and 6144 MiB. Its info shows no ceiling for a fixed dimension:
+
+<CodeGroup>
+
+```typescript TypeScript
+const info = await sandbox.getInfo()
+console.log(info.vcpuCount, info.vcpuMax) // 3 undefined
+console.log(info.memoryMib, info.memoryMaxMib) // 6144 undefined
+```
+
+```python Python
+info = sandbox.get_info()
+print(info.vcpu_count, info.vcpu_max)  # 3 None
+print(info.memory_mib, info.memory_max_mib)  # 6144 None
+```
+
+</CodeGroup>
+
+Had you passed only `vcpu: 3`, memory would still range from 2048 to 8192 MiB.
+
+## Forks
+
+A sandbox created from a [snapshot](/sandbox/snapshots) keeps the size of the sandbox it was taken from. If that sandbox was created with a chosen memory size, you can pass a different `memoryMib` / `memory_mib` with `fromSnapshot` / `from_snapshot`, within the snapshot's memory range. Choosing `vcpu` for a fork isn't available yet; omit it to keep the snapshot's vCPU count.
+
+## Errors
+
+| Status | Error | When |
+| --- | --- | --- |
+| `400` | `ValidationError` | The value is outside the template's range or plan limits, or the template has no range for that dimension. System templates such as `superserve/base` have none. |
+| `409` | `ConflictError` | The template was built before size selection was available. [Rebuild it](/templates/lifecycle), or omit `vcpu` and `memoryMib` to use its defaults. |
+| `429` | `RateLimitError` with code `host_capacity` | The host has no room for that size right now. Retry after a short wait. |
+
+Choosing a size isn't available yet for sandboxes placed on AWS (`placement.cloud` set to `aws` in [`POST /sandboxes`](/api-reference/sandboxes/create-a-new-sandbox)); omit `vcpu` and `memoryMib` there.
+
+## Billing
+
+A sandbox with a fixed size is billed for that size while it's active. A dimension left growable is billed as described in [live CPU resizing](/sandbox/live-cpu-resizing#billing) and [live memory resizing](/sandbox/live-memory-resizing#billing).

@@ -135,7 +135,7 @@ It serves the MCP endpoint at `/` (POST) and a `GET /health` liveness probe. Con
 
 | Tool                         | Description                                                                                                                                |
 | ---------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------ |
-| `sandbox_create`             | Create a sandbox; returns its `id`. Accepts `secrets` bindings and egress rules.                                                           |
+| `sandbox_create`             | Create a sandbox; returns its `id`. Accepts `secrets` bindings, egress rules, and `vcpu`/`memory_mib` within the template's range.         |
 | `sandbox_update`             | Change a sandbox's metadata or egress (`allow_out`/`deny_out`) rules after creation.                                                       |
 | `sandbox_list`               | List sandboxes (active and paused), filterable by metadata.                                                                                |
 | `sandbox_info`               | Get a sandbox's status, resources, metadata, network rules, and secret bindings.                                                           |
