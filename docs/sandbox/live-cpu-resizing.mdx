@@ -6,6 +6,8 @@ description: "Sandboxes that get more CPU under load and drop back when they're 
 
 Agent workloads spend much of their time waiting: on a model, on the network, on the user. Then they need several cores at once for a build, a test suite or a batch job. Live CPU resizing lets a sandbox start small, get more CPU while it's busy, and drop back when it's idle. You don't have to size every sandbox for its busiest moment, and you don't pay for that CPU while it sits idle.
 
+To keep a sandbox at one vCPU count instead, choose a [custom size](/sandbox/size).
+
 ## Turn it on
 
 CPU resizing is set per template. Set `vcpuMax` alongside `vcpu`: `vcpu` is the minimum a sandbox starts with, and `vcpuMax` is the most it can grow to. Sandboxes from that template, and sandboxes created from snapshots of them, use the same range.

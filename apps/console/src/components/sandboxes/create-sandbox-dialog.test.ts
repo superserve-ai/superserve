@@ -10,6 +10,7 @@
 import { describe, expect, it } from "vitest"
 
 import { buildCreateSandboxRequest } from "./create-sandbox-dialog"
+import { memorySteps, sizeSummary, templateSize } from "./sandbox-size-section"
 
 const emptyState = {
   name: "",
@@ -55,27 +56,27 @@ describe("buildCreateSandboxRequest size", () => {
     memory_max_mib: 8192,
   }
 
-  it("sends vcpu and memory_mib picked within the template range", () => {
+  it("sends a fixed vcpu and memory_mib within the template range", () => {
     const req = buildCreateSandboxRequest({
       ...emptyState,
       name: "x",
       templateRef: "my-env",
       template: ranged,
-      vcpu: "3",
-      memoryMib: "6144",
+      vcpu: 3,
+      memoryMib: 6144,
     })
     expect(req.vcpu).toBe(3)
     expect(req.memory_mib).toBe(6144)
   })
 
-  it("omits a blank pick and a dimension the template has no range for", () => {
+  it("sends nothing for auto or a dimension the template has no range for", () => {
     const req = buildCreateSandboxRequest({
       ...emptyState,
       name: "x",
       templateRef: "my-env",
       template: { vcpu: 2, memory_mib: 2048, memory_max_mib: 8192 },
-      vcpu: "2",
-      memoryMib: "",
+      vcpu: 2,
+      memoryMib: null,
     })
     expect(req).not.toHaveProperty("vcpu")
     expect(req).not.toHaveProperty("memory_mib")
@@ -87,17 +88,17 @@ describe("buildCreateSandboxRequest size", () => {
       name: "x",
       snapshotId: "0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
       template: ranged,
-      vcpu: "3",
+      vcpu: 3,
     })
     expect(req).not.toHaveProperty("vcpu")
   })
 
   it("rejects a pick outside the range or off the 2 MiB grid", () => {
     for (const pick of [
-      { vcpu: "5" },
-      { vcpu: "1.5" },
-      { memoryMib: "1024" },
-      { memoryMib: "6145" },
+      { vcpu: 5 },
+      { vcpu: 1.5 },
+      { memoryMib: 1024 },
+      { memoryMib: 6145 },
     ]) {
       expect(() =>
         buildCreateSandboxRequest({
@@ -109,6 +110,28 @@ describe("buildCreateSandboxRequest size", () => {
         }),
       ).toThrow()
     }
+  })
+})
+
+describe("size helpers", () => {
+  it("steps memory by 256 MiB from the minimum and ends at the maximum", () => {
+    expect(memorySteps(1024, 2000)).toEqual([1024, 1280, 1536, 1792, 2000])
+    for (const v of memorySteps(1026, 4096)) expect((v - 1026) % 2).toBe(0)
+  })
+
+  it("summarises all fixed, all auto and mixed sizes", () => {
+    const t = { vcpu: 1, vcpu_max: 4, memory_mib: 1024, memory_max_mib: 4096 }
+    const line = (v: number | null, m: number | null) => {
+      const { cpu, memory } = templateSize(t, v, m)
+      return sizeSummary(cpu, memory)
+    }
+    expect(line(2, 2048)).toBe("2 vCPU · 2 GB · fixed")
+    expect(line(null, null)).toBe("1–4 vCPU · 1–4 GB · auto")
+    expect(line(2, null)).toBe("2 vCPU fixed · 1–4 GB auto")
+    const noRange = templateSize({ vcpu: 1, memory_mib: 1024 }, null, null)
+    expect(sizeSummary(noRange.cpu, noRange.memory)).toBe(
+      "1 vCPU · 1 GB · fixed",
+    )
   })
 })
 

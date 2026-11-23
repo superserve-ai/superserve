@@ -31,10 +31,10 @@ const text = await sandbox.files.readText("/app/data.txt")
 await sandbox.kill()
 ```
 
-## Sandbox size
+## Custom size
 
 A template built with a CPU or memory range (`vcpu`..`vcpuMax`,
-`memoryMib`..`memoryMaxMib`) lets each sandbox pick a fixed size within it:
+`memoryMib`..`memoryMaxMib`) lets each sandbox use a fixed size within it:
 
 ```typescript
 const sandbox = await Sandbox.create({
@@ -45,9 +45,10 @@ const sandbox = await Sandbox.create({
 })
 ```
 
-Omit either to inherit the source's configuration. Sandboxes created from a
+Leave either out to keep the default (Auto): the template's size, growing
+within its range. Sandboxes created from a
 snapshot can pick a size within the range the snapshot records. See
-[Choose CPU and memory](https://docs.superserve.ai/sandbox/size).
+[Custom size](https://docs.superserve.ai/sandbox/size).
 
 ## Preview URLs
 

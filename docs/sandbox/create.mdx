@@ -74,8 +74,8 @@ Use **`secrets`** for credentials, not `envVars`. A secret binds an env var to a
 |---|---|---|
 | `name` | `string` | **Required.** Human-readable sandbox name. |
 | `timeoutSeconds` / `timeout_seconds` | `number` | Auto-pause after this many seconds of active time (per session; re-armed on resume). See [Lifecycle](/sandbox/lifecycle#auto-pause). |
-| `vcpu` | `number` | Fixed vCPU count within the template's or snapshot's CPU range. Requires SDK 0.14.0+. See [Choose CPU and memory](/sandbox/size). |
-| `memoryMib` / `memory_mib` | `number` | Fixed memory in MiB within the template's or snapshot's memory range. Requires SDK 0.14.0+. See [Choose CPU and memory](/sandbox/size). |
+| `vcpu` | `number` | Fixed vCPU count within the template's or snapshot's CPU range. See [Custom size](/sandbox/size). |
+| `memoryMib` / `memory_mib` | `number` | Fixed memory in MiB within the template's or snapshot's memory range. See [Custom size](/sandbox/size). |
 | `idleTimeoutSeconds` / `idle_timeout_seconds` | `number` | Auto-pause after this many seconds with no activity (60 to 604800). Requires SDK 0.11.6+. See [Lifecycle](/sandbox/lifecycle#idle-timeout). |
 | `autoDeleteSeconds` / `auto_delete_seconds` | `number` | Delete the sandbox once continuously paused for this many seconds. See [Lifecycle](/sandbox/lifecycle#auto-delete). |
 | `metadata` | `Record<string, string>` | String tags. See [Metadata](/sandbox/metadata). |
@@ -106,6 +106,39 @@ sandbox = Sandbox.create(
 
 </CodeGroup>
 
-The sandbox's vCPU, memory, and disk size are inherited from the template. If the template is built with a CPU or memory range, you can pick a fixed size within it with `vcpu` and `memoryMib` / `memory_mib`; see [Choose CPU and memory](/sandbox/size). See [Templates overview](/templates/overview) for how to build your own.
+See [Templates overview](/templates/overview) for how to build your own.
+
+## Size
+
+By default, a sandbox uses its template's vCPU, memory and disk. If the template has a range, the sandbox starts at the minimum and grows with load.
+
+To fix the size instead, pass `vcpu` and/or `memoryMib` / `memory_mib` within the template's range:
+
+<CodeGroup>
+
+```typescript TypeScript
+// Default: the template's size
+await Sandbox.create({ name: "default", fromTemplate: "my-env" })
+
+// Custom size
+await Sandbox.create({
+  name: "custom",
+  fromTemplate: "my-env",
+  vcpu: 2,
+  memoryMib: 2048,
+})
+```
+
+```python Python
+# Default: the template's size
+Sandbox.create(name="default", from_template="my-env")
+
+# Custom size
+Sandbox.create(name="custom", from_template="my-env", vcpu=2, memory_mib=2048)
+```
+
+</CodeGroup>
+
+See [Custom size](/sandbox/size) for building a template with a range and choosing a size for snapshot copies.
 
 Next: [run commands](/commands/overview), [write files](/filesystem/read-write), or [pause the sandbox](/sandbox/lifecycle) to save costs between runs.

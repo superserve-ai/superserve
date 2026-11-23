@@ -158,8 +158,8 @@ export function registerLifecycleTools(
             "Fixed vCPU count for this sandbox, both ends of the range included and within the plan's limits. " +
               "With from_template: within the template's CPU range (vcpu to vcpu_max in sandbox_template_list). " +
               "With from_snapshot: within the CPU range the snapshot recorded from its template. The count stays " +
-              "fixed for the sandbox's life. Omit to inherit the source's CPU configuration. If a template was " +
-              "built before size selection was available, rebuild it (or omit vcpu and memory_mib).",
+              "fixed for the sandbox's life. Omit for Auto: the source's CPU, growing within its range if it has one. If a template was " +
+              "built before custom sizes were available, rebuild it (or omit vcpu and memory_mib).",
           ),
         memory_mib: z
           .number()
@@ -172,8 +172,8 @@ export function registerLifecycleTools(
               "(memory_mib below memory_max_mib). With from_snapshot: a snapshot of a sandbox created with a fixed " +
               "memory_mib. Must be within that range in 2 MiB steps from its minimum, and within the plan's " +
               "limits. Stays fixed for the " +
-              "sandbox's life. Omit to inherit the source's memory configuration. If a template was built before " +
-              "size selection was available, rebuild it (or omit vcpu and memory_mib).",
+              "sandbox's life. Omit for Auto: the source's memory, growing within its range if it has one. If a template was built before " +
+              "custom sizes were available, rebuild it (or omit vcpu and memory_mib).",
           ),
         timeout_seconds: z
           .number()

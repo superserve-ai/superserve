@@ -79,7 +79,7 @@ Polled every 2s after `startCmd` until it exits `0` or 10 minutes elapse. Use th
 
 ## Resource limits
 
-Templates specify the VM shape and sandboxes inherit it. With a CPU or memory range, each sandbox can pick a fixed size within it; see [Choose CPU and memory](/sandbox/size).
+Templates specify the VM shape and sandboxes inherit it. With a CPU or memory range, each sandbox grows within it by default, or can use a fixed size within it; see [Custom size](/sandbox/size).
 
 | Limit         | `vcpu` (vCPUs) | `memoryMib` (MiB)  |
 | ------------- | -------------- | ------------------ |

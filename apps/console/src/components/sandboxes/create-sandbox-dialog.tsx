@@ -28,17 +28,23 @@ import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
 import { createPortal, flushSync } from "react-dom"
 
 import { CornerBrackets } from "@/components/corner-brackets"
+import {
+  hasCpuRange,
+  hasMemoryRange,
+  type SizeRange,
+  sizeSummary,
+  SnapshotSize,
+  snapshotSize,
+  templateSize,
+  TemplateSizeSection,
+} from "@/components/sandboxes/sandbox-size-section"
 import type { SecretBindingEntry } from "@/components/secrets/secret-binding-editor"
 import { SecretBindingEditor } from "@/components/secrets/secret-binding-editor"
 import { snapshotLabel } from "@/components/snapshots/snapshot-status-badge"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { useSnapshots } from "@/hooks/use-snapshots"
 import { useTemplates } from "@/hooks/use-templates"
-import type {
-  CreateSandboxRequest,
-  PreviewAccessPolicy,
-  TemplateResponse,
-} from "@/lib/api/types"
+import type { CreateSandboxRequest, PreviewAccessPolicy } from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
@@ -289,27 +295,10 @@ interface FormState {
   templateRef?: string
   /** Saved snapshot to continue from; takes the place of `templateRef`. */
   snapshotId?: string
-  /** Fixed size picks; only sent within the selected template's range. */
-  vcpu?: string
-  memoryMib?: string
+  /** Fixed size picks (null = auto); only sent within the template's range. */
+  vcpu?: number | null
+  memoryMib?: number | null
   template?: SizeRange
-}
-
-type SizeRange = Pick<
-  TemplateResponse,
-  "vcpu" | "vcpu_max" | "memory_mib" | "memory_max_mib"
->
-
-export function hasCpuRange(t: SizeRange | undefined): t is SizeRange & {
-  vcpu_max: number
-} {
-  return t?.vcpu_max != null && t.vcpu_max > t.vcpu
-}
-
-export function hasMemoryRange(t: SizeRange | undefined): t is SizeRange & {
-  memory_max_mib: number
-} {
-  return t?.memory_max_mib != null && t.memory_max_mib > t.memory_mib
 }
 
 /** Max auto-pause timeout (7 days) and auto-delete window (30 days), matching
@@ -342,6 +331,15 @@ export function parseWindowSeconds(
   return n
 }
 
+function inRange(n: number, label: string, min: number, max: number): number {
+  if (!Number.isSafeInteger(n) || n < min || n > max) {
+    throw new Error(
+      `${label} must be a whole number between ${min} and ${max}.`,
+    )
+  }
+  return n
+}
+
 /**
  * Build the CreateSandboxRequest payload from the dialog's form state.
  *
@@ -366,9 +364,10 @@ export function parseWindowSeconds(
  *  - `from_snapshot` is included when `snapshotId` is set, and then
  *    `from_template` never is; otherwise `from_template` is included when
  *    `templateRef` is non-empty.
- *  - `vcpu` / `memory_mib` are only included for a template source whose
- *    range covers that dimension, validated to the range (memory in 2 MiB
- *    steps from the minimum). Blank keeps the template's own configuration.
+ *  - `vcpu` / `memory_mib` are only included when fixed (non-null) for a
+ *    template source whose range covers that dimension, validated to the
+ *    range (memory in 2 MiB steps from the minimum). Auto sends nothing, so
+ *    the sandbox keeps the template's range.
  *  - `preview_access` is always explicit so new console sandboxes use the
  *    published-port model instead of the compatibility-only legacy mode.
  */
@@ -417,22 +416,19 @@ export function buildCreateSandboxRequest(
   )
 
   const template = state.snapshotId ? undefined : state.template
-  const vcpu = hasCpuRange(template)
-    ? parseWindowSeconds(
-        state.vcpu ?? "",
-        "vCPU",
-        template.vcpu,
-        template.vcpu_max,
-      )
-    : undefined
-  const memoryMib = hasMemoryRange(template)
-    ? parseWindowSeconds(
-        state.memoryMib ?? "",
-        "Memory",
-        template.memory_mib,
-        template.memory_max_mib,
-      )
-    : undefined
+  const vcpu =
+    hasCpuRange(template) && state.vcpu != null
+      ? inRange(state.vcpu, "vCPU", template.vcpu, template.vcpu_max)
+      : undefined
+  const memoryMib =
+    hasMemoryRange(template) && state.memoryMib != null
+      ? inRange(
+          state.memoryMib,
+          "Memory",
+          template.memory_mib,
+          template.memory_max_mib,
+        )
+      : undefined
   if (
     memoryMib !== undefined &&
     template &&
@@ -533,8 +529,9 @@ export function CreateSandboxDialog({
     initialSnapshotId ? "snapshot" : "template",
   )
   const [snapshotId, setSnapshotId] = useState(initialSnapshotId ?? "")
-  const [vcpu, setVcpu] = useState("")
-  const [memoryMib, setMemoryMib] = useState("")
+  // null = Auto: the sandbox keeps the template's range.
+  const [vcpu, setVcpu] = useState<number | null>(null)
+  const [memoryMib, setMemoryMib] = useState<number | null>(null)
 
   useLayoutEffect(() => {
     if (open) {
@@ -612,10 +609,9 @@ export function CreateSandboxDialog({
   const selectedTemplate = templateOptions.find(
     (t) => t.name === templateRef || t.id === templateRef,
   )
-  const cpuRange = hasCpuRange(selectedTemplate) ? selectedTemplate : undefined
-  const memoryRange = hasMemoryRange(selectedTemplate)
-    ? selectedTemplate
-    : undefined
+  const size = fromSnapshot
+    ? selectedSnapshot && snapshotSize(selectedSnapshot.resources)
+    : selectedTemplate && templateSize(selectedTemplate, vcpu, memoryMib)
 
   const createMutation = useCreateSandbox()
   const { addToast } = useToast()
@@ -637,8 +633,8 @@ export function CreateSandboxDialog({
     setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
     setSnapshotId(initialSnapshotId ?? "")
     setSource(initialSnapshotId ? "snapshot" : "template")
-    setVcpu("")
-    setMemoryMib("")
+    setVcpu(null)
+    setMemoryMib(null)
   }
 
   const handleCreate = () => {
@@ -821,7 +817,7 @@ export function CreateSandboxDialog({
                   required
                   description={
                     selectedSnapshot
-                      ? `Starts where the snapshot left off, with ${selectedSnapshot.resources.vcpu_count} vCPU, ${selectedSnapshot.resources.memory_mib} MiB memory and ${selectedSnapshot.resources.disk_mib} MiB disk.`
+                      ? `Starts where the snapshot left off, with its size and ${selectedSnapshot.resources.disk_mib} MiB disk.`
                       : "Starts where the snapshot left off. The snapshot sets vCPU, memory and disk."
                   }
                 >
@@ -844,48 +840,27 @@ export function CreateSandboxDialog({
                     items={selectItems}
                     onChange={(ref) => {
                       setTemplateRef(ref)
-                      setVcpu("")
-                      setMemoryMib("")
+                      setVcpu(null)
+                      setMemoryMib(null)
                     }}
                     emptyText="No ready templates available"
                   />
                 </Field>
               )}
 
-              {!fromSnapshot && cpuRange && (
-                <Field
-                  label="vCPU"
-                  description={`Fixed vCPU count, ${cpuRange.vcpu} to ${cpuRange.vcpu_max}. Leave blank to keep the template's ${cpuRange.vcpu}–${cpuRange.vcpu_max} vCPU range, which grows under load.`}
-                >
-                  <Input
-                    type="number"
-                    placeholder={`${cpuRange.vcpu}–${cpuRange.vcpu_max}`}
-                    suffix="vCPU"
-                    min={cpuRange.vcpu}
-                    max={cpuRange.vcpu_max}
-                    value={vcpu}
-                    onChange={(e) => setVcpu(e.target.value)}
-                  />
-                </Field>
-              )}
-
-              {!fromSnapshot && memoryRange && (
-                <Field
-                  label="Memory"
-                  description={`Fixed memory, ${memoryRange.memory_mib} to ${memoryRange.memory_max_mib} MiB in 2 MiB steps. Leave blank to keep the template's range, which grows under load.`}
-                >
-                  <Input
-                    type="number"
-                    placeholder={`${memoryRange.memory_mib}–${memoryRange.memory_max_mib}`}
-                    suffix="MiB"
-                    min={memoryRange.memory_mib}
-                    max={memoryRange.memory_max_mib}
-                    step={2}
-                    value={memoryMib}
-                    onChange={(e) => setMemoryMib(e.target.value)}
-                  />
-                </Field>
-              )}
+              {fromSnapshot
+                ? selectedSnapshot && (
+                    <SnapshotSize resources={selectedSnapshot.resources} />
+                  )
+                : selectedTemplate && (
+                    <TemplateSizeSection
+                      template={selectedTemplate}
+                      vcpu={vcpu}
+                      memoryMib={memoryMib}
+                      onVcpuChange={setVcpu}
+                      onMemoryChange={setMemoryMib}
+                    />
+                  )}
 
               <button
                 type="button"
@@ -1204,18 +1179,26 @@ export function CreateSandboxDialog({
               </AnimatePresence>
             </div>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                disabled={
-                  (fromSnapshot && !snapshotId) || createMutation.isPending
-                }
-                onClick={handleCreate}
+            <DialogFooter className="flex-wrap items-center justify-between">
+              <span
+                data-testid="size-summary"
+                className="basis-full font-mono text-xs text-muted tabular-nums sm:basis-auto"
               >
-                {createMutation.isPending ? "Creating..." : "Create Sandbox"}
-              </Button>
+                {size ? sizeSummary(size.cpu, size.memory) : ""}
+              </span>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={
+                    (fromSnapshot && !snapshotId) || createMutation.isPending
+                  }
+                  onClick={handleCreate}
+                >
+                  {createMutation.isPending ? "Creating..." : "Create Sandbox"}
+                </Button>
+              </div>
             </DialogFooter>
           </>
         ) : (
