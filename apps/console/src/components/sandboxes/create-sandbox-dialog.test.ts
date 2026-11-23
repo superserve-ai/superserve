@@ -47,6 +47,71 @@ describe("buildCreateSandboxRequest source", () => {
   })
 })
 
+describe("buildCreateSandboxRequest size", () => {
+  const ranged = {
+    vcpu: 1,
+    vcpu_max: 4,
+    memory_mib: 2048,
+    memory_max_mib: 8192,
+  }
+
+  it("sends vcpu and memory_mib picked within the template range", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      templateRef: "my-env",
+      template: ranged,
+      vcpu: "3",
+      memoryMib: "6144",
+    })
+    expect(req.vcpu).toBe(3)
+    expect(req.memory_mib).toBe(6144)
+  })
+
+  it("omits a blank pick and a dimension the template has no range for", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      templateRef: "my-env",
+      template: { vcpu: 2, memory_mib: 2048, memory_max_mib: 8192 },
+      vcpu: "2",
+      memoryMib: "",
+    })
+    expect(req).not.toHaveProperty("vcpu")
+    expect(req).not.toHaveProperty("memory_mib")
+  })
+
+  it("never sends a size with a snapshot source", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      snapshotId: "0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
+      template: ranged,
+      vcpu: "3",
+    })
+    expect(req).not.toHaveProperty("vcpu")
+  })
+
+  it("rejects a pick outside the range or off the 2 MiB grid", () => {
+    for (const pick of [
+      { vcpu: "5" },
+      { vcpu: "1.5" },
+      { memoryMib: "1024" },
+      { memoryMib: "6145" },
+    ]) {
+      expect(() =>
+        buildCreateSandboxRequest({
+          ...emptyState,
+          name: "x",
+          templateRef: "my-env",
+          template: ranged,
+          ...pick,
+        }),
+      ).toThrow()
+    }
+  })
+})
+
 describe("buildCreateSandboxRequest", () => {
   it("trims the name", () => {
     const req = buildCreateSandboxRequest({ ...emptyState, name: "  hi  " })
