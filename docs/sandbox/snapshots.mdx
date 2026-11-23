@@ -66,7 +66,7 @@ To fork one sandbox per CI job from a snapshot with installed dependencies, see 
 
 ### What a fork starts with
 
-- **Machine:** the snapshot's vCPU, memory and disk size, and the template it was built on.
+- **Machine:** the snapshot's vCPU, memory and disk size, and the template it was built on. You can pick a different `vcpu` or `memoryMib` / `memory_mib` within the range the snapshot records; see [Snapshot copies](/sandbox/size#snapshot-copies).
 - **Network rules:** the original sandbox's rules, unless you pass `network`. They apply before anything in the fork runs.
 - **Timeout:** the original sandbox's auto-pause timeout, unless you pass `timeoutSeconds` / `timeout_seconds`.
 - **Secrets:** the original sandbox's secrets are attached again. Secrets deleted since the snapshot are left out, and any secrets you pass are attached as usual.

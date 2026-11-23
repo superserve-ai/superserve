@@ -1,3 +1,4 @@
+import { ConflictError } from "@superserve/sdk"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { createFakeClient } from "./fake-client.js"
@@ -101,6 +102,39 @@ describe("network rules + sandbox_update (in-memory, fake client)", () => {
       expect(info.structured.memory_shrink_after_seconds).toBe(300)
       expect(info.structured.vcpu_max).toBe(8)
       expect(info.text).toContain("2-8 vCPU")
+    } finally {
+      await c.close()
+    }
+  })
+
+  it("sandbox_create passes a chosen vcpu and memory_mib", async () => {
+    const created = await callTool(conn.client, "sandbox_create", {
+      name: "sized",
+      from_template: "my-env",
+      vcpu: 3,
+      memory_mib: 6144,
+    })
+    const id = created.structured.id as string
+
+    const info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.vcpu_count).toBe(3)
+    expect(info.structured.memory_mib).toBe(6144)
+    expect(info.text).toContain("3 vCPU / 6144 MiB")
+  })
+
+  it("sandbox_create shows a create conflict without the sandbox-state hint", async () => {
+    const fake = createFakeClient()
+    fake.client.create = async () => {
+      throw new ConflictError("Rebuild it to choose vcpu or memory_mib.")
+    }
+    const c = await connect(fake.client)
+    try {
+      const r = await callTool(c.client, "sandbox_create", {
+        from_template: "my-env",
+        vcpu: 2,
+      })
+      expect(r.isError).toBe(true)
+      expect(r.text).toBe("Rebuild it to choose vcpu or memory_mib.")
     } finally {
       await c.close()
     }

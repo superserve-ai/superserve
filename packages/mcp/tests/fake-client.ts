@@ -40,6 +40,8 @@ interface FakeSandbox {
   autoDeleteSeconds?: number
   timeoutSeconds?: number
   idleTimeoutSeconds?: number
+  vcpuCount: number
+  memoryMib: number
   memoryShrinkAfterSeconds?: number
   vcpuMax?: number
   previewAccess: PreviewAccess
@@ -134,6 +136,8 @@ export function createFakeClient(): FakeClient {
         autoDeleteSeconds: input.autoDeleteSeconds,
         timeoutSeconds: input.timeoutSeconds ?? 3600,
         idleTimeoutSeconds: input.idleTimeoutSeconds,
+        vcpuCount: input.vcpu ?? 2,
+        memoryMib: input.memoryMib ?? 2048,
         previewAccess: input.previewAccess ?? "public",
         publishedPorts: new Map(),
         secrets: Object.entries(input.secrets ?? {}).map(
@@ -195,8 +199,8 @@ export function createFakeClient(): FakeClient {
         id: sb.id,
         name: sb.name,
         status: sb.status,
-        vcpuCount: 2,
-        memoryMib: 2048,
+        vcpuCount: sb.vcpuCount,
+        memoryMib: sb.memoryMib,
         createdAt: new Date(0),
         timeoutSeconds: sb.timeoutSeconds,
         idleTimeoutSeconds: sb.idleTimeoutSeconds,

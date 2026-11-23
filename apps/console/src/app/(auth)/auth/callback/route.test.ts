@@ -316,9 +316,17 @@ vi.mock("@/lib/auth/signup-review-server", async (importOriginal) => ({
 
 // Run `after()` work at once but never wait for it, as Next does once the
 // response is out. Tests can then assert the scheduled events directly.
+let deferAfterWork = false
+let afterRegistrationFails = false
+const afterQueue: Array<() => unknown> = []
 vi.mock("next/server", async (importOriginal) => ({
   ...(await importOriginal<typeof import("next/server")>()),
   after: (fn: () => unknown) => {
+    if (afterRegistrationFails) throw new Error("No request scope")
+    if (deferAfterWork) {
+      afterQueue.push(fn)
+      return
+    }
     void fn()
   },
 }))
@@ -378,6 +386,14 @@ import { STAFF_SESSION_COOKIE } from "@/lib/yc/staff-session"
 
 import { GET } from "./route"
 
+function deferred<T>() {
+  let resolve!: (value: T | PromiseLike<T>) => void
+  const promise = new Promise<T>((complete) => {
+    resolve = complete
+  })
+  return { promise, resolve }
+}
+
 describe("auth callback", () => {
   it.each([
     `/invite/ssinv_use_${"T".repeat(43)}`,
@@ -405,6 +421,9 @@ describe("auth callback", () => {
   )
 
   beforeEach(() => {
+    deferAfterWork = false
+    afterRegistrationFails = false
+    afterQueue.length = 0
     vi.stubEnv("YC_STAFF_UI_ENABLED", "false")
     mockGetSignupPlanAction.mockReset().mockResolvedValue(undefined)
     mockPrepareTeam.mockReset().mockImplementation(async () => {
@@ -533,6 +552,177 @@ describe("auth callback", () => {
     mockTrackEvent.mockReset()
   })
 
+  describe("post-response delivery", () => {
+    beforeEach(() => {
+      deferAfterWork = true
+    })
+
+    it.each(["google", "email"] as const)(
+      "finishes %s account setup before delivering slow notifications",
+      async (provider) => {
+        googleMembershipState = { kind: "first_time" }
+        currentUser!.app_metadata.provider = provider
+        mockPricingVersion.mockResolvedValue("v2")
+        const setup = deferred<string>()
+        const delivery = deferred<void>()
+        mockSignupEntryDestination.mockReturnValue(setup.promise)
+        mockNotifySlackOfNewUser.mockReturnValue(delivery.promise)
+        mockTrackEvent.mockReturnValue(delivery.promise)
+        mockSendWelcomeEmail.mockReturnValue(delivery.promise)
+        const query =
+          provider === "google"
+            ? "code=abc&signup_attempt_id=attempt-1"
+            : "token_hash=token&type=signup"
+        let response: Awaited<ReturnType<typeof GET>> | undefined
+        const callback = GET(
+          new Request(`https://console.superserve.ai/auth/callback?${query}`),
+        ).then((value) => {
+          response = value
+          return value
+        })
+
+        await waitFor(() =>
+          expect(mockSignupEntryDestination).toHaveBeenCalled(),
+        )
+        expect(response).toBeUndefined()
+        expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+        expect(mockTrackEvent).not.toHaveBeenCalled()
+        expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+
+        setup.resolve("/sandboxes")
+        const completed = await callback
+        expect(new URL(completed.headers.get("location")!).pathname).toBe(
+          "/sandboxes",
+        )
+        expect(mockEvaluateSignupRestriction).toHaveBeenCalled()
+        expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+        const responseTime = Date.now()
+
+        const work = afterQueue.splice(0).map((fn) => fn())
+        expect(mockNotifySlackOfNewUser).toHaveBeenCalledTimes(1)
+        expect(mockNotifySlackOfNewUser.mock.calls[0].slice(0, 5)).toEqual([
+          "user@example.com",
+          "Test User",
+          provider,
+          { kind: "unavailable" },
+          undefined,
+        ])
+        expect(
+          mockNotifySlackOfNewUser.mock.calls[0][6].getTime(),
+        ).toBeLessThanOrEqual(responseTime)
+        expect(mockTrackEvent).toHaveBeenCalledWith(
+          "sign_up_completed",
+          "u1",
+          expect.objectContaining({ provider, is_new_user: true }),
+          expect.any(Date),
+        )
+        expect(mockSendWelcomeEmail).toHaveBeenCalledTimes(1)
+        delivery.resolve()
+        await Promise.all(work)
+      },
+    )
+
+    it("keeps returning sign-in telemetry after the response without signup notifications", async () => {
+      const response = await GET(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/sandboxes",
+      )
+      expect(mockTrackEvent).not.toHaveBeenCalled()
+      await Promise.all(afterQueue.splice(0).map((fn) => fn()))
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "sign_in_completed",
+        "u1",
+        expect.objectContaining({ is_new_user: false }),
+        expect.any(Date),
+      )
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+    })
+
+    it("still blocks a Google signup without proof before delivering telemetry", async () => {
+      googleMembershipState = { kind: "first_time" }
+      proofAvailable = false
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_attempt_id=attempt-1",
+        ),
+      )
+      expect(response.headers.get("location")).toContain(
+        "/auth/signup?complete_google=1&reason=no_proof",
+      )
+      expect(mockMarkGoogleSignupRecovery).toHaveBeenCalledWith("no_proof")
+      expect(mockSignupEntryDestination).not.toHaveBeenCalled()
+      expect(mockTrackEvent).not.toHaveBeenCalled()
+      await Promise.all(afterQueue.splice(0).map((fn) => fn()))
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "auth_google_signup_bypass_blocked",
+        "u1",
+        expect.objectContaining({ proof_failure: "no_proof" }),
+        expect.any(Date),
+      )
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+    })
+
+    it("preserves Enterprise admission and signs out before sending its notification", async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockStrictPlans.mockResolvedValue({ pricing_version: "v2", cards: [] })
+      const response = await GET(
+        new Request(
+          "https://console.superserve.ai/auth/callback?code=abc&signup_offer=enterprise",
+        ),
+      )
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/auth/pending",
+      )
+      expect(mockUpdateSignupReview).toHaveBeenCalled()
+      expect(mockSignOut).toHaveBeenCalled()
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+      await Promise.all(afterQueue.splice(0).map((fn) => fn()))
+      expect(mockNotifySlackOfNewUser).toHaveBeenCalledWith(
+        "user@example.com",
+        "Test User",
+        "google",
+        { kind: "unavailable" },
+        undefined,
+        true,
+        expect.any(Date),
+      )
+    })
+
+    it("keeps the redirect and remaining deliveries when a delivery throws", async () => {
+      googleMembershipState = { kind: "first_time" }
+      mockNotifySlackOfNewUser.mockRejectedValue(new Error("webhook down"))
+      mockTrackEvent.mockRejectedValue(new Error("analytics down"))
+      const response = await GET(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+      await expect(
+        Promise.all(afterQueue.splice(0).map((fn) => fn())),
+      ).resolves.toBeDefined()
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/sandboxes",
+      )
+      expect(mockSendWelcomeEmail).toHaveBeenCalledTimes(1)
+    })
+
+    it("keeps authentication working when post-response scheduling is unavailable", async () => {
+      afterRegistrationFails = true
+      googleMembershipState = { kind: "first_time" }
+      const response = await GET(
+        new Request("https://console.superserve.ai/auth/callback?code=abc"),
+      )
+      expect(new URL(response.headers.get("location")!).pathname).toBe(
+        "/sandboxes",
+      )
+      expect(mockHasValidLegacyGoogleSignupProof).toHaveBeenCalled()
+      expect(mockNotifySlackOfNewUser).not.toHaveBeenCalled()
+      expect(mockTrackEvent).not.toHaveBeenCalled()
+      expect(mockSendWelcomeEmail).not.toHaveBeenCalled()
+    })
+  })
+
   it.each(["first_time", "indeterminate"] as const)(
     "returns verified staff proof without customer onboarding when membership is %s",
     async (kind) => {
@@ -609,6 +799,8 @@ describe("auth callback", () => {
       "email",
       { kind: "blocked" },
       undefined,
+      undefined,
+      expect.any(Date),
     )
   })
 
@@ -631,6 +823,8 @@ describe("auth callback", () => {
         kind: "unavailable",
       },
       undefined,
+      undefined,
+      expect.any(Date),
     )
     expect(mockTrackEvent).toHaveBeenCalledWith(
       "auth_callback_failed",
@@ -850,6 +1044,8 @@ describe("auth callback", () => {
         kind: "unavailable",
       },
       undefined,
+      undefined,
+      expect.any(Date),
     )
   })
 
@@ -1065,11 +1261,16 @@ describe("auth callback", () => {
     expect(response.headers.get("location")).toContain(
       "/auth/auth-code-error?reason=membership_lookup_degraded",
     )
-    expect(mockTrackEvent).toHaveBeenCalledWith("sign_in_failed", "u1", {
-      provider: "google",
-      email: "user@example.com",
-      reason: "membership_lookup_degraded",
-    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "sign_in_failed",
+      "u1",
+      {
+        provider: "google",
+        email: "user@example.com",
+        reason: "membership_lookup_degraded",
+      },
+      expect.any(Date),
+    )
   })
 
   it.each([
@@ -1101,16 +1302,23 @@ describe("auth callback", () => {
         "google",
         { kind: "unavailable" },
         expected,
+        undefined,
+        expect.any(Date),
       )
     },
   )
 
   describe("sign-up versus sign-in event", () => {
     const completion = () =>
-      mockTrackEvent.mock.calls.filter(
-        ([event]) =>
-          event === "sign_up_completed" || event === "sign_in_completed",
-      )
+      mockTrackEvent.mock.calls
+        .filter(
+          ([event]) =>
+            event === "sign_up_completed" || event === "sign_in_completed",
+        )
+        .map(([event, userId, properties, occurredAt]) => {
+          expect(occurredAt).toBeInstanceOf(Date)
+          return [event, userId, properties]
+        })
 
     it.each([
       ["30 seconds", 30_000],
@@ -1765,6 +1973,8 @@ describe("auth callback", () => {
         "google",
         { kind: "unavailable" },
         undefined,
+        undefined,
+        expect.any(Date),
       )
     })
 
@@ -1797,6 +2007,7 @@ describe("auth callback", () => {
             reason: "missing_or_invalid_proof",
             proof_failure: failure,
           }),
+          expect.any(Date),
         )
       }
     })
@@ -2160,6 +2371,7 @@ describe("auth callback", () => {
         { kind: "unavailable" },
         undefined,
         true,
+        expect.any(Date),
       )
       expect(new URL(response.headers.get("location")!).pathname).toBe(
         "/auth/pending",
@@ -2761,17 +2973,24 @@ describe("auth callback", () => {
       "google",
       { kind: "unavailable" },
       undefined,
+      undefined,
+      expect.any(Date),
     )
     expect(mockSendWelcomeEmail).toHaveBeenCalledWith(
       "user@example.com",
       "Test User",
     )
     expect(mockConsumeGoogleSignupProof).not.toHaveBeenCalled()
-    expect(mockTrackEvent).toHaveBeenCalledWith("sign_up_completed", "u1", {
-      provider: "google",
-      email: "user@example.com",
-      is_new_user: true,
-    })
+    expect(mockTrackEvent).toHaveBeenCalledWith(
+      "sign_up_completed",
+      "u1",
+      {
+        provider: "google",
+        email: "user@example.com",
+        is_new_user: true,
+      },
+      expect.any(Date),
+    )
   })
 
   it.each([
@@ -2900,6 +3119,8 @@ describe("auth callback", () => {
         "google",
         expected,
         undefined,
+        undefined,
+        expect.any(Date),
       )
       expect(mockReadGooglePromotionEvidence).toHaveBeenCalledWith(
         "attempt-1",
@@ -3101,6 +3322,8 @@ describe("auth callback", () => {
       "google",
       { kind: "unavailable" },
       undefined,
+      undefined,
+      expect.any(Date),
     )
     expect(mockReadGooglePromotionEvidence).toHaveBeenCalledWith(
       "attempt-1",
@@ -3144,6 +3367,8 @@ describe("auth callback", () => {
       "google",
       { kind: "unavailable" },
       undefined,
+      undefined,
+      expect.any(Date),
     )
     expect(
       mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
@@ -3236,6 +3461,8 @@ describe("auth callback", () => {
           "email",
           expected,
           undefined,
+          undefined,
+          expect.any(Date),
         )
         expect(
           mockPublishOriginalSignupEvidence.mock.invocationCallOrder[0],
@@ -3280,6 +3507,8 @@ describe("auth callback", () => {
         "email",
         { kind: "unavailable" },
         undefined,
+        undefined,
+        expect.any(Date),
       )
     } finally {
       if (previousSecret === undefined)
@@ -3314,6 +3543,8 @@ describe("auth callback", () => {
       "google",
       { kind: "unavailable" },
       undefined,
+      undefined,
+      expect.any(Date),
     )
     expect(mockSendWelcomeEmail).toHaveBeenCalledWith(
       "user@example.com",
@@ -3337,6 +3568,8 @@ describe("auth callback", () => {
       "email",
       { kind: "unavailable" },
       undefined,
+      undefined,
+      expect.any(Date),
     )
   })
 
@@ -3422,6 +3655,7 @@ describe("auth callback", () => {
         signup_method: "google",
         observed_at: expect.any(String),
       },
+      expect.any(Date),
     )
   })
 
@@ -3547,6 +3781,8 @@ describe("auth callback", () => {
       "google",
       { kind: "blocked" },
       undefined,
+      undefined,
+      expect.any(Date),
     )
   })
 
@@ -3716,12 +3952,17 @@ describe("auth callback", () => {
       const location = new URL(response.headers.get("location")!)
       expect(location.pathname).not.toBe("/auth/reset-password")
       expect(location.pathname).toBe("/sandboxes")
-      expect(mockTrackEvent).toHaveBeenCalledWith("sign_in_completed", "u1", {
-        provider: "email",
-        email: "user@example.com",
-        is_new_user: false,
-        sign_in_recovery: "email_link",
-      })
+      expect(mockTrackEvent).toHaveBeenCalledWith(
+        "sign_in_completed",
+        "u1",
+        {
+          provider: "email",
+          email: "user@example.com",
+          is_new_user: false,
+          sign_in_recovery: "email_link",
+        },
+        expect.any(Date),
+      )
     })
 
     it("carries the Google recovery flag to the sign-in event", async () => {
@@ -3738,6 +3979,7 @@ describe("auth callback", () => {
           provider: "google",
           sign_in_recovery: "google",
         }),
+        expect.any(Date),
       )
     })
 

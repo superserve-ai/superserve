@@ -97,9 +97,13 @@ it("keeps checkout return conventions and blocks duplicate submission", async ()
   expect(result.current.submitting).toBeNull()
 })
 
-it("prefers the existing portal flow", async () => {
+it("keeps the portal-only flow", async () => {
   mocks.portal.mockRejectedValue(new Error("Portal unavailable"))
-  const { result } = setup({ ...summary, portal_available: true })
+  const { result } = setup({
+    ...summary,
+    checkout_available: false,
+    portal_available: true,
+  })
   await act(() => result.current.openSession())
   expect(mocks.checkout).not.toHaveBeenCalled()
   expect(
@@ -124,7 +128,11 @@ it.each([false, true])(
       activeTeamId: "a",
       activeRegion: "use",
     })
-    const value = { ...summary, portal_available: portalAvailable }
+    const value = {
+      ...summary,
+      checkout_available: !portalAvailable,
+      portal_available: portalAvailable,
+    }
     const { result } = renderHook(
       () => ({
         banner: useBillingPayment(value, "use:a"),
@@ -241,7 +249,11 @@ it.each([false, true])(
     )
     const request = portal ? mocks.portal : mocks.checkout
     request.mockRejectedValue(new Error("not navigating"))
-    const { result } = setup({ ...summary, portal_available: portal })
+    const { result } = setup({
+      ...summary,
+      checkout_available: !portal,
+      portal_available: portal,
+    })
     await act(() => result.current.openSession())
     const raw = request.mock.calls[0][0]
     const urls = portal ? [raw.returnUrl] : [raw.successUrl, raw.cancelUrl]
@@ -275,8 +287,29 @@ it("never falls back to legacy card checkout after enrolled capabilities become 
 it("preserves the existing customer portal when capabilities are unavailable", async () => {
   mocks.capabilityModel = undefined
   mocks.portal.mockRejectedValue(new Error("Portal unavailable"))
-  const { result } = setup({ ...summary, portal_available: true })
+  const { result } = setup({
+    ...summary,
+    checkout_available: false,
+    portal_available: true,
+  })
   await act(() => result.current.openSession())
   expect(mocks.portal).toHaveBeenCalledTimes(1)
   expect(mocks.checkout).not.toHaveBeenCalled()
 })
+
+it.each(["legacy", "v2"] as const)(
+  "chooses the permitted %s action when both hints are available",
+  async (model) => {
+    mocks.capabilityModel = model
+    mocks.checkout.mockRejectedValue(new Error("Synthetic checkout"))
+    mocks.portal.mockRejectedValue(new Error("Synthetic portal"))
+    const { result } = setup({
+      ...summary,
+      checkout_available: true,
+      portal_available: true,
+    })
+    await act(() => result.current.openSession())
+    expect(mocks.checkout).toHaveBeenCalledTimes(model === "legacy" ? 1 : 0)
+    expect(mocks.portal).toHaveBeenCalledTimes(model === "v2" ? 1 : 0)
+  },
+)

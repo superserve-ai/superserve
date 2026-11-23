@@ -24,6 +24,10 @@ describe("sandbox", () => {
         "dev",
         "-t",
         "superserve/python-3.11",
+        "--vcpu",
+        "3",
+        "--memory",
+        "6G",
         "--timeout",
         "30m",
         "--idle-timeout",
@@ -55,6 +59,8 @@ describe("sandbox", () => {
     expect(r.requests[0].json()).toEqual({
       name: "dev",
       from_template: "superserve/python-3.11",
+      vcpu: 3,
+      memory_mib: 6144,
       timeout_seconds: 1800,
       idle_timeout_seconds: 600,
       auto_delete_seconds: 0,
@@ -78,6 +84,29 @@ describe("sandbox", () => {
     expect(human.stdout + human.stderr).not.toContain("tok-secret")
   })
 
+  test("create passes a size through with --snapshot", async () => {
+    const r = await runCli(
+      [
+        "sandbox",
+        "create",
+        "--json",
+        "--snapshot",
+        SANDBOX_ID,
+        "--vcpu",
+        "4",
+        "--memory",
+        "4G",
+      ],
+      { fetch: () => json(sandbox(), 201) },
+    )
+    expect(r.exitCode).toBe(0)
+    expect(r.requests[0].json()).toMatchObject({
+      from_snapshot: SANDBOX_ID,
+      vcpu: 4,
+      memory_mib: 4096,
+    })
+  })
+
   test("create rejects bad input before sending", async () => {
     for (const args of [
       ["--template", "t", "--snapshot", SANDBOX_ID],
@@ -86,6 +115,10 @@ describe("sandbox", () => {
       ["--idle-timeout", "30s"],
       ["--idle-timeout", "8d"],
       ["--auto-delete", "31d"],
+      ["--vcpu", "0"],
+      ["--vcpu", "1.5"],
+      ["--memory", "128M"],
+      ["--memory", "2X"],
     ]) {
       const r = await runCli(["sandbox", "create", ...args])
       expect(r.exitCode).toBe(2)

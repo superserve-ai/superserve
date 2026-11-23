@@ -31,6 +31,24 @@ const text = await sandbox.files.readText("/app/data.txt")
 await sandbox.kill()
 ```
 
+## Sandbox size
+
+A template built with a CPU or memory range (`vcpu`..`vcpuMax`,
+`memoryMib`..`memoryMaxMib`) lets each sandbox pick a fixed size within it:
+
+```typescript
+const sandbox = await Sandbox.create({
+  name: "build",
+  fromTemplate: "my-env",
+  vcpu: 4,
+  memoryMib: 8192,
+})
+```
+
+Omit either to inherit the source's configuration. Sandboxes created from a
+snapshot can pick a size within the range the snapshot records. See
+[Choose CPU and memory](https://docs.superserve.ai/sandbox/size).
+
 ## Preview URLs
 
 Choose the default access for new ports, publish only the ports you intend to

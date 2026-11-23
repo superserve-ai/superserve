@@ -64,7 +64,7 @@ const addToast = vi.fn()
 
 const baseSummary: BillingSummaryResponse = {
   billing_mode: "live" as const,
-  checkout_available: true,
+  checkout_available: false,
   portal_available: true,
   payment_setup_required: false,
   permissions: {
@@ -412,7 +412,11 @@ describe("CustomerBillingSection", () => {
           reject = rej
         }),
       )
-      renderControls({ ...baseSummary, portal_available: portalAvailable })
+      renderControls({
+        ...baseSummary,
+        checkout_available: !portalAvailable,
+        portal_available: portalAvailable,
+      })
 
       const button = screen.getByRole("button", { name: label })
       expect(button).toBeEnabled()
@@ -617,6 +621,7 @@ describe("CustomerBillingSection", () => {
   it("keeps disconnected payment and setup recovery visible", () => {
     renderControls({
       ...baseSummary,
+      checkout_available: true,
       portal_available: false,
       payment_setup_required: true,
     })
@@ -830,7 +835,11 @@ describe("CustomerBillingSection", () => {
     (pricing) => {
       mocks.pricingVersion = "v2"
       mocks.capabilitiesPending = pricing === "pending"
-      renderControls({ ...baseSummary, portal_available: false })
+      renderControls({
+        ...baseSummary,
+        checkout_available: true,
+        portal_available: false,
+      })
       expect(
         screen.queryByRole("button", { name: "Set Up Billing" }),
       ).not.toBeInTheDocument()
@@ -838,7 +847,11 @@ describe("CustomerBillingSection", () => {
   )
 
   it("offers working legacy checkout without a missing portal warning", () => {
-    renderControls({ ...baseSummary, portal_available: false })
+    renderControls({
+      ...baseSummary,
+      checkout_available: true,
+      portal_available: false,
+    })
     expect(screen.getByRole("button", { name: "Set Up Billing" })).toBeEnabled()
     expect(screen.queryByTestId("plan-billing-problem")).not.toBeInTheDocument()
   })
@@ -864,6 +877,7 @@ describe("CustomerBillingSection", () => {
     })
     renderControls({
       ...baseSummary,
+      checkout_available: true,
       portal_available: false,
       payment_setup_required: true,
     })
@@ -929,4 +943,33 @@ describe("billingProblem", () => {
       "The last payment failed. Update your payment method in the customer portal.",
     )
   })
+})
+
+it("labels and dispatches replacement legacy setup when portal is also available", async () => {
+  mocks.entry.mockReturnValue({ data: null, isPending: false, isError: false })
+  mocks.scope = "self"
+  mocks.pricingVersion = "legacy"
+  mocks.capabilitiesPending = false
+  useCustomerBillingPeriods.mockReturnValue({
+    data: { periods: [] },
+    isPending: false,
+    isFetching: false,
+  })
+  createStripeCustomerPortalSession.mockReset()
+  createStripeCheckoutSession.mockReset()
+  createStripeCheckoutSession.mockRejectedValue(new Error("Synthetic checkout"))
+  renderControls({
+    ...baseSummary,
+    checkout_available: true,
+    portal_available: true,
+  })
+  const setup = screen.getByRole("button", { name: "Set Up Billing" })
+  expect(
+    screen.queryByRole("button", { name: "Open Customer Portal" }),
+  ).toBeNull()
+  fireEvent.click(setup)
+  await waitFor(() =>
+    expect(createStripeCheckoutSession).toHaveBeenCalledTimes(1),
+  )
+  expect(createStripeCustomerPortalSession).not.toHaveBeenCalled()
 })

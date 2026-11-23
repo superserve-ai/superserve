@@ -4,7 +4,11 @@
  * `sandbox_pause`, `sandbox_resume`, `sandbox_kill`.
  */
 
-import type { BuildStep, NetworkConfig } from "@superserve/sdk"
+import {
+  ConflictError,
+  type BuildStep,
+  type NetworkConfig,
+} from "@superserve/sdk"
 import * as z from "zod"
 
 import type { SandboxClient } from "../client.js"
@@ -40,6 +44,8 @@ interface CreateArgs {
   name?: string
   from_template?: string
   from_snapshot?: string
+  vcpu?: number
+  memory_mib?: number
   timeout_seconds?: number
   idle_timeout_seconds?: number
   auto_delete_seconds?: number
@@ -142,6 +148,33 @@ export function registerLifecycleTools(
           .string()
           .optional()
           .describe("Snapshot ID to restore the sandbox from."),
+        vcpu: z
+          .number()
+          .int()
+          .min(1)
+          .max(32)
+          .optional()
+          .describe(
+            "Fixed vCPU count for this sandbox, both ends of the range included and within the plan's limits. " +
+              "With from_template: within the template's CPU range (vcpu to vcpu_max in sandbox_template_list). " +
+              "With from_snapshot: within the CPU range the snapshot recorded from its template. The count stays " +
+              "fixed for the sandbox's life. Omit to inherit the source's CPU configuration. If a template was " +
+              "built before size selection was available, rebuild it (or omit vcpu and memory_mib).",
+          ),
+        memory_mib: z
+          .number()
+          .int()
+          .min(256)
+          .max(131072)
+          .optional()
+          .describe(
+            "Fixed memory in MiB for this sandbox. With from_template: a template built with a memory range " +
+              "(memory_mib below memory_max_mib). With from_snapshot: a snapshot of a sandbox created with a fixed " +
+              "memory_mib. Must be within that range in 2 MiB steps from its minimum, and within the plan's " +
+              "limits. Stays fixed for the " +
+              "sandbox's life. Omit to inherit the source's memory configuration. If a template was built before " +
+              "size selection was available, rebuild it (or omit vcpu and memory_mib).",
+          ),
         timeout_seconds: z
           .number()
           .int()
@@ -225,6 +258,8 @@ export function registerLifecycleTools(
       name,
       from_template,
       from_snapshot,
+      vcpu,
+      memory_mib,
       timeout_seconds,
       idle_timeout_seconds,
       auto_delete_seconds,
@@ -240,6 +275,8 @@ export function registerLifecycleTools(
           name,
           fromTemplate: from_template,
           fromSnapshot: from_snapshot,
+          vcpu,
+          memoryMib: memory_mib,
           timeoutSeconds: timeout_seconds,
           idleTimeoutSeconds: idle_timeout_seconds,
           autoDeleteSeconds: auto_delete_seconds,
@@ -254,6 +291,9 @@ export function registerLifecycleTools(
           { ...s },
         )
       } catch (e) {
+        // A create conflict is about the source (e.g. a template to rebuild),
+        // not a sandbox's state, so the generic sandbox_info hint misleads.
+        if (e instanceof ConflictError) return toolError(e.message)
         return toolError(formatSdkError(e))
       }
     },
@@ -312,8 +352,8 @@ export function registerLifecycleTools(
       title: "Build a custom template",
       description:
         "Build a reusable template (base image) so you can launch sandboxes with a specific vCPU/memory/disk " +
-        "shape or preinstalled software. Sandbox resources are inherited from the template and cannot be set at " +
-        "sandbox_create time, so this is how you get, say, a 4 vCPU sandbox. The build runs asynchronously: this " +
+        "shape or preinstalled software. Sandboxes inherit the template's resources; build it with a range " +
+        "(vcpu_max / memory_max_mib) to let sandbox_create pick a fixed vcpu or memory_mib within it. The build runs asynchronously: this " +
         "returns immediately with status 'building' (or 'pending'). Poll sandbox_template_list (filter by name) " +
         "until the template's status is 'ready' before passing it to sandbox_create's from_template. A build " +
         "can take a few minutes.",
