@@ -32,6 +32,7 @@ export const notifySlackOfNewUser = async (
   outcome?: SignupEligibilityPresentationOutcome,
   offer?: string,
   awaitingEnterpriseSetup = false,
+  signedUpAt: Date = new Date(),
 ) => {
   try {
     const requestedOffer = normalizeRequestedOffer(offer)
@@ -86,7 +87,7 @@ export const notifySlackOfNewUser = async (
           elements: [
             {
               type: "mrkdwn",
-              text: `Signed up on ${new Date().toLocaleString()}`,
+              text: `Signed up on ${signedUpAt.toLocaleString()}`,
             },
           ],
         },
