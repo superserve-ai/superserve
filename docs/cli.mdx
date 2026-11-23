@@ -101,7 +101,7 @@ superserve sandbox create --name analysis --template py-data
 | `--start-cmd <cmd>` | Process started after the build and captured running in the snapshot. |
 | `--ready-cmd <cmd>` | Readiness probe polled after `--start-cmd` until it exits 0. |
 | `--vcpu <n>` | vCPUs. Default `1`. |
-| `--vcpu-max <n>` | Let sandboxes get more CPU under load, up to this many vCPUs. See [Live CPU resizing](/sandbox/live-cpu-resizing). |
+| `--vcpu-max <n>` | Let sandboxes get more CPU under load, up to this many vCPUs. Requires CLI 2.4.0+. See [Live CPU resizing](/sandbox/live-cpu-resizing). |
 | `--memory <size>` | Memory a sandbox boots with. Default `1G`. |
 | `--memory-max <size>` | Let sandboxes grow memory while running, up to this size. See [Live memory resizing](/sandbox/live-memory-resizing). |
 | `--memory-shrink-after <duration>` | How long memory must stay low after growing before it shrinks back, for example `10m`. 1 to 30 minutes; requires `--memory-max`. When unset, the default (about one minute) applies. See [Shrink timing](/sandbox/live-memory-resizing#shrink-timing). |
