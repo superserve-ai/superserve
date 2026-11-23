@@ -12,7 +12,13 @@ import {
 import type { Command } from "commander"
 
 import { apiRequest, isUuid } from "../api"
-import { confirm, parseDuration, parseInteger, readStdin } from "../args"
+import {
+  confirm,
+  parseDuration,
+  parseInteger,
+  parseMib,
+  readStdin,
+} from "../args"
 import { sdkOptions } from "../config"
 import { CliError, EXIT, reportBatch, usageError } from "../errors"
 import {
@@ -106,17 +112,6 @@ export async function resolveTemplateId(ref: string): Promise<string> {
 }
 
 /** `2048` / `2048M` / `2GiB` / `1.5G` → MiB. */
-function parseMib(input: string, flag: string): number {
-  const m = /^(\d+(?:\.\d+)?)\s*(m|mi|mib|mb|g|gi|gib|gb)?$/i.exec(input.trim())
-  const mib = m ? Number(m[1]) * (/^g/i.test(m[2] ?? "") ? 1024 : 1) : NaN
-  if (!Number.isInteger(mib)) {
-    throw usageError(
-      `Invalid ${flag} "${input}": use MiB (2048) or a size like 512M, 2G, 8GiB.`,
-    )
-  }
-  return mib
-}
-
 function checkRange(v: unknown, what: string, min: number, max: number) {
   if (!Number.isInteger(v) || (v as number) < min || (v as number) > max) {
     throw usageError(`${what} must be an integer between ${min} and ${max}.`)

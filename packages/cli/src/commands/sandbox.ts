@@ -20,6 +20,7 @@ import {
   parseDuration,
   parseInteger,
   parseKeyValues,
+  parseMib,
 } from "../args"
 import { connection, readCredentials, sdkOptions } from "../config"
 import { CliError, EXIT, reportBatch, usageError } from "../errors"
@@ -134,6 +135,14 @@ function secondsOrNone(
   range: { min: number; max: number },
 ): number | null {
   return input === "none" ? null : seconds(input, flag, range)
+}
+
+function memoryMib(input: string): number {
+  const mib = parseMib(input, "--memory")
+  if (mib < 256 || mib > 131_072) {
+    throw usageError("--memory must be between 256M and 128G.")
+  }
+  return mib
 }
 
 function limitQuery(limit: string | undefined): string | undefined {
@@ -305,6 +314,14 @@ export function register(program: Command): void {
     )
     .option("--snapshot <snapshot-id>", "Fork a saved snapshot instead")
     .option(
+      "--vcpu <n>",
+      "Fixed vCPUs, within the template's or snapshot's CPU range (default: the source's)",
+    )
+    .option(
+      "--memory <size>",
+      "Fixed memory in MiB or with a unit, e.g. 6G, within the template's or snapshot's memory range in 2 MiB steps (default: the source's)",
+    )
+    .option(
       "--timeout <duration>",
       "Auto-pause after this long active, e.g. 30m (max 7d)",
     )
@@ -347,14 +364,18 @@ Examples:
   superserve sandbox create --name dev -t superserve/python-3.11
   superserve sandbox create --timeout 30m --auto-delete 7d -m env=ci
   superserve sandbox create --idle-timeout 10m           # pause after 10m with no activity
+  superserve sandbox create -t my-env --vcpu 4 --memory 8G   # pick a size in the template's range
   superserve sandbox create -s OPENAI_API_KEY=openai-prod --allow-out api.openai.com --deny-out 0.0.0.0/0
-  superserve sandbox create --snapshot <snapshot-id>      # fork a snapshot`,
+  superserve sandbox create --snapshot <snapshot-id>      # fork a snapshot
+  superserve sandbox create --snapshot <snapshot-id> --vcpu 4   # fork at a different size in its range`,
     )
     .action(
       async (opts: {
         name?: string
         template?: string
         snapshot?: string
+        vcpu?: string
+        memory?: string
         timeout?: string
         idleTimeout?: string
         autoDelete?: string
@@ -389,6 +410,13 @@ Examples:
           name,
           from_template: opts.template,
           from_snapshot: opts.snapshot,
+          // The source's range and the plan limit are left to the API.
+          vcpu:
+            opts.vcpu === undefined
+              ? undefined
+              : parseInteger(opts.vcpu, "--vcpu", { min: 1, max: 32 }),
+          memory_mib:
+            opts.memory === undefined ? undefined : memoryMib(opts.memory),
           timeout_seconds:
             opts.timeout === undefined
               ? undefined

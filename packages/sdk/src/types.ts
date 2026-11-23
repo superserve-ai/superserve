@@ -92,6 +92,19 @@ export interface SandboxCreateOptions extends ConnectionOptions {
    * `fromTemplate`.
    */
   fromSnapshot?: string | { id: string }
+  /**
+   * Fixed vCPU count for this sandbox, within the template's CPU range or
+   * the range a snapshot records, both ends included. Fixed for the
+   * sandbox's life. Omit to inherit the source's CPU configuration.
+   */
+  vcpu?: number
+  /**
+   * Fixed RAM size in MiB for this sandbox, within the source's memory range
+   * in 2 MiB steps from its minimum. Needs a template built with a memory
+   * range, or a snapshot of a sandbox created with a fixed RAM size. Fixed for
+   * the sandbox's life. Omit to inherit the source's memory configuration.
+   */
+  memoryMib?: number
   timeoutSeconds?: number
   /**
    * Pause the sandbox after this many seconds with no activity (60 to

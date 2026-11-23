@@ -138,6 +138,10 @@ export interface CreateInput {
   name?: string
   fromTemplate?: string
   fromSnapshot?: string
+  /** Fixed vCPU count within the template's or snapshot's CPU range. */
+  vcpu?: number
+  /** Fixed memory within the source's memory range. */
+  memoryMib?: number
   timeoutSeconds?: number
   /** Pause the sandbox after this many seconds with no activity. */
   idleTimeoutSeconds?: number
@@ -332,6 +336,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         name: input.name ?? defaultName(),
         fromTemplate: input.fromTemplate,
         fromSnapshot: input.fromSnapshot,
+        vcpu: input.vcpu,
+        memoryMib: input.memoryMib,
         timeoutSeconds: input.timeoutSeconds,
         idleTimeoutSeconds: input.idleTimeoutSeconds,
         autoDeleteSeconds: input.autoDeleteSeconds,
