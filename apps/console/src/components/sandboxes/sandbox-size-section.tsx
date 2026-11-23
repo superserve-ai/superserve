@@ -60,37 +60,67 @@ export function sizeLine(r: Resources): string {
   return grow.length ? `${base} · can grow to ${grow.join(" · ")}` : base
 }
 
-export function templateResources(t: SizeRange): Resources {
+export interface Range {
+  min: number
+  max: number
+}
+
+/** What a sandbox gets by default from its source, and what it may choose. */
+export interface SizeSource {
+  vcpu: number
+  memoryMib: number
+  line: string
+  vcpuRange?: Range
+  memoryRange?: Range
+}
+
+export function templateSource(t: SizeRange): SizeSource {
   return {
     vcpu: t.vcpu,
     memoryMib: t.memory_mib,
-    vcpuMax: t.vcpu_max,
-    memoryMaxMib: t.memory_max_mib,
+    line: sizeLine({
+      vcpu: t.vcpu,
+      memoryMib: t.memory_mib,
+      vcpuMax: t.vcpu_max,
+      memoryMaxMib: t.memory_max_mib,
+    }),
+    vcpuRange: hasCpuRange(t) ? { min: t.vcpu, max: t.vcpu_max } : undefined,
+    memoryRange: hasMemoryRange(t)
+      ? { min: t.memory_mib, max: t.memory_max_mib }
+      : undefined,
   }
 }
 
-export function snapshotResources(r: {
+export function snapshotSource(r: {
   vcpu_count: number
   memory_mib: number
   vcpu_max?: number
   memory_max_mib?: number
-}): Resources {
+  vcpu_range?: Range
+  memory_range_mib?: Range
+}): SizeSource {
   return {
     vcpu: r.vcpu_count,
     memoryMib: r.memory_mib,
-    vcpuMax: r.vcpu_max,
-    memoryMaxMib: r.memory_max_mib,
+    line: `${sizeLine({
+      vcpu: r.vcpu_count,
+      memoryMib: r.memory_mib,
+      vcpuMax: r.vcpu_max,
+      memoryMaxMib: r.memory_max_mib,
+    })} · from snapshot`,
+    vcpuRange: r.vcpu_range,
+    memoryRange: r.memory_range_mib,
   }
 }
 
-/** The size a sandbox gets: the chosen values, else the template's default line. */
+/** The size a sandbox gets: the chosen values, else the source's default line. */
 export function chosenSizeLine(
-  t: SizeRange,
+  src: SizeSource,
   vcpu: number | null,
   memoryMib: number | null,
 ): string {
-  if (vcpu === null && memoryMib === null) return sizeLine(templateResources(t))
-  return `${formatVcpu(vcpu ?? t.vcpu)} · ${formatMib(memoryMib ?? t.memory_mib)}`
+  if (vcpu === null && memoryMib === null) return src.line
+  return `${formatVcpu(vcpu ?? src.vcpu)} · ${formatMib(memoryMib ?? src.memoryMib)}`
 }
 
 export function SizeLine({ text }: { text: string }) {
@@ -127,29 +157,28 @@ const linkButton =
   "cursor-pointer font-mono text-xs text-foreground uppercase underline decoration-dashed underline-offset-2 focus-visible:ring-2 focus-visible:ring-border-focus focus-visible:outline-none"
 
 /**
- * The template's default size, and for a template with a range a "Choose
- * size" control: steppers within the range for each resource that has one.
- * Choosing is open while either value is set.
+ * The source's default size, and when it has a range a "Choose size" control:
+ * steppers within the range for each resource that has one. Choosing is open
+ * while either value is set.
  */
-export function TemplateSizeSection({
-  template,
+export function SizeSection({
+  source,
   vcpu,
   memoryMib,
   onChange,
 }: {
-  template: SizeRange
+  source: SizeSource
   vcpu: number | null
   memoryMib: number | null
   onChange: (vcpu: number | null, memoryMib: number | null) => void
 }) {
-  const cpuRange = hasCpuRange(template) ? template : undefined
-  const memoryRange = hasMemoryRange(template) ? template : undefined
+  const { vcpuRange, memoryRange } = source
   const choosing = vcpu !== null || memoryMib !== null
   return (
     <div className="space-y-2">
       <div className="flex flex-wrap items-baseline justify-between gap-2">
-        <SizeLine text={sizeLine(templateResources(template))} />
-        {(cpuRange || memoryRange) && (
+        <SizeLine text={source.line} />
+        {(vcpuRange || memoryRange) && (
           <button
             type="button"
             aria-expanded={choosing}
@@ -158,8 +187,8 @@ export function TemplateSizeSection({
               choosing
                 ? onChange(null, null)
                 : onChange(
-                    cpuRange ? cpuRange.vcpu : null,
-                    memoryRange ? memoryRange.memory_mib : null,
+                    vcpuRange ? clamp(source.vcpu, vcpuRange) : null,
+                    memoryRange ? memoryRange.min : null,
                   )
             }
           >
@@ -169,46 +198,41 @@ export function TemplateSizeSection({
       </div>
       {choosing && (
         <div className="space-y-1">
-          {cpuRange && vcpu !== null ? (
-            <ChoiceRow
-              label="vCPU"
-              range={`${cpuRange.vcpu}–${cpuRange.vcpu_max}`}
-            >
+          {vcpuRange && vcpu !== null ? (
+            <ChoiceRow label="vCPU" range={`${vcpuRange.min}–${vcpuRange.max}`}>
               <Stepper
                 label="vCPU"
-                steps={vcpuSteps(cpuRange.vcpu, cpuRange.vcpu_max)}
+                steps={vcpuSteps(vcpuRange.min, vcpuRange.max)}
                 value={vcpu}
                 onChange={(v) => onChange(v, memoryMib)}
                 format={formatVcpu}
               />
             </ChoiceRow>
           ) : (
-            <ChoiceRow label="vCPU" range={formatVcpu(template.vcpu)} />
+            <ChoiceRow label="vCPU" range={formatVcpu(source.vcpu)} />
           )}
           {memoryRange && memoryMib !== null ? (
             <ChoiceRow
               label="Memory"
-              range={formatMibRange(
-                memoryRange.memory_mib,
-                memoryRange.memory_max_mib,
-              )}
+              range={formatMibRange(memoryRange.min, memoryRange.max)}
             >
               <Stepper
                 label="Memory"
-                steps={memorySteps(
-                  memoryRange.memory_mib,
-                  memoryRange.memory_max_mib,
-                )}
+                steps={memorySteps(memoryRange.min, memoryRange.max)}
                 value={memoryMib}
                 onChange={(m) => onChange(vcpu, m)}
                 format={formatMib}
               />
             </ChoiceRow>
           ) : (
-            <ChoiceRow label="Memory" range={formatMib(template.memory_mib)} />
+            <ChoiceRow label="Memory" range={formatMib(source.memoryMib)} />
           )}
         </div>
       )}
     </div>
   )
+}
+
+function clamp(n: number, r: Range): number {
+  return Math.min(r.max, Math.max(r.min, n))
 }

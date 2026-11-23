@@ -582,6 +582,14 @@ describe("size range", () => {
     expect(await submit()).toMatchObject({ vcpu_max: 3, memory_max_mib: 4096 })
   })
 
+  it("opens at the widest range when resizing is on but fixed", async () => {
+    render(<CreateTemplateDialog open hideTrigger />)
+    resize()
+    sizeRange()
+    expect(spin("vCPU up to")).toHaveAttribute("aria-valuenow", "4")
+    expect(await submit()).toMatchObject({ vcpu_max: 4, memory_max_mib: 4096 })
+  })
+
   it("clears the limits when the last section turns off", async () => {
     render(<CreateTemplateDialog open hideTrigger />)
     sizeRange()

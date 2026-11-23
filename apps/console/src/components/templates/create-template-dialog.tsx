@@ -613,7 +613,8 @@ export function CreateTemplateDialog({
     preset: boolean,
   ) => {
     setOn(on)
-    if (on && preset && !otherOn) {
+    // Start at the widest range unless a limit is already set, e.g. by resizing.
+    if (on && preset && !anyLimit) {
       setCpuGrowth(canGrowCpu)
       setVcpuMax(cpuCeiling)
       setGrowth(canGrow)

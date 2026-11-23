@@ -10,7 +10,7 @@ Sandboxes that don't choose a size start at the template's size and grow with lo
 
 ## Build a template with a range
 
-The template sets the range. Set `vcpuMax` above `vcpu` for a CPU range, and `memoryMaxMib` above `memoryMib` for a memory range. In the console, turn on **Size range** when you create the template. See [Growing CPU](/templates/build-spec#growing-cpu) and [Growing memory](/templates/build-spec#growing-memory) for the rules.
+The template sets the range. Set `vcpuMax` above `vcpu` for a CPU range, and `memoryMaxMib` above `memoryMib` for a memory range. See [Growing CPU](/templates/build-spec#growing-cpu) and [Growing memory](/templates/build-spec#growing-memory) for the rules.
 
 <CodeGroup>
 
@@ -51,7 +51,7 @@ superserve template create my-env --from python:3.11 \
 
 ## Choose a size
 
-Pass `vcpu`, `memoryMib` / `memory_mib`, or both. In the console, click **Choose size** in **Create Sandbox**.
+Pass `vcpu`, `memoryMib` / `memory_mib`, or both.
 
 <CodeGroup>
 

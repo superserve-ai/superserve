@@ -130,30 +130,93 @@ describe("Create Sandbox size", () => {
     ).toBeInTheDocument()
     expect(screen.queryByRole("spinbutton", { name: "vCPU" })).toBeNull()
   })
+})
 
-  it("shows a snapshot's size read-only", () => {
-    snapshots.data = [
-      {
-        id: "0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
-        sandbox_id: "1b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
-        kind: "mem+fs",
-        status: "ready",
-        name: "warm",
-        size_bytes: 1,
-        resources: { vcpu_count: 2, memory_mib: 2048, disk_mib: 4096 },
-        created_at: "2026-01-01T00:00:00Z",
-      },
-    ]
-    render(
-      <ToastProvider>
-        <CreateSandboxDialog
-          open
-          hideTrigger
-          initialSnapshotId="0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b"
-        />
-      </ToastProvider>,
-    )
+const SNAP_A = "0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b"
+const SNAP_B = "2b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b"
+const snapshot = (
+  id: string,
+  name: string,
+  extra: Record<string, unknown>,
+) => ({
+  id,
+  sandbox_id: "1b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
+  kind: "mem+fs",
+  status: "ready",
+  name,
+  size_bytes: 1,
+  resources: { vcpu_count: 2, memory_mib: 2048, disk_mib: 4096, ...extra },
+  created_at: "2026-01-01T00:00:00Z",
+})
+
+function openSnapshot(id: string) {
+  render(
+    <ToastProvider>
+      <CreateSandboxDialog open hideTrigger initialSnapshotId={id} />
+    </ToastProvider>,
+  )
+}
+
+describe("Create Sandbox size from a snapshot", () => {
+  it("shows the snapshot's size with no Choose size when it has no range", () => {
+    snapshots.data = [snapshot(SNAP_A, "warm", {})]
+    openSnapshot(SNAP_A)
     expect(screen.queryByRole("button", { name: "Choose size" })).toBeNull()
-    expect(summary()).toBe("2 vCPU · 2 GB")
+    expect(summary()).toBe("2 vCPU · 2 GB · from snapshot")
+    expect(create()).not.toHaveProperty("vcpu")
+  })
+
+  it("sends a size chosen within both ranges with from_snapshot", () => {
+    snapshots.data = [
+      snapshot(SNAP_A, "warm", {
+        vcpu_range: { min: 1, max: 4 },
+        memory_range_mib: { min: 1024, max: 4096 },
+      }),
+    ]
+    openSnapshot(SNAP_A)
+    choose()
+    const cpu = screen.getByRole("spinbutton", { name: "vCPU" })
+    // Opens at the snapshot's own count, bounded to its range.
+    expect(cpu).toHaveAttribute("aria-valuenow", "2")
+    expect(cpu).toHaveAttribute("aria-valuemax", "4")
+    fireEvent.click(screen.getByRole("button", { name: "Increase vCPU" }))
+    fireEvent.keyDown(screen.getByRole("spinbutton", { name: "Memory" }), {
+      key: "End",
+    })
+    expect(summary()).toBe("3 vCPU · 4 GB")
+    expect(create()).toMatchObject({
+      from_snapshot: SNAP_A,
+      vcpu: 3,
+      memory_mib: 4096,
+    })
+  })
+
+  it("offers only the vCPU stepper for a CPU-only range, and Use default sends nothing", () => {
+    snapshots.data = [
+      snapshot(SNAP_A, "warm", { vcpu_range: { min: 1, max: 4 } }),
+    ]
+    openSnapshot(SNAP_A)
+    choose()
+    expect(screen.queryByRole("spinbutton", { name: "Memory" })).toBeNull()
+    fireEvent.click(screen.getByRole("button", { name: "Use default" }))
+    const req = create()
+    expect(req).toMatchObject({ from_snapshot: SNAP_A })
+    expect(req).not.toHaveProperty("vcpu")
+    expect(req).not.toHaveProperty("memory_mib")
+  })
+
+  it("goes back to the default when the snapshot changes", () => {
+    snapshots.data = [
+      snapshot(SNAP_A, "warm", { vcpu_range: { min: 1, max: 4 } }),
+      snapshot(SNAP_B, "cold", { vcpu_range: { min: 1, max: 4 } }),
+    ]
+    openSnapshot(SNAP_A)
+    choose()
+    fireEvent.click(screen.getByRole("button", { name: /warm/ }))
+    fireEvent.click(screen.getAllByRole("button", { name: /cold/ }).at(-1)!)
+    expect(
+      screen.getByRole("button", { name: "Choose size" }),
+    ).toBeInTheDocument()
+    expect(create()).not.toHaveProperty("vcpu")
   })
 })
