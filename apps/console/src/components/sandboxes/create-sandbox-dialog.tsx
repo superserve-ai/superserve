@@ -34,7 +34,11 @@ import { snapshotLabel } from "@/components/snapshots/snapshot-status-badge"
 import { useCreateSandbox } from "@/hooks/use-sandboxes"
 import { useSnapshots } from "@/hooks/use-snapshots"
 import { useTemplates } from "@/hooks/use-templates"
-import type { CreateSandboxRequest, PreviewAccessPolicy } from "@/lib/api/types"
+import type {
+  CreateSandboxRequest,
+  PreviewAccessPolicy,
+  TemplateResponse,
+} from "@/lib/api/types"
 import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
@@ -285,6 +289,27 @@ interface FormState {
   templateRef?: string
   /** Saved snapshot to continue from; takes the place of `templateRef`. */
   snapshotId?: string
+  /** Fixed size picks; only sent within the selected template's range. */
+  vcpu?: string
+  memoryMib?: string
+  template?: SizeRange
+}
+
+type SizeRange = Pick<
+  TemplateResponse,
+  "vcpu" | "vcpu_max" | "memory_mib" | "memory_max_mib"
+>
+
+export function hasCpuRange(t: SizeRange | undefined): t is SizeRange & {
+  vcpu_max: number
+} {
+  return t?.vcpu_max != null && t.vcpu_max > t.vcpu
+}
+
+export function hasMemoryRange(t: SizeRange | undefined): t is SizeRange & {
+  memory_max_mib: number
+} {
+  return t?.memory_max_mib != null && t.memory_max_mib > t.memory_mib
 }
 
 /** Max auto-pause timeout (7 days) and auto-delete window (30 days), matching
@@ -341,6 +366,9 @@ export function parseWindowSeconds(
  *  - `from_snapshot` is included when `snapshotId` is set, and then
  *    `from_template` never is; otherwise `from_template` is included when
  *    `templateRef` is non-empty.
+ *  - `vcpu` / `memory_mib` are only included for a template source whose
+ *    range covers that dimension, validated to the range (memory in 2 MiB
+ *    steps from the minimum). Blank keeps the template's own configuration.
  *  - `preview_access` is always explicit so new console sandboxes use the
  *    published-port model instead of the compatibility-only legacy mode.
  */
@@ -388,6 +416,33 @@ export function buildCreateSandboxRequest(
     MAX_AUTO_DELETE_SECONDS,
   )
 
+  const template = state.snapshotId ? undefined : state.template
+  const vcpu = hasCpuRange(template)
+    ? parseWindowSeconds(
+        state.vcpu ?? "",
+        "vCPU",
+        template.vcpu,
+        template.vcpu_max,
+      )
+    : undefined
+  const memoryMib = hasMemoryRange(template)
+    ? parseWindowSeconds(
+        state.memoryMib ?? "",
+        "Memory",
+        template.memory_mib,
+        template.memory_max_mib,
+      )
+    : undefined
+  if (
+    memoryMib !== undefined &&
+    template &&
+    (memoryMib - template.memory_mib) % 2 !== 0
+  ) {
+    throw new Error(
+      `Memory must be ${template.memory_mib} MiB plus a multiple of 2 MiB.`,
+    )
+  }
+
   return {
     name: state.name.trim(),
     preview_access: state.previewAccess,
@@ -396,6 +451,8 @@ export function buildCreateSandboxRequest(
       : state.templateRef
         ? { from_template: state.templateRef }
         : {}),
+    ...(vcpu !== undefined ? { vcpu } : {}),
+    ...(memoryMib !== undefined ? { memory_mib: memoryMib } : {}),
     ...(timeoutSeconds !== undefined
       ? { timeout_seconds: timeoutSeconds }
       : {}),
@@ -476,6 +533,8 @@ export function CreateSandboxDialog({
     initialSnapshotId ? "snapshot" : "template",
   )
   const [snapshotId, setSnapshotId] = useState(initialSnapshotId ?? "")
+  const [vcpu, setVcpu] = useState("")
+  const [memoryMib, setMemoryMib] = useState("")
 
   useLayoutEffect(() => {
     if (open) {
@@ -550,6 +609,13 @@ export function CreateSandboxDialog({
   )
   const selectedSnapshot = readySnapshots.find((s) => s.id === snapshotId)
   const fromSnapshot = source === "snapshot"
+  const selectedTemplate = templateOptions.find(
+    (t) => t.name === templateRef || t.id === templateRef,
+  )
+  const cpuRange = hasCpuRange(selectedTemplate) ? selectedTemplate : undefined
+  const memoryRange = hasMemoryRange(selectedTemplate)
+    ? selectedTemplate
+    : undefined
 
   const createMutation = useCreateSandbox()
   const { addToast } = useToast()
@@ -571,6 +637,8 @@ export function CreateSandboxDialog({
     setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
     setSnapshotId(initialSnapshotId ?? "")
     setSource(initialSnapshotId ? "snapshot" : "template")
+    setVcpu("")
+    setMemoryMib("")
   }
 
   const handleCreate = () => {
@@ -597,6 +665,9 @@ export function CreateSandboxDialog({
         previewAccess,
         templateRef: fromSnapshot ? undefined : templateRef || undefined,
         snapshotId: fromSnapshot ? snapshotId : undefined,
+        vcpu,
+        memoryMib,
+        template: selectedTemplate,
       })
     } catch (e) {
       addToast(e instanceof Error ? e.message : "Invalid input", "error")
@@ -620,6 +691,8 @@ export function CreateSandboxDialog({
       advanced_expanded: showAdvanced,
       from_template: !!payload.from_template,
       from_snapshot: !!payload.from_snapshot,
+      has_vcpu: payload.vcpu !== undefined,
+      has_memory_mib: payload.memory_mib !== undefined,
       preview_access: payload.preview_access,
     })
 
@@ -769,8 +842,47 @@ export function CreateSandboxDialog({
                   <SourcePicker
                     value={templateRef}
                     items={selectItems}
-                    onChange={setTemplateRef}
+                    onChange={(ref) => {
+                      setTemplateRef(ref)
+                      setVcpu("")
+                      setMemoryMib("")
+                    }}
                     emptyText="No ready templates available"
+                  />
+                </Field>
+              )}
+
+              {!fromSnapshot && cpuRange && (
+                <Field
+                  label="vCPU"
+                  description={`Fixed vCPU count, ${cpuRange.vcpu} to ${cpuRange.vcpu_max}. Leave blank to keep the template's ${cpuRange.vcpu}–${cpuRange.vcpu_max} vCPU range, which grows under load.`}
+                >
+                  <Input
+                    type="number"
+                    placeholder={`${cpuRange.vcpu}–${cpuRange.vcpu_max}`}
+                    suffix="vCPU"
+                    min={cpuRange.vcpu}
+                    max={cpuRange.vcpu_max}
+                    value={vcpu}
+                    onChange={(e) => setVcpu(e.target.value)}
+                  />
+                </Field>
+              )}
+
+              {!fromSnapshot && memoryRange && (
+                <Field
+                  label="Memory"
+                  description={`Fixed memory, ${memoryRange.memory_mib} to ${memoryRange.memory_max_mib} MiB in 2 MiB steps. Leave blank to keep the template's range, which grows under load.`}
+                >
+                  <Input
+                    type="number"
+                    placeholder={`${memoryRange.memory_mib}–${memoryRange.memory_max_mib}`}
+                    suffix="MiB"
+                    min={memoryRange.memory_mib}
+                    max={memoryRange.memory_max_mib}
+                    step={2}
+                    value={memoryMib}
+                    onChange={(e) => setMemoryMib(e.target.value)}
                   />
                 </Field>
               )}

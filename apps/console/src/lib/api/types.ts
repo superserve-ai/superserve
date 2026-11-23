@@ -64,6 +64,10 @@ export interface CreateSandboxRequest {
   from_template?: string
   /** Saved snapshot ID to continue from; excludes from_template. */
   from_snapshot?: string
+  /** Fixed vCPU count within the template's CPU range. */
+  vcpu?: number
+  /** Fixed memory within the template's memory range, in 2 MiB steps. */
+  memory_mib?: number
   timeout_seconds?: number
   /** Pause after this many seconds with no activity. */
   idle_timeout_seconds?: number
