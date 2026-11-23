@@ -30,11 +30,19 @@ const MEMORY_STEP_MIB = 256
 
 // 256 MiB steps from the minimum plus the maximum itself; every value stays a
 // whole number of 2 MiB steps from the minimum, as the API requires.
-export function memorySteps(min: number, max: number): number[] {
+export function memorySteps(min: number, max: number, keep?: number): number[] {
   const steps: number[] = []
   for (let v = min; v < max; v += MEMORY_STEP_MIB) steps.push(v)
   steps.push(max)
-  return steps
+  // The source's own size stays selectable, so opening doesn't change it.
+  if (keep !== undefined && !steps.includes(keep)) steps.push(keep)
+  return steps.toSorted((a, b) => a - b)
+}
+
+// The source's size within the range, on the API's 2 MiB grid from the minimum.
+export function startMemory(memoryMib: number, r: Range): number {
+  const v = Math.min(r.max, Math.max(r.min, memoryMib))
+  return Math.min(r.max, r.min + Math.ceil((v - r.min) / 2) * 2)
 }
 
 export function vcpuSteps(min: number, max: number): number[] {
@@ -188,7 +196,9 @@ export function SizeSection({
                 ? onChange(null, null)
                 : onChange(
                     vcpuRange ? clamp(source.vcpu, vcpuRange) : null,
-                    memoryRange ? memoryRange.min : null,
+                    memoryRange
+                      ? startMemory(source.memoryMib, memoryRange)
+                      : null,
                   )
             }
           >
@@ -218,7 +228,11 @@ export function SizeSection({
             >
               <Stepper
                 label="Memory"
-                steps={memorySteps(memoryRange.min, memoryRange.max)}
+                steps={memorySteps(
+                  memoryRange.min,
+                  memoryRange.max,
+                  startMemory(source.memoryMib, memoryRange),
+                )}
                 value={memoryMib}
                 onChange={(m) => onChange(vcpu, m)}
                 format={formatMib}

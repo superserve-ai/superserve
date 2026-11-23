@@ -191,6 +191,40 @@ describe("Create Sandbox size from a snapshot", () => {
     })
   })
 
+  it("opens at the snapshot's own size, so creating unchanged keeps it", () => {
+    snapshots.data = [
+      snapshot(SNAP_A, "warm", {
+        memory_mib: 3072,
+        vcpu_range: { min: 1, max: 4 },
+        memory_range_mib: { min: 1024, max: 4096 },
+      }),
+    ]
+    openSnapshot(SNAP_A)
+    choose()
+    expect(screen.getByRole("spinbutton", { name: "Memory" })).toHaveAttribute(
+      "aria-valuenow",
+      "3072",
+    )
+    expect(create()).toMatchObject({ vcpu: 2, memory_mib: 3072 })
+  })
+
+  it("keeps an off-grid snapshot size selectable", () => {
+    snapshots.data = [
+      snapshot(SNAP_A, "warm", {
+        memory_mib: 2050,
+        memory_range_mib: { min: 1024, max: 4096 },
+      }),
+    ]
+    openSnapshot(SNAP_A)
+    choose()
+    const mem = screen.getByRole("spinbutton", { name: "Memory" })
+    expect(mem).toHaveAttribute("aria-valuenow", "2050")
+    fireEvent.click(screen.getByRole("button", { name: "Increase Memory" }))
+    expect(mem).toHaveAttribute("aria-valuenow", "2304")
+    fireEvent.click(screen.getByRole("button", { name: "Decrease Memory" }))
+    expect(create()).toMatchObject({ memory_mib: 2050 })
+  })
+
   it("offers only the vCPU stepper for a CPU-only range, and Use default sends nothing", () => {
     snapshots.data = [
       snapshot(SNAP_A, "warm", { vcpu_range: { min: 1, max: 4 } }),
