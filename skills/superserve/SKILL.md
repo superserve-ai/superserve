@@ -205,7 +205,9 @@ to rediscover boxes you created earlier.
 A sandbox **inherits its VM shape from its template**. If the template has a CPU range
 (`vcpu`..`vcpuMax`) or memory range (`memoryMib`..`memoryMaxMib`), `create()` can pick a
 fixed `vcpu` / `memoryMib` (`memory_mib`) within it (memory in 2 MiB steps from the minimum);
-otherwise boot from (or build) a different template. There is no `disk` argument. The default template `superserve/base` (`ubuntu:24.04`) is **2 vCPU · 4096 MiB
+otherwise boot from (or build) a different template. With `fromSnapshot`, `vcpu` works within
+the CPU range the snapshot recorded from its template, and `memoryMib` for snapshots of
+sandboxes created with a chosen memory size. There is no `disk` argument. The default template `superserve/base` (`ubuntu:24.04`) is **2 vCPU · 4096 MiB
 memory · 8192 MiB disk**.
 
 | Limit         | `vcpu` (vCPUs) | `memoryMib` (MiB)  |

@@ -315,7 +315,7 @@ export function register(program: Command): void {
     .option("--snapshot <snapshot-id>", "Fork a saved snapshot instead")
     .option(
       "--vcpu <n>",
-      "Fixed vCPUs, within the template's CPU range (default: the template's)",
+      "Fixed vCPUs, within the template's or snapshot's CPU range (default: the source's)",
     )
     .option(
       "--memory <size>",
@@ -366,7 +366,8 @@ Examples:
   superserve sandbox create --idle-timeout 10m           # pause after 10m with no activity
   superserve sandbox create -t my-env --vcpu 4 --memory 8G   # pick a size in the template's range
   superserve sandbox create -s OPENAI_API_KEY=openai-prod --allow-out api.openai.com --deny-out 0.0.0.0/0
-  superserve sandbox create --snapshot <snapshot-id>      # fork a snapshot`,
+  superserve sandbox create --snapshot <snapshot-id>      # fork a snapshot
+  superserve sandbox create --snapshot <snapshot-id> --vcpu 4   # fork at a different size in its range`,
     )
     .action(
       async (opts: {

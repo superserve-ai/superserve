@@ -84,6 +84,29 @@ describe("sandbox", () => {
     expect(human.stdout + human.stderr).not.toContain("tok-secret")
   })
 
+  test("create passes a size through with --snapshot", async () => {
+    const r = await runCli(
+      [
+        "sandbox",
+        "create",
+        "--json",
+        "--snapshot",
+        SANDBOX_ID,
+        "--vcpu",
+        "4",
+        "--memory",
+        "4G",
+      ],
+      { fetch: () => json(sandbox(), 201) },
+    )
+    expect(r.exitCode).toBe(0)
+    expect(r.requests[0].json()).toMatchObject({
+      from_snapshot: SANDBOX_ID,
+      vcpu: 4,
+      memory_mib: 4096,
+    })
+  })
+
   test("create rejects bad input before sending", async () => {
     for (const args of [
       ["--template", "t", "--snapshot", SANDBOX_ID],

@@ -253,7 +253,7 @@ When it's done, the agent can `sandbox_pause` (state preserved, cheaper to keep 
 
 The sandbox sees a proxy token; the platform swaps in the real credential only for outbound requests to the secret's allowed hosts.
 
-**Templates.** A sandbox inherits its vCPU/memory/disk from its template. If the template has a CPU or memory range, `sandbox_create` can pick a fixed `vcpu` or `memory_mib` within it; see [Choose CPU and memory](/sandbox/size). To get a specific shape (say, a 4 vCPU sandbox) or preinstalled software, build a template with `sandbox_template_create`, then poll `sandbox_template_list` until its `status` is `ready` before passing it as `from_template`.
+**Templates.** A sandbox inherits its vCPU/memory/disk from its template. If the template has a CPU or memory range, `sandbox_create` can pick a fixed `vcpu` or `memory_mib` within it, with `from_template` or with `from_snapshot` for a snapshot that records the range; see [Choose CPU and memory](/sandbox/size). To get a specific shape (say, a 4 vCPU sandbox) or preinstalled software, build a template with `sandbox_template_create`, then poll `sandbox_template_list` until its `status` is `ready` before passing it as `from_template`.
 
 `sandbox_template_create` takes:
 

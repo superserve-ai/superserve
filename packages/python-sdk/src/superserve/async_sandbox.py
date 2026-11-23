@@ -262,10 +262,10 @@ class AsyncSandbox:
         activity. Off when omitted.
 
         ``vcpu`` and ``memory_mib`` choose a fixed size for this sandbox within
-        the source's range: ``vcpu`` within the template's CPU range (both ends
-        included), ``memory_mib`` within its memory range in 2 MiB steps from
-        the minimum. The template must be built with that range; ``memory_mib``
-        also works with a snapshot of a sandbox created with a fixed RAM size.
+        the source's range: ``vcpu`` within the CPU range of the template or the
+        snapshot's recorded range (both ends included), ``memory_mib`` within
+        the memory range in 2 MiB steps from the minimum. With a snapshot,
+        ``memory_mib`` needs one of a sandbox created with a chosen memory size.
         The chosen size is fixed for the sandbox's life. Omit to inherit the
         source's configuration.
         """

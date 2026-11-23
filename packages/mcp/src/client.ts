@@ -138,7 +138,7 @@ export interface CreateInput {
   name?: string
   fromTemplate?: string
   fromSnapshot?: string
-  /** Fixed vCPU count within the template's CPU range. */
+  /** Fixed vCPU count within the template's or snapshot's CPU range. */
   vcpu?: number
   /** Fixed memory within the source's memory range. */
   memoryMib?: number

@@ -45,7 +45,8 @@ const sandbox = await Sandbox.create({
 })
 ```
 
-Omit either to inherit the template's configuration. See
+Omit either to inherit the source's configuration. Sandboxes created from a
+snapshot can pick a size within the range the snapshot records. See
 [Choose CPU and memory](https://docs.superserve.ai/sandbox/size).
 
 ## Preview URLs

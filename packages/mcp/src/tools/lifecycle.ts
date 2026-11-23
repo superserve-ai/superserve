@@ -155,10 +155,11 @@ export function registerLifecycleTools(
           .max(32)
           .optional()
           .describe(
-            "Fixed vCPU count for this sandbox, within the template's CPU range (vcpu to vcpu_max in " +
-              "sandbox_template_list), both ends included, and within the plan's limits. The count stays fixed " +
-              "for the sandbox's life. Omit to inherit the template's CPU configuration. If a template was built " +
-              "before size selection was available, rebuild it (or omit vcpu and memory_mib).",
+            "Fixed vCPU count for this sandbox, both ends of the range included and within the plan's limits. " +
+              "With from_template: within the template's CPU range (vcpu to vcpu_max in sandbox_template_list). " +
+              "With from_snapshot: within the CPU range the snapshot recorded from its template. The count stays " +
+              "fixed for the sandbox's life. Omit to inherit the source's CPU configuration. If a template was " +
+              "built before size selection was available, rebuild it (or omit vcpu and memory_mib).",
           ),
         memory_mib: z
           .number()
@@ -167,8 +168,8 @@ export function registerLifecycleTools(
           .max(131072)
           .optional()
           .describe(
-            "Fixed memory in MiB for this sandbox. Only for a from_template template built with a memory range " +
-              "(memory_mib below memory_max_mib), or a from_snapshot snapshot of a sandbox created with a fixed " +
+            "Fixed memory in MiB for this sandbox. With from_template: a template built with a memory range " +
+              "(memory_mib below memory_max_mib). With from_snapshot: a snapshot of a sandbox created with a fixed " +
               "memory_mib. Must be within that range in 2 MiB steps from its minimum, and within the plan's " +
               "limits. Stays fixed for the " +
               "sandbox's life. Omit to inherit the source's memory configuration. If a template was built before " +

@@ -93,10 +93,9 @@ export interface SandboxCreateOptions extends ConnectionOptions {
    */
   fromSnapshot?: string | { id: string }
   /**
-   * Fixed vCPU count for this sandbox, within the template's CPU range
-   * (`vcpu` to `vcpuMax`, both included). The template must be built with a
-   * CPU range. Fixed for the sandbox's life. Omit to inherit the source's
-   * CPU configuration.
+   * Fixed vCPU count for this sandbox, within the template's CPU range or
+   * the range a snapshot records, both ends included. Fixed for the
+   * sandbox's life. Omit to inherit the source's CPU configuration.
    */
   vcpu?: number
   /**
