@@ -4,16 +4,13 @@ sidebarTitle: Custom size
 description: "Fix a sandbox's vCPU and memory at create, within its template's range."
 ---
 
-A sandbox gets its size in one of two ways:
+By default, a sandbox gets its template's size. If the template has a range, you can instead choose `vcpu` and/or `memoryMib` within it when you create the sandbox, and the sandbox stays at that size. One template can then serve a small sandbox for a quick script and a large one for a build.
 
-- **Auto** (the default): the sandbox uses its template's size. If the template has a range, the sandbox starts at the minimum and grows with load, up to the maximum. See [Memory resizing](/sandbox/live-memory-resizing) and [CPU resizing](/sandbox/live-cpu-resizing).
-- **Fixed**: you choose `vcpu` and/or `memoryMib` within the template's range when you create the sandbox. It stays at that size.
-
-One template with a range can serve a small sandbox for a quick script and a large one for a build.
+Sandboxes that don't choose a size start at the template's size and grow with load up to its range; see [Memory resizing](/sandbox/live-memory-resizing) and [CPU resizing](/sandbox/live-cpu-resizing).
 
 ## Build a template with a range
 
-The template sets the range. Set `vcpuMax` above `vcpu` for a CPU range, and `memoryMaxMib` above `memoryMib` for a memory range. In the console, pick **Range** for vCPU or Memory. See [Growing CPU](/templates/build-spec#growing-cpu) and [Growing memory](/templates/build-spec#growing-memory) for the rules.
+The template sets the range. Set `vcpuMax` above `vcpu` for a CPU range, and `memoryMaxMib` above `memoryMib` for a memory range. In the console, turn on **Size range** when you create the template. See [Growing CPU](/templates/build-spec#growing-cpu) and [Growing memory](/templates/build-spec#growing-memory) for the rules.
 
 <CodeGroup>
 
@@ -54,7 +51,7 @@ superserve template create my-env --from python:3.11 \
 
 ## Choose a size
 
-Pass `vcpu`, `memoryMib` / `memory_mib`, or both. In the console, set vCPU or Memory to **Fixed** under **Size**.
+Pass `vcpu`, `memoryMib` / `memory_mib`, or both. In the console, click **Choose size** in **Create Sandbox**.
 
 <CodeGroup>
 
@@ -92,7 +89,7 @@ With the [MCP server](/integrations/mcp), pass `vcpu` and `memory_mib` to `sandb
 - **`memoryMib`**: MiB from the template's `memoryMib` to its `memoryMaxMib`, in 2 MiB steps from the minimum. For a 2048–8192 MiB template, 6144 works and 6145 doesn't.
 - Both ends of the range are included. Values must also be within your plan's limits. See [Resource limits](/templates/build-spec#resource-limits).
 
-A fixed size holds through pause and resume. A dimension you leave out stays Auto. In the example above, passing only `vcpu: 3` would give a fixed 3 vCPU with memory still growing from 2048 to 8192 MiB.
+A fixed size holds through pause and resume. A resource you leave out keeps the template's default. In the example above, passing only `vcpu: 3` would give a fixed 3 vCPU with memory still growing from 2048 to 8192 MiB.
 
 The sandbox's info shows no maximum for a fixed dimension:
 
@@ -114,7 +111,7 @@ print(info.memory_mib, info.memory_max_mib)  # 6144 None
 
 ## Snapshot copies
 
-A sandbox created from a [snapshot](/sandbox/snapshots) keeps the original sandbox's size, Auto or Fixed. You can also choose a size with `fromSnapshot` / `from_snapshot`:
+A sandbox created from a [snapshot](/sandbox/snapshots) keeps the original sandbox's size, including any range it grows in. You can also choose a size with `fromSnapshot` / `from_snapshot`:
 
 - **`vcpu`** works when the original sandbox came from a template with a CPU range. The snapshot records that range, and the copy can take any count in it. For a snapshot of a 2 vCPU sandbox from a 1–4 vCPU template, 1, 3 and 4 all work.
 - **`memoryMib`** works when the original sandbox had a fixed memory size. The copy can take any size in the snapshot's memory range, in 2 MiB steps from the minimum.
@@ -160,4 +157,4 @@ Custom sizes apply to sandboxes placed on GCP. For an AWS placement (`placement.
 
 ## Billing
 
-A fixed size is billed at that size while the sandbox is active. An Auto dimension is billed as described in [CPU resizing](/sandbox/live-cpu-resizing#billing) and [Memory resizing](/sandbox/live-memory-resizing#billing).
+A fixed size is billed at that size while the sandbox is active. A resource that grows with load is billed as described in [CPU resizing](/sandbox/live-cpu-resizing#billing) and [Memory resizing](/sandbox/live-memory-resizing#billing).

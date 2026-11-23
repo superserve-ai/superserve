@@ -202,7 +202,7 @@ to rediscover boxes you created earlier.
 
 ## System specs & defaults
 
-A sandbox **inherits its VM shape from its template** (Auto: with a CPU range
+A sandbox **inherits its VM shape from its template** (with a CPU range
 `vcpu`..`vcpuMax` or memory range `memoryMib`..`memoryMaxMib`, it starts at the minimum and
 grows with load). For a custom size, `create()` can pick a fixed `vcpu` / `memoryMib`
 (`memory_mib`) within the range (memory in 2 MiB steps from the minimum);

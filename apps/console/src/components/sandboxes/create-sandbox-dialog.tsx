@@ -32,10 +32,10 @@ import {
   hasCpuRange,
   hasMemoryRange,
   type SizeRange,
-  sizeSummary,
-  SnapshotSize,
-  snapshotSize,
-  templateSize,
+  chosenSizeLine,
+  SizeLine,
+  sizeLine,
+  snapshotResources,
   TemplateSizeSection,
 } from "@/components/sandboxes/sandbox-size-section"
 import type { SecretBindingEntry } from "@/components/secrets/secret-binding-editor"
@@ -295,7 +295,7 @@ interface FormState {
   templateRef?: string
   /** Saved snapshot to continue from; takes the place of `templateRef`. */
   snapshotId?: string
-  /** Fixed size picks (null = auto); only sent within the template's range. */
+  /** Chosen size (null = the template's default); only sent within its range. */
   vcpu?: number | null
   memoryMib?: number | null
   template?: SizeRange
@@ -366,7 +366,7 @@ function inRange(n: number, label: string, min: number, max: number): number {
  *    `templateRef` is non-empty.
  *  - `vcpu` / `memory_mib` are only included when fixed (non-null) for a
  *    template source whose range covers that dimension, validated to the
- *    range (memory in 2 MiB steps from the minimum). Auto sends nothing, so
+ *    range (memory in 2 MiB steps from the minimum). The default sends nothing, so
  *    the sandbox keeps the template's range.
  *  - `preview_access` is always explicit so new console sandboxes use the
  *    published-port model instead of the compatibility-only legacy mode.
@@ -529,7 +529,7 @@ export function CreateSandboxDialog({
     initialSnapshotId ? "snapshot" : "template",
   )
   const [snapshotId, setSnapshotId] = useState(initialSnapshotId ?? "")
-  // null = Auto: the sandbox keeps the template's range.
+  // Chosen size; both null means the template's default.
   const [vcpu, setVcpu] = useState<number | null>(null)
   const [memoryMib, setMemoryMib] = useState<number | null>(null)
 
@@ -610,8 +610,9 @@ export function CreateSandboxDialog({
     (t) => t.name === templateRef || t.id === templateRef,
   )
   const size = fromSnapshot
-    ? selectedSnapshot && snapshotSize(selectedSnapshot.resources)
-    : selectedTemplate && templateSize(selectedTemplate, vcpu, memoryMib)
+    ? selectedSnapshot &&
+      sizeLine(snapshotResources(selectedSnapshot.resources))
+    : selectedTemplate && chosenSizeLine(selectedTemplate, vcpu, memoryMib)
 
   const createMutation = useCreateSandbox()
   const { addToast } = useToast()
@@ -850,15 +851,21 @@ export function CreateSandboxDialog({
 
               {fromSnapshot
                 ? selectedSnapshot && (
-                    <SnapshotSize resources={selectedSnapshot.resources} />
+                    <SizeLine
+                      text={sizeLine(
+                        snapshotResources(selectedSnapshot.resources),
+                      )}
+                    />
                   )
                 : selectedTemplate && (
                     <TemplateSizeSection
                       template={selectedTemplate}
                       vcpu={vcpu}
                       memoryMib={memoryMib}
-                      onVcpuChange={setVcpu}
-                      onMemoryChange={setMemoryMib}
+                      onChange={(v, m) => {
+                        setVcpu(v)
+                        setMemoryMib(m)
+                      }}
                     />
                   )}
 
@@ -1184,7 +1191,7 @@ export function CreateSandboxDialog({
                 data-testid="size-summary"
                 className="basis-full font-mono text-xs text-muted tabular-nums sm:basis-auto"
               >
-                {size ? sizeSummary(size.cpu, size.memory) : ""}
+                {size ?? ""}
               </span>
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setOpen(false)}>

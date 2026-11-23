@@ -44,8 +44,7 @@ sandbox = Sandbox.create(
 )
 ```
 
-Leave either out to keep the default (Auto): the template's size, growing
-within its range. Sandboxes created from a
+Leave either out to keep the template's default size. Sandboxes created from a
 snapshot can pick a size within the range the snapshot records. See
 [Custom size](https://docs.superserve.ai/sandbox/size).
 

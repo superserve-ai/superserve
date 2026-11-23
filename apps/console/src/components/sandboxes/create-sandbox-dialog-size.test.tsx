@@ -1,5 +1,5 @@
 import { ToastProvider } from "@superserve/ui"
-import { fireEvent, render, screen, within } from "@testing-library/react"
+import { fireEvent, render, screen } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { CreateSandboxDialog } from "./create-sandbox-dialog"
@@ -43,11 +43,6 @@ function open(templateRef: string) {
   )
 }
 
-const mode = (resource: string, option: "Auto" | "Fixed") =>
-  within(screen.getByRole("radiogroup", { name: resource })).getByRole(
-    "radio",
-    { name: option },
-  )
 const summary = () => screen.getByTestId("size-summary").textContent
 const create = () => {
   fireEvent.click(screen.getByRole("button", { name: "Create Sandbox" }))
@@ -60,69 +55,80 @@ beforeEach(() => {
   snapshots.data = []
 })
 
+const choose = () =>
+  fireEvent.click(screen.getByRole("button", { name: "Choose size" }))
+const sizeText = (text: string) =>
+  screen
+    .getAllByText(text)
+    .find((el) => el.tagName === "SPAN" && el.closest("p"))
+
 describe("Create Sandbox size", () => {
-  it("defaults to auto, shows the range and sends no size", () => {
+  it("shows the template's default and sends no size", () => {
     open("ranged-env")
-    expect(mode("vCPU", "Auto")).toBeChecked()
-    expect(mode("Memory", "Auto")).toBeChecked()
-    expect(screen.getByText("Auto: 1–4 vCPU, grows with load")).toBeVisible()
-    expect(summary()).toBe("1–4 vCPU · 1–4 GB · auto")
+    expect(sizeText("1 vCPU · 1 GB · can grow to 4 vCPU · 4 GB")).toBeTruthy()
+    expect(summary()).toBe("1 vCPU · 1 GB · can grow to 4 vCPU · 4 GB")
+    expect(screen.queryByRole("spinbutton", { name: "vCPU" })).toBeNull()
     const req = create()
     expect(req).not.toHaveProperty("vcpu")
     expect(req).not.toHaveProperty("memory_mib")
   })
 
-  it("sends only the fixed dimension, bounded to the range", () => {
+  it("sends the chosen size, bounded to the range", () => {
     open("ranged-env")
-    fireEvent.click(mode("vCPU", "Fixed"))
+    choose()
     const cpu = screen.getByRole("spinbutton", { name: "vCPU" })
     expect(cpu).toHaveAttribute("aria-valuemin", "1")
     expect(cpu).toHaveAttribute("aria-valuemax", "4")
     fireEvent.click(screen.getByRole("button", { name: "Increase vCPU" }))
-    expect(summary()).toBe("2 vCPU fixed · 1–4 GB auto")
-    fireEvent.click(mode("Memory", "Fixed"))
     fireEvent.keyDown(screen.getByRole("spinbutton", { name: "Memory" }), {
       key: "End",
     })
-    expect(summary()).toBe("2 vCPU · 4 GB · fixed")
+    expect(summary()).toBe("2 vCPU · 4 GB")
     expect(create()).toMatchObject({ vcpu: 2, memory_mib: 4096 })
   })
 
-  it("shows a template without a range read-only", () => {
+  it("sends nothing after Use default", () => {
+    open("ranged-env")
+    choose()
+    fireEvent.click(screen.getByRole("button", { name: "Use default" }))
+    expect(screen.queryByRole("spinbutton", { name: "vCPU" })).toBeNull()
+    const req = create()
+    expect(req).not.toHaveProperty("vcpu")
+    expect(req).not.toHaveProperty("memory_mib")
+  })
+
+  it("shows a fixed template's size with no Choose size", () => {
     open("plain")
-    expect(screen.queryByRole("radiogroup", { name: "vCPU" })).toBeNull()
-    expect(
-      screen.getByText("1 vCPU · 1 GB · fixed by template"),
-    ).toBeInTheDocument()
-    expect(
-      screen.getByText("To choose sizes, build a template with a size range."),
-    ).toBeInTheDocument()
-    expect(summary()).toBe("1 vCPU · 1 GB · fixed")
+    expect(screen.queryByRole("button", { name: "Choose size" })).toBeNull()
+    expect(summary()).toBe("1 vCPU · 1 GB")
     expect(create()).not.toHaveProperty("vcpu")
   })
 
-  it("lists a dimension without a range as fixed by the template", () => {
+  it("only offers a stepper for a resource with a range", () => {
     templates.data = [template("cpu-only", { vcpu_max: 4 })]
     open("cpu-only")
-    expect(screen.getByRole("radiogroup", { name: "vCPU" })).toBeInTheDocument()
-    expect(screen.queryByRole("radiogroup", { name: "Memory" })).toBeNull()
-    expect(
-      screen.getByText("Memory: 1 GB, fixed by template"),
-    ).toBeInTheDocument()
-    expect(summary()).toBe("1–4 vCPU auto · 1 GB fixed")
+    expect(summary()).toBe("1 vCPU · 1 GB · can grow to 4 vCPU")
+    choose()
+    expect(screen.getByRole("spinbutton", { name: "vCPU" })).toBeInTheDocument()
+    expect(screen.queryByRole("spinbutton", { name: "Memory" })).toBeNull()
+    const req = create()
+    expect(req).toMatchObject({ vcpu: 1 })
+    expect(req).not.toHaveProperty("memory_mib")
   })
 
-  it("resets to auto when the template changes", () => {
+  it("goes back to the default when the template changes", () => {
     open("ranged-env")
-    fireEvent.click(mode("vCPU", "Fixed"))
+    choose()
     const pick = (from: RegExp, to: RegExp) => {
       fireEvent.click(screen.getByRole("button", { name: from }))
       fireEvent.click(screen.getAllByRole("button", { name: to }).at(-1)!)
     }
     pick(/ranged-env/, /plain/)
-    expect(screen.queryByRole("radiogroup", { name: "vCPU" })).toBeNull()
     pick(/plain/, /ranged-env/)
-    expect(mode("vCPU", "Auto")).toBeChecked()
+    expect(
+      screen.getByRole("button", { name: "Choose size" }),
+    ).toBeInTheDocument()
+    expect(screen.queryByRole("spinbutton", { name: "vCPU" })).toBeNull()
   })
 
   it("shows a snapshot's size read-only", () => {
@@ -147,10 +153,7 @@ describe("Create Sandbox size", () => {
         />
       </ToastProvider>,
     )
-    expect(screen.queryByRole("radiogroup", { name: "vCPU" })).toBeNull()
-    expect(
-      screen.getByText("2 vCPU · 2 GB · from snapshot"),
-    ).toBeInTheDocument()
-    expect(summary()).toBe("2 vCPU · 2 GB · fixed")
+    expect(screen.queryByRole("button", { name: "Choose size" })).toBeNull()
+    expect(summary()).toBe("2 vCPU · 2 GB")
   })
 })

@@ -10,7 +10,7 @@
 import { describe, expect, it } from "vitest"
 
 import { buildCreateSandboxRequest } from "./create-sandbox-dialog"
-import { memorySteps, sizeSummary, templateSize } from "./sandbox-size-section"
+import { chosenSizeLine, memorySteps } from "./sandbox-size-section"
 
 const emptyState = {
   name: "",
@@ -119,18 +119,17 @@ describe("size helpers", () => {
     for (const v of memorySteps(1026, 4096)) expect((v - 1026) % 2).toBe(0)
   })
 
-  it("summarises all fixed, all auto and mixed sizes", () => {
+  it("describes the default size and a chosen one", () => {
     const t = { vcpu: 1, vcpu_max: 4, memory_mib: 1024, memory_max_mib: 4096 }
-    const line = (v: number | null, m: number | null) => {
-      const { cpu, memory } = templateSize(t, v, m)
-      return sizeSummary(cpu, memory)
-    }
-    expect(line(2, 2048)).toBe("2 vCPU · 2 GB · fixed")
-    expect(line(null, null)).toBe("1–4 vCPU · 1–4 GB · auto")
-    expect(line(2, null)).toBe("2 vCPU fixed · 1–4 GB auto")
-    const noRange = templateSize({ vcpu: 1, memory_mib: 1024 }, null, null)
-    expect(sizeSummary(noRange.cpu, noRange.memory)).toBe(
-      "1 vCPU · 1 GB · fixed",
+    expect(chosenSizeLine(t, null, null)).toBe(
+      "1 vCPU · 1 GB · can grow to 4 vCPU · 4 GB",
+    )
+    expect(chosenSizeLine(t, 2, 3072)).toBe("2 vCPU · 3 GB")
+    expect(
+      chosenSizeLine({ ...t, memory_max_mib: undefined }, null, null),
+    ).toBe("1 vCPU · 1 GB · can grow to 4 vCPU")
+    expect(chosenSizeLine({ vcpu: 2, memory_mib: 2048 }, null, null)).toBe(
+      "2 vCPU · 2 GB",
     )
   })
 })
