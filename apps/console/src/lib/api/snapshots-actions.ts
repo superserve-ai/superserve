@@ -5,6 +5,10 @@ import type { User } from "@supabase/supabase-js"
 import { getImpersonationContext } from "@/lib/admin/impersonation"
 import { canReadPlatformSandboxes } from "@/lib/admin/permissions"
 import { resolveActiveTeam } from "@/lib/api/active-team"
+import {
+  snapshotSizeRanges,
+  type SnapshotSizeRow,
+} from "@/lib/api/snapshot-size-ranges"
 import type { TeamMembership } from "@/lib/api/team-directory"
 import type { SnapshotStatus, TeamSnapshot } from "@/lib/api/types"
 import { cellFor } from "@/lib/cells"
@@ -38,7 +42,7 @@ export async function listSnapshotsAction(): Promise<TeamSnapshot[]> {
   const { data, error } = await admin
     .from("sandbox_snapshot")
     .select(
-      "id, sandbox_id, template_id, status, name, size_bytes, vcpu_count, memory_mib, disk_mib, memory_max_mib, vcpu_max, created_at, ready_at",
+      "id, sandbox_id, template_id, status, name, size_bytes, vcpu_count, memory_mib, disk_mib, memory_max_mib, vcpu_max, memory_shrink_after_seconds, fixed_cpu_image_vcpus, fixed_cpu_image_min_vcpus, fixed_memory_image_boot_mib, fixed_memory_image_max_mib, created_at, ready_at",
     )
     .eq("team_id", team.teamId)
     .is("deleted_at", null)
@@ -78,6 +82,7 @@ export async function listSnapshotsAction(): Promise<TeamSnapshot[]> {
       disk_mib: s.disk_mib as number,
       memory_max_mib: (s.memory_max_mib as number | null) ?? undefined,
       vcpu_max: (s.vcpu_max as number | null) ?? undefined,
+      ...snapshotSizeRanges(s as unknown as SnapshotSizeRow),
     },
     created_at: s.created_at as string,
     ready_at: (s.ready_at as string | null) ?? null,
