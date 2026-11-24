@@ -202,10 +202,11 @@ to rediscover boxes you created earlier.
 
 ## System specs & defaults
 
-A sandbox **inherits its VM shape from its template** (with a CPU range
-`vcpu`..`vcpuMax` or memory range `memoryMib`..`memoryMaxMib`, it starts at the minimum and
-grows with load). For a custom size, `create()` can pick a fixed `vcpu` / `memoryMib`
-(`memory_mib`) within the range (memory in 2 MiB steps from the minimum);
+A sandbox **inherits its VM shape from its template** (with growth ceilings `vcpuMax` /
+`memoryMaxMib`, it starts at `vcpu` / `memoryMib` and grows with load). If the template has a
+`sizeRange` (`size_range`), `create()` can pick a fixed `vcpu` / `memoryMib` (`memory_mib`)
+from the template's values up to `sizeRange.vcpuMax` / `sizeRange.memoryMaxMib` (memory in
+2 MiB steps from the minimum); a chosen size never grows;
 otherwise boot from (or build) a different template. With `fromSnapshot`, `vcpu` works within
 the CPU range the snapshot recorded from its template, and `memoryMib` for snapshots of
 sandboxes created with a chosen memory size. There is no `disk` argument. The default template `superserve/base` (`ubuntu:24.04`) is **2 vCPU · 4096 MiB
@@ -232,6 +233,10 @@ memory · 8192 MiB disk**.
   that many vCPUs (`vcpu` stays the minimum); it drops back when idle and is billed by the
   allowance granted. Whole vCPUs: it must exceed `vcpu`, be at most 4x it and 32, and within
   the plan limit. Omit it for a fixed vCPU count; sandboxes and snapshots inherit it.
+- Optional template `sizeRange: { vcpuMax?, memoryMaxMib? }` (Python
+  `size_range=TemplateSizeRange(vcpu_max=..., memory_max_mib=...)`) lets each sandbox choose
+  a fixed size at create. Same limits as `vcpuMax` / `memoryMaxMib`, and must equal them when
+  both are set. Without growth, sandboxes that don't choose stay at the base size.
 - `diskMib`: minimum 1024 MiB (1 GiB), default 4096 MiB (4 GiB); the maximum depends on the
   team's plan.
 - Every `superserve/*` system template ships at 2 vCPU / 4096 MiB / 8192 MiB disk,
@@ -586,7 +591,7 @@ try {
 - Check `exitCode`; the SDK only throws for transport/API failures, not command failures.
 - Use `getInfo()` for current state — the instance `status`/`metadata` are stale snapshots.
 - `update({ metadata })` **replaces** the whole map; omitted keys are dropped.
-- `vcpu`/`memoryMib` on `create()` only work within the source's range; a template without
+- `vcpu`/`memoryMib` on `create()` only work within the source's size range; a template without
   one returns `400`, one built before custom sizes returns `409` (rebuild it), and a size
   above the plan's limits returns `402` (`sandbox_exceeds_plan_limits`). No `disk`.
 - `Template.create()` returns when the build is _queued_; boot a sandbox only **after**

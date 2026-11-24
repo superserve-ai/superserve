@@ -44,6 +44,7 @@ interface TemplateRow {
   memory_max_mib?: number | null
   memory_shrink_after_seconds?: number | null
   vcpu_max?: number | null
+  size_range?: { vcpu_max?: number; memory_max_mib?: number }
   disk_mib: number
   size_bytes?: number
   error_message?: string
@@ -81,8 +82,11 @@ const SPEC_KEYS = [
   "memory_max_mib",
   "memory_shrink_after_seconds",
   "vcpu_max",
+  "size_range",
   "disk_mib",
 ]
+
+const SIZE_RANGE_KEYS = ["vcpu_max", "memory_max_mib"]
 
 const tpath = (id: string) => `/templates/${encodeURIComponent(id)}`
 const bpath = (id: string, buildId: string) =>
@@ -121,6 +125,38 @@ function checkRange(v: unknown, what: string, min: number, max: number) {
 function fmtMib(mib: number | undefined): string {
   if (mib === undefined) return "-"
   return mib % 1024 === 0 ? `${mib / 1024}G` : `${mib}M`
+}
+
+// 1 vCPU and 1024 MiB are the API's defaults; plan limits and the 128 MiB
+// step are left to the API.
+function checkVcpuCeiling(v: unknown, vcpu: unknown, what: string) {
+  checkRange(v, what, 1, 32)
+  const base = (vcpu as number | undefined) ?? 1
+  if ((v as number) <= base || (v as number) > 4 * base) {
+    throw usageError(
+      `${what} must be greater than vCPU (${base}) and at most 4 times it.`,
+    )
+  }
+}
+
+function checkMemoryCeiling(v: unknown, memory: unknown, what: string) {
+  checkRange(v, `${what} (MiB)`, 256, 131_072)
+  const boot = (memory as number | undefined) ?? 1024
+  if ((v as number) <= boot || (v as number) > 4 * boot) {
+    throw usageError(
+      `${what} must be greater than memory (${fmtMib(boot)}) and at most 4 times it.`,
+    )
+  }
+}
+
+function fmtSizeRange(t: TemplateRow): string | undefined {
+  const r = t.size_range
+  if (!r) return undefined
+  const parts = []
+  if (r.vcpu_max != null) parts.push(`${t.vcpu}-${r.vcpu_max} vCPU`)
+  if (r.memory_max_mib != null)
+    parts.push(`${fmtMib(t.memory_mib)}-${fmtMib(r.memory_max_mib)}`)
+  return parts.join(", ")
 }
 
 function fmtVcpu(t: TemplateRow): string {
@@ -203,6 +239,8 @@ interface CreateOpts {
   memoryMax?: string
   memoryShrinkAfter?: string
   vcpuMax?: string
+  sizeRangeVcpuMax?: string
+  sizeRangeMemoryMax?: string
   disk?: string
   wait: boolean
 }
@@ -268,6 +306,31 @@ async function buildCreateBody(
     opts.vcpuMax !== undefined
       ? parseInteger(opts.vcpuMax, "--vcpu-max")
       : file.vcpu_max
+  const fileRange = (file.size_range ?? {}) as Record<string, unknown>
+  if (
+    typeof fileRange !== "object" ||
+    fileRange === null ||
+    Array.isArray(fileRange)
+  ) {
+    throw usageError("size_range must be an object.")
+  }
+  const unknownRange = Object.keys(fileRange).filter(
+    (k) => !SIZE_RANGE_KEYS.includes(k),
+  )
+  if (unknownRange.length) {
+    throw usageError(
+      `Unknown field(s) in size_range: ${unknownRange.join(", ")}.`,
+      `Allowed: ${SIZE_RANGE_KEYS.join(", ")}.`,
+    )
+  }
+  const rangeVcpuMax =
+    opts.sizeRangeVcpuMax !== undefined
+      ? parseInteger(opts.sizeRangeVcpuMax, "--size-range-vcpu-max")
+      : fileRange.vcpu_max
+  const rangeMemoryMax =
+    opts.sizeRangeMemoryMax !== undefined
+      ? parseMib(opts.sizeRangeMemoryMax, "--size-range-memory-max")
+      : fileRange.memory_max_mib
   const disk =
     opts.disk !== undefined ? parseMib(opts.disk, "--disk") : file.disk_mib
   if (vcpu !== undefined) {
@@ -279,15 +342,7 @@ async function buildCreateBody(
     body.memory_mib = memory
   }
   if (memoryMax !== undefined) {
-    checkRange(memoryMax, "Max memory (MiB)", 256, 131_072)
-    // 1024 is the API's default memory; plan limits and the 128 MiB step
-    // are left to the API.
-    const boot = (memory as number | undefined) ?? 1024
-    if ((memoryMax as number) <= boot || (memoryMax as number) > 4 * boot) {
-      throw usageError(
-        `Max memory must be greater than memory (${fmtMib(boot)}) and at most 4 times it.`,
-      )
-    }
+    checkMemoryCeiling(memoryMax, memory, "Max memory")
     body.memory_max_mib = memoryMax
   }
   if (shrinkAfter !== undefined) {
@@ -298,15 +353,20 @@ async function buildCreateBody(
     body.memory_shrink_after_seconds = shrinkAfter
   }
   if (vcpuMax !== undefined) {
-    checkRange(vcpuMax, "Max vCPU", 1, 32)
-    // 1 is the API's default vCPU count; the plan limit is left to the API.
-    const base = (vcpu as number | undefined) ?? 1
-    if ((vcpuMax as number) <= base || (vcpuMax as number) > 4 * base) {
-      throw usageError(
-        `Max vCPU must be greater than vCPU (${base}) and at most 4 times it.`,
-      )
-    }
+    checkVcpuCeiling(vcpuMax, vcpu, "Max vCPU")
     body.vcpu_max = vcpuMax
+  }
+  if (rangeVcpuMax !== undefined || rangeMemoryMax !== undefined) {
+    const range: Record<string, unknown> = {}
+    if (rangeVcpuMax !== undefined) {
+      checkVcpuCeiling(rangeVcpuMax, vcpu, "Size range max vCPU")
+      range.vcpu_max = rangeVcpuMax
+    }
+    if (rangeMemoryMax !== undefined) {
+      checkMemoryCeiling(rangeMemoryMax, memory, "Size range max memory")
+      range.memory_max_mib = rangeMemoryMax
+    }
+    body.size_range = range
   }
   if (disk !== undefined) {
     checkRange(disk, "Disk (MiB)", 1024, 131_072)
@@ -546,7 +606,7 @@ export function register(program: Command): void {
     .argument("<name>", "Template name, unique in your team")
     .option(
       "-f, --file <path>",
-      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, memory_max_mib, memory_shrink_after_seconds, vcpu_max, disk_mib (- for stdin)",
+      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, memory_max_mib, memory_shrink_after_seconds, vcpu_max, size_range, disk_mib (- for stdin)",
     )
     .option("--from <image>", "Base OCI image, e.g. python:3.11 (linux/amd64)")
     .option("--run <cmd>", "Build step: run a shell command (repeatable)")
@@ -589,6 +649,14 @@ export function register(program: Command): void {
       "How long memory must stay low after growing before it shrinks back, e.g. 5m; 1m-30m, needs --memory-max (default: platform default)",
     )
     .option(
+      "--size-range-vcpu-max <n>",
+      "Let each sandbox choose a fixed vCPU count at create, from --vcpu up to this; at most 4x --vcpu and 32",
+    )
+    .option(
+      "--size-range-memory-max <size>",
+      "Let each sandbox choose a fixed memory size at create, from --memory up to this; at most 4x --memory",
+    )
+    .option(
       "--disk <size>",
       "Disk in MiB or with a unit, e.g. 8G; 1G-128G (default 4G)",
     )
@@ -604,7 +672,9 @@ override the file's other fields. The file is JSON (YAML is not supported):
 Examples:
   superserve template create py-data --from python:3.11 \\
     --run "pip install numpy pandas" --env DEBUG=1 --workdir /app
-  superserve template create web -f template.json --memory 2G --no-wait`,
+  superserve template create web -f template.json --memory 2G --no-wait
+  superserve template create api --from node:22 --vcpu 1 --memory 1G \\
+    --size-range-vcpu-max 4 --size-range-memory-max 4G`,
     )
     .action(async (name: string, opts: CreateOpts) => {
       const body = await buildCreateBody(name, opts, flagSteps)
@@ -690,6 +760,7 @@ Examples:
         ["Status", t.status, statusColor],
         ["vCPU", fmtVcpu(t)],
         ["Memory", fmtMemory(t)],
+        ["Size range", fmtSizeRange(t)],
         [
           "Memory shrink after",
           t.memory_shrink_after_seconds == null

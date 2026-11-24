@@ -11,19 +11,19 @@ import type { TemplateResponse } from "@/lib/api/types"
 
 export type SizeRange = Pick<
   TemplateResponse,
-  "vcpu" | "vcpu_max" | "memory_mib" | "memory_max_mib"
+  "vcpu" | "vcpu_max" | "memory_mib" | "memory_max_mib" | "size_range"
 >
 
-export function hasCpuRange(t: SizeRange | undefined): t is SizeRange & {
-  vcpu_max: number
-} {
-  return t?.vcpu_max != null && t.vcpu_max > t.vcpu
+// Choose size follows the template's size range only; vcpu_max and
+// memory_max_mib are growth ceilings.
+export function cpuRangeMax(t: SizeRange | undefined): number | undefined {
+  const max = t?.size_range?.vcpu_max
+  return max != null && max > t!.vcpu ? max : undefined
 }
 
-export function hasMemoryRange(t: SizeRange | undefined): t is SizeRange & {
-  memory_max_mib: number
-} {
-  return t?.memory_max_mib != null && t.memory_max_mib > t.memory_mib
+export function memoryRangeMax(t: SizeRange | undefined): number | undefined {
+  const max = t?.size_range?.memory_max_mib
+  return max != null && max > t!.memory_mib ? max : undefined
 }
 
 const MEMORY_STEP_MIB = 256
@@ -83,6 +83,8 @@ export interface SizeSource {
 }
 
 export function templateSource(t: SizeRange): SizeSource {
+  const vcpuMax = cpuRangeMax(t)
+  const memoryMax = memoryRangeMax(t)
   return {
     vcpu: t.vcpu,
     memoryMib: t.memory_mib,
@@ -92,10 +94,8 @@ export function templateSource(t: SizeRange): SizeSource {
       vcpuMax: t.vcpu_max,
       memoryMaxMib: t.memory_max_mib,
     }),
-    vcpuRange: hasCpuRange(t) ? { min: t.vcpu, max: t.vcpu_max } : undefined,
-    memoryRange: hasMemoryRange(t)
-      ? { min: t.memory_mib, max: t.memory_max_mib }
-      : undefined,
+    vcpuRange: vcpuMax ? { min: t.vcpu, max: vcpuMax } : undefined,
+    memoryRange: memoryMax ? { min: t.memory_mib, max: memoryMax } : undefined,
   }
 }
 

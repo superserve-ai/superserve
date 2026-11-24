@@ -33,10 +33,20 @@ await sandbox.kill()
 
 ## Custom size
 
-A template built with a CPU or memory range (`vcpu`..`vcpuMax`,
-`memoryMib`..`memoryMaxMib`) lets each sandbox use a fixed size within it:
+A template built with a size range lets each sandbox use a fixed size within it:
 
 ```typescript
+import { Sandbox, Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "my-env",
+  from: "python:3.11",
+  vcpu: 1,
+  memoryMib: 2048,
+  sizeRange: { vcpuMax: 4, memoryMaxMib: 8192 },
+})
+await template.waitUntilReady()
+
 const sandbox = await Sandbox.create({
   name: "build",
   fromTemplate: "my-env",

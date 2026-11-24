@@ -57,6 +57,7 @@ describe("Template.create", () => {
       memoryMaxMib: 8192,
       memoryShrinkAfterSeconds: 600,
       vcpuMax: 4,
+      sizeRange: { vcpuMax: 4, memoryMaxMib: 8192 },
       diskMib: 4096,
       from: "python:3.11",
       steps: [
@@ -82,6 +83,7 @@ describe("Template.create", () => {
       memory_max_mib: 8192,
       memory_shrink_after_seconds: 600,
       vcpu_max: 4,
+      size_range: { vcpu_max: 4, memory_max_mib: 8192 },
       disk_mib: 4096,
       build_spec: {
         from: "python:3.11",

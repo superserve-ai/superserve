@@ -11,7 +11,7 @@ import {
 } from "@superserve/sdk"
 import * as z from "zod"
 
-import type { SandboxClient } from "../client.js"
+import type { SandboxClient, TemplateSummary } from "../client.js"
 import {
   DEFAULT_NETWORK_LOG_LIMIT,
   MAX_AUTO_DELETE_SECONDS,
@@ -76,6 +76,7 @@ interface TemplateCreateArgs {
   memory_max_mib?: number
   memory_shrink_after_seconds?: number
   vcpu_max?: number
+  size_range?: { vcpu_max?: number; memory_max_mib?: number }
   disk_mib?: number
   run_steps?: string[]
   start_cmd?: string
@@ -156,7 +157,7 @@ export function registerLifecycleTools(
           .optional()
           .describe(
             "Fixed vCPU count for this sandbox, both ends of the range included and within the plan's limits. " +
-              "With from_template: within the template's CPU range (vcpu to vcpu_max in sandbox_template_list). " +
+              "With from_template: within the template's size range (vcpu to sizeRange.vcpuMax in sandbox_template_list). " +
               "With from_snapshot: within the CPU range the snapshot recorded from its template. The count stays " +
               "fixed for the sandbox's life. Omit for the source's default CPU. If a template was " +
               "built before custom sizes were available, rebuild it (or omit vcpu and memory_mib).",
@@ -168,8 +169,8 @@ export function registerLifecycleTools(
           .max(131072)
           .optional()
           .describe(
-            "Fixed memory in MiB for this sandbox. With from_template: a template built with a memory range " +
-              "(memory_mib below memory_max_mib). With from_snapshot: a snapshot of a sandbox created with a fixed " +
+            "Fixed memory in MiB for this sandbox. With from_template: a template built with a size range " +
+              "for memory (memory_mib to sizeRange.memoryMaxMib). With from_snapshot: a snapshot of a sandbox created with a fixed " +
               "memory_mib. Must be within that range in 2 MiB steps from its minimum, and within the plan's " +
               "limits. Stays fixed for the " +
               "sandbox's life. Omit for the source's default memory. If a template was built before " +
@@ -334,7 +335,7 @@ export function registerLifecycleTools(
           ? templates
               .map(
                 (t) =>
-                  `${t.name}\t${t.status}\t${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}`,
+                  `${t.name}\t${t.status}\t${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}${sizeRangeText(t)}`,
               )
               .join("\n")
           : "(no templates)"
@@ -352,8 +353,8 @@ export function registerLifecycleTools(
       title: "Build a custom template",
       description:
         "Build a reusable template (base image) so you can launch sandboxes with a specific vCPU/memory/disk " +
-        "shape or preinstalled software. Sandboxes inherit the template's resources; build it with a range " +
-        "(vcpu_max / memory_max_mib) to let sandbox_create pick a fixed vcpu or memory_mib within it. The build runs asynchronously: this " +
+        "shape or preinstalled software. Sandboxes inherit the template's resources; set size_range to let " +
+        "sandbox_create pick a fixed vcpu or memory_mib within it. The build runs asynchronously: this " +
         "returns immediately with status 'building' (or 'pending'). Poll sandbox_template_list (filter by name) " +
         "until the template's status is 'ready' before passing it to sandbox_create's from_template. A build " +
         "can take a few minutes.",
@@ -411,6 +412,18 @@ export function registerLifecycleTools(
               "vcpu stays the starting count. Must exceed vcpu, be at most 4 times it and at most 32. " +
               "Omit for a fixed vCPU count.",
           ),
+        size_range: z
+          .object({
+            vcpu_max: z.number().int().positive().optional(),
+            memory_max_mib: z.number().int().positive().optional(),
+          })
+          .optional()
+          .describe(
+            "Optional. Lets sandbox_create choose a fixed vcpu or memory_mib for each sandbox, from the " +
+              "template's vcpu / memory_mib up to these maximums. Each maximum follows the same limits as " +
+              "vcpu_max / memory_max_mib, and must equal it when both are set. A sandbox that chooses a size " +
+              "does not grow.",
+          ),
         disk_mib: z
           .number()
           .int()
@@ -451,6 +464,7 @@ export function registerLifecycleTools(
       memory_max_mib,
       memory_shrink_after_seconds,
       vcpu_max,
+      size_range,
       disk_mib,
       run_steps,
       start_cmd,
@@ -468,13 +482,17 @@ export function registerLifecycleTools(
           memoryMaxMib: memory_max_mib,
           memoryShrinkAfterSeconds: memory_shrink_after_seconds,
           vcpuMax: vcpu_max,
+          sizeRange: size_range && {
+            vcpuMax: size_range.vcpu_max,
+            memoryMaxMib: size_range.memory_max_mib,
+          },
           diskMib: disk_mib,
           steps,
           startCmd: start_cmd,
           readyCmd: ready_cmd,
         })
         return toolOk(
-          `building template ${t.name} (${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}), status ${t.status}. ` +
+          `building template ${t.name} (${cpuText(t.vcpu, t.vcpuMax)} / ${memoryText(t.memoryMib, t.memoryMaxMib)}${sizeRangeText(t)}), status ${t.status}. ` +
             `Poll sandbox_template_list until status is 'ready', then use from_template: "${t.name}".`,
           { template: t },
         )
@@ -924,6 +942,15 @@ function cpuText(min: number, max: number | undefined): string {
 
 function memoryText(min: number, max: number | undefined): string {
   return max === undefined ? `${min} MiB` : `${min}-${max} MiB`
+}
+
+function sizeRangeText(t: TemplateSummary): string {
+  const parts = []
+  if (t.sizeRange?.vcpuMax !== undefined)
+    parts.push(cpuText(t.vcpu, t.sizeRange.vcpuMax))
+  if (t.sizeRange?.memoryMaxMib !== undefined)
+    parts.push(memoryText(t.memoryMib, t.sizeRange.memoryMaxMib))
+  return parts.length ? `, size range ${parts.join(" / ")}` : ""
 }
 
 function toIsoOrUndefined(d: Date | undefined): string | undefined {

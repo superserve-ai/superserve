@@ -32,7 +32,9 @@ const template = (name: string, over: Record<string, unknown> = {}) => ({
   ...over,
 })
 
-const ranged = template("ranged-env", { vcpu_max: 4, memory_max_mib: 4096 })
+const ranged = template("ranged-env", {
+  size_range: { vcpu_max: 4, memory_max_mib: 4096 },
+})
 const plain = template("plain")
 
 function open(templateRef: string) {
@@ -65,8 +67,8 @@ const sizeText = (text: string) =>
 describe("Create Sandbox size", () => {
   it("shows the template's default and sends no size", () => {
     open("ranged-env")
-    expect(sizeText("1 vCPU · 1 GB · can grow to 4 vCPU · 4 GB")).toBeTruthy()
-    expect(summary()).toBe("1 vCPU · 1 GB · can grow to 4 vCPU · 4 GB")
+    expect(sizeText("1 vCPU · 1 GB")).toBeTruthy()
+    expect(summary()).toBe("1 vCPU · 1 GB")
     expect(screen.queryByRole("spinbutton", { name: "vCPU" })).toBeNull()
     const req = create()
     expect(req).not.toHaveProperty("vcpu")
@@ -104,10 +106,19 @@ describe("Create Sandbox size", () => {
     expect(create()).not.toHaveProperty("vcpu")
   })
 
+  it("shows growth but no Choose size for a template that only grows", () => {
+    templates.data = [
+      template("growing", { vcpu_max: 4, memory_max_mib: 4096 }),
+    ]
+    open("growing")
+    expect(summary()).toBe("1 vCPU · 1 GB · can grow to 4 vCPU · 4 GB")
+    expect(screen.queryByRole("button", { name: "Choose size" })).toBeNull()
+  })
+
   it("only offers a stepper for a resource with a range", () => {
-    templates.data = [template("cpu-only", { vcpu_max: 4 })]
+    templates.data = [template("cpu-only", { size_range: { vcpu_max: 4 } })]
     open("cpu-only")
-    expect(summary()).toBe("1 vCPU · 1 GB · can grow to 4 vCPU")
+    expect(summary()).toBe("1 vCPU · 1 GB")
     choose()
     expect(screen.getByRole("spinbutton", { name: "vCPU" })).toBeInTheDocument()
     expect(screen.queryByRole("spinbutton", { name: "Memory" })).toBeNull()

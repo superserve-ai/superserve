@@ -2,7 +2,6 @@
 
 import { MinusIcon, PlusIcon } from "@phosphor-icons/react"
 import { cn } from "@superserve/ui"
-import { useId } from "react"
 
 // Controls shared by the template and sandbox dialogs for vCPU and memory.
 
@@ -116,16 +115,6 @@ export function Stepper({
 export const ROW_GRID =
   "grid grid-cols-[1fr_auto] items-center gap-3 sm:grid-cols-[1fr_auto_4.5rem]"
 
-const segment = (selected: boolean) =>
-  cn(
-    "flex h-8 flex-1 cursor-pointer items-center justify-center px-2 font-mono text-xs whitespace-nowrap uppercase tabular-nums transition-colors",
-    "has-[:focus-visible]:relative has-[:focus-visible]:ring-2 has-[:focus-visible]:ring-border-focus",
-    "has-[:disabled]:cursor-not-allowed has-[:disabled]:opacity-30",
-    selected
-      ? "bg-foreground text-background"
-      : "text-muted hover:text-foreground",
-  )
-
 // An indented row under a resource: label | control | right-hand note.
 export function SubRow({
   label,
@@ -145,52 +134,6 @@ export function SubRow({
       <span className="hidden text-right font-mono text-xs text-muted tabular-nums sm:block">
         {note}
       </span>
-    </div>
-  )
-}
-
-export interface SegmentedOption<T> {
-  value: T
-  text: string
-  disabled?: boolean
-}
-
-// Native radios styled as the console's segmented buttons: arrow keys move
-// between them and the group takes its name from a visible label.
-export function SegmentedChoice<T>({
-  value,
-  options,
-  onChange,
-  labelledBy,
-  describedBy,
-}: {
-  value: T
-  options: readonly SegmentedOption<T>[]
-  onChange: (value: T) => void
-  labelledBy: string
-  describedBy?: string
-}) {
-  const id = useId()
-  return (
-    <div
-      role="radiogroup"
-      aria-labelledby={labelledBy}
-      aria-describedby={describedBy}
-      className="flex w-[10.5rem] divide-x divide-dashed divide-control border border-dashed border-control"
-    >
-      {options.map((o) => (
-        <label key={o.text} className={segment(value === o.value)}>
-          <input
-            type="radio"
-            name={id}
-            className="sr-only"
-            checked={value === o.value}
-            disabled={o.disabled}
-            onChange={() => onChange(o.value)}
-          />
-          {o.text}
-        </label>
-      ))}
     </div>
   )
 }

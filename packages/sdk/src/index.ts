@@ -116,6 +116,7 @@ export type {
   TemplateCreateOptions,
   TemplateInfo,
   TemplateListOptions,
+  TemplateSizeRange,
   TemplateStatus,
   WaitUntilReadyOptions,
 } from "./types.js"

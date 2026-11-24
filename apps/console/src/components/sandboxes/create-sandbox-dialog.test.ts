@@ -56,9 +56,8 @@ describe("buildCreateSandboxRequest source", () => {
 describe("buildCreateSandboxRequest size", () => {
   const ranged = templateSource({
     vcpu: 1,
-    vcpu_max: 4,
     memory_mib: 2048,
-    memory_max_mib: 8192,
+    size_range: { vcpu_max: 4, memory_max_mib: 8192 },
   })
 
   it("sends a fixed vcpu and memory_mib within the template range", () => {

@@ -38,6 +38,7 @@ import type {
   SandboxInfo,
   SecretInfo,
   TemplateInfo,
+  TemplateSizeRange,
 } from "@superserve/sdk"
 
 import type { ClientConfig } from "./config.js"
@@ -131,6 +132,8 @@ export interface TemplateSummary {
   memoryShrinkAfterSeconds?: number
   /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
   vcpuMax?: number
+  /** Sizes sandboxes may choose at create; absent when they cannot choose. */
+  sizeRange?: TemplateSizeRange
   diskMib: number
 }
 
@@ -183,6 +186,7 @@ export interface TemplateCreateInput {
   memoryMaxMib?: number
   memoryShrinkAfterSeconds?: number
   vcpuMax?: number
+  sizeRange?: TemplateSizeRange
   diskMib?: number
   steps?: BuildStep[]
   startCmd?: string
@@ -302,6 +306,7 @@ function toTemplateSummary(t: TemplateInfo): TemplateSummary {
     memoryMaxMib: t.memoryMaxMib,
     memoryShrinkAfterSeconds: t.memoryShrinkAfterSeconds,
     vcpuMax: t.vcpuMax,
+    sizeRange: t.sizeRange,
     diskMib: t.diskMib,
   }
 }
@@ -398,6 +403,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         memoryMaxMib: input.memoryMaxMib,
         memoryShrinkAfterSeconds: input.memoryShrinkAfterSeconds,
         vcpuMax: input.vcpuMax,
+        sizeRange: input.sizeRange,
         diskMib: input.diskMib,
         steps: input.steps,
         startCmd: input.startCmd,
@@ -414,6 +420,7 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         memoryMaxMib: t.memoryMaxMib,
         memoryShrinkAfterSeconds: t.memoryShrinkAfterSeconds,
         vcpuMax: t.vcpuMax,
+        sizeRange: t.sizeRange,
         diskMib: t.diskMib,
         createdAt: t.createdAt,
       })

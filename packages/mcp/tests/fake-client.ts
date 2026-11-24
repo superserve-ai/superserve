@@ -187,6 +187,7 @@ export function createFakeClient(): FakeClient {
         memoryMaxMib: input.memoryMaxMib,
         memoryShrinkAfterSeconds: input.memoryShrinkAfterSeconds,
         vcpuMax: input.vcpuMax,
+        sizeRange: input.sizeRange,
         diskMib: input.diskMib ?? 8192,
       }
       templates.push(summary)

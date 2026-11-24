@@ -18,9 +18,14 @@ const fixed: TemplateShape = {
   memoryMib: 2048,
   memoryMaxMib: null,
   memoryShrinkAfterSeconds: null,
+  sizeRange: null,
   diskMib: 8192,
 }
 const growing: TemplateShape = { ...fixed, vcpuMax: 8, memoryMaxMib: 8192 }
+const ranged: TemplateShape = {
+  ...fixed,
+  sizeRange: { vcpuMax: 8, memoryMaxMib: 8192 },
+}
 
 // Parses the CLI's own size syntax (packages/cli/src/commands/template.ts).
 function parseMib(input: string): number {
@@ -53,11 +58,23 @@ describe("createRequest", () => {
       memory_max_mib: 8192,
     })
   })
+
+  it("sends a size range without growth ceilings", () => {
+    const body = createRequest(ranged)
+    expect(body.size_range).toEqual({ vcpu_max: 8, memory_max_mib: 8192 })
+    expect(body).not.toHaveProperty("vcpu_max")
+    expect(body).not.toHaveProperty("memory_max_mib")
+  })
 })
 
 describe("cliCommand", () => {
   it("matches the request field for field", () => {
-    for (const shape of [fixed, growing, { ...fixed, memoryMib: 1536 }]) {
+    for (const shape of [
+      fixed,
+      growing,
+      ranged,
+      { ...fixed, memoryMib: 1536 },
+    ]) {
       const body = createRequest(shape)
       const command = cliCommand(shape)
       const flags = cliFlags(command)
@@ -74,6 +91,12 @@ describe("cliCommand", () => {
       if (body.vcpu_max === undefined)
         expect(flags).not.toHaveProperty("vcpu-max")
       else expect(Number(flags["vcpu-max"])).toBe(body.vcpu_max)
+      expect(Number(flags["size-range-vcpu-max"] ?? NaN)).toEqual(
+        body.size_range?.vcpu_max ?? NaN,
+      )
+      expect(parseMib(flags["size-range-memory-max"] ?? "0")).toBe(
+        body.size_range?.memory_max_mib ?? 0,
+      )
     }
   })
 
@@ -118,6 +141,12 @@ describe("typescriptSnippet", () => {
     )
   })
 
+  it("passes a size range", () => {
+    expect(typescriptSnippet(ranged)).toContain(
+      "  sizeRange: { vcpuMax: 8, memoryMaxMib: 8192 },",
+    )
+  })
+
   it("leaves the ceilings out for a fixed shape", () => {
     expect(typescriptSnippet(fixed)).not.toContain("memoryMaxMib")
     expect(typescriptSnippet(fixed)).not.toContain("vcpuMax")
@@ -141,6 +170,14 @@ describe("pythonSnippet", () => {
         ")",
         "template.wait_until_ready()",
       ].join("\n"),
+    )
+  })
+
+  it("passes a size range and imports its type", () => {
+    const code = pythonSnippet(ranged)
+    expect(code).toContain("from superserve import Template, TemplateSizeRange")
+    expect(code).toContain(
+      "    size_range=TemplateSizeRange(vcpu_max=8, memory_max_mib=8192),",
     )
   })
 

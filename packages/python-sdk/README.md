@@ -32,10 +32,20 @@ sandbox.kill()
 
 ## Custom size
 
-A template built with a CPU or memory range (`vcpu`..`vcpu_max`,
-`memory_mib`..`memory_max_mib`) lets each sandbox use a fixed size within it:
+A template built with a size range lets each sandbox use a fixed size within it:
 
 ```python
+from superserve import Sandbox, Template, TemplateSizeRange
+
+template = Template.create(
+    name="my-env",
+    from_="python:3.11",
+    vcpu=1,
+    memory_mib=2048,
+    size_range=TemplateSizeRange(vcpu_max=4, memory_max_mib=8192),
+)
+template.wait_until_ready()
+
 sandbox = Sandbox.create(
     name="build",
     from_template="my-env",
