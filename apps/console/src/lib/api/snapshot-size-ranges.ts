@@ -4,6 +4,8 @@ import type { SnapshotSizeRange } from "@/lib/api/types"
 export interface SnapshotSizeRow {
   vcpu_count: number
   vcpu_max: number | null
+  /** Whether the source's template lets sandboxes choose a vCPU count. */
+  vcpu_selectable: boolean
   fixed_cpu_image_vcpus: number | null
   fixed_cpu_image_min_vcpus: number | null
   memory_mib: number
@@ -27,7 +29,7 @@ export function snapshotSizeRanges(s: SnapshotSizeRow): {
     memory_range_mib?: SnapshotSizeRange
   } = {}
 
-  if (s.vcpu_max != null && s.vcpu_count > 0) {
+  if (s.vcpu_max != null && s.vcpu_count > 0 && s.vcpu_selectable) {
     out.vcpu_range = { min: s.vcpu_count, max: s.vcpu_max }
   } else if (
     s.fixed_cpu_image_min_vcpus != null &&

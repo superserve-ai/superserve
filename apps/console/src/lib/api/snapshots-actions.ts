@@ -42,7 +42,7 @@ export async function listSnapshotsAction(): Promise<TeamSnapshot[]> {
   const { data, error } = await admin
     .from("sandbox_snapshot")
     .select(
-      "id, sandbox_id, template_id, status, name, size_bytes, vcpu_count, memory_mib, disk_mib, memory_max_mib, vcpu_max, memory_shrink_after_seconds, fixed_cpu_image_vcpus, fixed_cpu_image_min_vcpus, fixed_memory_image_boot_mib, fixed_memory_image_max_mib, created_at, ready_at",
+      "id, sandbox_id, template_id, status, name, size_bytes, vcpu_count, memory_mib, disk_mib, memory_max_mib, vcpu_max, vcpu_selectable, memory_shrink_after_seconds, fixed_cpu_image_vcpus, fixed_cpu_image_min_vcpus, fixed_memory_image_boot_mib, fixed_memory_image_max_mib, created_at, ready_at",
     )
     .eq("team_id", team.teamId)
     .is("deleted_at", null)

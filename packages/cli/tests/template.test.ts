@@ -59,6 +59,8 @@ describe("template", () => {
         "2",
         "--vcpu-max",
         "8",
+        "--size-range-vcpu-max",
+        "8",
         "--no-wait",
         "--json",
       ],
@@ -85,6 +87,7 @@ describe("template", () => {
       memory_max_mib: 8192,
       memory_shrink_after_seconds: 600,
       vcpu_max: 8,
+      size_range: { vcpu_max: 8 },
       disk_mib: 8192,
       build_spec: {
         from: "python:3.11",
@@ -109,6 +112,15 @@ describe("template", () => {
       ["template", "create", "ok", "--from", "x", "--memory-max", "2X"],
       ["template", "create", "ok", "--from", "x", "--vcpu-max", "1"],
       ["template", "create", "ok", "--from", "x", "--vcpu-max", "5"],
+      [
+        "template",
+        "create",
+        "ok",
+        "--from",
+        "x",
+        "--size-range-memory-max",
+        "8G",
+      ],
       [
         "template",
         "create",

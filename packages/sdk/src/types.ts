@@ -731,12 +731,24 @@ export interface TemplateInfo {
   memoryShrinkAfterSeconds?: number
   /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
   vcpuMax?: number
+  /** Sizes sandboxes may choose at create; absent when they cannot choose. */
+  sizeRange?: TemplateSizeRange
   diskMib: number
   sizeBytes?: number
   errorMessage?: string
   createdAt: Date
   builtAt?: Date
   latestBuildId?: string
+}
+
+/**
+ * Largest size a sandbox created from the template may choose with `vcpu` or
+ * `memoryMib`; the range starts at the template's `vcpu` and `memoryMib`. A
+ * dimension without a maximum cannot be chosen.
+ */
+export interface TemplateSizeRange {
+  vcpuMax?: number
+  memoryMaxMib?: number
 }
 
 export interface TemplateBuildInfo {
@@ -789,6 +801,12 @@ export interface TemplateCreateOptions extends ConnectionOptions {
    * within the team's vCPU limit. Omit for a fixed CPU count.
    */
   vcpuMax?: number
+  /**
+   * Lets each sandbox choose a fixed size at create, from `vcpu` and
+   * `memoryMib` up to these maximums. Each maximum follows the same limits
+   * as `vcpuMax` and `memoryMaxMib`, and must equal it when both are set.
+   */
+  sizeRange?: TemplateSizeRange
   diskMib?: number
   from: string
   steps?: BuildStep[]
@@ -831,6 +849,7 @@ export interface ApiTemplateResponse {
   memory_max_mib?: number | null
   memory_shrink_after_seconds?: number | null
   vcpu_max?: number | null
+  size_range?: { vcpu_max?: number | null; memory_max_mib?: number | null }
   disk_mib?: number
   size_bytes?: number
   error_message?: string
@@ -899,6 +918,12 @@ export function toTemplateInfo(
     memoryMaxMib: raw.memory_max_mib ?? undefined,
     memoryShrinkAfterSeconds: raw.memory_shrink_after_seconds ?? undefined,
     vcpuMax: raw.vcpu_max ?? undefined,
+    sizeRange: raw.size_range
+      ? {
+          vcpuMax: raw.size_range.vcpu_max ?? undefined,
+          memoryMaxMib: raw.size_range.memory_max_mib ?? undefined,
+        }
+      : undefined,
     diskMib: raw.disk_mib ?? 0,
     sizeBytes: raw.size_bytes,
     errorMessage: raw.error_message,

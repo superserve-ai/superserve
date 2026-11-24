@@ -79,7 +79,7 @@ Polled every 2s after `startCmd` until it exits `0` or 10 minutes elapse. Use th
 
 ## Resource limits
 
-Templates specify the VM shape and sandboxes inherit it. With a CPU or memory range, each sandbox grows within it by default, or can use a fixed size within it; see [Custom size](/sandbox/size).
+Templates specify the VM shape and sandboxes inherit it. A template can also let sandboxes grow with load (see [Growing memory](#growing-memory) and [Growing CPU](#growing-cpu)), or choose their own size at create (see [Size range](#size-range)).
 
 | Limit         | `vcpu` (vCPUs) | `memoryMib` (MiB)  |
 | ------------- | -------------- | ------------------ |
@@ -116,6 +116,18 @@ vcpuMax: 4,
 Only sandboxes from a template built with `vcpuMax` set can grow; leave it out for a fixed vCPU count. The [CLI](/cli#build-a-template) takes the same value as `--vcpu-max`, and the [MCP server](/integrations/mcp) as `vcpu_max` on `sandbox_template_create`.
 
 For how sandboxes scale up, drop back and are billed, see [Live CPU resizing](/sandbox/live-cpu-resizing).
+
+### Size range
+
+Set `sizeRange` to let each sandbox choose a fixed `vcpu` and/or `memoryMib` when it's created, from the template's values up to these maximums. The maximums follow the same rules as `vcpuMax` and `memoryMaxMib`.
+
+```typescript
+vcpu: 1,
+memoryMib: 1024,
+sizeRange: { vcpuMax: 4, memoryMaxMib: 4096 },
+```
+
+Sandboxes that don't choose a size get the template's base size. To also let them grow, set `vcpuMax` / `memoryMaxMib` to the same maximum. The [CLI](/cli#build-a-template) takes `--size-range-vcpu-max` and `--size-range-memory-max`, and the [MCP server](/integrations/mcp) takes `size_range` on `sandbox_template_create`. See [Custom size](/sandbox/size).
 
 ## Build error codes
 

@@ -111,6 +111,7 @@ describe("toTemplateInfo", () => {
       memory_max_mib: 8192,
       memory_shrink_after_seconds: 600,
       vcpu_max: 8,
+      size_range: { memory_max_mib: 8192 },
       disk_mib: 4096,
       size_bytes: 12345,
       created_at: "2026-01-01T00:00:00Z",
@@ -124,6 +125,7 @@ describe("toTemplateInfo", () => {
     expect(info.memoryMaxMib).toBe(8192)
     expect(info.memoryShrinkAfterSeconds).toBe(600)
     expect(info.vcpuMax).toBe(8)
+    expect(info.sizeRange).toEqual({ memoryMaxMib: 8192 })
     expect(info.diskMib).toBe(4096)
     expect(info.sizeBytes).toBe(12345)
     expect(info.createdAt).toBeInstanceOf(Date)
@@ -144,6 +146,7 @@ describe("toTemplateInfo", () => {
     expect(info.memoryMaxMib).toBeUndefined()
     expect(info.memoryShrinkAfterSeconds).toBeUndefined()
     expect(info.vcpuMax).toBeUndefined()
+    expect(info.sizeRange).toBeUndefined()
     expect(info.sizeBytes).toBeUndefined()
     expect(info.builtAt).toBeUndefined()
     expect(info.errorMessage).toBeUndefined()

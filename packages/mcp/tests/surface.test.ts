@@ -210,6 +210,7 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
       memory_max_mib: 16384,
       memory_shrink_after_seconds: 600,
       vcpu_max: 8,
+      size_range: { vcpu_max: 8 },
       run_steps: ["pip install numpy"],
     })
     expect(r.isError).toBe(false)
@@ -219,7 +220,8 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
     expect(t.memoryMaxMib).toBe(16384)
     expect(t.memoryShrinkAfterSeconds).toBe(600)
     expect(t.vcpuMax).toBe(8)
-    expect(r.text).toContain("4-8 vCPU / 8192-16384 MiB")
+    expect(t.sizeRange).toEqual({ vcpuMax: 8 })
+    expect(r.text).toContain("4-8 vCPU / 8192-16384 MiB, size range 4-8 vCPU")
     expect(t.status).toBe("building")
     // The agent is told to poll until ready before using it.
     expect(r.text).toMatch(/ready/)

@@ -280,8 +280,16 @@ export interface CreateTemplateRequest {
   memory_max_mib?: number
   memory_shrink_after_seconds?: number
   vcpu_max?: number
+  size_range?: TemplateSizeRange
   disk_mib?: number
   build_spec: BuildSpec
+}
+
+/** Largest size a sandbox may choose at create; the range starts at the
+ *  template's vcpu / memory_mib. */
+export interface TemplateSizeRange {
+  vcpu_max?: number
+  memory_max_mib?: number
 }
 
 export interface CreateTemplateResponse {
@@ -298,6 +306,8 @@ export interface CreateTemplateResponse {
   memory_shrink_after_seconds?: number
   /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
   vcpu_max?: number
+  /** Sizes sandboxes may choose at create; absent when they can't choose. */
+  size_range?: TemplateSizeRange
   created_at: string
   build_id: string
 }
@@ -316,6 +326,8 @@ export interface TemplateResponse {
   memory_shrink_after_seconds?: number
   /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
   vcpu_max?: number
+  /** Sizes sandboxes may choose at create; absent when they can't choose. */
+  size_range?: TemplateSizeRange
   size_bytes?: number
   error_message?: string
   created_at: string

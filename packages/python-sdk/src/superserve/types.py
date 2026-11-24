@@ -399,6 +399,17 @@ class BuildLogStream(str, Enum):
     SYSTEM = "system"
 
 
+class TemplateSizeRange(BaseModel):
+    """Largest size a sandbox may choose at create with ``vcpu`` or ``memory_mib``.
+
+    The range starts at the template's ``vcpu`` and ``memory_mib``. A
+    dimension without a maximum cannot be chosen.
+    """
+
+    vcpu_max: Optional[int] = None
+    memory_max_mib: Optional[int] = None
+
+
 class TemplateInfo(BaseModel):
     id: str
     name: str
@@ -412,6 +423,8 @@ class TemplateInfo(BaseModel):
     memory_shrink_after_seconds: Optional[int] = None
     # Ceiling the CPU count can grow to while running; None when it is fixed.
     vcpu_max: Optional[int] = None
+    # Sizes sandboxes may choose at create; None when they cannot choose.
+    size_range: Optional[TemplateSizeRange] = None
     disk_mib: int = 0
     size_bytes: Optional[int] = None
     error_message: Optional[str] = None
@@ -499,6 +512,14 @@ def to_template_info(
         memory_max_mib=raw.get("memory_max_mib"),
         memory_shrink_after_seconds=raw.get("memory_shrink_after_seconds"),
         vcpu_max=raw.get("vcpu_max"),
+        size_range=(
+            TemplateSizeRange(
+                vcpu_max=raw["size_range"].get("vcpu_max"),
+                memory_max_mib=raw["size_range"].get("memory_max_mib"),
+            )
+            if raw.get("size_range")
+            else None
+        ),
         disk_mib=raw.get("disk_mib", 0),
         size_bytes=raw.get("size_bytes"),
         error_message=raw.get("error_message"),

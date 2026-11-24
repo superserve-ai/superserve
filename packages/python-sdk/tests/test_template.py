@@ -7,7 +7,7 @@ import json
 import httpx
 import pytest
 import respx
-from superserve import Template, TemplateStatus
+from superserve import Template, TemplateSizeRange, TemplateStatus
 
 API = "https://api.example.com"
 
@@ -43,6 +43,7 @@ class TestCreate:
                 memory_max_mib=8192,
                 memory_shrink_after_seconds=600,
                 vcpu_max=4,
+                size_range=TemplateSizeRange(vcpu_max=4),
                 disk_mib=4096,
                 from_="python:3.11",
                 start_cmd="python server.py",
@@ -56,6 +57,7 @@ class TestCreate:
             assert json.loads(body)["memory_max_mib"] == 8192
             assert json.loads(body)["memory_shrink_after_seconds"] == 600
             assert json.loads(body)["vcpu_max"] == 4
+            assert json.loads(body)["size_range"] == {"vcpu_max": 4}
 
     def test_omits_growth_ceilings_when_unset(self) -> None:
         with respx.mock() as router:

@@ -8,6 +8,7 @@ import {
 const row = (over: Partial<SnapshotSizeRow>): SnapshotSizeRow => ({
   vcpu_count: 2,
   vcpu_max: null,
+  vcpu_selectable: true,
   fixed_cpu_image_vcpus: null,
   fixed_cpu_image_min_vcpus: null,
   memory_mib: 2048,
@@ -30,6 +31,11 @@ describe("snapshotSizeRanges", () => {
         memory_max_mib: 4096,
       }),
       { vcpu_range: { min: 1, max: 4 } },
+    ],
+    [
+      "growable source whose template doesn't let sandboxes choose",
+      row({ vcpu_count: 1, vcpu_max: 4, vcpu_selectable: false }),
+      {},
     ],
     [
       "sized source",

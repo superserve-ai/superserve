@@ -65,6 +65,7 @@ const dbRow = (over: Record<string, unknown>) => ({
   disk_mib: 4096,
   memory_max_mib: null,
   vcpu_max: null,
+  vcpu_selectable: true,
   memory_shrink_after_seconds: null,
   fixed_cpu_image_vcpus: null,
   fixed_cpu_image_min_vcpus: null,
