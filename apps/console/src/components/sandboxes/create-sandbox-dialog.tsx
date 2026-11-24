@@ -29,14 +29,11 @@ import { createPortal, flushSync } from "react-dom"
 
 import { CornerBrackets } from "@/components/corner-brackets"
 import {
-  hasCpuRange,
-  hasMemoryRange,
-  type SizeRange,
-  sizeSummary,
-  SnapshotSize,
-  snapshotSize,
-  templateSize,
-  TemplateSizeSection,
+  chosenSizeLine,
+  SizeSection,
+  type SizeSource,
+  snapshotSource,
+  templateSource,
 } from "@/components/sandboxes/sandbox-size-section"
 import type { SecretBindingEntry } from "@/components/secrets/secret-binding-editor"
 import { SecretBindingEditor } from "@/components/secrets/secret-binding-editor"
@@ -295,10 +292,11 @@ interface FormState {
   templateRef?: string
   /** Saved snapshot to continue from; takes the place of `templateRef`. */
   snapshotId?: string
-  /** Fixed size picks (null = auto); only sent within the template's range. */
+  /** Chosen size (null = the source's default); only sent within its range. */
   vcpu?: number | null
   memoryMib?: number | null
-  template?: SizeRange
+  /** The selected template's or snapshot's size and choosable ranges. */
+  size?: SizeSource
 }
 
 /** Max auto-pause timeout (7 days) and auto-delete window (30 days), matching
@@ -364,10 +362,9 @@ function inRange(n: number, label: string, min: number, max: number): number {
  *  - `from_snapshot` is included when `snapshotId` is set, and then
  *    `from_template` never is; otherwise `from_template` is included when
  *    `templateRef` is non-empty.
- *  - `vcpu` / `memory_mib` are only included when fixed (non-null) for a
- *    template source whose range covers that dimension, validated to the
- *    range (memory in 2 MiB steps from the minimum). Auto sends nothing, so
- *    the sandbox keeps the template's range.
+ *  - `vcpu` / `memory_mib` are only included when chosen (non-null) and the
+ *    source's `size` has a range for that dimension, validated to the range
+ *    (memory in 2 MiB steps from the minimum). The default sends nothing.
  *  - `preview_access` is always explicit so new console sandboxes use the
  *    published-port model instead of the compatibility-only legacy mode.
  */
@@ -415,27 +412,23 @@ export function buildCreateSandboxRequest(
     MAX_AUTO_DELETE_SECONDS,
   )
 
-  const template = state.snapshotId ? undefined : state.template
+  const vcpuRange = state.size?.vcpuRange
+  const memoryRange = state.size?.memoryRange
   const vcpu =
-    hasCpuRange(template) && state.vcpu != null
-      ? inRange(state.vcpu, "vCPU", template.vcpu, template.vcpu_max)
+    vcpuRange && state.vcpu != null
+      ? inRange(state.vcpu, "vCPU", vcpuRange.min, vcpuRange.max)
       : undefined
   const memoryMib =
-    hasMemoryRange(template) && state.memoryMib != null
-      ? inRange(
-          state.memoryMib,
-          "Memory",
-          template.memory_mib,
-          template.memory_max_mib,
-        )
+    memoryRange && state.memoryMib != null
+      ? inRange(state.memoryMib, "Memory", memoryRange.min, memoryRange.max)
       : undefined
   if (
     memoryMib !== undefined &&
-    template &&
-    (memoryMib - template.memory_mib) % 2 !== 0
+    memoryRange &&
+    (memoryMib - memoryRange.min) % 2 !== 0
   ) {
     throw new Error(
-      `Memory must be ${template.memory_mib} MiB plus a multiple of 2 MiB.`,
+      `Memory must be ${memoryRange.min} MiB plus a multiple of 2 MiB.`,
     )
   }
 
@@ -529,7 +522,7 @@ export function CreateSandboxDialog({
     initialSnapshotId ? "snapshot" : "template",
   )
   const [snapshotId, setSnapshotId] = useState(initialSnapshotId ?? "")
-  // null = Auto: the sandbox keeps the template's range.
+  // Chosen size; both null means the template's default.
   const [vcpu, setVcpu] = useState<number | null>(null)
   const [memoryMib, setMemoryMib] = useState<number | null>(null)
 
@@ -609,9 +602,18 @@ export function CreateSandboxDialog({
   const selectedTemplate = templateOptions.find(
     (t) => t.name === templateRef || t.id === templateRef,
   )
-  const size = fromSnapshot
-    ? selectedSnapshot && snapshotSize(selectedSnapshot.resources)
-    : selectedTemplate && templateSize(selectedTemplate, vcpu, memoryMib)
+  const sizeSource = fromSnapshot
+    ? selectedSnapshot && snapshotSource(selectedSnapshot.resources)
+    : selectedTemplate && templateSource(selectedTemplate)
+  const size = sizeSource && chosenSizeLine(sizeSource, vcpu, memoryMib)
+  // A new source starts at its default size.
+  const changeSource =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v)
+      setVcpu(null)
+      setMemoryMib(null)
+    }
 
   const createMutation = useCreateSandbox()
   const { addToast } = useToast()
@@ -663,7 +665,7 @@ export function CreateSandboxDialog({
         snapshotId: fromSnapshot ? snapshotId : undefined,
         vcpu,
         memoryMib,
-        template: selectedTemplate,
+        size: sizeSource,
       })
     } catch (e) {
       addToast(e instanceof Error ? e.message : "Invalid input", "error")
@@ -796,7 +798,7 @@ export function CreateSandboxDialog({
                       key={s.value}
                       type="button"
                       aria-pressed={source === s.value}
-                      onClick={() => setSource(s.value)}
+                      onClick={() => changeSource(setSource)(s.value)}
                       className={cn(
                         "relative inline-flex cursor-pointer items-center px-3 py-1 font-mono text-xs transition-colors",
                         source === s.value
@@ -824,7 +826,7 @@ export function CreateSandboxDialog({
                   <SourcePicker
                     value={snapshotId}
                     items={snapshotItems}
-                    onChange={setSnapshotId}
+                    onChange={changeSource(setSnapshotId)}
                     emptyText="No ready snapshots available"
                     placeholder="Select a snapshot"
                   />
@@ -838,29 +840,23 @@ export function CreateSandboxDialog({
                   <SourcePicker
                     value={templateRef}
                     items={selectItems}
-                    onChange={(ref) => {
-                      setTemplateRef(ref)
-                      setVcpu(null)
-                      setMemoryMib(null)
-                    }}
+                    onChange={changeSource(setTemplateRef)}
                     emptyText="No ready templates available"
                   />
                 </Field>
               )}
 
-              {fromSnapshot
-                ? selectedSnapshot && (
-                    <SnapshotSize resources={selectedSnapshot.resources} />
-                  )
-                : selectedTemplate && (
-                    <TemplateSizeSection
-                      template={selectedTemplate}
-                      vcpu={vcpu}
-                      memoryMib={memoryMib}
-                      onVcpuChange={setVcpu}
-                      onMemoryChange={setMemoryMib}
-                    />
-                  )}
+              {sizeSource && (
+                <SizeSection
+                  source={sizeSource}
+                  vcpu={vcpu}
+                  memoryMib={memoryMib}
+                  onChange={(v, m) => {
+                    setVcpu(v)
+                    setMemoryMib(m)
+                  }}
+                />
+              )}
 
               <button
                 type="button"
@@ -1184,7 +1180,7 @@ export function CreateSandboxDialog({
                 data-testid="size-summary"
                 className="basis-full font-mono text-xs text-muted tabular-nums sm:basis-auto"
               >
-                {size ? sizeSummary(size.cpu, size.memory) : ""}
+                {size ?? ""}
               </span>
               <div className="flex gap-3">
                 <Button variant="outline" onClick={() => setOpen(false)}>

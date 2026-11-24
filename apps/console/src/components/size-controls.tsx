@@ -17,6 +17,22 @@ export function formatVcpu(n: number): string {
   return `${n} vCPU`
 }
 
+function formatNum(n: number): string {
+  return String(Number(n.toFixed(2)))
+}
+
+export function formatVcpuRange(min: number, max: number | undefined): string {
+  return max == null ? formatVcpu(min) : `${min}–${formatVcpu(max)}`
+}
+
+export function formatMibRange(min: number, max: number | undefined): string {
+  if (max == null) return formatMib(min)
+  // Share the unit when both ends use it: "1–4 GB", not "1 GB–4 GB".
+  return min >= 1024 && max >= 1024
+    ? `${formatNum(min / 1024)}–${formatMib(max)}`
+    : `${formatMib(min)}–${formatMib(max)}`
+}
+
 export interface StepperProps {
   label: string
   /** Visible label; without it, `label` names the control. */

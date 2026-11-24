@@ -19,6 +19,7 @@ import {
   Field,
   HighlightedCode,
   Input,
+  Switch,
   Tabs,
   TabsList,
   TabsPanel,
@@ -31,7 +32,9 @@ import { useId, useMemo, useRef, useState } from "react"
 import {
   focusRing,
   formatMib,
+  formatMibRange,
   formatVcpu,
+  formatVcpuRange,
   ROW_GRID,
   SegmentedChoice,
   Stepper,
@@ -77,6 +80,9 @@ const SHRINK_AFTER_MIN = 60
 const SHRINK_AFTER_MAX = 1800
 
 const SIZE_DOCS_URL = "https://docs.superserve.ai/sandbox/size"
+const LIVE_MEMORY_DOCS_URL =
+  "https://docs.superserve.ai/sandbox/live-memory-resizing"
+const LIVE_CPU_DOCS_URL = "https://docs.superserve.ai/sandbox/live-cpu-resizing"
 
 function limitOf(
   cap: number | null | undefined,
@@ -207,33 +213,59 @@ function ResourceRow({
   )
 }
 
-// Fixed size vs a range the sandboxes from this template can size within.
-function SizeModeToggle({
-  isRange,
-  canRange,
-  resourceLabelId,
-  hintId,
+// One optional Resources section: a switch in the heading reveals its rows.
+function OptionalSection({
+  id,
+  title,
+  subtitle,
+  on,
   onChange,
+  children,
 }: {
-  isRange: boolean
-  canRange: boolean
-  // The resource row's label, so each group is named for what it sizes.
-  resourceLabelId: string
-  // Visible note explaining a disabled range, read with the group.
-  hintId: string
-  onChange: (range: boolean) => void
+  id: string
+  title: string
+  subtitle: string
+  on: boolean
+  onChange: (on: boolean) => void
+  children: React.ReactNode
 }) {
   return (
-    <SegmentedChoice
-      value={isRange}
-      onChange={onChange}
-      labelledBy={resourceLabelId}
-      describedBy={canRange ? undefined : hintId}
-      options={[
-        { value: false, text: "Fixed size" },
-        { value: true, text: "Range", disabled: !canRange },
-      ]}
-    />
+    <section aria-labelledby={`${id}-title`} className="pt-4">
+      <div className="flex items-start justify-between gap-3 border-b border-dashed border-border pb-2">
+        <div>
+          <h3
+            id={`${id}-title`}
+            className="font-mono text-xs tracking-wider text-muted uppercase"
+          >
+            {title} <span className="normal-case">(optional)</span>
+          </h3>
+          <p className="mt-1 text-xs text-muted">{subtitle}</p>
+        </div>
+        <Switch
+          id={`${id}-switch`}
+          checked={on}
+          onCheckedChange={onChange}
+          aria-labelledby={`${id}-title`}
+        />
+      </div>
+      {on && <div className="space-y-1 py-2">{children}</div>}
+    </section>
+  )
+}
+
+function DocsLink({ href, children }: { href: string; children: string }) {
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      className={cn(
+        "text-foreground underline decoration-dashed underline-offset-2",
+        focusRing,
+      )}
+    >
+      {children}
+    </a>
   )
 }
 
@@ -409,6 +441,10 @@ export function CreateTemplateDialog({
   const [shrinkAfter, setShrinkAfter] = useState("")
   const [cpuGrowth, setCpuGrowth] = useState(false)
   const [vcpuMaxPick, setVcpuMax] = useState(2)
+  // Size range and resizing both set vcpu_max / memory_max_mib: one shared
+  // limit per resource, sent while either section is on.
+  const [rangeOn, setRangeOn] = useState(false)
+  const [resizeOn, setResizeOn] = useState(false)
   const [codeOpen, setCodeOpen] = useState(false)
   // Picks are clamped at render rather than rewritten, so a cap or boot size
   // change always shows, and submits, a shape the API accepts.
@@ -424,14 +460,19 @@ export function CreateTemplateDialog({
   // Drop the opt-in once there is no room to grow, so a later lower boot size
   // doesn't re-enable it unasked.
   if (growth && !canGrow) setGrowth(false)
+  const limitsOn = rangeOn || resizeOn
   const memoryMax =
-    growth && canGrow ? clampTo(memoryMaxPick, memoryMaxSteps) : null
+    limitsOn && growth && canGrow
+      ? clampTo(memoryMaxPick, memoryMaxSteps)
+      : null
   const vcpuMaxSteps = maxVcpuSteps(vcpu, vcpuLimit)
   const canGrowCpu = vcpuMaxSteps.length > 0
   const cpuCeiling = canGrowCpu ? vcpuMaxSteps[vcpuMaxSteps.length - 1] : 0
   if (cpuGrowth && !canGrowCpu) setCpuGrowth(false)
   const vcpuMax =
-    cpuGrowth && canGrowCpu ? clampTo(vcpuMaxPick, vcpuMaxSteps) : null
+    limitsOn && cpuGrowth && canGrowCpu
+      ? clampTo(vcpuMaxPick, vcpuMaxSteps)
+      : null
   const [errors, setErrors] = useState<{
     name?: string
     image?: string
@@ -449,6 +490,8 @@ export function CreateTemplateDialog({
     setShrinkAfter("")
     setCpuGrowth(false)
     setVcpuMax(2)
+    setRangeOn(false)
+    setResizeOn(false)
     setCodeOpen(false)
     setErrors({})
   }
@@ -461,7 +504,9 @@ export function CreateTemplateDialog({
     [trimmedImage],
   )
 
-  const sendShrinkAfter = memoryMax !== null && shrinkAfter.trim() !== ""
+  // Shrink timing belongs to resizing only.
+  const sendShrinkAfter =
+    resizeOn && memoryMax !== null && shrinkAfter.trim() !== ""
   const liveShrinkAfterError = sendShrinkAfter
     ? validateShrinkAfter(shrinkAfter.trim())
     : null
@@ -554,12 +599,32 @@ export function CreateTemplateDialog({
     caps?.max_memory_mib == null ||
     caps?.max_disk_mib == null
   const summary = [
-    vcpuMax === null ? formatVcpu(vcpu) : `${vcpu}–${formatVcpu(vcpuMax)}`,
-    memoryMax === null
-      ? formatMib(memory)
-      : `${formatMib(memory)}–${formatMib(memoryMax)}`,
+    formatVcpuRange(vcpu, vcpuMax ?? undefined),
+    formatMibRange(memory, memoryMax ?? undefined),
     `${formatMib(disk)} disk`,
   ].join(" · ")
+  const anyLimit = vcpuMax !== null || memoryMax !== null
+  // Turning a section off clears the limits unless the other still uses them.
+  const toggleSection = (
+    setOn: (on: boolean) => void,
+    on: boolean,
+    otherOn: boolean,
+    // Size range opens at the widest range; resizing opens fixed, as before.
+    preset: boolean,
+  ) => {
+    setOn(on)
+    // Start at the widest range unless a limit is already set, e.g. by resizing.
+    if (on && preset && !anyLimit) {
+      setCpuGrowth(canGrowCpu)
+      setVcpuMax(cpuCeiling)
+      setGrowth(canGrow)
+      setMemoryMax(growthCeiling)
+    }
+    if (!on && !otherOn) {
+      setCpuGrowth(false)
+      setGrowth(false)
+    }
+  }
 
   return (
     <Dialog
@@ -648,40 +713,31 @@ export function CreateTemplateDialog({
           </Field>
 
           <section aria-labelledby={`${ids}-resources`}>
-            <div
-              className={cn(
-                ROW_GRID,
-                "border-b border-dashed border-border pb-2 font-mono text-xs tracking-wider text-muted uppercase",
-              )}
-            >
-              <h3 id={`${ids}-resources`}>Resources</h3>
-              <span aria-hidden className="w-[10.5rem] text-center">
-                Per sandbox
-              </span>
-              <span aria-hidden className="hidden text-right sm:block">
-                Plan max
-              </span>
+            <div className="border-b border-dashed border-border pb-2">
+              <div
+                className={cn(
+                  ROW_GRID,
+                  "font-mono text-xs tracking-wider text-muted uppercase",
+                )}
+              >
+                <h3 id={`${ids}-resources`}>Size</h3>
+                <span aria-hidden />
+                <span aria-hidden className="hidden text-right sm:block">
+                  Plan max
+                </span>
+              </div>
+              <p className="mt-1 text-xs text-muted">
+                Every sandbox from this template gets this size.
+              </p>
             </div>
             <div className="divide-y divide-dashed divide-border">
-              <div className="space-y-1 py-2">
+              <div className="py-2">
                 <ResourceRow
                   label="vCPU"
                   labelId={`${ids}-vcpu`}
                   cap={caps?.max_vcpu}
                   limitText={String(vcpuLimit)}
                 >
-                  <SizeModeToggle
-                    isRange={vcpuMax !== null}
-                    canRange={canGrowCpu}
-                    resourceLabelId={`${ids}-vcpu`}
-                    hintId={`${ids}-vcpu-hint`}
-                    onChange={(range) => {
-                      setCpuGrowth(range)
-                      if (range) setVcpuMax(cpuCeiling)
-                    }}
-                  />
-                </ResourceRow>
-                <SubRow label={vcpuMax === null ? "Size" : "From"}>
                   <Stepper
                     label="vCPU"
                     labelledBy={`${ids}-vcpu`}
@@ -690,48 +746,15 @@ export function CreateTemplateDialog({
                     onChange={setVcpu}
                     format={formatVcpu}
                   />
-                </SubRow>
-                {vcpuMax !== null && (
-                  <SubRow label="To" note={`max ${formatVcpu(cpuCeiling)}`}>
-                    <Stepper
-                      label="Max vCPU"
-                      steps={vcpuMaxSteps}
-                      value={vcpuMax}
-                      onChange={setVcpuMax}
-                      format={formatVcpu}
-                    />
-                  </SubRow>
-                )}
-                {!canGrowCpu && (
-                  <p
-                    id={`${ids}-vcpu-hint`}
-                    className="pl-3 text-xs text-muted"
-                  >
-                    A range needs room between vCPU and your limit. Lower vCPU
-                    to use one.
-                  </p>
-                )}
+                </ResourceRow>
               </div>
-              <div className="space-y-1 py-2">
+              <div className="py-2">
                 <ResourceRow
                   label="Memory"
                   labelId={`${ids}-memory`}
                   cap={caps?.max_memory_mib}
                   limitText={formatMib(memoryLimit)}
                 >
-                  <SizeModeToggle
-                    isRange={memoryMax !== null}
-                    canRange={canGrow}
-                    resourceLabelId={`${ids}-memory`}
-                    hintId={`${ids}-memory-hint`}
-                    onChange={(range) => {
-                      setGrowth(range)
-                      // Start at the widest range; step down below.
-                      if (range) setMemoryMax(growthCeiling)
-                    }}
-                  />
-                </ResourceRow>
-                <SubRow label={memoryMax === null ? "Size" : "From"}>
                   <Stepper
                     label="Memory"
                     labelledBy={`${ids}-memory`}
@@ -740,50 +763,7 @@ export function CreateTemplateDialog({
                     onChange={setMemory}
                     format={formatMib}
                   />
-                </SubRow>
-                {memoryMax !== null && (
-                  <SubRow label="To" note={`max ${formatMib(growthCeiling)}`}>
-                    <Stepper
-                      label="Max memory"
-                      steps={memoryMaxSteps}
-                      value={memoryMax}
-                      onChange={setMemoryMax}
-                      format={formatMib}
-                    />
-                  </SubRow>
-                )}
-                {!canGrow && (
-                  <p
-                    id={`${ids}-memory-hint`}
-                    className="pl-3 text-xs text-muted"
-                  >
-                    A range needs at least 128 MB of room between memory and
-                    your limit. Lower memory to use one.
-                  </p>
-                )}
-                {memoryMax !== null && (
-                  <div className={ROW_GRID}>
-                    <label
-                      htmlFor={`${ids}-shrink-after`}
-                      className="border-l border-dashed border-control pl-3 text-sm text-foreground"
-                    >
-                      Shrink after (seconds)
-                    </label>
-                    <Input
-                      id={`${ids}-shrink-after`}
-                      type="number"
-                      inputMode="numeric"
-                      min={SHRINK_AFTER_MIN}
-                      max={SHRINK_AFTER_MAX}
-                      value={shrinkAfter}
-                      onChange={(e) => setShrinkAfter(e.target.value)}
-                      placeholder="Default"
-                      title="How long memory must stay low after growing before it shrinks back, 60 to 1800"
-                      className="w-[10.5rem] font-mono"
-                      error={liveShrinkAfterError ?? undefined}
-                    />
-                  </div>
-                )}
+                </ResourceRow>
               </div>
               <div className="py-2">
                 <ResourceRow
@@ -803,23 +783,6 @@ export function CreateTemplateDialog({
                 </ResourceRow>
               </div>
             </div>
-            {(vcpuMax !== null || memoryMax !== null) && (
-              <p className="mt-2 text-xs text-muted">
-                Range: each sandbox can pick a fixed size within it, or
-                auto-resize as load changes.{" "}
-                <a
-                  href={SIZE_DOCS_URL}
-                  target="_blank"
-                  rel="noreferrer"
-                  className={cn(
-                    "text-foreground underline decoration-dashed underline-offset-2",
-                    focusRing,
-                  )}
-                >
-                  Custom size docs
-                </a>
-              </p>
-            )}
             <p className="mt-2 text-xs text-muted">
               Size the disk for the image plus everything your build installs.
               {anyUnreported && (
@@ -831,6 +794,193 @@ export function CreateTemplateDialog({
               )}
             </p>
           </section>
+
+          <OptionalSection
+            id={`${ids}-range`}
+            title="Size range"
+            subtitle="Let each sandbox choose its own size when it's created."
+            on={rangeOn}
+            onChange={(on) => toggleSection(setRangeOn, on, resizeOn, true)}
+          >
+            <SubRow
+              label="vCPU up to"
+              note={formatVcpuRange(vcpu, vcpuMax ?? undefined)}
+            >
+              <Stepper
+                label="vCPU up to"
+                steps={[vcpu, ...vcpuMaxSteps]}
+                value={vcpuMax ?? vcpu}
+                onChange={(v) => {
+                  setCpuGrowth(v !== vcpu)
+                  if (v !== vcpu) setVcpuMax(v)
+                }}
+                format={formatVcpu}
+              />
+            </SubRow>
+            <SubRow
+              label="Memory up to"
+              note={formatMibRange(memory, memoryMax ?? undefined)}
+            >
+              <Stepper
+                label="Memory up to"
+                steps={[memory, ...memoryMaxSteps]}
+                value={memoryMax ?? memory}
+                onChange={(v) => {
+                  setGrowth(v !== memory)
+                  if (v !== memory) setMemoryMax(v)
+                }}
+                format={formatMib}
+              />
+            </SubRow>
+            <p className="pt-1 text-xs text-muted">
+              Sandboxes can pick any size from the Size above up to these
+              limits. <DocsLink href={SIZE_DOCS_URL}>Custom size docs</DocsLink>
+            </p>
+            {!resizeOn && anyLimit && (
+              <p className="text-xs text-muted">
+                Sandboxes that don&apos;t choose a size grow with load up to
+                this limit.
+              </p>
+            )}
+          </OptionalSection>
+
+          <OptionalSection
+            id={`${ids}-resize`}
+            title="CPU and memory resizing"
+            subtitle="Let sandboxes grow and shrink with load."
+            on={resizeOn}
+            onChange={(on) => toggleSection(setResizeOn, on, rangeOn, false)}
+          >
+            <div className={ROW_GRID}>
+              <span id={`${ids}-grow-vcpu`} className="text-sm text-foreground">
+                vCPU
+              </span>
+              <SegmentedChoice
+                value={vcpuMax !== null}
+                labelledBy={`${ids}-grow-vcpu`}
+                describedBy={canGrowCpu ? undefined : `${ids}-vcpu-hint`}
+                onChange={(grow) => {
+                  setCpuGrowth(grow)
+                  if (grow) setVcpuMax(cpuCeiling)
+                }}
+                options={[
+                  { value: false, text: "Fixed" },
+                  {
+                    value: true,
+                    text: canGrowCpu
+                      ? `Up to ${formatVcpu(vcpuMax ?? cpuCeiling)}`
+                      : "At limit",
+                    disabled: !canGrowCpu,
+                  },
+                ]}
+              />
+              <span className="hidden sm:block" />
+            </div>
+            {!canGrowCpu && (
+              <p id={`${ids}-vcpu-hint`} className="pl-3 text-xs text-muted">
+                Growth needs room between vCPU and your limit. Lower vCPU to
+                turn it on.
+              </p>
+            )}
+            {vcpuMax !== null && (
+              <SubRow label="Max vCPU" note={`max ${formatVcpu(cpuCeiling)}`}>
+                <Stepper
+                  label="Max vCPU"
+                  steps={vcpuMaxSteps}
+                  value={vcpuMax}
+                  onChange={setVcpuMax}
+                  format={formatVcpu}
+                />
+              </SubRow>
+            )}
+            <div className={ROW_GRID}>
+              <span
+                id={`${ids}-grow-memory`}
+                className="text-sm text-foreground"
+              >
+                Memory
+              </span>
+              <SegmentedChoice
+                value={memoryMax !== null}
+                labelledBy={`${ids}-grow-memory`}
+                describedBy={canGrow ? undefined : `${ids}-memory-hint`}
+                onChange={(grow) => {
+                  setGrowth(grow)
+                  // Start at the ceiling the option names; step down below.
+                  if (grow) setMemoryMax(growthCeiling)
+                }}
+                options={[
+                  { value: false, text: "Fixed" },
+                  {
+                    value: true,
+                    text: canGrow
+                      ? `Up to ${formatMib(memoryMax ?? growthCeiling)}`
+                      : "At limit",
+                    disabled: !canGrow,
+                  },
+                ]}
+              />
+              <span className="hidden sm:block" />
+            </div>
+            {!canGrow && (
+              <p id={`${ids}-memory-hint`} className="pl-3 text-xs text-muted">
+                Growth needs at least 128 MB of room between memory and your
+                limit. Lower memory to turn it on.
+              </p>
+            )}
+            {memoryMax !== null && (
+              <SubRow
+                label="Max memory"
+                note={`max ${formatMib(growthCeiling)}`}
+              >
+                <Stepper
+                  label="Max memory"
+                  steps={memoryMaxSteps}
+                  value={memoryMax}
+                  onChange={setMemoryMax}
+                  format={formatMib}
+                />
+              </SubRow>
+            )}
+            {memoryMax !== null && (
+              <div className={ROW_GRID}>
+                <label
+                  htmlFor={`${ids}-shrink-after`}
+                  className="border-l border-dashed border-control pl-3 text-sm text-foreground"
+                >
+                  Shrink after (seconds)
+                </label>
+                <Input
+                  id={`${ids}-shrink-after`}
+                  type="number"
+                  inputMode="numeric"
+                  min={SHRINK_AFTER_MIN}
+                  max={SHRINK_AFTER_MAX}
+                  value={shrinkAfter}
+                  onChange={(e) => setShrinkAfter(e.target.value)}
+                  placeholder="Default"
+                  title="How long memory must stay low after growing before it shrinks back, 60 to 1800"
+                  className="w-[10.5rem] font-mono"
+                  error={liveShrinkAfterError ?? undefined}
+                />
+              </div>
+            )}
+            <p className="pt-1 text-xs text-muted">
+              Sandboxes start at the Size above and grow up to these limits.{" "}
+              <DocsLink href={LIVE_CPU_DOCS_URL}>
+                Live CPU resizing docs
+              </DocsLink>{" "}
+              ·{" "}
+              <DocsLink href={LIVE_MEMORY_DOCS_URL}>
+                Live memory resizing docs
+              </DocsLink>
+            </p>
+            {rangeOn && anyLimit && (
+              <p className="text-xs text-muted">
+                Size range and resizing share the vCPU and memory limits.
+              </p>
+            )}
+          </OptionalSection>
 
           <TemplateCode
             shape={shape}

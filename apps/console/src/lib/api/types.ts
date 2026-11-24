@@ -154,6 +154,12 @@ export interface CreateApiKeyResponse {
 
 export type SnapshotStatus = "creating" | "ready" | "failed" | "deleting"
 
+/** Inclusive bounds. */
+export interface SnapshotSizeRange {
+  min: number
+  max: number
+}
+
 export interface SnapshotResponse {
   id: string
   sandbox_id: string
@@ -168,6 +174,10 @@ export interface SnapshotResponse {
     disk_mib: number
     memory_max_mib?: number
     vcpu_max?: number
+    /** vCPU counts a sandbox from this snapshot may choose; absent when it can't. */
+    vcpu_range?: SnapshotSizeRange
+    /** Memory sizes (2 MiB steps from min) a sandbox from it may choose. */
+    memory_range_mib?: SnapshotSizeRange
   }
   created_at: string
   ready_at: string | null
