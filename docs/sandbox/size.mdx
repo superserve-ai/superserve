@@ -170,9 +170,7 @@ A snapshot of a copy records the same range, so a copy of a copy can choose agai
 | `400` | `ValidationError` | `memoryMib` with a snapshot of a sandbox that didn't have a fixed memory size. |
 | `402` | `BillingError` with code `sandbox_exceeds_plan_limits` | The value is within range but above your plan's limits. See [Billing errors](/errors#billing-errors-402). |
 | `409` | `ConflictError` | The template was built before custom sizes were available. [Rebuild it](/templates/lifecycle), or leave out `vcpu` and `memoryMib`. |
-| `429` | `RateLimitError` with code `host_capacity` | The host has no room for that size right now. Retry after a short wait. |
-
-Custom sizes apply to sandboxes placed on GCP. For an AWS placement (`placement.cloud` set to `aws` in [`POST /sandboxes`](/api-reference/sandboxes/create-a-new-sandbox)), leave out `vcpu` and `memoryMib`.
+| `429` | `RateLimitError` with code `host_capacity` | There's no capacity for that size right now. Retry after a short wait. |
 
 ## Billing
 

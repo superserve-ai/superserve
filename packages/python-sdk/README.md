@@ -37,13 +37,14 @@ A template built with a size range lets each sandbox use a fixed size within it:
 ```python
 from superserve import Sandbox, Template, TemplateSizeRange
 
-Template.create(
+template = Template.create(
     name="my-env",
     from_="python:3.11",
     vcpu=1,
     memory_mib=2048,
     size_range=TemplateSizeRange(vcpu_max=4, memory_max_mib=8192),
 )
+template.wait_until_ready()
 
 sandbox = Sandbox.create(
     name="build",

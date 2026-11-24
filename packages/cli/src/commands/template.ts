@@ -86,6 +86,8 @@ const SPEC_KEYS = [
   "disk_mib",
 ]
 
+const SIZE_RANGE_KEYS = ["vcpu_max", "memory_max_mib"]
+
 const tpath = (id: string) => `/templates/${encodeURIComponent(id)}`
 const bpath = (id: string, buildId: string) =>
   `${tpath(id)}/builds/${encodeURIComponent(buildId)}`
@@ -304,13 +306,23 @@ async function buildCreateBody(
     opts.vcpuMax !== undefined
       ? parseInteger(opts.vcpuMax, "--vcpu-max")
       : file.vcpu_max
+  const fileRange = (file.size_range ?? {}) as Record<string, unknown>
   if (
-    file.size_range !== undefined &&
-    (typeof file.size_range !== "object" || file.size_range === null)
+    typeof fileRange !== "object" ||
+    fileRange === null ||
+    Array.isArray(fileRange)
   ) {
     throw usageError("size_range must be an object.")
   }
-  const fileRange = (file.size_range ?? {}) as Record<string, unknown>
+  const unknownRange = Object.keys(fileRange).filter(
+    (k) => !SIZE_RANGE_KEYS.includes(k),
+  )
+  if (unknownRange.length) {
+    throw usageError(
+      `Unknown field(s) in size_range: ${unknownRange.join(", ")}.`,
+      `Allowed: ${SIZE_RANGE_KEYS.join(", ")}.`,
+    )
+  }
   const rangeVcpuMax =
     opts.sizeRangeVcpuMax !== undefined
       ? parseInteger(opts.sizeRangeVcpuMax, "--size-range-vcpu-max")

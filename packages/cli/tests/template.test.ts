@@ -169,6 +169,13 @@ describe("template", () => {
       expect(r.exitCode).toBe(2)
       expect(r.requests).toHaveLength(0)
     }
+    for (const range of [[4], { vcpuMax: 4 }]) {
+      const r = await runCli(["template", "create", "ok", "-f", "-"], {
+        stdin: JSON.stringify({ from: "x", size_range: range }),
+      })
+      expect(r.exitCode).toBe(2)
+      expect(r.requests).toHaveLength(0)
+    }
   })
 
   test("a failed build streams logs and exits non-zero with the error code", async () => {
