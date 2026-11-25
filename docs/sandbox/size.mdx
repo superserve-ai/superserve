@@ -128,38 +128,38 @@ print(info.memory_mib, info.memory_max_mib)  # 6144 None
 
 </CodeGroup>
 
-## Snapshot copies
+## Forks
 
-A sandbox created from a [snapshot](/sandbox/snapshots) keeps the original sandbox's size, including any range it grows in. You can also choose a size with `fromSnapshot` / `from_snapshot`:
+A [fork](/sandbox/snapshots) keeps the original sandbox's size, including any range it grows in. You can also choose a size for it with `fromSnapshot` / `from_snapshot`:
 
-- **`vcpu`** works when the original sandbox came from a template with a vCPU size range. The snapshot records that range, and the copy can take any count in it. For a snapshot of a 2 vCPU sandbox from a 1–4 vCPU template, 1, 3 and 4 all work.
-- **`memoryMib`** works when the original sandbox had a fixed memory size. The copy can take any size in the snapshot's memory range, in 2 MiB steps from the minimum.
+- **`vcpu`** works when the original sandbox came from a template with a vCPU size range. The snapshot records that range, and the fork can take any count in it. For a snapshot of a 2 vCPU sandbox from a 1–4 vCPU template, 1, 3 and 4 all work.
+- **`memoryMib`** works when the original sandbox had a fixed memory size. The fork can take any size in the snapshot's memory range, in 2 MiB steps from the minimum. A fork with less memory than the original must still fit the memory the original was using when the snapshot was taken; if it can't, the request fails and the error names the smallest size that fits.
 
 <CodeGroup>
 
 ```typescript TypeScript
-const copy = await Sandbox.create({
-  name: "bigger-copy",
+const fork = await Sandbox.create({
+  name: "bigger-fork",
   fromSnapshot: snapshot,
   vcpu: 4,
 })
 ```
 
 ```python Python
-copy = Sandbox.create(
-    name="bigger-copy",
+fork = Sandbox.create(
+    name="bigger-fork",
     from_snapshot=snapshot,
     vcpu=4,
 )
 ```
 
 ```bash CLI
-superserve sandbox create --name bigger-copy --snapshot <snapshot-id> --vcpu 4
+superserve sandbox create --name bigger-fork --snapshot <snapshot-id> --vcpu 4
 ```
 
 </CodeGroup>
 
-A snapshot of a copy records the same range, so a copy of a copy can choose again.
+A snapshot of a fork records the same range, so a fork of a fork can choose again.
 
 ## Errors
 
@@ -168,6 +168,7 @@ A snapshot of a copy records the same range, so a copy of a copy can choose agai
 | `400` | `ValidationError` | The value is outside the template's or snapshot's range, or the template has no size range for that resource. System templates such as `superserve/base` have none. |
 | `400` | `ValidationError` | `vcpu` with a snapshot that has no recorded CPU range, for example one from a system template. |
 | `400` | `ValidationError` | `memoryMib` with a snapshot of a sandbox that didn't have a fixed memory size. |
+| `400` | `ValidationError` | `memoryMib` too small for the memory the original sandbox was using when the snapshot was taken. The message names the smallest size that fits. |
 | `402` | `BillingError` with code `sandbox_exceeds_plan_limits` | The value is within range but above your plan's limits. See [Billing errors](/errors#billing-errors-402). |
 | `409` | `ConflictError` | The template was built before custom sizes were available. [Rebuild it](/templates/lifecycle), or leave out `vcpu` and `memoryMib`. |
 | `429` | `RateLimitError` with code `host_capacity` | There's no capacity for that size right now. Retry after a short wait. |
