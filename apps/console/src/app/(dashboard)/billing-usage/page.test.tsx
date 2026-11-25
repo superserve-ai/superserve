@@ -227,7 +227,7 @@ describe("PlanUsagePage", () => {
     useBillingSummary.mockReturnValue({
       data: {
         billing_mode: "live",
-        checkout_available: true,
+        checkout_available: false,
         portal_available: true,
         payment_setup_required: false,
         permissions: {

@@ -127,7 +127,9 @@
               "sandbox/create",
               "sandbox/connect",
               "sandbox/lifecycle",
+              "sandbox/size",
               "sandbox/live-memory-resizing",
+              "sandbox/live-cpu-resizing",
               "sandbox/snapshots",
               "sandbox/metadata",
               "sandbox/networking",
@@ -217,6 +219,7 @@
                   "integrations/coding-agents/copilot-cli",
                   "integrations/coding-agents/grok",
                   "integrations/coding-agents/kilocode",
+                  "integrations/coding-agents/openhands",
                   "integrations/coding-agents/opencode",
                   "integrations/coding-agents/pi"
                 ]
@@ -313,6 +316,8 @@
               "GET /sandboxes",
               "POST /sandboxes",
               "GET /sandboxes/{sandbox_id}",
+              "GET /sandboxes/{sandbox_id}/metrics",
+              "POST /sandboxes/lookup",
               "PATCH /sandboxes/{sandbox_id}",
               "DELETE /sandboxes/{sandbox_id}",
               "POST /sandboxes/{sandbox_id}/pause",
@@ -334,20 +339,6 @@
               "GET /snapshots/{snapshot_id}",
               "PATCH /snapshots/{snapshot_id}",
               "DELETE /snapshots/{snapshot_id}"
-            ]
-          },
-          {
-            "group": "Volumes",
-            "pages": [
-              "GET /volumes",
-              "POST /volumes",
-              "GET /volumes/{volume_id}",
-              "DELETE /volumes/{volume_id}",
-              "POST /sandboxes/{sandbox_id}/volumes",
-              "GET /volumes/{volume_id}/attachments",
-              "GET /volume-attachments/{attachment_id}",
-              "DELETE /volume-attachments/{attachment_id}",
-              "POST /volume-attachments/{attachment_id}/token"
             ]
           },
           {
@@ -392,26 +383,38 @@
             ]
           },
           {
-            "group": "Team Management",
+            "group": "Teams",
             "pages": [
               "PATCH /teams/{team_id}",
-              "GET /teams/{team_id}/members",
-              "POST /teams/{team_id}/members",
-              "DELETE /teams/{team_id}/members/{user_id}",
-              "GET /teams/{team_id}/roles",
-              "POST /teams/{team_id}/roles",
-              "DELETE /teams/{team_id}/roles/{assignment_id}",
-              "GET /teams/{team_id}/invitations",
-              "POST /teams/{team_id}/invitations",
-              "POST /teams/{team_id}/invitations/{invitation_id}/resend",
-              "POST /teams/{team_id}/invitations/{invitation_id}/revoke",
-              "POST /teams/{team_id}/invitations/{invitation_id}/delivery",
-              "POST /teams/{team_id}/leave"
+              "POST /teams/{team_id}/leave",
+              "GET /activity",
+              {
+                "group": "Members",
+                "pages": [
+                  "GET /teams/{team_id}/members",
+                  "POST /teams/{team_id}/members",
+                  "DELETE /teams/{team_id}/members/{user_id}"
+                ]
+              },
+              {
+                "group": "Roles",
+                "pages": [
+                  "GET /teams/{team_id}/roles",
+                  "POST /teams/{team_id}/roles",
+                  "DELETE /teams/{team_id}/roles/{assignment_id}"
+                ]
+              },
+              {
+                "group": "Invitations",
+                "pages": [
+                  "GET /teams/{team_id}/invitations",
+                  "POST /teams/{team_id}/invitations",
+                  "POST /teams/{team_id}/invitations/{invitation_id}/resend",
+                  "POST /teams/{team_id}/invitations/{invitation_id}/revoke",
+                  "POST /teams/{team_id}/invitations/{invitation_id}/delivery"
+                ]
+              }
             ]
-          },
-          {
-            "group": "Activity",
-            "pages": ["GET /activity"]
           }
         ],
         "openapi": "https://api.superserve.ai/openapi.yaml"

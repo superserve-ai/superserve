@@ -63,6 +63,59 @@ export const diagnosticReasons = [
   "original_evidence_missing",
 ] as const
 export type DiagnosticReason = (typeof diagnosticReasons)[number]
+
+// Fingerprint agent v4 codes are fixed labels; unknown error strings stay private.
+const sdkErrorCodes = [
+  "client_timeout",
+  "network_connection",
+  "network_abort",
+  "csp_block",
+  "invalid_endpoint",
+  "handle_agent_data",
+  "script_load_fail",
+  "bad_response_format",
+  "server_error",
+  "api_key_missing",
+  "api_key_invalid",
+  "cache_misconfigured",
+  "endpoints_misconfigured",
+  "wrong_worker_option",
+  "worker_initialization_failed",
+  "sandboxed_iframe",
+  "bundle_not_defined",
+  "request_cannot_be_parsed",
+  "request_read_timeout",
+  "secret_api_key_required",
+  "secret_api_key_not_found",
+  "public_api_key_required",
+  "public_api_key_not_found",
+  "subscription_not_active",
+  "wrong_region",
+  "feature_not_enabled",
+  "request_not_found",
+  "visitor_not_found",
+  "too_many_requests",
+  "state_not_ready",
+  "failed",
+  "event_not_found",
+  "missing_module",
+  "payload_too_large",
+] as const
+type SdkErrorCode = (typeof sdkErrorCodes)[number]
+const sdkErrorTypes = [
+  "FingerprintError",
+  "Error",
+  "TypeError",
+  "RangeError",
+  "ReferenceError",
+  "SyntaxError",
+  "URIError",
+  "EvalError",
+  "DOMException",
+  "unknown",
+] as const
+type SdkErrorType = (typeof sdkErrorTypes)[number]
+
 export interface FingerprintDiagnostic {
   stage: DiagnosticStage
   outcome: DiagnosticOutcome
@@ -72,6 +125,8 @@ export interface FingerprintDiagnostic {
   capture_attempt_id?: string
   provider_event_id?: string
   http_status?: number
+  sdk_error_code?: SdkErrorCode
+  sdk_error_type?: SdkErrorType
 }
 export interface BrowserFingerprintDiagnostics {
   schema_version: 1
@@ -113,6 +168,16 @@ export function sanitizeDiagnostic(
       : {}),
     capture_attempt_id: diagnosticId(row.capture_attempt_id),
     provider_event_id: diagnosticId(row.provider_event_id),
+    ...(row.stage === "capture" && row.outcome === "unknown"
+      ? {
+          ...(isSdkErrorCode(row.sdk_error_code)
+            ? { sdk_error_code: row.sdk_error_code }
+            : {}),
+          ...(isSdkErrorType(row.sdk_error_type)
+            ? { sdk_error_type: row.sdk_error_type }
+            : {}),
+        }
+      : {}),
     ...(typeof row.http_status === "number" &&
     Number.isInteger(row.http_status) &&
     row.http_status >= 100 &&
@@ -122,11 +187,48 @@ export function sanitizeDiagnostic(
   }
 }
 
-export function sdkDiagnosticReason(error: unknown): DiagnosticReason {
-  const code =
-    error && typeof error === "object" && "code" in error
-      ? error.code
+function isSdkErrorCode(value: unknown): value is SdkErrorCode {
+  return (
+    typeof value === "string" && sdkErrorCodes.includes(value as SdkErrorCode)
+  )
+}
+
+function isSdkErrorType(value: unknown): value is SdkErrorType {
+  return (
+    typeof value === "string" && sdkErrorTypes.includes(value as SdkErrorType)
+  )
+}
+
+function errorField(error: unknown, field: "code" | "name"): unknown {
+  try {
+    return error && typeof error === "object"
+      ? (error as Record<string, unknown>)[field]
       : undefined
+  } catch {
+    return undefined
+  }
+}
+
+export function sdkDiagnosticDetails(
+  error: unknown,
+): Pick<FingerprintDiagnostic, "sdk_error_code" | "sdk_error_type"> {
+  const code = errorField(error, "code")
+  const name = errorField(error, "name")
+  let type: SdkErrorType = isSdkErrorType(name) ? name : "unknown"
+  try {
+    if (typeof DOMException !== "undefined" && error instanceof DOMException)
+      type = "DOMException"
+  } catch {
+    /* An unreadable exception must not affect capture state. */
+  }
+  return {
+    ...(isSdkErrorCode(code) ? { sdk_error_code: code } : {}),
+    sdk_error_type: type,
+  }
+}
+
+export function sdkDiagnosticReason(error: unknown): DiagnosticReason {
+  const code = errorField(error, "code")
   return typeof code === "string" &&
     [
       "script_load_fail",

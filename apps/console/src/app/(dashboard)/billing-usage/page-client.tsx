@@ -17,6 +17,7 @@ import {
   BillingSummary,
   billingErrorMessage,
 } from "@/components/billing-summary"
+import { billingAccountState } from "@/components/billing/billing-account-state"
 import { PlanOverviewSection } from "@/components/billing/plan-overview-section"
 import {
   BILLING_UNKNOWN_LABEL,
@@ -27,6 +28,7 @@ import {
   billingStatusNote,
   resourceSwatch,
 } from "@/components/billing/usage-breakdown"
+import { UsageUnavailable } from "@/components/billing/usage-unavailable"
 import {
   CustomerBillingSection,
   usePlanBillingControls,
@@ -40,7 +42,13 @@ import {
   useQueryScope,
 } from "@/components/query-provider"
 import { TableSkeleton } from "@/components/table-skeleton"
+import {
+  isBillingUsageUnavailable,
+  isStorageUnavailable,
+} from "@/hooks/billing-query-retry"
+import { useBillingCapabilities } from "@/hooks/use-billing-capabilities"
 import { useBillingSummary } from "@/hooks/use-billing-summary"
+import { useBillingUnavailableError } from "@/hooks/use-billing-unavailable-error"
 import { useBillingUsage } from "@/hooks/use-billing-usage"
 import { useTeamPlan } from "@/hooks/use-billing-v2"
 import { useTeams } from "@/hooks/use-teams"
@@ -482,12 +490,20 @@ export function PlanUsagePageClient() {
   // A failed plan lookup must not hide independently authorized billing data.
   // Only a confirmed Free assignment suppresses payment setup.
   const showPayments = teamPlan?.kind !== "free"
-  const summaryQuery = useBillingSummary(!userLoading && !!user)
+  const summaryQuery = useBillingSummary(!userLoading && !!user, {
+    manualRecovery: true,
+  })
   // Do not render retained summary data after a failed refresh. The billing
   // query is team-scoped, but React Query can still expose the last successful
   // value together with an error for that key; that value is not authoritative
   // while the current response is unavailable.
   const summary = summaryQuery.error ? undefined : summaryQuery.data
+  const capabilities = useBillingCapabilities()
+  const account = billingAccountState(
+    summary,
+    summaryQuery.error,
+    capabilities.data,
+  )
   const activeTeam = useMemo(() => {
     const teams = teamsQuery.data?.teams ?? []
     if (queryScope !== "self") {
@@ -515,10 +531,13 @@ export function PlanUsagePageClient() {
     }
     return null
   }, [activeTeam, dashboardTeam])
+  const viewIdentity = `${queryScope}:${billingTeam?.region}:${billingTeam?.teamId}:${user?.id}`
+  const summaryError = useBillingUnavailableError(summaryQuery, viewIdentity)
   // Free teams keep the separate billing account strip instead.
   const billingControls = usePlanBillingControls({
     team: billingTeam,
     summary,
+    account,
     enabled: teamPlan?.kind !== "free",
   })
   // Retain the viewed period on refresh errors without retaining billing claims.
@@ -575,6 +594,10 @@ export function PlanUsagePageClient() {
     !userLoading && !!user,
   ] as const
   const usageQuery = useBillingUsage(...usageSeriesSignature)
+  const usageError = useBillingUnavailableError(
+    usageQuery,
+    `${viewIdentity}:${selectedRange.start.toISOString()}:${selectedRange.end.toISOString()}:${effectiveGranularity}:${timezone}`,
+  )
   const usageData = usageQuery.data as
     | {
         buckets?: BillingUsageSeriesBucket[]
@@ -654,21 +677,27 @@ export function PlanUsagePageClient() {
       ) : (
         <div className="flex-1 overflow-y-auto p-4 sm:p-6">
           <div className="space-y-5">
-            {summaryQuery.isPending ? (
+            <PlanOverviewSection
+              summary={summary}
+              account={account}
+              billingControls={billingControls}
+            />
+
+            {summaryQuery.isPending && !summaryError ? (
               <BillingSkeleton />
+            ) : isBillingUsageUnavailable(summaryError) ? (
+              <UsageUnavailable
+                timedOut={!isStorageUnavailable(summaryError)}
+                onRetry={() => void summaryQuery.refetch()}
+                retrying={summaryQuery.isFetching}
+              />
             ) : summaryQuery.error ? (
               <BillingError
                 error={summaryQuery.error}
                 onRetry={() => void summaryQuery.refetch()}
               />
             ) : summary ? (
-              <>
-                <PlanOverviewSection
-                  summary={summary}
-                  billingControls={billingControls}
-                />
-                {showPayments ? <BillingSummary summary={summary} /> : null}
-              </>
+              <>{showPayments ? <BillingSummary summary={summary} /> : null}</>
             ) : null}
 
             {billingTeam && (
@@ -677,6 +706,7 @@ export function PlanUsagePageClient() {
                 teamRegion={billingTeam.region}
                 teamName={billingTeam.name}
                 summary={summary ?? null}
+                account={account}
                 cardless={teamPlan?.kind === "free"}
               />
             )}
@@ -702,8 +732,14 @@ export function PlanUsagePageClient() {
                 />
               </div>
 
-              {usageQuery.isPending ? (
+              {usageQuery.isPending && !usageError ? (
                 <TableSkeleton columns={5} />
+              ) : isBillingUsageUnavailable(usageError) ? (
+                <UsageUnavailable
+                  timedOut={!isStorageUnavailable(usageError)}
+                  onRetry={() => void usageQuery.refetch()}
+                  retrying={usageQuery.isFetching}
+                />
               ) : usageErrorDetails ? (
                 <ErrorState
                   message={usageErrorDetails.message}

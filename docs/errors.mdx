@@ -57,6 +57,8 @@ except SandboxError:
 ```
 </CodeGroup>
 
+A `NotFoundError` for a sandbox does not tell you whether it was deleted or never existed. To check, see [Check whether a sandbox was deleted](/sandbox/lifecycle#check-whether-a-sandbox-was-deleted).
+
 ## Base error properties
 
 Every SDK error extends `SandboxError` and exposes:
@@ -99,6 +101,8 @@ The SDK automatically retries transient failures on `GET` and `DELETE` requests 
 - `5xx` server errors
 - Network errors (connection reset, DNS failure)
 
+On a `429` that has a `Retry-After` header, the SDK uses that value, up to its maximum backoff, as the wait before the next attempt.
+
 `POST` / `PATCH` requests are **not** retried automatically because they aren't safely idempotent - the SDK surfaces the error so you can decide.
 
 ## `RateLimitError`
@@ -107,12 +111,45 @@ Raised on `429` responses. Branch on `code` to distinguish the variant:
 
 | Code | Endpoint(s) | Meaning |
 |---|---|---|
-| `rate_limited` | any | Request rate exceeded; retry after a short backoff. |
+| `rate_limited` | any | The request budget is used up (see [Request rate limits](#request-rate-limits)). Wait the number of seconds in `Retry-After`, then retry. |
 | `too_many_builds` | `POST /templates` | Team has reached its concurrent build limit. Wait for an active build to finish. |
 | `too_many_templates` | `POST /templates` | Team has reached its total template count limit. Delete one or contact support. |
 | `too_many_sandboxes` | `POST /sandboxes` | Team has reached its active sandbox count limit. Pause/delete one or contact support. |
 
 The error `message` already includes the cap and a contact-support hint, so surfacing it directly to users is usually fine.
+
+### Request rate limits
+
+Each request to the API at `https://api.superserve.ai` uses one token from a token bucket. The bucket refills at a sustained rate and holds up to a burst, so you can send a short burst above the sustained rate. There are two buckets:
+
+| Scope | Shared by | Sustained rate | Burst |
+|---|---|---|---|
+| `team` | All API keys of one team | 50 requests per second | 150 |
+| `ip` | All requests from one IP address, before authentication | 100 requests per second | 200 |
+
+Every request goes through the `ip` bucket first. An authenticated request then goes through its team's bucket. These limits are the same on every plan.
+
+Each API response has headers that describe the bucket that counted the request. The examples come from an authenticated request:
+
+| Header | Example | Meaning |
+|---|---|---|
+| `RateLimit-Policy` | `"team";q=50;w=1;burst=150` | The scope, the sustained quota `q` per window of `w` seconds, and the burst. |
+| `RateLimit` | `"team";r=149;t=1` | `r` requests you can send now, and the window `t` in seconds for that figure. |
+| `RateLimit-Limit` | `150` | The bucket capacity (the burst), in the same unit as `RateLimit-Remaining`. It is not the per-second rate. |
+| `RateLimit-Remaining` | `149` | Tokens left in the bucket after this request. |
+| `RateLimit-Reset` | `1` | Seconds until the bucket is full again. Never less than `1`. |
+| `Retry-After` | `1` | On a `429` with code `rate_limited`: seconds until you can send one more request. |
+
+`RateLimit-Policy` and `RateLimit` are the current form of these headers. `RateLimit-Limit`, `RateLimit-Remaining` and `RateLimit-Reset` give the same numbers in the earlier form.
+
+To stay within the budget:
+
+- On a `429` with code `rate_limited`, wait the number of seconds in `Retry-After`, then send the next request. On that `429`, `RateLimit` shows `r=0` and a `t` equal to `Retry-After`. `Retry-After` is the wait for one request, not for a full bucket.
+- To pace a batch, send no more than `r` requests within `t` seconds, then read `RateLimit` again. To start a large batch with a full bucket, wait the number of seconds in `RateLimit-Reset`.
+- Read the scope in `RateLimit-Policy`. Behind a shared NAT or proxy, the `ip` bucket can refuse a request even when your team is below its own limit.
+- A `429` with any other code, such as `too_many_sandboxes`, comes from a limit of that endpoint and has no `Retry-After`. Its rate-limit headers describe the request budget, not the limit that refused the request, so do not use them to time a retry.
+
+File and command operations go directly to the sandbox, not to `https://api.superserve.ai`, so their responses do not have these headers.
 
 ## Billing errors (`402`)
 

@@ -10,6 +10,12 @@
 import { describe, expect, it } from "vitest"
 
 import { buildCreateSandboxRequest } from "./create-sandbox-dialog"
+import {
+  chosenSizeLine,
+  memorySteps,
+  snapshotSource,
+  templateSource,
+} from "./sandbox-size-section"
 
 const emptyState = {
   name: "",
@@ -44,6 +50,112 @@ describe("buildCreateSandboxRequest source", () => {
     })
     expect(req.from_snapshot).toBe("0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b")
     expect(req).not.toHaveProperty("from_template")
+  })
+})
+
+describe("buildCreateSandboxRequest size", () => {
+  const ranged = templateSource({
+    vcpu: 1,
+    memory_mib: 2048,
+    size_range: { vcpu_max: 4, memory_max_mib: 8192 },
+  })
+
+  it("sends a fixed vcpu and memory_mib within the template range", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      templateRef: "my-env",
+      size: ranged,
+      vcpu: 3,
+      memoryMib: 6144,
+    })
+    expect(req.vcpu).toBe(3)
+    expect(req.memory_mib).toBe(6144)
+  })
+
+  it("sends nothing for the default or a dimension without a range", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      templateRef: "my-env",
+      size: templateSource({ vcpu: 2, memory_mib: 2048, memory_max_mib: 8192 }),
+      vcpu: 2,
+      memoryMib: null,
+    })
+    expect(req).not.toHaveProperty("vcpu")
+    expect(req).not.toHaveProperty("memory_mib")
+  })
+
+  it("sends a size chosen within a snapshot's ranges", () => {
+    const req = buildCreateSandboxRequest({
+      ...emptyState,
+      name: "x",
+      snapshotId: "0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
+      size: snapshotSource({
+        vcpu_count: 2,
+        memory_mib: 2048,
+        vcpu_range: { min: 1, max: 4 },
+      }),
+      vcpu: 3,
+      memoryMib: 4096,
+    })
+    expect(req).toMatchObject({
+      from_snapshot: "0b6f3c1e-4d2a-4f7b-9a1e-2c3d4e5f6a7b",
+      vcpu: 3,
+    })
+    // No memory range on this snapshot, so memory_mib is never sent.
+    expect(req).not.toHaveProperty("memory_mib")
+  })
+
+  it("rejects a pick outside the range or off the 2 MiB grid", () => {
+    for (const pick of [
+      { vcpu: 5 },
+      { vcpu: 1.5 },
+      { memoryMib: 1024 },
+      { memoryMib: 6145 },
+    ]) {
+      expect(() =>
+        buildCreateSandboxRequest({
+          ...emptyState,
+          name: "x",
+          templateRef: "my-env",
+          size: ranged,
+          ...pick,
+        }),
+      ).toThrow()
+    }
+  })
+})
+
+describe("size helpers", () => {
+  it("steps memory by 256 MiB from the minimum and ends at the maximum", () => {
+    expect(memorySteps(1024, 2000)).toEqual([1024, 1280, 1536, 1792, 2000])
+    for (const v of memorySteps(1026, 4096)) expect((v - 1026) % 2).toBe(0)
+  })
+
+  it("describes the default size and a chosen one", () => {
+    const t = { vcpu: 1, vcpu_max: 4, memory_mib: 1024, memory_max_mib: 4096 }
+    expect(chosenSizeLine(templateSource(t), null, null)).toBe(
+      "1 vCPU · 1 GB · can grow to 4 vCPU · 4 GB",
+    )
+    expect(chosenSizeLine(templateSource(t), 2, 3072)).toBe("2 vCPU · 3 GB")
+    expect(
+      chosenSizeLine(
+        templateSource({ ...t, memory_max_mib: undefined }),
+        null,
+        null,
+      ),
+    ).toBe("1 vCPU · 1 GB · can grow to 4 vCPU")
+    expect(
+      chosenSizeLine(templateSource({ vcpu: 2, memory_mib: 2048 }), null, null),
+    ).toBe("2 vCPU · 2 GB")
+    expect(
+      chosenSizeLine(
+        snapshotSource({ vcpu_count: 2, memory_mib: 2048 }),
+        null,
+        null,
+      ),
+    ).toBe("2 vCPU · 2 GB · from snapshot")
   })
 })
 

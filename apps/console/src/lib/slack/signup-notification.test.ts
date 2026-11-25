@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from "vitest"
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 const send = vi.hoisted(() => vi.fn().mockResolvedValue(undefined))
 vi.mock("./send-to-webhook", () => ({ default: send }))
@@ -44,6 +44,7 @@ describe("requested offer in signup notification", () => {
 
 describe("signup notification fields", () => {
   beforeEach(() => send.mockClear())
+  afterEach(() => vi.useRealTimers())
 
   const fields = () =>
     send.mock.lastCall![0].blocks[1].fields as Array<{ text: string }>
@@ -83,6 +84,34 @@ describe("signup notification fields", () => {
     await notifySlackOfNewUser("user@example.com", "User", "google")
     expect(fields().some(({ text }) => text.startsWith("*Enterprise:*"))).toBe(
       false,
+    )
+  })
+
+  it("preserves signup time when notification delivery runs later", async () => {
+    vi.useFakeTimers()
+    const signedUpAt = new Date("2026-11-23T17:36:21Z")
+    vi.setSystemTime(new Date("2026-11-23T18:00:00Z"))
+    await notifySlackOfNewUser(
+      "user@example.com",
+      "User",
+      "google",
+      undefined,
+      undefined,
+      false,
+      signedUpAt,
+    )
+    expect(send.mock.lastCall![0].blocks[3].elements[0].text).toBe(
+      `Signed up on ${signedUpAt.toLocaleString()}`,
+    )
+  })
+
+  it("defaults to the current time for callers without a signup timestamp", async () => {
+    vi.useFakeTimers()
+    const now = new Date("2026-11-23T17:36:21Z")
+    vi.setSystemTime(now)
+    await notifySlackOfNewUser("user@example.com", "User", "google")
+    expect(send.mock.lastCall![0].blocks[3].elements[0].text).toBe(
+      `Signed up on ${now.toLocaleString()}`,
     )
   })
 })

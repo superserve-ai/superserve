@@ -4,6 +4,7 @@ import posthog from "posthog-js"
 import { PostHogProvider as PHProvider } from "posthog-js/react"
 import type React from "react"
 
+import { enrichWebVitals } from "@/lib/browser-performance"
 import {
   carriesInviteToken,
   redactCapturedRequest,
@@ -33,7 +34,7 @@ if (typeof window !== "undefined") {
         // of every event, whatever put the token there.
         before_send: (event) => {
           scrubPersistedInviteTokens(posthog)
-          return redactInviteTokensFromEvent(event)
+          return redactInviteTokensFromEvent(enrichWebVitals(event))
         },
         loaded: (ph) => {
           scrubPersistedInviteTokens(ph)

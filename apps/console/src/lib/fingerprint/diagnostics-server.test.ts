@@ -1,14 +1,24 @@
 import { afterEach, beforeEach, expect, it, vi } from "vitest"
-const mocks = vi.hoisted(() => ({ after: vi.fn(), batch: vi.fn() }))
+const mocks = vi.hoisted(() => ({
+  after: vi.fn(),
+  batch: vi.fn(),
+  createAttempt: vi.fn(),
+}))
 vi.mock("next/server", () => ({ after: mocks.after }))
 vi.mock("@/lib/posthog/batch", () => ({ trackEventBatch: mocks.batch }))
+vi.mock("@/app/(auth)/auth/signup/action", () => ({
+  createSignupFingerprintAttempt: mocks.createAttempt,
+}))
 import { fingerprintDiagnostics } from "./diagnostics-server"
 
 beforeEach(() => {
   vi.resetAllMocks()
   vi.spyOn(console, "info").mockImplementation(() => {})
 })
-afterEach(() => vi.useRealTimers())
+afterEach(() => {
+  vi.useRealTimers()
+  vi.unstubAllGlobals()
+})
 const row = {
   stage: "capture",
   outcome: "unknown",
@@ -164,3 +174,104 @@ it("never fills a pending browser capture with a different tab's cookie event", 
   expect(properties.provider_event_id).toBeUndefined()
   expect(properties.signup_attempt_id).toBe("signup")
 })
+
+it.each([
+  ["api_key_invalid", "sdk_error"],
+  ["wrong_region", "sdk_error"],
+  ["subscription_not_active", "sdk_error"],
+  ["too_many_requests", "sdk_error"],
+  ["network_connection", "network_connection"],
+])(
+  "delivers safe %s details from SDK rejection through browser JSON",
+  async (code, reason) => {
+    const values = new Map<string, string>()
+    vi.stubGlobal("sessionStorage", {
+      getItem: (key: string) => values.get(key) ?? null,
+      setItem: (key: string, value: string) => values.set(key, value),
+      removeItem: (key: string) => values.delete(key),
+    })
+    mocks.createAttempt.mockResolvedValue({
+      attemptId: "capture-attempt",
+      challenge: "secret-challenge",
+    })
+    const client = await import("./client")
+    client.clearFingerprintSignupCapture()
+    const getData = vi.fn().mockRejectedValue(
+      Object.assign(
+        new Error("secret request https://provider/?token=secret"),
+        {
+          name: "FingerprintError",
+          code,
+          event_id: "unreturned-event",
+          visitor_id: "secret-visitor",
+        },
+      ),
+    )
+    client.registerFingerprintGetData(getData)
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
+
+    const report = JSON.parse(
+      JSON.stringify(client.getFingerprintSignupDiagnostics()),
+    )
+    fingerprintDiagnostics({ signupAttemptId: "signup-attempt" }).browser(
+      report,
+    )
+    await mocks.after.mock.calls[0][0]()
+    const events = mocks.batch.mock.calls[0][0]
+    expect(
+      events.find(
+        (event: { event: string }) =>
+          event.event === "auth_fingerprint_signup_capture",
+      ),
+    ).toMatchObject({
+      properties: {
+        stage: "capture",
+        outcome: "unknown",
+        reason,
+        sdk_error_code: code,
+        sdk_error_type: "FingerprintError",
+        capture_attempt_id: "capture-attempt",
+        source: "client_reported",
+      },
+    })
+    expect(JSON.stringify(events)).not.toContain("secret")
+    expect(JSON.stringify(events)).not.toContain("https:")
+    expect(JSON.stringify(events)).not.toContain("unreturned-event")
+    expect(await client.ensureFingerprintSignupCapture()).toEqual({
+      unavailable: true,
+    })
+    expect(getData).toHaveBeenCalledOnce()
+  },
+)
+
+it.each([
+  "unknown_provider_code",
+  "https://provider/?token=secret",
+  "x".repeat(10_000),
+])(
+  "discards unknown SDK details at the untrusted browser boundary",
+  async (code) => {
+    fingerprintDiagnostics({}).browser({
+      schema_version: 1,
+      events: [
+        {
+          ...row,
+          sdk_error_code: code,
+          sdk_error_type: "Error containing a secret",
+          message: "secret exception message",
+          stack: "secret stack",
+        },
+      ],
+    })
+    await mocks.after.mock.calls[0][0]()
+    const properties = mocks.batch.mock.calls[0][0][0].properties
+    expect(properties).not.toHaveProperty("sdk_error_code")
+    expect(properties).not.toHaveProperty("sdk_error_type")
+    expect(properties).not.toHaveProperty("message")
+    expect(properties).not.toHaveProperty("stack")
+    expect(JSON.stringify(properties)).not.toContain("secret")
+    expect(JSON.stringify(properties)).not.toContain(code)
+  },
+)

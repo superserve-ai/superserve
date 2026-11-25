@@ -51,6 +51,19 @@ const EXEMPT_PATHS = new Set([
   "/stripe/plan-choice",
   "/stripe/pro-checkout/recover",
   "/stripe/webhook",
+  // Volumes are a gated pilot (sandbox PR 1161) and get public docs at general
+  // availability.
+  "/volumes",
+  "/volumes/{volume_id}",
+  "/volumes/{volume_id}/attachments",
+  "/sandboxes/{sandbox_id}/volumes",
+  "/volume-attachments/{attachment_id}",
+  "/volume-attachments/{attachment_id}/token",
+  // The read-only usage API is enabled per team behind a feature flag and
+  // gets public docs when it opens to all teams.
+  "/billing/usage/summary",
+  "/billing/usage/details",
+  "/billing/usage/storage-references",
 ])
 
 const OP_RE = new RegExp(`^(${HTTP_METHODS.join("|")})\\s+/`)

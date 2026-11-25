@@ -16,7 +16,7 @@ You may also see these short-lived states:
 - **`resuming`** - a paused sandbox is being restored to `active`.
 - **`migrating`** - the platform is moving a paused sandbox. This state is temporary. Calls that need the running sandbox, such as `connect()`, can fail with `ConflictError` (`409`) until it ends, so retry shortly.
 
-`connect()` and `resume()` wait a pause out for you; a pause still finishing after that wait answers `409` with code `sandbox_pausing` and a `Retry-After` header, so retry shortly. **`failed`** indicates the sandbox couldn't boot or resume; the entry remains until you delete it. Deletion removes the sandbox entirely; further API calls return `404`.
+`connect()` and `resume()` wait a pause out for you; a pause still finishing after that wait answers `409` with code `sandbox_pausing` and a `Retry-After` header, so retry shortly. **`failed`** indicates the sandbox can't run, for example because it couldn't start or resume, or its VM stopped unexpectedly; the entry remains until you delete it. Deletion destroys the sandbox; `GET /sandboxes/{sandbox_id}` then returns `404`. To find out whether a `404` means deleted or unknown, see [Check whether a sandbox was deleted](#check-whether-a-sandbox-was-deleted).
 
 ```
 starting  →  active  →  pausing  →  paused  →  resuming  →  active
@@ -28,6 +28,8 @@ any state  →  deleted
 ## Pause
 
 `pause()` checkpoints the full VM state (memory, processes, filesystem) to disk and stops billing for compute. It returns once the pause is accepted and the sandbox finishes pausing on its own; pass `wait: true` / `wait=True` to return once the sandbox is `paused`. A waited pause is a single request the server holds until the pause lands, so in the usual case the SDK does not poll. The call still blocks until the sandbox is `paused`, up to `timeoutMs` / `timeout` (default 5 minutes). If that limit passes first, the call throws `TimeoutError` (TypeScript) or `SandboxTimeoutError` (Python), and the pause finishes in the background.
+
+`pause()` needs an `active` sandbox. On a sandbox that is already `pausing` or `paused`, it throws `ConflictError` (`409`), with or without `wait`. It does not wait for the earlier pause to finish.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -57,7 +59,7 @@ sandbox.pause()
 
 ## Resume
 
-`resume()` restores a `paused` sandbox you already hold a reference to. Processes pick up where they left off.
+`resume()` restores a `paused` sandbox you already hold a reference to. Processes pick up where they left off. On a sandbox that is already `active`, `resume()` throws `ConflictError` (`409`).
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -80,7 +82,7 @@ sandbox.commands.run("ls /tmp")
 </CodeGroup>
 
 <Tip>
-A paused sandbox is auto-resumed by both `Sandbox.connect()` and `commands.run()`.
+`Sandbox.connect()` and `commands.run()` auto-resume a sandbox whose state is `paused`. While the state is still `pausing`, `commands.run()` does not resume it and fails after about 30 seconds with `TimeoutError` (TypeScript) or `SandboxTimeoutError` (Python). This can happen right after `pause()` returns, or when a command starts as an auto-pause takes effect. To run commands soon after a pause, use `pause({ wait: true })` / `pause(wait=True)`, or call `Sandbox.connect()` first. `connect()` and `resume()` also work while the state is `pausing`.
 </Tip>
 
 After a resume, keep using the same `sandbox` — your `commands` and `files` calls keep working with no changes on your side.
@@ -88,6 +90,8 @@ After a resume, keep using the same `sandbox` — your `commands` and `files` ca
 ## Kill
 
 `kill()` deletes the sandbox and all its resources. It's idempotent - deleting an already-deleted sandbox is a no-op that swallows the `404`.
+
+In Python, some methods on the `sandbox` object you killed, including `get_info()`, `pause()`, and `update()`, raise `SandboxError` without sending a request, instead of the `404` `NotFoundError`.
 
 <CodeGroup>
 ```typescript TypeScript {5}
@@ -125,6 +129,39 @@ Sandbox.kill_by_id("7a3f2b8c-1234-...")
 ```
 </CodeGroup>
 
+## Check whether a sandbox was deleted
+
+After a delete, `GET /sandboxes/{sandbox_id}` returns `404`, the same answer as for an ID that never existed. When you keep sandbox IDs in your own records, send them to [`POST /sandboxes/lookup`](/api-reference/sandboxes/look-up-the-status-of-a-batch-of-sandboxes) to find out which ones still exist. The SDKs and the CLI do not have a method for this endpoint yet, so call the REST API.
+
+Send your API key in the `X-API-Key` header to the API URL for your key's region (see [API key](/api-key)), with up to 1,000 IDs in `sandbox_ids`. The key needs the same access as listing the team's sandboxes; otherwise the request fails with `403`. The example uses `https://api.superserve.ai`, the API URL for `ss_live_use_` keys and keys without a region. For an `ss_live_usw_` key, use `https://api-usw.superserve.ai`.
+
+```bash
+curl -X POST https://api.superserve.ai/sandboxes/lookup \
+  -H "X-API-Key: $SUPERSERVE_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"sandbox_ids": ["38130fc9-d591-495f-9d6a-47432c08dff0", "ca62de90-aede-40c0-a2c9-748cc3414928", "00000000-0000-4000-8000-000000000000"]}'
+```
+
+```json
+{
+  "sandboxes": [
+    { "id": "38130fc9-d591-495f-9d6a-47432c08dff0", "status": "active" },
+    { "id": "ca62de90-aede-40c0-a2c9-748cc3414928", "status": "deleted" }
+  ],
+  "unknown": ["00000000-0000-4000-8000-000000000000"]
+}
+```
+
+Each UUID you send appears once, in one of two lists:
+
+- **Exists**: the ID is in `sandboxes` with its current status, for example `active`, `paused`, or `failed`.
+- **Deleted**: the ID is in `sandboxes` with status `deleted`.
+- **Unknown**: the ID is in `unknown`. Your team has no sandbox with that ID in the region you sent the request to. The sandbox was never created, belongs to another team, or was created in another region. The response does not show whether another team's sandbox exists. To check IDs from another region, send them to that region's API URL with a key for that region.
+
+Entries in `sandboxes` can be in any order, so match them by `id`. The API can return the `id` in a different form from the one you sent (bare UUID or region-tagged `sb-<region>-<uuid>`), so compare the UUID part without regard to case. IDs in `unknown` come back as you sent them, in request order. Each UUID appears once in the response, even if you send it more than once or in both forms; in `unknown`, only the first form you sent comes back, so match `unknown` by UUID too. Every entry you send counts toward the 1,000 limit.
+
+The request fails with `400` and code `bad_request` when the body is not valid JSON, or `sandbox_ids` is empty or missing, has more than 1,000 entries, or contains a value the API cannot read as a sandbox ID. To check more than 1,000 IDs, send them in batches.
+
 ## Update without an instance
 
 Use `updateById` / `update_by_id` to change a sandbox when you have only its ID. Unlike `connect()`, it does not resume the sandbox: a paused sandbox stays paused. It takes the same options as `update()`, such as `metadata` (replaces the whole map), `timeoutSeconds`, `idleTimeoutSeconds`, `autoDeleteSeconds`, and `network`. Pass `null` / `None` to clear a timeout or the auto-delete window.
@@ -159,7 +196,7 @@ Sandbox.update_by_id(
 
 ## Auto-pause
 
-Set `timeoutSeconds` to auto-pause a sandbox after it has been active for that long. Pausing checkpoints its state and stops compute billing, so a sandbox you forget about won't keep running and billing. It isn't deleted; the next `commands.run()`, file operation, or `connect()` resumes it where it left off.
+Set `timeoutSeconds` to auto-pause a sandbox after it has been active for that long. Pausing checkpoints its state and stops compute billing, so a sandbox you forget about won't keep running and billing. It isn't deleted; once it is `paused`, the next `commands.run()`, file operation, or `connect()` resumes it where it left off. A command that starts while the sandbox is still `pausing` can fail (see the tip under [Resume](#resume)).
 
 <CodeGroup>
 ```typescript TypeScript {5}

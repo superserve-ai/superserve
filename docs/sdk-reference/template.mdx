@@ -75,9 +75,11 @@ template = Template.create(
 | `name` | `string` | **Required.** Team-scoped identifier. Must not start with `superserve/`. Names are unique per team among non-deleted templates and are released for reuse the moment a template is deleted. |
 | `from` / `from_` | `string` | **Required.** OCI base image (e.g. `python:3.11`). See [BuildSpec](/templates/build-spec#from-base-image). |
 | `vcpu` | `number` | Number of vCPUs. Minimum 1 vCPU. Maximum 2 vCPU on Free, 4 vCPU on Developer, 16 vCPU on Pro. Default `1` (1 vCPU). See [Resource limits](/templates/build-spec#resource-limits). |
+| `vcpuMax` / `vcpu_max` | `number` | Optional ceiling sandboxes can grow their CPU to under load; `vcpu` stays the minimum. Whole vCPUs, greater than `vcpu`, at most 4 times it, at most 32, and within your plan's vCPU limit. Omit for a fixed vCPU count. See [Live CPU resizing](/sandbox/live-cpu-resizing). |
 | `memoryMib` / `memory_mib` | `number` | Memory in MiB. Minimum 256 MiB. Maximum 4096 MiB (4 GiB) on Free, 16384 MiB (16 GiB) on Developer, 65536 MiB (64 GiB) on Pro. Default `1024` (1 GiB). |
 | `memoryMaxMib` / `memory_max_mib` | `number` | Optional ceiling sandboxes can grow memory to while running; `memoryMib` stays the boot size. Must be greater than `memoryMib`, at most 4 times it and within your plan's memory limit, and differ from it by a multiple of 128. Omit for a fixed memory size. See [Growing memory](/templates/build-spec#growing-memory). |
 | `memoryShrinkAfterSeconds` / `memory_shrink_after_seconds` | `number` | Optional. How long, in seconds, a sandbox's memory must stay low after growing before it shrinks back toward `memoryMib` (60 to 1800). Requires `memoryMaxMib`. Sandboxes created from the template inherit it. When unset, the default (about one minute) applies. See [Shrink timing](/sandbox/live-memory-resizing#shrink-timing). |
+| `sizeRange` / `size_range` | `TemplateSizeRange` | Optional. Lets each sandbox choose a fixed `vcpu` and/or `memoryMib` at create, from the template's values up to `vcpuMax` / `vcpu_max` and `memoryMaxMib` / `memory_max_mib`. Each maximum follows the same rules as the growth ceiling of the same name, and must equal it when both are set. See [Custom size](/sandbox/size). |
 | `diskMib` / `disk_mib` | `number` | Disk in MiB. Minimum 1024 MiB (1 GiB). The maximum depends on your team's plan. Default `4096` (4 GiB). |
 | `steps` | [`BuildStep[]`](#buildstep) | Ordered build steps. |
 | `startCmd` / `start_cmd` | `string` | Long-running process captured in the snapshot. |
@@ -325,9 +327,11 @@ All properties are read-only snapshots taken at construction. Call `getInfo()` /
 | `teamId` / `team_id` | `string` | Owning team UUID. |
 | `status` | `TemplateStatus` | Status at construction time. |
 | `vcpu` | `number` | vCPU count the template boots with. |
+| `vcpuMax?` / `vcpu_max?` | `number` | Ceiling the vCPU count can grow to while running; absent when it is fixed. |
 | `memoryMib` / `memory_mib` | `number` | Memory the template boots with. |
 | `memoryMaxMib?` / `memory_max_mib?` | `number` | Ceiling memory can grow to while running; absent when memory is fixed. |
 | `memoryShrinkAfterSeconds?` / `memory_shrink_after_seconds?` | `number` | How long, in seconds, memory must stay low after growing before it shrinks back. Absent when the default (about one minute) applies. |
+| `sizeRange?` / `size_range?` | `TemplateSizeRange` | Sizes sandboxes may choose at create; absent when they can't choose. |
 | `diskMib` / `disk_mib` | `number` | Disk the template boots with. |
 | `sizeBytes?` / `size_bytes?` | `number` | Snapshot size in bytes, once built. |
 | `errorMessage?` / `error_message?` | `string` | Last build's error message, if any. |
@@ -399,6 +403,8 @@ interface TemplateInfo {
   memoryMib: number
   memoryMaxMib?: number // absent when memory is fixed
   memoryShrinkAfterSeconds?: number // absent when the default applies
+  vcpuMax?: number // absent when the vCPU count is fixed
+  sizeRange?: { vcpuMax?: number; memoryMaxMib?: number } // absent when sandboxes can't choose a size
   diskMib: number
   sizeBytes?: number
   errorMessage?: string
@@ -421,12 +427,33 @@ class TemplateInfo(BaseModel):
     memory_mib: int
     memory_max_mib: int | None = None  # None when memory is fixed
     memory_shrink_after_seconds: int | None = None  # None when the default applies
+    vcpu_max: int | None = None  # None when the vCPU count is fixed
+    size_range: TemplateSizeRange | None = None  # None when sandboxes can't choose a size
     disk_mib: int
     size_bytes: int | None = None
     error_message: str | None = None
     created_at: datetime
     built_at: datetime | None = None
     latest_build_id: str | None = None
+```
+</CodeGroup>
+
+### `TemplateSizeRange`
+
+The largest size a sandbox may choose at create. The range starts at the template's `vcpu` and `memoryMib`; a resource without a maximum can't be chosen.
+
+<CodeGroup>
+```typescript TypeScript
+interface TemplateSizeRange {
+  vcpuMax?: number
+  memoryMaxMib?: number
+}
+```
+
+```python Python
+from superserve import TemplateSizeRange
+
+TemplateSizeRange(vcpu_max=4, memory_max_mib=8192)
 ```
 </CodeGroup>
 

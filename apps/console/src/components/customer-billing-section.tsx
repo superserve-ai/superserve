@@ -15,6 +15,7 @@ import {
   billingCredits,
   formatCurrency,
 } from "@/components/billing-summary"
+import type { BillingActionState } from "@/components/billing/billing-account-state"
 import { TrialUpgradeAction } from "@/components/billing/trial-upgrade-action"
 import { useQueryScope } from "@/components/query-provider"
 import { useBillingPayment } from "@/hooks/use-billing-payment"
@@ -30,6 +31,7 @@ interface CustomerBillingSectionProps {
   teamRegion: string
   teamName: string
   summary: BillingSummaryResponse | null | undefined
+  account?: BillingActionState | null
   cardless?: boolean
 }
 
@@ -80,10 +82,8 @@ function noticeFromQuery(value: string | null) {
 // is explained by its own notice, so it adds no line either.
 export function billingProblem(
   summary:
-    | Pick<
-        BillingSummaryResponse,
-        "billing_mode" | "payment_setup_required" | "portal_available"
-      >
+    | (Pick<BillingSummaryResponse, "billing_mode" | "portal_available"> &
+        Partial<Pick<BillingSummaryResponse, "payment_setup_required">>)
     | null
     | undefined,
   period:
@@ -151,7 +151,7 @@ function useLatestBillingPeriod(
 function useBillingAction(
   teamId: string | null,
   teamKey: string | null,
-  summary: BillingSummaryResponse | null | undefined,
+  summary: BillingActionState | null | undefined,
   cardless: boolean,
   enabled = true,
 ) {
@@ -172,9 +172,9 @@ function useBillingAction(
     enabled,
   )
   const canManageBilling = Boolean(summary?.permissions?.can_manage)
-  const canOpenPortal = Boolean(summary?.portal_available)
   const canStartCheckout =
     !cardless && Boolean(summary?.checkout_available) && checkoutSupported
+  const canOpenPortal = Boolean(summary?.portal_available) && !canStartCheckout
 
   const manageLabel = canOpenPortal
     ? "Open Customer Portal"
@@ -225,10 +225,12 @@ function useBillingAction(
 export function usePlanBillingControls({
   team,
   summary,
+  account = summary,
   enabled = true,
 }: {
   team: { teamId: string; region: string } | null
   summary: BillingSummaryResponse | null | undefined
+  account?: BillingActionState | null
   enabled?: boolean
 }): ReactNode {
   const active = enabled && !!team
@@ -238,7 +240,7 @@ export function usePlanBillingControls({
     useBillingAction(
       team?.teamId ?? null,
       team ? `${team.region}:${team.teamId}` : null,
-      summary,
+      account,
       false,
       active,
     )
@@ -264,10 +266,10 @@ export function usePlanBillingControls({
       </div>
     )
   }
-  const problem = billingProblem(summary, latestPeriod, {
+  const problem = billingProblem(account, latestPeriod, {
     checkoutReady,
   })
-  const viewOnly = !canManageBilling && Boolean(summary)
+  const viewOnly = !canManageBilling && Boolean(account)
   if (!actionButton && !viewOnly && !problem) return null
 
   return (
@@ -296,13 +298,14 @@ export function CustomerBillingSection({
   teamRegion,
   teamName,
   summary,
+  account = summary,
   cardless = false,
 }: CustomerBillingSectionProps) {
   const queryClient = useQueryClient()
   const [notice, setNotice] = useState<ReturnType<typeof noticeFromQuery>>()
 
   const { actionButton, canManageBilling, canOpenPortal, latestPeriod } =
-    useBillingAction(teamId, `${teamRegion}:${teamId}`, summary, cardless)
+    useBillingAction(teamId, `${teamRegion}:${teamId}`, account, cardless)
 
   useEffect(() => {
     const query = new URLSearchParams(window.location.search)
@@ -319,7 +322,7 @@ export function CustomerBillingSection({
     }
   }, [queryClient])
 
-  const modeCopy = billingModeCopy(summary?.billing_mode)
+  const modeCopy = billingModeCopy(account?.billing_mode)
 
   if (cardless) {
     const credits = summary ? billingCredits(summary) : null

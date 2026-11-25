@@ -28,6 +28,70 @@ class SandboxStatus(str, Enum):
     DELETED = "deleted"
 
 
+SandboxMeasurementSource = Literal["live", "last_known"]
+SandboxMetricsStatus = Literal[
+    "starting", "active", "pausing", "paused", "resuming", "migrating", "failed"
+]
+
+
+class SandboxCpuUsage(BaseModel):
+    """Average consumed vCPUs over the actual observation window."""
+
+    used_vcpus: float
+    sampled_at: datetime
+    window_seconds: float
+    source: SandboxMeasurementSource
+
+
+class SandboxCpuMetrics(BaseModel):
+    configured_vcpus: float
+    effective_vcpus: Optional[float]
+    limit_vcpus: float
+    usage: Optional[SandboxCpuUsage]
+
+
+class SandboxMemoryUsage(BaseModel):
+    """Guest MemTotal minus MemAvailable, in bytes."""
+
+    used_bytes: int
+    sampled_at: datetime
+    source: SandboxMeasurementSource
+
+
+class SandboxMemoryMetrics(BaseModel):
+    configured_bytes: int
+    effective_bytes: Optional[int]
+    limit_bytes: int
+    usage: Optional[SandboxMemoryUsage]
+
+
+class SandboxDiskUsage(BaseModel):
+    """Guest root filesystem capacity and usage, independent of disk allocation."""
+
+    total_bytes: int
+    used_bytes: int
+    available_bytes: int
+    sampled_at: datetime
+    source: SandboxMeasurementSource
+
+
+class SandboxDiskMetrics(BaseModel):
+    configured_bytes: int
+    effective_bytes: Optional[int]
+    limit_bytes: int
+    usage: Optional[SandboxDiskUsage]
+
+
+class SandboxMetrics(BaseModel):
+    """Raw values with independent sample times; source is not a freshness guarantee."""
+
+    id: str
+    status: SandboxMetricsStatus
+    cpu: SandboxCpuMetrics
+    memory: SandboxMemoryMetrics
+    disk: SandboxDiskMetrics
+
+
 class PreviewAccess(str, Enum):
     LEGACY_PUBLIC = "legacy_public"
     PUBLIC = "public"
@@ -63,6 +127,8 @@ class SandboxInfo(BaseModel):
     memory_current_mib: Optional[int] = None
     # Seconds memory must stay low after growing before it shrinks back; None when the platform default applies.
     memory_shrink_after_seconds: Optional[int] = None
+    # Ceiling the CPU count can grow to while running; None when it is fixed.
+    vcpu_max: Optional[int] = None
     created_at: datetime
     timeout_seconds: Optional[int] = None
     # Pause the sandbox after this many seconds with no activity.
@@ -216,6 +282,7 @@ def to_sandbox_info(raw: dict[str, Any]) -> SandboxInfo:
         memory_max_mib=raw.get("memory_max_mib"),
         memory_current_mib=raw.get("memory_current_mib"),
         memory_shrink_after_seconds=raw.get("memory_shrink_after_seconds"),
+        vcpu_max=raw.get("vcpu_max"),
         created_at=_parse_iso8601(raw["created_at"]),
         timeout_seconds=raw.get("timeout_seconds"),
         idle_timeout_seconds=raw.get("idle_timeout_seconds"),
@@ -254,6 +321,8 @@ class SnapshotResources(BaseModel):
     disk_mib: int = 0
     # Ceiling memory can grow to while running; None when memory is fixed.
     memory_max_mib: Optional[int] = None
+    # Ceiling the CPU count can grow to while running; None when it is fixed.
+    vcpu_max: Optional[int] = None
 
 
 class SnapshotInfo(BaseModel):
@@ -296,6 +365,7 @@ def to_snapshot_info(raw: dict[str, Any]) -> SnapshotInfo:
             memory_mib=resources.get("memory_mib") or 0,
             disk_mib=resources.get("disk_mib") or 0,
             memory_max_mib=resources.get("memory_max_mib"),
+            vcpu_max=resources.get("vcpu_max"),
         ),
         created_at=_parse_iso8601(raw["created_at"]),
         ready_at=_parse_iso8601(raw["ready_at"]) if raw.get("ready_at") else None,
@@ -329,6 +399,17 @@ class BuildLogStream(str, Enum):
     SYSTEM = "system"
 
 
+class TemplateSizeRange(BaseModel):
+    """Largest size a sandbox may choose at create with ``vcpu`` or ``memory_mib``.
+
+    The range starts at the template's ``vcpu`` and ``memory_mib``. A
+    dimension without a maximum cannot be chosen.
+    """
+
+    vcpu_max: Optional[int] = None
+    memory_max_mib: Optional[int] = None
+
+
 class TemplateInfo(BaseModel):
     id: str
     name: str
@@ -340,6 +421,10 @@ class TemplateInfo(BaseModel):
     memory_max_mib: Optional[int] = None
     # Seconds memory must stay low after growing before it shrinks back; None when the platform default applies.
     memory_shrink_after_seconds: Optional[int] = None
+    # Ceiling the CPU count can grow to while running; None when it is fixed.
+    vcpu_max: Optional[int] = None
+    # Sizes sandboxes may choose at create; None when they cannot choose.
+    size_range: Optional[TemplateSizeRange] = None
     disk_mib: int = 0
     size_bytes: Optional[int] = None
     error_message: Optional[str] = None
@@ -426,6 +511,15 @@ def to_template_info(
         memory_mib=raw.get("memory_mib", 0),
         memory_max_mib=raw.get("memory_max_mib"),
         memory_shrink_after_seconds=raw.get("memory_shrink_after_seconds"),
+        vcpu_max=raw.get("vcpu_max"),
+        size_range=(
+            TemplateSizeRange(
+                vcpu_max=raw["size_range"].get("vcpu_max"),
+                memory_max_mib=raw["size_range"].get("memory_max_mib"),
+            )
+            if raw.get("size_range")
+            else None
+        ),
         disk_mib=raw.get("disk_mib", 0),
         size_bytes=raw.get("size_bytes"),
         error_message=raw.get("error_message"),

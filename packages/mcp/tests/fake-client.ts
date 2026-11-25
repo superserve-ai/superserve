@@ -40,7 +40,10 @@ interface FakeSandbox {
   autoDeleteSeconds?: number
   timeoutSeconds?: number
   idleTimeoutSeconds?: number
+  vcpuCount: number
+  memoryMib: number
   memoryShrinkAfterSeconds?: number
+  vcpuMax?: number
   previewAccess: PreviewAccess
   publishedPorts: Map<number, PreviewAccessPolicy>
 }
@@ -133,6 +136,8 @@ export function createFakeClient(): FakeClient {
         autoDeleteSeconds: input.autoDeleteSeconds,
         timeoutSeconds: input.timeoutSeconds ?? 3600,
         idleTimeoutSeconds: input.idleTimeoutSeconds,
+        vcpuCount: input.vcpu ?? 2,
+        memoryMib: input.memoryMib ?? 2048,
         previewAccess: input.previewAccess ?? "public",
         publishedPorts: new Map(),
         secrets: Object.entries(input.secrets ?? {}).map(
@@ -181,6 +186,8 @@ export function createFakeClient(): FakeClient {
         memoryMib: input.memoryMib ?? 2048,
         memoryMaxMib: input.memoryMaxMib,
         memoryShrinkAfterSeconds: input.memoryShrinkAfterSeconds,
+        vcpuMax: input.vcpuMax,
+        sizeRange: input.sizeRange,
         diskMib: input.diskMib ?? 8192,
       }
       templates.push(summary)
@@ -193,12 +200,13 @@ export function createFakeClient(): FakeClient {
         id: sb.id,
         name: sb.name,
         status: sb.status,
-        vcpuCount: 2,
-        memoryMib: 2048,
+        vcpuCount: sb.vcpuCount,
+        memoryMib: sb.memoryMib,
         createdAt: new Date(0),
         timeoutSeconds: sb.timeoutSeconds,
         idleTimeoutSeconds: sb.idleTimeoutSeconds,
         memoryShrinkAfterSeconds: sb.memoryShrinkAfterSeconds,
+        vcpuMax: sb.vcpuMax,
         autoDeleteSeconds: sb.autoDeleteSeconds,
         network: sb.network,
         metadata: sb.metadata,

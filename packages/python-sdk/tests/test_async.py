@@ -563,6 +563,34 @@ class TestAsyncCreateFromTemplate:
             finally:
                 await sbx._close_http_client()
 
+    async def test_sends_chosen_size(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            sbx = await AsyncSandbox.create(
+                name="b", from_template="my-env", vcpu=3, memory_mib=6144
+            )
+            try:
+                body = json.loads(route.calls.last.request.content)
+                assert body["vcpu"] == 3
+                assert body["memory_mib"] == 6144
+            finally:
+                await sbx._close_http_client()
+
+    async def test_omits_size_when_unset(self) -> None:
+        with respx.mock() as router:
+            route = router.post(f"{API}/sandboxes").mock(
+                return_value=httpx.Response(200, json=_raw())
+            )
+            sbx = await AsyncSandbox.create(name="b")
+            try:
+                body = json.loads(route.calls.last.request.content)
+                assert "vcpu" not in body
+                assert "memory_mib" not in body
+            finally:
+                await sbx._close_http_client()
+
 
 class TestAsyncConcurrentRefresh:
     async def test_serialized_refresh_under_concurrent_401(self) -> None:

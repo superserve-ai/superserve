@@ -38,6 +38,7 @@ import type {
   SandboxInfo,
   SecretInfo,
   TemplateInfo,
+  TemplateSizeRange,
 } from "@superserve/sdk"
 
 import type { ClientConfig } from "./config.js"
@@ -129,6 +130,10 @@ export interface TemplateSummary {
   memoryMaxMib?: number
   /** Seconds memory must stay low after growing before it shrinks back; absent when the platform default applies. */
   memoryShrinkAfterSeconds?: number
+  /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
+  vcpuMax?: number
+  /** Sizes sandboxes may choose at create; absent when they cannot choose. */
+  sizeRange?: TemplateSizeRange
   diskMib: number
 }
 
@@ -136,6 +141,10 @@ export interface CreateInput {
   name?: string
   fromTemplate?: string
   fromSnapshot?: string
+  /** Fixed vCPU count within the template's or snapshot's CPU range. */
+  vcpu?: number
+  /** Fixed memory within the source's memory range. */
+  memoryMib?: number
   timeoutSeconds?: number
   /** Pause the sandbox after this many seconds with no activity. */
   idleTimeoutSeconds?: number
@@ -176,6 +185,8 @@ export interface TemplateCreateInput {
   memoryMib?: number
   memoryMaxMib?: number
   memoryShrinkAfterSeconds?: number
+  vcpuMax?: number
+  sizeRange?: TemplateSizeRange
   diskMib?: number
   steps?: BuildStep[]
   startCmd?: string
@@ -294,6 +305,8 @@ function toTemplateSummary(t: TemplateInfo): TemplateSummary {
     memoryMib: t.memoryMib,
     memoryMaxMib: t.memoryMaxMib,
     memoryShrinkAfterSeconds: t.memoryShrinkAfterSeconds,
+    vcpuMax: t.vcpuMax,
+    sizeRange: t.sizeRange,
     diskMib: t.diskMib,
   }
 }
@@ -328,6 +341,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         name: input.name ?? defaultName(),
         fromTemplate: input.fromTemplate,
         fromSnapshot: input.fromSnapshot,
+        vcpu: input.vcpu,
+        memoryMib: input.memoryMib,
         timeoutSeconds: input.timeoutSeconds,
         idleTimeoutSeconds: input.idleTimeoutSeconds,
         autoDeleteSeconds: input.autoDeleteSeconds,
@@ -387,6 +402,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         memoryMib: input.memoryMib,
         memoryMaxMib: input.memoryMaxMib,
         memoryShrinkAfterSeconds: input.memoryShrinkAfterSeconds,
+        vcpuMax: input.vcpuMax,
+        sizeRange: input.sizeRange,
         diskMib: input.diskMib,
         steps: input.steps,
         startCmd: input.startCmd,
@@ -402,6 +419,8 @@ export function createSdkClient(config: ClientConfig): SandboxClient {
         memoryMib: t.memoryMib,
         memoryMaxMib: t.memoryMaxMib,
         memoryShrinkAfterSeconds: t.memoryShrinkAfterSeconds,
+        vcpuMax: t.vcpuMax,
+        sizeRange: t.sizeRange,
         diskMib: t.diskMib,
         createdAt: t.createdAt,
       })

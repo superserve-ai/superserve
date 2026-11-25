@@ -12,7 +12,13 @@ import {
 import type { Command } from "commander"
 
 import { apiRequest, isUuid } from "../api"
-import { confirm, parseDuration, parseInteger, readStdin } from "../args"
+import {
+  confirm,
+  parseDuration,
+  parseInteger,
+  parseMib,
+  readStdin,
+} from "../args"
 import { sdkOptions } from "../config"
 import { CliError, EXIT, reportBatch, usageError } from "../errors"
 import {
@@ -37,6 +43,8 @@ interface TemplateRow {
   memory_mib: number
   memory_max_mib?: number | null
   memory_shrink_after_seconds?: number | null
+  vcpu_max?: number | null
+  size_range?: { vcpu_max?: number; memory_max_mib?: number }
   disk_mib: number
   size_bytes?: number
   error_message?: string
@@ -73,8 +81,12 @@ const SPEC_KEYS = [
   "memory_mib",
   "memory_max_mib",
   "memory_shrink_after_seconds",
+  "vcpu_max",
+  "size_range",
   "disk_mib",
 ]
+
+const SIZE_RANGE_KEYS = ["vcpu_max", "memory_max_mib"]
 
 const tpath = (id: string) => `/templates/${encodeURIComponent(id)}`
 const bpath = (id: string, buildId: string) =>
@@ -104,17 +116,6 @@ export async function resolveTemplateId(ref: string): Promise<string> {
 }
 
 /** `2048` / `2048M` / `2GiB` / `1.5G` → MiB. */
-function parseMib(input: string, flag: string): number {
-  const m = /^(\d+(?:\.\d+)?)\s*(m|mi|mib|mb|g|gi|gib|gb)?$/i.exec(input.trim())
-  const mib = m ? Number(m[1]) * (/^g/i.test(m[2] ?? "") ? 1024 : 1) : NaN
-  if (!Number.isInteger(mib)) {
-    throw usageError(
-      `Invalid ${flag} "${input}": use MiB (2048) or a size like 512M, 2G, 8GiB.`,
-    )
-  }
-  return mib
-}
-
 function checkRange(v: unknown, what: string, min: number, max: number) {
   if (!Number.isInteger(v) || (v as number) < min || (v as number) > max) {
     throw usageError(`${what} must be an integer between ${min} and ${max}.`)
@@ -124,6 +125,42 @@ function checkRange(v: unknown, what: string, min: number, max: number) {
 function fmtMib(mib: number | undefined): string {
   if (mib === undefined) return "-"
   return mib % 1024 === 0 ? `${mib / 1024}G` : `${mib}M`
+}
+
+// 1 vCPU and 1024 MiB are the API's defaults; plan limits and the 128 MiB
+// step are left to the API.
+function checkVcpuCeiling(v: unknown, vcpu: unknown, what: string) {
+  checkRange(v, what, 1, 32)
+  const base = (vcpu as number | undefined) ?? 1
+  if ((v as number) <= base || (v as number) > 4 * base) {
+    throw usageError(
+      `${what} must be greater than vCPU (${base}) and at most 4 times it.`,
+    )
+  }
+}
+
+function checkMemoryCeiling(v: unknown, memory: unknown, what: string) {
+  checkRange(v, `${what} (MiB)`, 256, 131_072)
+  const boot = (memory as number | undefined) ?? 1024
+  if ((v as number) <= boot || (v as number) > 4 * boot) {
+    throw usageError(
+      `${what} must be greater than memory (${fmtMib(boot)}) and at most 4 times it.`,
+    )
+  }
+}
+
+function fmtSizeRange(t: TemplateRow): string | undefined {
+  const r = t.size_range
+  if (!r) return undefined
+  const parts = []
+  if (r.vcpu_max != null) parts.push(`${t.vcpu}-${r.vcpu_max} vCPU`)
+  if (r.memory_max_mib != null)
+    parts.push(`${fmtMib(t.memory_mib)}-${fmtMib(r.memory_max_mib)}`)
+  return parts.join(", ")
+}
+
+function fmtVcpu(t: TemplateRow): string {
+  return t.vcpu_max == null ? String(t.vcpu) : `${t.vcpu}-${t.vcpu_max}`
 }
 
 function fmtMemory(t: TemplateRow): string {
@@ -201,6 +238,9 @@ interface CreateOpts {
   memory?: string
   memoryMax?: string
   memoryShrinkAfter?: string
+  vcpuMax?: string
+  sizeRangeVcpuMax?: string
+  sizeRangeMemoryMax?: string
   disk?: string
   wait: boolean
 }
@@ -262,6 +302,35 @@ async function buildCreateBody(
     opts.memoryShrinkAfter !== undefined
       ? parseDuration(opts.memoryShrinkAfter, "--memory-shrink-after")
       : file.memory_shrink_after_seconds
+  const vcpuMax =
+    opts.vcpuMax !== undefined
+      ? parseInteger(opts.vcpuMax, "--vcpu-max")
+      : file.vcpu_max
+  const fileRange = (file.size_range ?? {}) as Record<string, unknown>
+  if (
+    typeof fileRange !== "object" ||
+    fileRange === null ||
+    Array.isArray(fileRange)
+  ) {
+    throw usageError("size_range must be an object.")
+  }
+  const unknownRange = Object.keys(fileRange).filter(
+    (k) => !SIZE_RANGE_KEYS.includes(k),
+  )
+  if (unknownRange.length) {
+    throw usageError(
+      `Unknown field(s) in size_range: ${unknownRange.join(", ")}.`,
+      `Allowed: ${SIZE_RANGE_KEYS.join(", ")}.`,
+    )
+  }
+  const rangeVcpuMax =
+    opts.sizeRangeVcpuMax !== undefined
+      ? parseInteger(opts.sizeRangeVcpuMax, "--size-range-vcpu-max")
+      : fileRange.vcpu_max
+  const rangeMemoryMax =
+    opts.sizeRangeMemoryMax !== undefined
+      ? parseMib(opts.sizeRangeMemoryMax, "--size-range-memory-max")
+      : fileRange.memory_max_mib
   const disk =
     opts.disk !== undefined ? parseMib(opts.disk, "--disk") : file.disk_mib
   if (vcpu !== undefined) {
@@ -273,15 +342,7 @@ async function buildCreateBody(
     body.memory_mib = memory
   }
   if (memoryMax !== undefined) {
-    checkRange(memoryMax, "Max memory (MiB)", 256, 131_072)
-    // 1024 is the API's default memory; plan limits and the 128 MiB step
-    // are left to the API.
-    const boot = (memory as number | undefined) ?? 1024
-    if ((memoryMax as number) <= boot || (memoryMax as number) > 4 * boot) {
-      throw usageError(
-        `Max memory must be greater than memory (${fmtMib(boot)}) and at most 4 times it.`,
-      )
-    }
+    checkMemoryCeiling(memoryMax, memory, "Max memory")
     body.memory_max_mib = memoryMax
   }
   if (shrinkAfter !== undefined) {
@@ -290,6 +351,22 @@ async function buildCreateBody(
       throw usageError("--memory-shrink-after needs --memory-max.")
     }
     body.memory_shrink_after_seconds = shrinkAfter
+  }
+  if (vcpuMax !== undefined) {
+    checkVcpuCeiling(vcpuMax, vcpu, "Max vCPU")
+    body.vcpu_max = vcpuMax
+  }
+  if (rangeVcpuMax !== undefined || rangeMemoryMax !== undefined) {
+    const range: Record<string, unknown> = {}
+    if (rangeVcpuMax !== undefined) {
+      checkVcpuCeiling(rangeVcpuMax, vcpu, "Size range max vCPU")
+      range.vcpu_max = rangeVcpuMax
+    }
+    if (rangeMemoryMax !== undefined) {
+      checkMemoryCeiling(rangeMemoryMax, memory, "Size range max memory")
+      range.memory_max_mib = rangeMemoryMax
+    }
+    body.size_range = range
   }
   if (disk !== undefined) {
     checkRange(disk, "Disk (MiB)", 1024, 131_072)
@@ -529,7 +606,7 @@ export function register(program: Command): void {
     .argument("<name>", "Template name, unique in your team")
     .option(
       "-f, --file <path>",
-      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, memory_max_mib, memory_shrink_after_seconds, disk_mib (- for stdin)",
+      "JSON build spec: BuildSpec fields plus vcpu, memory_mib, memory_max_mib, memory_shrink_after_seconds, vcpu_max, size_range, disk_mib (- for stdin)",
     )
     .option("--from <image>", "Base OCI image, e.g. python:3.11 (linux/amd64)")
     .option("--run <cmd>", "Build step: run a shell command (repeatable)")
@@ -556,6 +633,10 @@ export function register(program: Command): void {
     )
     .option("--vcpu <n>", "vCPUs, 1-32 (default 1)")
     .option(
+      "--vcpu-max <n>",
+      "Let sandboxes grow CPU while running, up to this many vCPUs; above --vcpu, at most 4x it and 32",
+    )
+    .option(
       "--memory <size>",
       "Memory in MiB or with a unit, e.g. 2G; 256M-128G (default 1G)",
     )
@@ -566,6 +647,14 @@ export function register(program: Command): void {
     .option(
       "--memory-shrink-after <duration>",
       "How long memory must stay low after growing before it shrinks back, e.g. 5m; 1m-30m, needs --memory-max (default: platform default)",
+    )
+    .option(
+      "--size-range-vcpu-max <n>",
+      "Let each sandbox choose a fixed vCPU count at create, from --vcpu up to this; at most 4x --vcpu and 32",
+    )
+    .option(
+      "--size-range-memory-max <size>",
+      "Let each sandbox choose a fixed memory size at create, from --memory up to this; at most 4x --memory",
     )
     .option(
       "--disk <size>",
@@ -583,7 +672,9 @@ override the file's other fields. The file is JSON (YAML is not supported):
 Examples:
   superserve template create py-data --from python:3.11 \\
     --run "pip install numpy pandas" --env DEBUG=1 --workdir /app
-  superserve template create web -f template.json --memory 2G --no-wait`,
+  superserve template create web -f template.json --memory 2G --no-wait
+  superserve template create api --from node:22 --vcpu 1 --memory 1G \\
+    --size-range-vcpu-max 4 --size-range-memory-max 4G`,
     )
     .action(async (name: string, opts: CreateOpts) => {
       const body = await buildCreateBody(name, opts, flagSteps)
@@ -642,7 +733,7 @@ Examples:
           },
           {
             header: "cpu/mem/disk",
-            value: (t) => `${t.vcpu}/${fmtMemory(t)}/${fmtMib(t.disk_mib)}`,
+            value: (t) => `${fmtVcpu(t)}/${fmtMemory(t)}/${fmtMib(t.disk_mib)}`,
           },
           { header: "size", value: (t) => formatBytes(t.size_bytes) },
           { header: "built", value: (t) => formatDate(t.built_at) },
@@ -667,8 +758,9 @@ Examples:
         ["Name", t.name],
         ["ID", t.id],
         ["Status", t.status, statusColor],
-        ["vCPU", String(t.vcpu)],
+        ["vCPU", fmtVcpu(t)],
         ["Memory", fmtMemory(t)],
+        ["Size range", fmtSizeRange(t)],
         [
           "Memory shrink after",
           t.memory_shrink_after_seconds == null

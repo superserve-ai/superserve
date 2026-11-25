@@ -14,12 +14,18 @@ const fixed: TemplateShape = {
   name: "python-ml",
   from: "python:3.12-slim",
   vcpu: 2,
+  vcpuMax: null,
   memoryMib: 2048,
   memoryMaxMib: null,
   memoryShrinkAfterSeconds: null,
+  sizeRange: null,
   diskMib: 8192,
 }
-const growing: TemplateShape = { ...fixed, memoryMaxMib: 8192 }
+const growing: TemplateShape = { ...fixed, vcpuMax: 8, memoryMaxMib: 8192 }
+const ranged: TemplateShape = {
+  ...fixed,
+  sizeRange: { vcpuMax: 8, memoryMaxMib: 8192 },
+}
 
 // Parses the CLI's own size syntax (packages/cli/src/commands/template.ts).
 function parseMib(input: string): number {
@@ -46,14 +52,29 @@ describe("createRequest", () => {
     })
   })
 
-  it("adds memory_max_mib only when memory can grow", () => {
-    expect(createRequest(growing)).toMatchObject({ memory_max_mib: 8192 })
+  it("adds memory_max_mib and vcpu_max only when they can grow", () => {
+    expect(createRequest(growing)).toMatchObject({
+      vcpu_max: 8,
+      memory_max_mib: 8192,
+    })
+  })
+
+  it("sends a size range without growth ceilings", () => {
+    const body = createRequest(ranged)
+    expect(body.size_range).toEqual({ vcpu_max: 8, memory_max_mib: 8192 })
+    expect(body).not.toHaveProperty("vcpu_max")
+    expect(body).not.toHaveProperty("memory_max_mib")
   })
 })
 
 describe("cliCommand", () => {
   it("matches the request field for field", () => {
-    for (const shape of [fixed, growing, { ...fixed, memoryMib: 1536 }]) {
+    for (const shape of [
+      fixed,
+      growing,
+      ranged,
+      { ...fixed, memoryMib: 1536 },
+    ]) {
       const body = createRequest(shape)
       const command = cliCommand(shape)
       const flags = cliFlags(command)
@@ -67,6 +88,15 @@ describe("cliCommand", () => {
       if (body.memory_max_mib === undefined)
         expect(flags).not.toHaveProperty("memory-max")
       else expect(parseMib(flags["memory-max"])).toBe(body.memory_max_mib)
+      if (body.vcpu_max === undefined)
+        expect(flags).not.toHaveProperty("vcpu-max")
+      else expect(Number(flags["vcpu-max"])).toBe(body.vcpu_max)
+      expect(Number(flags["size-range-vcpu-max"] ?? NaN)).toEqual(
+        body.size_range?.vcpu_max ?? NaN,
+      )
+      expect(parseMib(flags["size-range-memory-max"] ?? "0")).toBe(
+        body.size_range?.memory_max_mib ?? 0,
+      )
     }
   })
 
@@ -76,6 +106,7 @@ describe("cliCommand", () => {
         "superserve template create python-ml \\",
         "  --from python:3.12-slim \\",
         "  --vcpu 2 \\",
+        "  --vcpu-max 8 \\",
         "  --memory 2G \\",
         "  --memory-max 8G \\",
         "  --disk 8G",
@@ -100,6 +131,7 @@ describe("typescriptSnippet", () => {
         '  name: "python-ml",',
         '  from: "python:3.12-slim",',
         "  vcpu: 2,",
+        "  vcpuMax: 8,",
         "  memoryMib: 2048,",
         "  memoryMaxMib: 8192,",
         "  diskMib: 8192,",
@@ -109,8 +141,15 @@ describe("typescriptSnippet", () => {
     )
   })
 
-  it("leaves memoryMaxMib out for fixed memory", () => {
+  it("passes a size range", () => {
+    expect(typescriptSnippet(ranged)).toContain(
+      "  sizeRange: { vcpuMax: 8, memoryMaxMib: 8192 },",
+    )
+  })
+
+  it("leaves the ceilings out for a fixed shape", () => {
     expect(typescriptSnippet(fixed)).not.toContain("memoryMaxMib")
+    expect(typescriptSnippet(fixed)).not.toContain("vcpuMax")
   })
 })
 
@@ -124,6 +163,7 @@ describe("pythonSnippet", () => {
         '    name="python-ml",',
         '    from_="python:3.12-slim",',
         "    vcpu=2,",
+        "    vcpu_max=8,",
         "    memory_mib=2048,",
         "    memory_max_mib=8192,",
         "    disk_mib=8192,",
@@ -133,8 +173,17 @@ describe("pythonSnippet", () => {
     )
   })
 
-  it("leaves memory_max_mib out for fixed memory", () => {
+  it("passes a size range and imports its type", () => {
+    const code = pythonSnippet(ranged)
+    expect(code).toContain("from superserve import Template, TemplateSizeRange")
+    expect(code).toContain(
+      "    size_range=TemplateSizeRange(vcpu_max=8, memory_max_mib=8192),",
+    )
+  })
+
+  it("leaves the ceilings out for a fixed shape", () => {
     expect(pythonSnippet(fixed)).not.toContain("memory_max_mib")
+    expect(pythonSnippet(fixed)).not.toContain("vcpu_max")
   })
 })
 

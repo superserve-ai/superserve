@@ -30,6 +30,34 @@ text = sandbox.files.read_text("/app/data.txt")
 sandbox.kill()
 ```
 
+## Custom size
+
+A template built with a size range lets each sandbox use a fixed size within it:
+
+```python
+from superserve import Sandbox, Template, TemplateSizeRange
+
+template = Template.create(
+    name="my-env",
+    from_="python:3.11",
+    vcpu=1,
+    memory_mib=2048,
+    size_range=TemplateSizeRange(vcpu_max=4, memory_max_mib=8192),
+)
+template.wait_until_ready()
+
+sandbox = Sandbox.create(
+    name="build",
+    from_template="my-env",
+    vcpu=4,
+    memory_mib=8192,
+)
+```
+
+Leave either out to keep the template's default size. Sandboxes created from a
+snapshot can pick a size within the range the snapshot records. See
+[Custom size](https://docs.superserve.ai/sandbox/size).
+
 ## Preview URLs
 
 Choose the default access for new ports, publish only the ports you intend to

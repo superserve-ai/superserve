@@ -61,6 +61,7 @@ from .types import (
     PreviewToken,
     PublishedPreviewPort,
     SandboxInfo,
+    SandboxMetrics,
     SandboxSecretBinding,
     SandboxStatus,
     SnapshotInfo,
@@ -237,6 +238,8 @@ class AsyncSandbox:
         volumes: Sequence[SandboxVolumeMount] | None = None,
         from_template: "str | Template | AsyncTemplate | None" = None,
         from_snapshot: "str | Snapshot | AsyncSnapshot | None" = None,
+        vcpu: int | None = None,
+        memory_mib: int | None = None,
         timeout_seconds: int | None = None,
         idle_timeout_seconds: int | None = None,
         auto_delete_seconds: int | None = None,
@@ -258,6 +261,14 @@ class AsyncSandbox:
         many seconds with no activity: running commands, open terminals and
         command streams, file operations and preview traffic all count as
         activity. Off when omitted.
+
+        ``vcpu`` and ``memory_mib`` choose a fixed size for this sandbox within
+        the source's range: ``vcpu`` within the CPU range of the template or the
+        snapshot's recorded range (both ends included), ``memory_mib`` within
+        the memory range in 2 MiB steps from the minimum. With a snapshot,
+        ``memory_mib`` needs one of a sandbox created with a chosen memory size.
+        The chosen size is fixed for the sandbox's life. Omit to inherit the
+        source's configuration.
         """
         config = resolve_config(api_key=api_key, base_url=base_url)
 
@@ -284,6 +295,10 @@ class AsyncSandbox:
             body["from_snapshot"] = (
                 from_snapshot if isinstance(from_snapshot, str) else from_snapshot.id
             )
+        if vcpu is not None:
+            body["vcpu"] = vcpu
+        if memory_mib is not None:
+            body["memory_mib"] = memory_mib
         if timeout_seconds is not None:
             body["timeout_seconds"] = timeout_seconds
         if idle_timeout_seconds is not None:
@@ -437,6 +452,23 @@ class AsyncSandbox:
         return [to_sandbox_info(item) for item in raw]
 
     @classmethod
+    async def get_metrics_by_id(
+        cls,
+        sandbox_id: str,
+        *,
+        api_key: str | None = None,
+        base_url: str | None = None,
+    ) -> SandboxMetrics:
+        """Read cached measurements by ID without activating or resuming the VM."""
+        config = resolve_config(api_key=api_key, base_url=base_url)
+        raw = await async_api_request(
+            "GET",
+            f"{config.base_url}/sandboxes/{sandbox_id}/metrics",
+            headers={"X-API-Key": config.api_key},
+        )
+        return SandboxMetrics.model_validate(raw)
+
+    @classmethod
     async def kill_by_id(
         cls,
         sandbox_id: str,
@@ -508,6 +540,17 @@ class AsyncSandbox:
             raise SandboxError(
                 f"Sandbox {self.id!r} has been deleted; create or connect to a new one."
             )
+
+    async def get_metrics(self) -> SandboxMetrics:
+        """Read cached observations, including last-known data for inactive VMs."""
+        self._require_not_deleted()
+        raw = await async_api_request(
+            "GET",
+            f"{self._config.base_url}/sandboxes/{self.id}/metrics",
+            headers={"X-API-Key": self._config.api_key},
+            client=self._http_client,
+        )
+        return SandboxMetrics.model_validate(raw)
 
     async def get_info(self) -> SandboxInfo:
         """Refresh this sandbox's info from the API."""

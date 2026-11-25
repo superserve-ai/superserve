@@ -1,3 +1,4 @@
+import { ConflictError } from "@superserve/sdk"
 import { afterEach, beforeEach, describe, expect, it } from "vitest"
 
 import { createFakeClient } from "./fake-client.js"
@@ -88,16 +89,52 @@ describe("network rules + sandbox_update (in-memory, fake client)", () => {
     expect(info.structured.idle_timeout_seconds).toBeUndefined()
   })
 
-  it("sandbox_info returns an inherited memory_shrink_after_seconds", async () => {
+  it("sandbox_info returns inherited memory_shrink_after_seconds and vcpu_max", async () => {
     const fake = createFakeClient()
     const c = await connect(fake.client)
     try {
       const created = await callTool(c.client, "sandbox_create", { name: "s" })
       const id = created.structured.id as string
       fake.sandboxes.get(id)!.memoryShrinkAfterSeconds = 300
+      fake.sandboxes.get(id)!.vcpuMax = 8
 
       const info = await callTool(c.client, "sandbox_info", { sandbox_id: id })
       expect(info.structured.memory_shrink_after_seconds).toBe(300)
+      expect(info.structured.vcpu_max).toBe(8)
+      expect(info.text).toContain("2-8 vCPU")
+    } finally {
+      await c.close()
+    }
+  })
+
+  it("sandbox_create passes a chosen vcpu and memory_mib", async () => {
+    const created = await callTool(conn.client, "sandbox_create", {
+      name: "sized",
+      from_template: "my-env",
+      vcpu: 3,
+      memory_mib: 6144,
+    })
+    const id = created.structured.id as string
+
+    const info = await callTool(conn.client, "sandbox_info", { sandbox_id: id })
+    expect(info.structured.vcpu_count).toBe(3)
+    expect(info.structured.memory_mib).toBe(6144)
+    expect(info.text).toContain("3 vCPU / 6144 MiB")
+  })
+
+  it("sandbox_create shows a create conflict without the sandbox-state hint", async () => {
+    const fake = createFakeClient()
+    fake.client.create = async () => {
+      throw new ConflictError("Rebuild it to choose vcpu or memory_mib.")
+    }
+    const c = await connect(fake.client)
+    try {
+      const r = await callTool(c.client, "sandbox_create", {
+        from_template: "my-env",
+        vcpu: 2,
+      })
+      expect(r.isError).toBe(true)
+      expect(r.text).toBe("Rebuild it to choose vcpu or memory_mib.")
     } finally {
       await c.close()
     }
@@ -172,6 +209,8 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
       memory_mib: 8192,
       memory_max_mib: 16384,
       memory_shrink_after_seconds: 600,
+      vcpu_max: 8,
+      size_range: { vcpu_max: 8 },
       run_steps: ["pip install numpy"],
     })
     expect(r.isError).toBe(false)
@@ -180,7 +219,9 @@ describe("sandbox_template_create (in-memory, fake client)", () => {
     expect(t.vcpu).toBe(4)
     expect(t.memoryMaxMib).toBe(16384)
     expect(t.memoryShrinkAfterSeconds).toBe(600)
-    expect(r.text).toContain("8192-16384 MiB")
+    expect(t.vcpuMax).toBe(8)
+    expect(t.sizeRange).toEqual({ vcpuMax: 8 })
+    expect(r.text).toContain("4-8 vCPU / 8192-16384 MiB, size range 4-8 vCPU")
     expect(t.status).toBe("building")
     // The agent is told to poll until ready before using it.
     expect(r.text).toMatch(/ready/)

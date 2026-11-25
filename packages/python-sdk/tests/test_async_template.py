@@ -62,6 +62,7 @@ class TestAsyncCreate:
                 memory_mib=2048,
                 memory_max_mib=8192,
                 memory_shrink_after_seconds=600,
+                vcpu_max=4,
                 disk_mib=4096,
                 from_="python:3.11",
                 start_cmd="python server.py",
@@ -74,6 +75,7 @@ class TestAsyncCreate:
             assert b"vcpu" in body
             assert json.loads(body)["memory_max_mib"] == 8192
             assert json.loads(body)["memory_shrink_after_seconds"] == 600
+            assert json.loads(body)["vcpu_max"] == 4
 
     async def test_throws_on_missing_build_id(self) -> None:
         with respx.mock() as router:
