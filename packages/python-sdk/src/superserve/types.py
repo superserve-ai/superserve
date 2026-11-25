@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import datetime
+from datetime import datetime, timezone
 from enum import Enum
 from typing import TYPE_CHECKING, Any, Literal, Optional, Sequence, Union
 from urllib.parse import urlencode
@@ -397,6 +397,19 @@ class BuildLogStream(str, Enum):
     STDOUT = "stdout"
     STDERR = "stderr"
     SYSTEM = "system"
+    # The build failure line, as "<code>: <message>".
+    ERROR = "error"
+
+    @classmethod
+    def _missing_(cls, value: object) -> Optional[BuildLogStream]:
+        # The server forwards the build runner's stream name unchanged. Keep a
+        # name this SDK does not list yet instead of failing the whole stream.
+        if not isinstance(value, str) or not value:
+            return None
+        member = str.__new__(cls, value)
+        member._name_ = value.upper()
+        member._value_ = value
+        return member
 
 
 class TemplateSizeRange(BaseModel):
@@ -556,13 +569,15 @@ def to_template_build_info(raw: dict[str, Any]) -> TemplateBuildInfo:
 
 
 def to_build_log_event(raw: dict[str, Any]) -> BuildLogEvent:
-    if not raw.get("timestamp"):
-        raise SandboxError("Invalid log event: missing timestamp")
     if not raw.get("stream"):
         raise SandboxError("Invalid log event: missing stream")
 
+    # The final event (``finished: true``) carries no server timestamp; use
+    # the time it was received so the stream does not fail on it.
     return BuildLogEvent(
-        timestamp=_parse_iso8601(raw["timestamp"]),
+        timestamp=_parse_iso8601(raw["timestamp"])
+        if raw.get("timestamp")
+        else datetime.now(timezone.utc),
         stream=BuildLogStream(raw["stream"]),
         text=raw.get("text", ""),
         finished=raw.get("finished"),
