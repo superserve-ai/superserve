@@ -125,6 +125,8 @@ it("keeps recovery visible while a slow retry checks the account", async () => {
     "use:original",
     "owner",
     "success",
+    undefined,
+    "return_and_completion",
   )
   await act(async () =>
     finish({

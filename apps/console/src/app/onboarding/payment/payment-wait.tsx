@@ -20,9 +20,12 @@ import { checkSignupPaymentAction } from "./actions"
 
 export function PaymentWait() {
   const router = useRouter()
-  const locator = checkoutLocator(useSearchParams())
+  const params = useSearchParams()
+  const locator = checkoutLocator(params)
   const account = locator?.account
   const team = locator?.team
+  // Set by the Checkout return route after it records the return.
+  const returned = params.get("returned") === "1"
   const [round, setRound] = useState(0)
   const [timedOut, setTimedOut] = useState(false)
 
@@ -40,9 +43,11 @@ export function PaymentWait() {
     let timer: ReturnType<typeof setTimeout> | undefined
     const deadline = Date.now() + SETTLE_TIMEOUT_MS
     const poll = async () => {
-      const next = await checkSignupPaymentAction(account, team).catch(
-        () => null,
-      )
+      const next = await checkSignupPaymentAction(
+        account,
+        team,
+        returned,
+      ).catch(() => null)
       if (stopped) return
       if (next) {
         if (isStripeCheckoutUrl(next)) window.location.assign(next)
@@ -57,7 +62,7 @@ export function PaymentWait() {
       stopped = true
       clearTimeout(timer)
     }
-  }, [account, team, round, router])
+  }, [account, team, returned, round, router])
 
   return (
     <div className="flex min-h-screen flex-col items-center justify-center p-6">

@@ -19,6 +19,8 @@ function getPostHogClient(): PostHog | null {
   return posthogClient
 }
 
+// timestamp, when given, is when the event happened. Without it PostHog uses
+// the time the event is captured.
 export async function trackEvent(
   event: string,
   distinctId: string,

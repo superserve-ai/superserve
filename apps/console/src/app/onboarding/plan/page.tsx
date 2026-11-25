@@ -8,6 +8,11 @@ import {
   type SignupPlanPageParams,
 } from "@/lib/api/signup-plan-page"
 import { trackEvent } from "@/lib/posthog/actions"
+import {
+  parseTeamKey,
+  recordCheckoutCompleted,
+  recordCheckoutReturned,
+} from "@/lib/posthog/checkout"
 import { ycOnboardingDestination } from "@/lib/yc/onboarding"
 
 export const metadata: Metadata = {
@@ -23,6 +28,19 @@ export default async function PlanSelectionPage({
   const params = await searchParams
   const result = await getSignupPlanPage(params)
   const context = result?.context
+  // A Free plan's card setup returns to the same URLs; it is not a paid
+  // Checkout. getSignupPlanPage already refuses an operator's session.
+  if (
+    context &&
+    context.offer !== "free" &&
+    (params.billing === "success" || params.billing === "cancel")
+  )
+    recordCheckoutReturned({
+      userId: context.userId,
+      surface: "onboarding_plan",
+      outcome: params.billing,
+      teamKey: context.teamKey,
+    })
   if (context && ["selecting", "pending", "yc_claim"].includes(context.state)) {
     let destination: string | null
     try {
@@ -69,6 +87,21 @@ export default async function PlanSelectionPage({
         action: "completed",
       })
     })
+    // The payment committed before this return rendered, so no recovery runs
+    // to complete the checkout.
+    const team = parseTeamKey(context.teamKey)
+    if (
+      params.billing === "success" &&
+      context.state === "committed" &&
+      context.offer &&
+      context.offer !== "free" &&
+      team
+    )
+      recordCheckoutCompleted({
+        userId: context.userId,
+        surface: "onboarding_plan",
+        team,
+      })
     redirect("/sandboxes")
   }
   return (
