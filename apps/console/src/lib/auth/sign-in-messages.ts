@@ -14,6 +14,8 @@ export const AUTH_MESSAGES = Object.freeze({
   resetEmailNetworkError:
     "We couldn't send the reset email. Check your connection and try again.",
   resetEmailFailed: "We couldn't send the reset email. Try again in a minute.",
+  passwordVerificationFailed:
+    "We couldn't verify your current password. Check it, try again later, or reset your password.",
 } as const)
 
 export function isNetworkAuthError(error: unknown): boolean {
