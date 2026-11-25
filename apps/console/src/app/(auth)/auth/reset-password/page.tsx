@@ -17,6 +17,9 @@ import { inviteLinkReplayClass } from "@/lib/invite-token-redaction"
 import { AUTH_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
+const SAME_PASSWORD_ERROR =
+  "Your new password matches your current one. Choose a different password."
+
 function ResetPasswordContent() {
   const [isLoading, setIsLoading] = useState(false)
   const [password, setPassword] = useState("")
@@ -56,7 +59,12 @@ function ResetPasswordContent() {
       const supabase = createBrowserClient()
       const { error } = await supabase.auth.updateUser({ password })
       if (error) {
-        setErrors({ form: "Failed to update password. Please try again." })
+        setErrors({
+          form:
+            error.code === "same_password"
+              ? SAME_PASSWORD_ERROR
+              : "Failed to update password. Please try again.",
+        })
         return
       }
       posthog.capture(AUTH_EVENTS.PASSWORD_RESET_COMPLETED)
