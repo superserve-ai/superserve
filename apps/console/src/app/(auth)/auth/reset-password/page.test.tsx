@@ -202,6 +202,75 @@ describe("ResetPasswordPage", () => {
     expect(mockUpdateUser).not.toHaveBeenCalled()
   })
 
+  const samePasswordCopy =
+    "Your new password matches your current one. Choose a different password."
+  const genericUpdateError = "Failed to update password. Please try again."
+
+  it("keeps the form open when the new password matches the current one", async () => {
+    mockUpdateUser.mockResolvedValue({
+      error: {
+        code: "same_password",
+        message: "New password should be different from the old password.",
+      },
+    })
+    render(<ResetPasswordPage />)
+
+    await fillAndSubmit()
+
+    expect(await screen.findByText(samePasswordCopy)).toBeTruthy()
+    expect(screen.queryByText(genericUpdateError)).toBeNull()
+    expect(screen.getByRole("button", { name: "Update Password" })).toBeTruthy()
+    await new Promise((resolve) => setTimeout(resolve, 2100))
+    expect(mockCapture).not.toHaveBeenCalled()
+    expect(mockPush).not.toHaveBeenCalled()
+  })
+
+  it.each([
+    {
+      label: "weak_password",
+      error: { code: "weak_password", message: "Too weak." },
+    },
+    { label: "no code", error: { message: "Password update failed." } },
+  ])("shows the generic update error for $label", async ({ error }) => {
+    mockUpdateUser.mockResolvedValue({ error })
+    render(<ResetPasswordPage />)
+
+    await fillAndSubmit()
+
+    expect(await screen.findByText(genericUpdateError)).toBeTruthy()
+    expect(screen.queryByText(samePasswordCopy)).toBeNull()
+  })
+
+  it("returns to the invitation after retrying with a different password", async () => {
+    nextPath = `/invite/ssinv_use_${"T".repeat(43)}`
+    mockUpdateUser
+      .mockResolvedValueOnce({
+        error: {
+          code: "same_password",
+          message: "New password should be different from the old password.",
+        },
+      })
+      .mockResolvedValueOnce({ error: null })
+    render(<ResetPasswordPage />)
+
+    await fillAndSubmit()
+    expect(await screen.findByText(samePasswordCopy)).toBeTruthy()
+
+    await fillAndSubmit("DifferentPassword456")
+
+    expect(
+      await screen.findByText("Returning to your invitation..."),
+    ).toBeTruthy()
+    expect(screen.queryByText(samePasswordCopy)).toBeNull()
+    expect(mockCapture).toHaveBeenCalledWith("auth_password_reset_completed")
+    expect(mockUpdateUser).toHaveBeenNthCalledWith(2, {
+      password: "DifferentPassword456",
+    })
+    await waitFor(() => expect(mockPush).toHaveBeenCalledWith(nextPath), {
+      timeout: 3000,
+    })
+  })
+
   it("cancels pending redirect on unmount", async () => {
     mockUpdateUser.mockResolvedValue({ error: null })
     const { unmount } = render(<ResetPasswordPage />)
