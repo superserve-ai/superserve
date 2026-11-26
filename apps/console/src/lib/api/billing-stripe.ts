@@ -1,3 +1,5 @@
+import { CheckoutCopyError } from "@/lib/billing/checkout-error-copy"
+
 import { ApiError, apiClient } from "./client"
 
 export interface CustomerBillingUsageResponse {
@@ -188,7 +190,7 @@ export async function createStripeCheckoutSession(params: {
     ) {
       intent.newOnNextClick = true
       sessionStorage.setItem(key, JSON.stringify(intent))
-      throw new Error(
+      throw new CheckoutCopyError(
         "Checkout could not resume. Click Set Up Billing again to request a new attempt; any existing Checkout must finish or expire first.",
         { cause: error },
       )

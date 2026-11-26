@@ -2,6 +2,7 @@ import { act, fireEvent, render, screen, waitFor } from "@testing-library/react"
 import { beforeEach, describe, expect, it, vi } from "vitest"
 
 import { createStripeCheckoutSession } from "@/lib/api/billing-stripe"
+import { ApiError } from "@/lib/api/client"
 import {
   commitFreePlan,
   recoverProPayment,
@@ -51,6 +52,26 @@ beforeEach(() => {
 })
 
 describe("onboarding plan flow", () => {
+  it("shows friendly checkout failure copy instead of control-plane details", async () => {
+    vi.mocked(startProCheckout).mockRejectedValueOnce(
+      new ApiError(
+        503,
+        "service_unavailable",
+        "Pro price configuration requires verification",
+      ),
+    )
+    render(<PlanSelection initial={selecting} />)
+    fireEvent.click(screen.getByRole("button", { name: "Continue to payment" }))
+    expect(await screen.findByRole("alert")).toHaveTextContent(
+      "Something went wrong on our side. Try again in a few minutes. If it keeps happening, contact support@superserve.ai.",
+    )
+    expect(
+      screen.queryByText("Pro price configuration requires verification"),
+    ).toBeNull()
+    expect(startProCheckout).toHaveBeenCalledTimes(1)
+    expect(assign).not.toHaveBeenCalled()
+  })
+
   it("returns YC teams to their claim without offering conflicting purchases", async () => {
     render(<PlanSelection initial={{ ...selecting, state: "yc_claim" }} />)
     await waitFor(() => expect(assign).toHaveBeenCalledWith("/yc/claim/"))

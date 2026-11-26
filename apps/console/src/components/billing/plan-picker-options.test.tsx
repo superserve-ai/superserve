@@ -15,11 +15,16 @@ const mocks = vi.hoisted(() => ({
   canManage: null as boolean | null,
   signOut: vi.fn(),
   teams: [] as TeamSummary[],
+  activeTeamId: null as string | null,
   switchTeam: vi.fn(async (_teamId: string, _region: string) => {}),
 }))
 vi.mock("@/hooks/use-sign-out", () => ({ useSignOut: () => mocks.signOut }))
 vi.mock("@/lib/api/teams-actions", () => ({
-  listTeamsAction: async () => ({ teams: mocks.teams }),
+  listTeamsAction: async () => ({
+    teams: mocks.teams,
+    activeTeamId: mocks.activeTeamId,
+    activeRegion: "use",
+  }),
   setActiveTeamAction: mocks.switchTeam,
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
@@ -85,6 +90,7 @@ afterEach(() => {
   cleanup()
   mocks.cards = []
   mocks.canManage = null
+  mocks.activeTeamId = null
   mocks.teams = []
   mocks.switchTeam.mockClear()
   vi.unstubAllGlobals()
@@ -232,6 +238,26 @@ describe("PlanPickerOptions", () => {
     expect(screen.getByRole("button", { name: "Pro" })).toBeTruthy()
   })
 
+  it("hides the locator team even when a different team is active", async () => {
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.canManage = false
+    mocks.activeTeamId = "team-2"
+    mocks.teams = [
+      { id: "team-1", name: "Locator team", region: "use" },
+      { id: "team-2", name: "Active team", region: "use" },
+    ]
+    const user = userEvent.setup()
+    render(<PlanPickerOptions preselected={null} locator={locator} />)
+    await user.click(
+      await screen.findByRole("combobox", { name: "Team to open" }),
+    )
+    expect(
+      (await screen.findAllByRole("option")).map(
+        (option) => option.textContent,
+      ),
+    ).toEqual(["Active team"])
+  })
+
   it("sends only the first plan choice while Checkout opens", async () => {
     mocks.offers = [
       offer("developer_monthly", "Builder"),
@@ -287,6 +313,65 @@ describe("PlanPickerOptions", () => {
     expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
     expect(mocks.switchTeam).toHaveBeenCalledWith("team-3", "use")
     await vi.waitFor(() => expect(assign).toHaveBeenCalledWith("/sandboxes"))
+  })
+
+  it("opens another team only once on double click", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    let resolve!: () => void
+    const switching = new Promise<void>((done) => {
+      resolve = done
+    })
+    mocks.switchTeam.mockReturnValueOnce(switching)
+    render(
+      <PlanPickerOptions preselected={null} locator={locator} adminRequired />,
+    )
+    const button = await screen.findByRole("button", { name: "Open team" })
+    act(() => {
+      fireEvent.click(button)
+      fireEvent.click(button)
+    })
+    expect(mocks.switchTeam).toHaveBeenCalledExactlyOnceWith("team-2", "use")
+    expect(button).toBeDisabled()
+    expect(
+      screen.getByRole("combobox", { name: "Team to open" }),
+    ).toBeDisabled()
+    expect(assign).not.toHaveBeenCalled()
+    await act(async () => resolve())
+    expect(assign).toHaveBeenCalledExactlyOnceWith("/sandboxes")
+    fireEvent.click(button)
+    expect(mocks.switchTeam).toHaveBeenCalledTimes(1)
+  })
+
+  it("does not navigate when another team switch resolves after unmount", async () => {
+    const assign = vi.fn()
+    vi.stubGlobal("location", { ...window.location, assign })
+    mocks.offers = [offer("developer_monthly", "Builder")]
+    mocks.teams = [
+      { id: "team-1", name: "Current", region: "use" },
+      { id: "team-2", name: "Side project", region: "use" },
+    ]
+    let resolve!: () => void
+    const switching = new Promise<void>((done) => {
+      resolve = done
+    })
+    mocks.switchTeam.mockReturnValueOnce(switching)
+    const { unmount } = render(
+      <PlanPickerOptions preselected={null} locator={locator} adminRequired />,
+    )
+    fireEvent.click(await screen.findByRole("button", { name: "Open team" }))
+    expect(mocks.switchTeam).toHaveBeenCalledExactlyOnceWith("team-2", "use")
+    expect(assign).not.toHaveBeenCalled()
+
+    unmount()
+    await act(async () => resolve())
+
+    expect(assign).not.toHaveBeenCalled()
   })
 
   it("labels each team with its region when the teams span regions", async () => {

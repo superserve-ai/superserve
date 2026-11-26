@@ -1,3 +1,4 @@
+import { CheckoutCopyError } from "@/lib/billing/checkout-error-copy"
 import { isPaymentActivating } from "@/lib/billing/signup-checkout-paths"
 
 import { apiClient } from "./client"
@@ -39,7 +40,7 @@ export async function startProCheckout(
       context.offer !== offer ||
       context.actor !== actor
     )
-      throw new Error(
+      throw new CheckoutCopyError(
         "The saved checkout belongs to another account or operation. Check payment status for the original team.",
       )
   } else {
@@ -100,7 +101,7 @@ function proCheckoutDestination(response: ProCheckoutResponse): string | null {
   )
     return null
   if (!response.url || !isStripeCheckoutUrl(response.url))
-    throw new Error(
+    throw new CheckoutCopyError(
       "Unable to open payment. Check your payment status before trying again.",
     )
   return response.url
@@ -151,7 +152,7 @@ function proOperationKey(team: string, offer: CheckoutOffer, actor?: string) {
     context.offer !== offer ||
     context.id !== legacyId
   )
-    throw new Error(
+    throw new CheckoutCopyError(
       "The saved checkout cannot be identified. Check payment status before trying again.",
     )
   return legacyKey
@@ -199,7 +200,7 @@ export async function commitFreePlan(teamKey: string) {
     },
   )
   if (response.state !== "committed" || response.offer !== "free")
-    throw new Error("Unable to confirm your plan. Please retry.")
+    throw new CheckoutCopyError("Unable to confirm your plan. Please retry.")
 }
 
 export async function recoverProPayment(teamKey: string, restart = false) {
@@ -226,7 +227,9 @@ export async function recoverProPayment(teamKey: string, restart = false) {
       "payment_confirmation_pending",
     ].includes(response.outcome)
   )
-    throw new Error("Payment status is unavailable. Please check again.")
+    throw new CheckoutCopyError(
+      "Payment status is unavailable. Please check again.",
+    )
   if (
     ["active", "retryable", "no_pending_pro_purchase"].includes(
       response.outcome,
