@@ -62,3 +62,27 @@ it("tells a team that needs a plan it never had a trial", () => {
   ).toBeTruthy()
   expect(screen.queryByText(/Trial/)).toBeNull()
 })
+
+it("shows a live trial's balance when the general credit fields read $0", () => {
+  const plan = summary("trial")
+  Object.assign(plan, {
+    credit_source: "stripe",
+    stripe_remaining_credit_usd: 0,
+    trial: { state: "active", remaining_usd: 0.05 },
+  })
+  render(<CurrentPlan summary={plan} />)
+  expect(screen.getByText("$0.05")).toBeTruthy()
+  expect(screen.getByText("Applied automatically to your usage.")).toBeTruthy()
+})
+
+it("shows a live trial's sub-cent balance as under a cent, not $0.00", () => {
+  const plan = summary("trial")
+  Object.assign(plan, {
+    credit_source: "stripe",
+    stripe_remaining_credit_usd: 0,
+    trial: { state: "active", remaining_usd: 0.004 },
+  })
+  render(<CurrentPlan summary={plan} />)
+  expect(screen.getByText("<$0.01")).toBeTruthy()
+  expect(screen.queryByText("$0.00")).toBeNull()
+})

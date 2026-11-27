@@ -37,11 +37,16 @@ vi.mock("@/components/corner-brackets", () => ({ CornerBrackets: () => null }))
 const trial = vi.hoisted(() => ({
   outcome: null as TrialOutcome | null,
   perTeam: {} as Record<string, TrialOutcome | null>,
+  never: false,
+  gate: null as Promise<void> | null,
 }))
 vi.mock("@/lib/billing/plan-offers-actions", () => ({
   getTeamCatalogAction: async () => null,
-  getTrialOutcomeAction: async ({ team }: { team: string }) =>
-    team in trial.perTeam ? trial.perTeam[team] : trial.outcome,
+  getTrialOutcomeAction: async ({ team }: { team: string }) => {
+    if (trial.never) return new Promise<never>(() => {})
+    await trial.gate
+    return team in trial.perTeam ? trial.perTeam[team] : trial.outcome
+  },
 }))
 const { capture } = vi.hoisted(() => ({ capture: vi.fn() }))
 vi.mock("posthog-js", () => ({ default: { capture } }))
@@ -57,6 +62,8 @@ describe("plan picker", () => {
     capture.mockClear()
     trial.outcome = null
     trial.perTeam = {}
+    trial.never = false
+    trial.gate = null
   })
 
   it("offers both plans when the trial has ended", async () => {
@@ -243,19 +250,135 @@ describe("plan picker", () => {
     ).toBe("/sandboxes")
   })
 
-  it("records why the picker opened and which plan was asked for", async () => {
+  it.each([
+    ["ended", "trial_ended"],
+    ["unavailable", "trial_unavailable"],
+    ["check_unavailable", "trial_check_unavailable"],
+    ["unknown", "trial_reason_unknown"],
+    [null, "trial_reason_unknown"],
+  ] as const)(
+    "records a trial_ended picker whose trial outcome is %s as %s",
+    async (outcome, reason) => {
+      trial.outcome = outcome
+      params = new URLSearchParams({
+        reason: "trial_ended",
+        offer: "starter",
+        account: "u1",
+        team: "use:team-1",
+      })
+      render(<ChoosePlanPage />)
+      await screen.findByRole("button", { name: "Developer" })
+      await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1))
+      expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
+        reason,
+        requested_offer: "developer",
+        plan_options_requested: true,
+      })
+    },
+  )
+
+  it("reads the trial outcome again when the picker returns to trial_ended", async () => {
+    trial.outcome = "check_unavailable"
+    const at = (reason: string) =>
+      new URLSearchParams({ reason, account: "u1", team: "use:team-1" })
+    params = at("trial_ended")
+    const { rerender } = render(<ChoosePlanPage />)
+    expect(await screen.findByText(/couldn't confirm/)).toBeTruthy()
+    params = at("checkout_canceled")
+    rerender(<ChoosePlanPage />)
+    trial.outcome = "unavailable"
+    params = at("trial_ended")
+    rerender(<ChoosePlanPage />)
+    expect(screen.queryByText(/couldn't confirm/)).toBeNull()
+    expect(await screen.findByText(/isn't available/)).toBeTruthy()
+    expect(capture.mock.calls.map(([, view]) => view.reason)).toEqual([
+      "trial_check_unavailable",
+      "checkout_canceled",
+      "trial_unavailable",
+    ])
+  })
+
+  it("still records a trial_ended picker that closes before its outcome loads", async () => {
+    trial.never = true
     params = new URLSearchParams({
       reason: "trial_ended",
-      offer: "starter",
+      account: "u1",
+      team: "use:team-1",
+    })
+    const { unmount } = render(
+      <StrictMode>
+        <ChoosePlanPage />
+      </StrictMode>,
+    )
+    await screen.findByRole("button", { name: "Developer" })
+    expect(capture).not.toHaveBeenCalled()
+    unmount()
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1))
+    expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
+      reason: "trial_reason_unknown",
+      requested_offer: "not_specified",
+      plan_options_requested: true,
+    })
+  })
+
+  it("records each team's waiting trial_ended view when the team changes", async () => {
+    trial.never = true
+    const at = (team: string) =>
+      new URLSearchParams({ reason: "trial_ended", account: "u1", team })
+    params = at("use:t1")
+    const { rerender, unmount } = render(<ChoosePlanPage />)
+    await screen.findByRole("button", { name: "Developer" })
+    params = at("use:t2")
+    rerender(<ChoosePlanPage />)
+    unmount()
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2))
+  })
+
+  it("records a waiting trial_ended view when the picker changes first", async () => {
+    trial.never = true
+    const at = (offer: string) =>
+      new URLSearchParams({
+        reason: "trial_ended",
+        offer,
+        account: "u1",
+        team: "use:team-1",
+      })
+    params = at("developer")
+    const { rerender, unmount } = render(<ChoosePlanPage />)
+    await screen.findByRole("button", { name: "Developer" })
+    params = at("pro_monthly")
+    rerender(<ChoosePlanPage />)
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(1))
+    unmount()
+    await vi.waitFor(() => expect(capture).toHaveBeenCalledTimes(2))
+    expect(capture.mock.calls.map(([, view]) => view.requested_offer)).toEqual([
+      "developer",
+      "pro_monthly",
+    ])
+    expect(capture.mock.calls.map(([, view]) => view.reason)).toEqual([
+      "trial_reason_unknown",
+      "trial_reason_unknown",
+    ])
+  })
+
+  it("records a waiting trial_ended view when the page unloads", async () => {
+    let release = () => {}
+    trial.gate = new Promise((done) => (release = done))
+    trial.outcome = "unavailable"
+    params = new URLSearchParams({
+      reason: "trial_ended",
       account: "u1",
       team: "use:team-1",
     })
     render(<ChoosePlanPage />)
     await screen.findByRole("button", { name: "Developer" })
+    window.dispatchEvent(new Event("pagehide"))
+    release()
+    await screen.findByText(/isn't available/i)
     expect(capture).toHaveBeenCalledTimes(1)
     expect(capture).toHaveBeenCalledWith("plan_picker_viewed", {
-      reason: "trial_ended",
-      requested_offer: "developer",
+      reason: "trial_reason_unknown",
+      requested_offer: "not_specified",
       plan_options_requested: true,
     })
   })

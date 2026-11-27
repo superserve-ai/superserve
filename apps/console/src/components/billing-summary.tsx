@@ -40,6 +40,24 @@ export function billingCredits(
   }
 }
 
+// The credit a team is shown as having left. A team still on its free trial
+// spends the trial balance, the figure the trial banner and sandbox access
+// use; the general credit fields can read $0 for it while the trial still has
+// credit. Only for display: estimates keep the general credit figures.
+export function creditsRemaining(
+  summary: BillingSummaryResponse,
+): number | null {
+  const trial = summary.trial
+  if (
+    summary.plan?.key === "trial" &&
+    trial?.state === "active" &&
+    typeof trial.remaining_usd === "number"
+  ) {
+    return trial.remaining_usd
+  }
+  return billingCredits(summary).remaining
+}
+
 export function formatCurrency(value: number, currency = "USD"): string {
   return new Intl.NumberFormat("en-US", {
     style: "currency",
@@ -47,6 +65,17 @@ export function formatCurrency(value: number, currency = "USD"): string {
     minimumFractionDigits: 2,
     maximumFractionDigits: 2,
   }).format(value)
+}
+
+// A trial balance has sub-cent precision. A positive balance under half a
+// cent would round to $0.00 while sandboxes still run, so show it as <$0.01.
+export function formatCreditsRemaining(
+  value: number,
+  currency = "USD",
+): string {
+  return value > 0 && value < 0.005
+    ? `<${formatCurrency(0.01, currency)}`
+    : formatCurrency(value, currency)
 }
 
 export function formatDateTime(value: string): string {
@@ -207,6 +236,7 @@ export function BillingSummary({
   )
   const credits = billingCredits(summary)
   const estimate = getProjectedPeriodEndEstimate(summary)
+  const remaining = creditsRemaining(summary)
   const money = (value: number | null) =>
     value == null ? "Unavailable" : formatCurrency(value, currency)
 
@@ -257,7 +287,11 @@ export function BillingSummary({
           />
           <HeadlineFigure
             label="Credits left"
-            value={money(credits.remaining)}
+            value={
+              remaining == null
+                ? "Unavailable"
+                : formatCreditsRemaining(remaining, currency)
+            }
           />
         </dl>
       </div>
