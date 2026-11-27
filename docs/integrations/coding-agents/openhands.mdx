@@ -1,11 +1,11 @@
 ---
 title: "OpenHands"
 sidebarTitle: OpenHands
-description: Run the OpenHands coding agent headless in a Superserve sandbox.
+description: Run the OpenHands coding agent headless or in its web UI in a Superserve sandbox.
 icon: "/logos/integrations/openhands.svg"
 ---
 
-[OpenHands](https://github.com/OpenHands/OpenHands) is an open-source AI coding agent. Its CLI has a headless mode for scripts and CI. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
+[OpenHands](https://github.com/OpenHands/OpenHands) is an open-source AI coding agent. Its CLI has a headless mode for scripts and CI, and its web UI runs in the browser. Run it in a Superserve sandbox so its shell commands and file edits stay isolated from your machine.
 
 ## Via the console
 
@@ -479,6 +479,176 @@ Then create sandboxes with `fromTemplate: "openhands"` (TypeScript) or `from_tem
 <Note>
 If you build from an image with libcurl 8.13 to 8.17, for example `python:3.12` or another Debian 13 image, add the step `{ env: { key: "GIT_HTTP_PROXY_AUTHMETHOD", value: "basic" } }` (TypeScript) or `EnvStep(env=EnvStepValue(key="GIT_HTTP_PROXY_AUTHMETHOD", value="basic"))` (Python). Without it, `git clone` over HTTPS hangs in sandboxes with secrets. The `ubuntu:24.04` image doesn't need it.
 </Note>
+
+## Use the web UI
+
+[Agent Canvas](https://docs.openhands.dev/openhands/usage/agent-canvas/overview) is the OpenHands web UI. Run it in a sandbox and open it in your browser through a private [preview URL](/sandbox/preview-urls). The agent runs in the sandbox, and the UI uses the same Anthropic secret as the CLI.
+
+### Start Agent Canvas
+
+Create a sandbox with a private preview policy and a random backend key. Agent Canvas needs Node.js 24 or later and `uv`. The `superserve/base` image has Node.js 22, so the install uses `n` to put Node.js 24 in `/usr/local`.
+
+<CodeGroup>
+```typescript TypeScript
+import { randomBytes } from "node:crypto"
+import { Sandbox } from "@superserve/sdk"
+
+const backendKey = randomBytes(32).toString("hex")
+
+const uiSandbox = await Sandbox.create({
+  name: "openhands-ui",
+  fromTemplate: "superserve/base",
+  previewAccess: "private",
+  secrets: { LLM_API_KEY: "anthropic-key" },
+  envVars: { LOCAL_BACKEND_API_KEY: backendKey },
+})
+
+await uiSandbox.commands.run(
+  "npm install -g n && n 24 && npm install -g @openhands/agent-canvas" +
+    " && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh",
+  { timeoutMs: 600_000 },
+)
+
+await uiSandbox.commands.run(
+  "mkdir -p ~/project && cd ~/project" +
+    " && nohup agent-canvas --public --host 0.0.0.0 > ~/agent-canvas.log 2>&1 &",
+)
+await uiSandbox.commands.run("until curl -sf localhost:8000/ready; do sleep 2; done", {
+  timeoutMs: 300_000,
+})
+```
+
+```python Python
+import secrets
+
+from superserve import Sandbox
+
+backend_key = secrets.token_hex(32)
+
+ui_sandbox = Sandbox.create(
+    name="openhands-ui",
+    from_template="superserve/base",
+    preview_access="private",
+    secrets={"LLM_API_KEY": "anthropic-key"},
+    env_vars={"LOCAL_BACKEND_API_KEY": backend_key},
+)
+
+ui_sandbox.commands.run(
+    "npm install -g n && n 24 && npm install -g @openhands/agent-canvas"
+    " && curl -LsSf https://astral.sh/uv/install.sh | env UV_INSTALL_DIR=/usr/local/bin sh",
+    timeout_seconds=600,
+)
+
+ui_sandbox.commands.run(
+    "mkdir -p ~/project && cd ~/project"
+    " && nohup agent-canvas --public --host 0.0.0.0 > ~/agent-canvas.log 2>&1 &"
+)
+ui_sandbox.commands.run(
+    "until curl -sf localhost:8000/ready; do sleep 2; done", timeout_seconds=300
+)
+```
+</CodeGroup>
+
+`agent-canvas` serves the UI and its API on port `8000` and runs the agent as a local process in the sandbox. `--host 0.0.0.0` lets the preview proxy reach it. `--public` makes every API request require the key in `LOCAL_BACKEND_API_KEY`. `nohup` keeps the server running after the command returns.
+
+### Set the model
+
+Agent Canvas stores the model and key in an LLM profile. Create the profile through its API from inside the sandbox, so the profile gets the [stand-in token](/secrets/overview) from `LLM_API_KEY` and not your real key:
+
+<CodeGroup>
+```typescript TypeScript
+await uiSandbox.commands.run(`set -e
+AUTH="X-Session-API-Key: $LOCAL_BACKEND_API_KEY"
+printf '{"llm": {"model": "anthropic/claude-sonnet-5-5", "api_key": "%s"}}' "$LLM_API_KEY" |
+  curl -sf -X POST localhost:8000/api/profiles/claude -H "$AUTH" \\
+    -H "Content-Type: application/json" --data-binary @- > /dev/null
+curl -sf -X POST localhost:8000/api/profiles/claude/activate -H "$AUTH" > /dev/null`)
+```
+
+```python Python
+ui_sandbox.commands.run("""set -e
+AUTH="X-Session-API-Key: $LOCAL_BACKEND_API_KEY"
+printf '{"llm": {"model": "anthropic/claude-sonnet-5-5", "api_key": "%s"}}' "$LLM_API_KEY" |
+  curl -sf -X POST localhost:8000/api/profiles/claude -H "$AUTH" \\
+    -H "Content-Type: application/json" --data-binary @- > /dev/null
+curl -sf -X POST localhost:8000/api/profiles/claude/activate -H "$AUTH" > /dev/null""")
+```
+</CodeGroup>
+
+The UI lists only the models that OpenHands has verified. Use a model from `GET /api/llm/models/verified`, or the model field in the UI shows empty.
+
+### Open the UI
+
+Publish port `8000` as private and get a signed URL for your browser. The example prints the URL and the backend key, so run it only in a terminal that you trust, not in CI or a shared notebook:
+
+<CodeGroup>
+```typescript TypeScript
+await uiSandbox.publishPreviewPort(8000, { access: "private" })
+const url = await uiSandbox.getSignedPreviewUrl(8000, { expiresInSeconds: 300 })
+console.log(`Open ${url}`)
+console.log(`Backend API key: ${backendKey}`)
+```
+
+```python Python
+ui_sandbox.publish_preview_port(8000, access="private")
+url = ui_sandbox.get_signed_preview_url(8000, expires_in_seconds=300)
+print(f"Open {url}")
+print(f"Backend API key: {backend_key}")
+```
+</CodeGroup>
+
+Open the URL within five minutes. On the first visit, the preview proxy stores the credential in a cookie for that hostname, so later visits don't need a new URL. Then:
+
+1. On **Add a backend**, keep the host, paste the backend API key, and click **Next**.
+2. Choose your telemetry setting, keep the **OpenHands** agent, and click **Next**.
+3. On **Set up your LLM**, check that the profile shows your model and click **Next**.
+4. Type a task, for example `Create /home/user/project/primes.py, a script that prints the first 10 prime numbers, and run it`, and send it.
+
+The agent runs its commands in the sandbox, and the conversation shows each step. Read the result from your code with `uiSandbox.files.readText("/home/user/project/primes.py")` (TypeScript) or `ui_sandbox.files.read_text("/home/user/project/primes.py")` (Python).
+
+### Security
+
+The UI can run any command in the sandbox, so protect both credentials:
+
+- The private port needs a preview credential: the signed URL, its cookie, or a header token. The backend key is a second layer that Agent Canvas checks on every API request.
+- Treat the signed URL and the backend key as secrets. Don't keep them in CI logs, shared notebooks, or chat.
+- Keep `--public`. Don't use `--allow-lan-session-key` or publish port `8000` as `public`.
+- To revoke browser access, call `rotatePreviewToken(8000)` / `rotate_preview_token(8000)`, then send a new signed URL.
+- The agent can reach any host that the sandbox can reach. To limit this, [restrict the network](#restrict-the-network).
+
+### Pause and resume
+
+Pause the sandbox to stop the agent and keep its state. While the sandbox is paused, the preview URL returns `503` with `sandbox is paused`. Browser requests do not resume it.
+
+<CodeGroup>
+```typescript TypeScript
+await uiSandbox.pause({ wait: true })
+await uiSandbox.resume()
+```
+
+```python Python
+ui_sandbox.pause(wait=True)
+ui_sandbox.resume()
+```
+</CodeGroup>
+
+After `resume()`, `agent-canvas` keeps running, and the UI shows the earlier conversations. Reload the page to continue. The browser cookie stays valid, unless you rotated the token or unpublished the port. To pause the sandbox when nobody uses the UI, set an [idle timeout](/sandbox/lifecycle#idle-timeout). Traffic to the preview URL counts as activity.
+
+### Clean up
+
+Unpublish the port to close the UI and revoke its credentials. The preview URL then returns `404`. Delete the sandbox when you no longer need it:
+
+<CodeGroup>
+```typescript TypeScript
+await uiSandbox.unpublishPreviewPort(8000)
+await uiSandbox.kill()
+```
+
+```python Python
+ui_sandbox.unpublish_preview_port(8000)
+ui_sandbox.kill()
+```
+</CodeGroup>
 
 ## Persist sessions
 
