@@ -18,6 +18,7 @@ import type {
   BillingSummaryResource,
 } from "@/lib/api/billing"
 import { PASSWORD_RULE_HINT, passwordRuleError } from "@/lib/auth/password-rule"
+import { AUTH_MESSAGES, isNetworkAuthError } from "@/lib/auth/sign-in-messages"
 import { SETTINGS_EVENTS } from "@/lib/posthog/events"
 import { createBrowserClient } from "@/lib/supabase/client"
 
@@ -54,6 +55,8 @@ export default function SettingsPage() {
   const [confirmPassword, setConfirmPassword] = useState("")
   const [newPasswordError, setNewPasswordError] = useState<string>()
   const [savingPassword, setSavingPassword] = useState(false)
+  const [passwordVerificationFailed, setPasswordVerificationFailed] =
+    useState(false)
 
   useEffect(() => {
     if (user && !nameLoaded) {
@@ -112,6 +115,7 @@ export default function SettingsPage() {
       return
     }
     setSavingPassword(true)
+    setPasswordVerificationFailed(false)
     try {
       const supabase = createBrowserClient()
       // Verify current password by re-authenticating
@@ -120,7 +124,15 @@ export default function SettingsPage() {
         password: currentPassword,
       })
       if (signInError) {
-        addToast("Current password is incorrect", "error")
+        // Wrong passwords and a password-login cooldown intentionally return
+        // the same response. Neither proves that this password was incorrect.
+        setPasswordVerificationFailed(true)
+        addToast(
+          isNetworkAuthError(signInError)
+            ? AUTH_MESSAGES.networkError
+            : AUTH_MESSAGES.passwordVerificationFailed,
+          "error",
+        )
         return
       }
       // Auth checks current_password itself once "Require current password"
@@ -258,6 +270,15 @@ export default function SettingsPage() {
                     placeholder="••••••••"
                   />
                 </Field>
+                {passwordVerificationFailed && (
+                  <output className="block text-xs text-muted">
+                    Password sign-in may be temporarily unavailable. You can{" "}
+                    <Link href="/auth/forgot-password" className="underline">
+                      reset your password
+                    </Link>{" "}
+                    to recover access.
+                  </output>
+                )}
                 <div>
                   <Button
                     onClick={handleChangePassword}

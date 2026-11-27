@@ -469,7 +469,7 @@ describe("Settings change password", () => {
     ).toBe("")
   })
 
-  it("does not update the password when the browser check fails", async () => {
+  it("offers recovery without claiming a cooldown means the password is wrong", async () => {
     signInWithPassword.mockResolvedValue({
       error: { code: "invalid_credentials" },
     })
@@ -479,11 +479,16 @@ describe("Settings change password", () => {
 
     await waitFor(() =>
       expect(addToast).toHaveBeenCalledWith(
-        "Current password is incorrect",
+        "We couldn't verify your current password. Check it, try again later, or reset your password.",
         "error",
       ),
     )
     expect(updateUser).not.toHaveBeenCalled()
+    expect(
+      screen
+        .getByRole("link", { name: "reset your password" })
+        .getAttribute("href"),
+    ).toBe("/auth/forgot-password")
   })
 
   it.each(["current_password_invalid", "current_password_required"])(
