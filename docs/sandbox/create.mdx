@@ -20,6 +20,14 @@ sandbox = Sandbox.create(name="data-analyzer")
 ```
 </CodeGroup>
 
+## Host capacity errors
+
+If the selected host is at capacity, create returns HTTP `429` with `error.code: "host_capacity"` and `Retry-After: 2`. The SDK raises `RateLimitError` with `code` set to `host_capacity`.
+
+Wait 2 seconds before retrying the create in your application. Each retried create gets a new placement decision and may use another host. A resume retry instead uses the sandbox's existing host; it does not move the sandbox to another host.
+
+The SDK does not automatically retry `POST` or `PATCH` requests, including create and explicit resume. Independent database failures remain `5xx` server errors, not `host_capacity` responses. See [Host capacity](/errors#host-capacity) and [Retries](/errors#retries).
+
 ## With options
 
 Attach metadata tags, inject environment variables, cap the active lifetime, or lock down network egress at creation time.
