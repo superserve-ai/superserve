@@ -21,5 +21,6 @@ describe("YC account return path", () => {
     "/yc/accept/other",
     "/yc/accept?claim=11111111-1111-4111-8111-111111111111&claim=22222222-2222-4222-8222-222222222222",
     "/yc/accept?offer=yc_2026",
+    "/\n/[",
   ])("rejects %s", (path) => expect(ycReturnPath(path)).toBeNull())
 })
