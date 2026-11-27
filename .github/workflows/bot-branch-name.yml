@@ -1,0 +1,49 @@
+name: Bot branch name
+
+# Warn-only check: asks Vorflux bot PRs to use a vorflux/<bot>/<topic> branch
+# so each PR can be traced to the bot that opened it. It never fails, never
+# comments, and must stay out of the required-checks list.
+#
+# The author login cannot identify bot PRs (some show a human account), so a
+# PR counts as a bot PR when its head branch starts with "vorflux/" or its
+# body links a Vorflux agent session. Every other PR exits at once.
+on:
+  pull_request:
+    types: [opened, reopened, synchronize, edited]
+
+permissions: {}
+
+jobs:
+  branch-name:
+    name: Bot branch name (warn only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 2
+    steps:
+      - name: Check branch name
+        # Belt and braces: an unexpected script error must not fail the PR.
+        continue-on-error: true
+        env:
+          # Untrusted PR input goes through env, never into the script text.
+          HEAD_REF: ${{ github.head_ref }}
+          PR_BODY: ${{ github.event.pull_request.body }}
+          LC_ALL: C
+        run: |
+          session_link='vorflux\.com/([^[:space:]/]+/)?agent-sessions/'
+          expected='^vorflux/[a-z0-9-]+/.+$'
+
+          if [[ "$HEAD_REF" != vorflux/* ]] && ! [[ "$PR_BODY" =~ $session_link ]]; then
+            exit 0
+          fi
+
+          if [[ "$HEAD_REF" =~ $expected ]]; then
+            echo "Branch name matches vorflux/<bot>/<topic>."
+            exit 0
+          fi
+
+          # Escape the ref for the workflow-command line.
+          ref="${HEAD_REF//%/%25}"
+          ref="${ref//$'\r'/%0D}"
+          ref="${ref//$'\n'/%0A}"
+          echo "::warning title=Bot branch name::Branch '${ref}' does not match vorflux/<bot>/<topic>, for example vorflux/ember/docs-fix. This check only warns."
+          echo "Warning: bot branch \`${HEAD_REF}\` does not match \`vorflux/<bot>/<topic>\` (example: \`vorflux/ember/docs-fix\`). This check only warns." >> "$GITHUB_STEP_SUMMARY" || true
+          exit 0
