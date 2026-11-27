@@ -69,6 +69,155 @@ export interface SandboxInfo {
   sourceSnapshotId?: string
 }
 
+/** Observation provenance; inspect sampledAt for freshness. */
+export type SandboxMeasurementSource = "live" | "last_known"
+export type SandboxMetricsStatus = Exclude<SandboxStatus, "deleted">
+
+export interface SandboxCpuUsage {
+  /** Average CPU time consumed per elapsed second, in vCPUs. */
+  usedVcpus: number
+  sampledAt: Date
+  windowSeconds: number
+  source: SandboxMeasurementSource
+}
+
+export interface SandboxCpuMetrics {
+  configuredVcpus: number
+  /** Confirmed applied allocation; null when unknown or inactive. */
+  effectiveVcpus: number | null
+  limitVcpus: number
+  usage: SandboxCpuUsage | null
+}
+
+export interface SandboxMemoryUsage {
+  /** Guest MemTotal minus MemAvailable, in bytes. */
+  usedBytes: number
+  sampledAt: Date
+  source: SandboxMeasurementSource
+}
+
+export interface SandboxMemoryMetrics {
+  configuredBytes: number
+  effectiveBytes: number | null
+  limitBytes: number
+  usage: SandboxMemoryUsage | null
+}
+
+export interface SandboxDiskUsage {
+  /** Guest root filesystem capacity, independent of configured disk size. */
+  totalBytes: number
+  usedBytes: number
+  availableBytes: number
+  sampledAt: Date
+  source: SandboxMeasurementSource
+}
+
+export interface SandboxDiskMetrics {
+  configuredBytes: number
+  /** Null when applied disk geometry is not independently known. */
+  effectiveBytes: number | null
+  limitBytes: number
+  usage: SandboxDiskUsage | null
+}
+
+/** Raw resource values with independent observation times; no percentages. */
+export interface SandboxMetrics {
+  id: string
+  status: SandboxMetricsStatus
+  cpu: SandboxCpuMetrics
+  memory: SandboxMemoryMetrics
+  disk: SandboxDiskMetrics
+}
+
+/** @internal Snake-case control-plane response. */
+export interface ApiSandboxMetrics {
+  id: string
+  status: SandboxMetricsStatus
+  cpu: {
+    configured_vcpus: number
+    effective_vcpus: number | null
+    limit_vcpus: number
+    usage: {
+      used_vcpus: number
+      sampled_at: string
+      window_seconds: number
+      source: SandboxMeasurementSource
+    } | null
+  }
+  memory: {
+    configured_bytes: number
+    effective_bytes: number | null
+    limit_bytes: number
+    usage: {
+      used_bytes: number
+      sampled_at: string
+      source: SandboxMeasurementSource
+    } | null
+  }
+  disk: {
+    configured_bytes: number
+    effective_bytes: number | null
+    limit_bytes: number
+    usage: {
+      total_bytes: number
+      used_bytes: number
+      available_bytes: number
+      sampled_at: string
+      source: SandboxMeasurementSource
+    } | null
+  }
+}
+
+/** @internal Convert observations without replacing timestamps or unknowns. */
+export function toSandboxMetrics(raw: ApiSandboxMetrics): SandboxMetrics {
+  return {
+    id: raw.id,
+    status: raw.status,
+    cpu: {
+      configuredVcpus: raw.cpu.configured_vcpus,
+      effectiveVcpus: raw.cpu.effective_vcpus,
+      limitVcpus: raw.cpu.limit_vcpus,
+      usage:
+        raw.cpu.usage === null
+          ? null
+          : {
+              usedVcpus: raw.cpu.usage.used_vcpus,
+              sampledAt: new Date(raw.cpu.usage.sampled_at),
+              windowSeconds: raw.cpu.usage.window_seconds,
+              source: raw.cpu.usage.source,
+            },
+    },
+    memory: {
+      configuredBytes: raw.memory.configured_bytes,
+      effectiveBytes: raw.memory.effective_bytes,
+      limitBytes: raw.memory.limit_bytes,
+      usage:
+        raw.memory.usage === null
+          ? null
+          : {
+              usedBytes: raw.memory.usage.used_bytes,
+              sampledAt: new Date(raw.memory.usage.sampled_at),
+              source: raw.memory.usage.source,
+            },
+    },
+    disk: {
+      configuredBytes: raw.disk.configured_bytes,
+      effectiveBytes: raw.disk.effective_bytes,
+      limitBytes: raw.disk.limit_bytes,
+      usage:
+        raw.disk.usage === null
+          ? null
+          : {
+              totalBytes: raw.disk.usage.total_bytes,
+              usedBytes: raw.disk.usage.used_bytes,
+              availableBytes: raw.disk.usage.available_bytes,
+              sampledAt: new Date(raw.disk.usage.sampled_at),
+              source: raw.disk.usage.source,
+            },
+    },
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Sandbox Options
 // ---------------------------------------------------------------------------
@@ -92,6 +241,19 @@ export interface SandboxCreateOptions extends ConnectionOptions {
    * `fromTemplate`.
    */
   fromSnapshot?: string | { id: string }
+  /**
+   * Fixed vCPU count for this sandbox, within the template's CPU range or
+   * the range a snapshot records, both ends included. Fixed for the
+   * sandbox's life. Omit to inherit the source's CPU configuration.
+   */
+  vcpu?: number
+  /**
+   * Fixed RAM size in MiB for this sandbox, within the source's memory range
+   * in 2 MiB steps from its minimum. Needs a template built with a memory
+   * range, or a snapshot of a sandbox created with a fixed RAM size. Fixed for
+   * the sandbox's life. Omit to inherit the source's memory configuration.
+   */
+  memoryMib?: number
   timeoutSeconds?: number
   /**
    * Pause the sandbox after this many seconds with no activity (60 to
@@ -569,12 +731,24 @@ export interface TemplateInfo {
   memoryShrinkAfterSeconds?: number
   /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
   vcpuMax?: number
+  /** Sizes sandboxes may choose at create; absent when they cannot choose. */
+  sizeRange?: TemplateSizeRange
   diskMib: number
   sizeBytes?: number
   errorMessage?: string
   createdAt: Date
   builtAt?: Date
   latestBuildId?: string
+}
+
+/**
+ * Largest size a sandbox created from the template may choose with `vcpu` or
+ * `memoryMib`; the range starts at the template's `vcpu` and `memoryMib`. A
+ * dimension without a maximum cannot be chosen.
+ */
+export interface TemplateSizeRange {
+  vcpuMax?: number
+  memoryMaxMib?: number
 }
 
 export interface TemplateBuildInfo {
@@ -627,6 +801,12 @@ export interface TemplateCreateOptions extends ConnectionOptions {
    * within the team's vCPU limit. Omit for a fixed CPU count.
    */
   vcpuMax?: number
+  /**
+   * Lets each sandbox choose a fixed size at create, from `vcpu` and
+   * `memoryMib` up to these maximums. Each maximum follows the same limits
+   * as `vcpuMax` and `memoryMaxMib`, and must equal it when both are set.
+   */
+  sizeRange?: TemplateSizeRange
   diskMib?: number
   from: string
   steps?: BuildStep[]
@@ -669,6 +849,7 @@ export interface ApiTemplateResponse {
   memory_max_mib?: number | null
   memory_shrink_after_seconds?: number | null
   vcpu_max?: number | null
+  size_range?: { vcpu_max?: number | null; memory_max_mib?: number | null }
   disk_mib?: number
   size_bytes?: number
   error_message?: string
@@ -737,6 +918,12 @@ export function toTemplateInfo(
     memoryMaxMib: raw.memory_max_mib ?? undefined,
     memoryShrinkAfterSeconds: raw.memory_shrink_after_seconds ?? undefined,
     vcpuMax: raw.vcpu_max ?? undefined,
+    sizeRange: raw.size_range
+      ? {
+          vcpuMax: raw.size_range.vcpu_max ?? undefined,
+          memoryMaxMib: raw.size_range.memory_max_mib ?? undefined,
+        }
+      : undefined,
     diskMib: raw.disk_mib ?? 0,
     sizeBytes: raw.size_bytes,
     errorMessage: raw.error_message,

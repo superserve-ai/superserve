@@ -31,6 +31,34 @@ const text = await sandbox.files.readText("/app/data.txt")
 await sandbox.kill()
 ```
 
+## Custom size
+
+A template built with a size range lets each sandbox use a fixed size within it:
+
+```typescript
+import { Sandbox, Template } from "@superserve/sdk"
+
+const template = await Template.create({
+  name: "my-env",
+  from: "python:3.11",
+  vcpu: 1,
+  memoryMib: 2048,
+  sizeRange: { vcpuMax: 4, memoryMaxMib: 8192 },
+})
+await template.waitUntilReady()
+
+const sandbox = await Sandbox.create({
+  name: "build",
+  fromTemplate: "my-env",
+  vcpu: 4,
+  memoryMib: 8192,
+})
+```
+
+Leave either out to keep the template's default size. Sandboxes created from a
+snapshot can pick a size within the range the snapshot records. See
+[Custom size](https://docs.superserve.ai/sandbox/size).
+
 ## Preview URLs
 
 Choose the default access for new ports, publish only the ports you intend to

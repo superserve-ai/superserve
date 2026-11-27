@@ -7,6 +7,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest"
 
 import { TrialBillingBanner } from "@/components/trial-billing-banner"
 import type { BillingSummaryResponse } from "@/lib/api/billing"
+import { ApiError } from "@/lib/api/client"
 
 import { useBillingSummary } from "./use-billing-summary"
 
@@ -461,6 +462,37 @@ describe("useBillingSummary", () => {
         await vi.advanceTimersByTimeAsync(60_000)
       })
       expect(getBillingSummary).toHaveBeenCalledTimes(2)
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+  it("automatically recovers other summary consumers that have no manual retry", async () => {
+    vi.useFakeTimers()
+    try {
+      useBillingContext.mockReturnValue({
+        cacheScope: "self",
+        teamKey: "use:a",
+        ready: true,
+      })
+      getBillingSummary
+        .mockRejectedValueOnce(
+          new ApiError(503, "storage_unavailable", "Unavailable"),
+        )
+        .mockResolvedValue(baseBillingSummary)
+      render(
+        <QueryClientProvider client={queryClient}>
+          <BillingSummaryValue />
+        </QueryClientProvider>,
+      )
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10)
+      })
+      expect(getBillingSummary).toHaveBeenCalledTimes(1)
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(60_000)
+      })
+      expect(getBillingSummary).toHaveBeenCalledTimes(2)
+      expect(screen.getByText("$10.00")).toBeInTheDocument()
     } finally {
       vi.useRealTimers()
     }

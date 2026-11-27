@@ -40,6 +40,8 @@ import {
 import type {
   ApiNetworkPage,
   ApiSandboxResponse,
+  ApiSandboxMetrics,
+  SandboxMetrics,
   ConnectionOptions,
   NetworkLogOptions,
   NetworkLogPage,
@@ -60,7 +62,12 @@ import type {
   SnapshotListOptions,
   ApiSnapshotResponse,
 } from "./types.js"
-import { toNetworkLogPage, toSandboxInfo, toSnapshotInfo } from "./types.js"
+import {
+  toNetworkLogPage,
+  toSandboxInfo,
+  toSandboxMetrics,
+  toSnapshotInfo,
+} from "./types.js"
 import {
   Volume,
   assertVolumeConnection,
@@ -329,6 +336,8 @@ export class Sandbox {
           ? options.fromSnapshot
           : options.fromSnapshot.id
     }
+    if (options.vcpu !== undefined) body.vcpu = options.vcpu
+    if (options.memoryMib !== undefined) body.memory_mib = options.memoryMib
     if (options.metadata !== undefined) body.metadata = options.metadata
     if (options.envVars !== undefined) body.env_vars = options.envVars
     if (options.secrets !== undefined) body.secrets = options.secrets
@@ -495,6 +504,21 @@ export class Sandbox {
     return raw.map(toSandboxInfo)
   }
 
+  /** Read cached resource measurements by ID without activating the sandbox. */
+  static async getMetricsById(
+    sandboxId: string,
+    options: ConnectionOptions = {},
+  ): Promise<SandboxMetrics> {
+    const config = resolveConfig(options)
+    const raw = await request<ApiSandboxMetrics>({
+      method: "GET",
+      url: `${config.baseUrl}/sandboxes/${sandboxId}/metrics`,
+      headers: { "X-API-Key": config.apiKey },
+      signal: options.signal,
+    })
+    return toSandboxMetrics(raw)
+  }
+
   /**
    * Delete a sandbox by ID.
    *
@@ -560,6 +584,17 @@ export class Sandbox {
       headers: { "X-API-Key": this._config.apiKey },
     })
     return toSandboxInfo(raw)
+  }
+
+  /** Read cached measurements without refreshing tokens or resuming the VM. */
+  async getMetrics(
+    options: { signal?: AbortSignal } = {},
+  ): Promise<SandboxMetrics> {
+    return Sandbox.getMetricsById(this.id, {
+      apiKey: this._config.apiKey,
+      baseUrl: this._config.baseUrl,
+      signal: options.signal,
+    })
   }
 
   /**

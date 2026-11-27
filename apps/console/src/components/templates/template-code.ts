@@ -13,6 +13,8 @@ export interface TemplateShape {
   memoryMaxMib: number | null
   /** Seconds memory stays low before shrinking; null takes the platform default. */
   memoryShrinkAfterSeconds: number | null
+  /** Sizes each sandbox may choose at create; null when it can't choose. */
+  sizeRange: { vcpuMax?: number; memoryMaxMib?: number } | null
   diskMib: number
 }
 
@@ -26,6 +28,16 @@ export function createRequest(shape: TemplateShape): CreateTemplateRequest {
     ...(shape.memoryMaxMib !== null && { memory_max_mib: shape.memoryMaxMib }),
     ...(shape.memoryShrinkAfterSeconds !== null && {
       memory_shrink_after_seconds: shape.memoryShrinkAfterSeconds,
+    }),
+    ...(shape.sizeRange !== null && {
+      size_range: {
+        ...(shape.sizeRange.vcpuMax !== undefined && {
+          vcpu_max: shape.sizeRange.vcpuMax,
+        }),
+        ...(shape.sizeRange.memoryMaxMib !== undefined && {
+          memory_max_mib: shape.sizeRange.memoryMaxMib,
+        }),
+      },
     }),
     disk_mib: shape.diskMib,
     build_spec: { from: shape.from },
@@ -66,8 +78,36 @@ export function cliCommand(shape: TemplateShape): string {
     ...(shape.memoryShrinkAfterSeconds === null
       ? []
       : [`--memory-shrink-after ${shape.memoryShrinkAfterSeconds}`]),
+    ...(shape.sizeRange?.vcpuMax === undefined
+      ? []
+      : [`--size-range-vcpu-max ${shape.sizeRange.vcpuMax}`]),
+    ...(shape.sizeRange?.memoryMaxMib === undefined
+      ? []
+      : [`--size-range-memory-max ${cliSize(shape.sizeRange.memoryMaxMib)}`]),
     `--disk ${cliSize(shape.diskMib)}`,
   ].join(" \\\n  ")
+}
+
+type Range = NonNullable<TemplateShape["sizeRange"]>
+
+function tsRange(r: Range): string {
+  const fields = [
+    ...(r.vcpuMax === undefined ? [] : [`vcpuMax: ${r.vcpuMax}`]),
+    ...(r.memoryMaxMib === undefined
+      ? []
+      : [`memoryMaxMib: ${r.memoryMaxMib}`]),
+  ]
+  return `{ ${fields.join(", ")} }`
+}
+
+function pyRange(r: Range): string {
+  const fields = [
+    ...(r.vcpuMax === undefined ? [] : [`vcpu_max=${r.vcpuMax}`]),
+    ...(r.memoryMaxMib === undefined
+      ? []
+      : [`memory_max_mib=${r.memoryMaxMib}`]),
+  ]
+  return `TemplateSizeRange(${fields.join(", ")})`
 }
 
 export function typescriptSnippet(shape: TemplateShape): string {
@@ -86,6 +126,9 @@ export function typescriptSnippet(shape: TemplateShape): string {
     ...(shape.memoryShrinkAfterSeconds === null
       ? []
       : [`  memoryShrinkAfterSeconds: ${shape.memoryShrinkAfterSeconds},`]),
+    ...(shape.sizeRange === null
+      ? []
+      : [`  sizeRange: ${tsRange(shape.sizeRange)},`]),
     `  diskMib: ${shape.diskMib},`,
     `})`,
     `await template.waitUntilReady()`,
@@ -94,7 +137,9 @@ export function typescriptSnippet(shape: TemplateShape): string {
 
 export function pythonSnippet(shape: TemplateShape): string {
   return [
-    `from superserve import Template`,
+    shape.sizeRange === null
+      ? `from superserve import Template`
+      : `from superserve import Template, TemplateSizeRange`,
     ``,
     `template = Template.create(`,
     `    name=${JSON.stringify(nameOf(shape))},`,
@@ -108,6 +153,9 @@ export function pythonSnippet(shape: TemplateShape): string {
     ...(shape.memoryShrinkAfterSeconds === null
       ? []
       : [`    memory_shrink_after_seconds=${shape.memoryShrinkAfterSeconds},`]),
+    ...(shape.sizeRange === null
+      ? []
+      : [`    size_range=${pyRange(shape.sizeRange)},`]),
     `    disk_mib=${shape.diskMib},`,
     `)`,
     `template.wait_until_ready()`,

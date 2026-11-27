@@ -64,6 +64,10 @@ export interface CreateSandboxRequest {
   from_template?: string
   /** Saved snapshot ID to continue from; excludes from_template. */
   from_snapshot?: string
+  /** Fixed vCPU count within the template's CPU range. */
+  vcpu?: number
+  /** Fixed memory within the template's memory range, in 2 MiB steps. */
+  memory_mib?: number
   timeout_seconds?: number
   /** Pause after this many seconds with no activity. */
   idle_timeout_seconds?: number
@@ -150,6 +154,12 @@ export interface CreateApiKeyResponse {
 
 export type SnapshotStatus = "creating" | "ready" | "failed" | "deleting"
 
+/** Inclusive bounds. */
+export interface SnapshotSizeRange {
+  min: number
+  max: number
+}
+
 export interface SnapshotResponse {
   id: string
   sandbox_id: string
@@ -164,6 +174,10 @@ export interface SnapshotResponse {
     disk_mib: number
     memory_max_mib?: number
     vcpu_max?: number
+    /** vCPU counts a sandbox from this snapshot may choose; absent when it can't. */
+    vcpu_range?: SnapshotSizeRange
+    /** Memory sizes (2 MiB steps from min) a sandbox from it may choose. */
+    memory_range_mib?: SnapshotSizeRange
   }
   created_at: string
   ready_at: string | null
@@ -266,8 +280,16 @@ export interface CreateTemplateRequest {
   memory_max_mib?: number
   memory_shrink_after_seconds?: number
   vcpu_max?: number
+  size_range?: TemplateSizeRange
   disk_mib?: number
   build_spec: BuildSpec
+}
+
+/** Largest size a sandbox may choose at create; the range starts at the
+ *  template's vcpu / memory_mib. */
+export interface TemplateSizeRange {
+  vcpu_max?: number
+  memory_max_mib?: number
 }
 
 export interface CreateTemplateResponse {
@@ -284,6 +306,8 @@ export interface CreateTemplateResponse {
   memory_shrink_after_seconds?: number
   /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
   vcpu_max?: number
+  /** Sizes sandboxes may choose at create; absent when they can't choose. */
+  size_range?: TemplateSizeRange
   created_at: string
   build_id: string
 }
@@ -302,6 +326,8 @@ export interface TemplateResponse {
   memory_shrink_after_seconds?: number
   /** Ceiling the CPU count can grow to while running; absent when it is fixed. */
   vcpu_max?: number
+  /** Sizes sandboxes may choose at create; absent when they can't choose. */
+  size_range?: TemplateSizeRange
   size_bytes?: number
   error_message?: string
   created_at: string

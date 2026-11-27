@@ -25,6 +25,19 @@ export function TemplateInfoGrid({ template }: { template: TemplateResponse }) {
               `–${formatMemory(template.memory_max_mib)}`}
             &nbsp;&middot; {formatMemory(template.disk_mib)}
           </p>
+          {template.size_range && (
+            <p className="mt-1 text-xs text-muted">
+              Size range{" "}
+              {[
+                template.size_range.vcpu_max != null &&
+                  `${template.vcpu}–${template.size_range.vcpu_max} vCPU`,
+                template.size_range.memory_max_mib != null &&
+                  `${formatMemory(template.memory_mib)}–${formatMemory(template.size_range.memory_max_mib)}`,
+              ]
+                .filter(Boolean)
+                .join(" · ")}
+            </p>
+          )}
           {template.memory_shrink_after_seconds != null && (
             <p className="mt-1 text-xs text-muted">
               Shrinks after {template.memory_shrink_after_seconds}s low

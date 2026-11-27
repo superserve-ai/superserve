@@ -56,6 +56,21 @@ export function checkoutTermsFor(
   return matches ? terms : undefined
 }
 
+const effectivePlanLimitsSchema = planLimitsSchema.extend({
+  max_concurrent: z.number().int().nonnegative().nullable(),
+})
+
+// Resource limits exist independently of a billing assignment. Older API
+// deployments only expose them inside an assigned plan.
+export const teamEffectiveLimitsSchema = z
+  .object({
+    effective_limits: effectivePlanLimitsSchema.optional(),
+    plan: z.object({ limits: effectivePlanLimitsSchema }).nullable(),
+  })
+  .transform(
+    ({ effective_limits, plan }) => effective_limits ?? plan?.limits ?? null,
+  )
+
 export const teamPlanSchema = z
   .object({
     plan: z
@@ -63,10 +78,7 @@ export const teamPlanSchema = z
         plan_key: z.string(),
         kind: planKindSchema,
         display_name: z.string(),
-        limits: planLimitsSchema.extend({
-          max_concurrent: z.number().int().nonnegative().nullable(),
-          max_templates: z.number().int().nonnegative().nullable(),
-        }),
+        limits: effectivePlanLimitsSchema,
         effective_from: z.string(),
         funding_policy: fundingPolicySchema.optional().catch(undefined),
         topoff: planTopoffSchema.optional().catch(undefined),

@@ -1589,6 +1589,36 @@ describe("Sandbox.create fromTemplate / fromSnapshot", () => {
     const body = JSON.parse(init.body as string)
     expect(body.from_snapshot).toBe("snap-abc")
   })
+
+  it("sends a chosen vcpu and memoryMib", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({
+      ...commonOpts,
+      name: "my-sandbox",
+      fromTemplate: "my-env",
+      vcpu: 3,
+      memoryMib: 6144,
+    })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body.vcpu).toBe(3)
+    expect(body.memory_mib).toBe(6144)
+  })
+
+  it("omits vcpu and memory_mib when unset", async () => {
+    const mock = vi.fn(async () => jsonResponse(baseSandbox))
+    vi.stubGlobal("fetch", mock)
+
+    await Sandbox.create({ ...commonOpts, name: "my-sandbox" })
+
+    const [, init] = mock.mock.calls[0] as [string, RequestInit]
+    const body = JSON.parse(init.body as string)
+    expect(body).not.toHaveProperty("vcpu")
+    expect(body).not.toHaveProperty("memory_mib")
+  })
 })
 
 describe("Sandbox concurrent token refresh coalesce", () => {

@@ -1,6 +1,6 @@
 import type { Session, User } from "@supabase/supabase-js"
 import { cookies } from "next/headers"
-import { NextResponse } from "next/server"
+import { after, NextResponse } from "next/server"
 
 import {
   consumeFingerprintSignupEventId,
@@ -107,6 +107,45 @@ import {
 const TRUSTED_REDIRECT_PATTERN =
   /^https:\/\/([a-z0-9-]+\.)?superserve\.ai(\/.*)?$/
 
+function scheduleCallbackDelivery(
+  kind: "analytics" | "signup_notification" | "welcome_email",
+  deliver: () => Promise<unknown>,
+) {
+  try {
+    after(async () => {
+      try {
+        await deliver()
+      } catch {
+        console.warn("Auth callback delivery failed", { kind })
+      }
+    })
+  } catch {
+    console.warn("Auth callback delivery could not be scheduled", { kind })
+  }
+}
+
+function notifySignup(...args: Parameters<typeof notifySlackOfNewUser>) {
+  const signedUpAt = new Date()
+  scheduleCallbackDelivery("signup_notification", () =>
+    notifySlackOfNewUser(
+      args[0],
+      args[1],
+      args[2],
+      args[3],
+      args[4],
+      args[5],
+      signedUpAt,
+    ),
+  )
+}
+
+function trackCallbackEvent(...args: Parameters<typeof trackEvent>) {
+  const occurredAt = new Date()
+  scheduleCallbackDelivery("analytics", () =>
+    trackEvent(args[0], args[1], args[2], occurredAt),
+  )
+}
+
 function buildRedirectUrl(origin: string, path: string): string {
   const base =
     process.env.VERCEL_ENV === "preview"
@@ -212,7 +251,7 @@ export async function GET(request: Request) {
       const authSignupRejected = isGenericAuthSignupFailure(error.message)
       if (authSignupRejected) {
         console.warn("OAuth signup rejected by Auth trigger")
-        await notifySlackOfNewUser(
+        notifySignup(
           "",
           null,
           code ? "google" : "email",
@@ -220,7 +259,7 @@ export async function GET(request: Request) {
             kind: "unavailable",
           },
           requestedOffer,
-        ).catch(() => {})
+        )
         return failureRedirect(
           buildRedirectUrl(
             origin,
@@ -498,7 +537,7 @@ export async function GET(request: Request) {
           }
 
           if (directory.kind === "indeterminate") {
-            await trackEvent(AUTH_EVENTS.SIGN_IN_FAILED, user.id, {
+            trackCallbackEvent(AUTH_EVENTS.SIGN_IN_FAILED, user.id, {
               provider,
               email: user.email,
               reason: "membership_lookup_degraded",
@@ -523,7 +562,7 @@ export async function GET(request: Request) {
             if (!proofValid) {
               const proofFailure =
                 await googleSignupProofFailure(signupAttemptId)
-              await trackEvent(
+              trackCallbackEvent(
                 AUTH_EVENTS.GOOGLE_SIGNUP_BYPASS_BLOCKED,
                 user.id,
                 {
@@ -674,12 +713,16 @@ export async function GET(request: Request) {
               }
             }
             if (signupAttemptId) {
-              await trackEvent(AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED, user.id, {
-                signup_attempt_id: signupAttemptId,
-                superserve_user_id: user.id,
-                signup_method: "google",
-                observed_at: new Date().toISOString(),
-              })
+              trackCallbackEvent(
+                AUTH_EVENTS.SIGNUP_ATTEMPT_ASSOCIATED,
+                user.id,
+                {
+                  signup_attempt_id: signupAttemptId,
+                  superserve_user_id: user.id,
+                  signup_method: "google",
+                  observed_at: new Date().toISOString(),
+                },
+              )
             }
           }
           if (isHeedeoObservationEnabled()) {
@@ -789,13 +832,13 @@ export async function GET(request: Request) {
             } catch (error) {
               if (error instanceof SignupRestrictedError) {
                 heedeoSignupBlocked = true
-                await notifySlackOfNewUser(
+                notifySignup(
                   user.email || "",
                   user.user_metadata?.full_name || null,
                   provider,
                   { kind: "blocked" },
                   requestedOffer,
-                ).catch(() => {})
+                )
                 return failureRedirect(
                   buildRedirectUrl(
                     origin,
@@ -810,38 +853,38 @@ export async function GET(request: Request) {
         }
 
         if (code && isNewUser && signupOffer === "enterprise") {
-          await notifySlackOfNewUser(
+          notifySignup(
             user.email || "",
             user.user_metadata?.full_name || null,
             provider,
             normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
             requestedOffer,
             true,
-          ).catch(() => {})
+          )
           return pendingSignupResponse(supabase, origin, user)
         }
 
         if (isNewUser) {
-          await notifySlackOfNewUser(
+          notifySignup(
             user.email || "",
             user.user_metadata?.full_name || null,
             provider,
             normalizeSignupEligibilitySnapshot(signupEligibilitySnapshot),
             requestedOffer,
-          ).catch(() => {})
-          Promise.resolve(
+          )
+          scheduleCallbackDelivery("welcome_email", () =>
             sendWelcomeEmail(
               user.email || "",
               user.user_metadata?.full_name || "there",
             ),
-          ).catch(() => {})
+          )
         }
 
         // newSignup, not isNewUser: an email signup confirmed more than 30 s
         // after the account was created is still the account's first
         // confirmation. A used or expired confirmation link fails verifyOtp
         // above, so a second click cannot reach this line.
-        await trackEvent(
+        trackCallbackEvent(
           newSignup
             ? AUTH_EVENTS.SIGN_UP_COMPLETED
             : AUTH_EVENTS.SIGN_IN_COMPLETED,

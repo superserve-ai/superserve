@@ -34,6 +34,7 @@ import type {
   TemplateCreateOptions,
   TemplateInfo,
   TemplateListOptions,
+  TemplateSizeRange,
   TemplateStatus,
   WaitUntilReadyOptions,
 } from "./types.js"
@@ -54,6 +55,7 @@ export class Template {
   readonly memoryMaxMib?: number
   readonly memoryShrinkAfterSeconds?: number
   readonly vcpuMax?: number
+  readonly sizeRange?: TemplateSizeRange
   readonly diskMib: number
   readonly sizeBytes?: number
   readonly errorMessage?: string
@@ -74,6 +76,7 @@ export class Template {
     this.memoryMaxMib = info.memoryMaxMib
     this.memoryShrinkAfterSeconds = info.memoryShrinkAfterSeconds
     this.vcpuMax = info.vcpuMax
+    this.sizeRange = info.sizeRange
     this.diskMib = info.diskMib
     this.sizeBytes = info.sizeBytes
     this.errorMessage = info.errorMessage
@@ -107,6 +110,14 @@ export class Template {
     if (options.memoryShrinkAfterSeconds !== undefined)
       body.memory_shrink_after_seconds = options.memoryShrinkAfterSeconds
     if (options.vcpuMax !== undefined) body.vcpu_max = options.vcpuMax
+    if (options.sizeRange !== undefined) {
+      const range: Record<string, number> = {}
+      if (options.sizeRange.vcpuMax !== undefined)
+        range.vcpu_max = options.sizeRange.vcpuMax
+      if (options.sizeRange.memoryMaxMib !== undefined)
+        range.memory_max_mib = options.sizeRange.memoryMaxMib
+      body.size_range = range
+    }
     if (options.diskMib !== undefined) body.disk_mib = options.diskMib
 
     const raw = await request<ApiCreateTemplateResponse>({

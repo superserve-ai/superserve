@@ -17,6 +17,7 @@ import { canStartAnyPlan, canStartPlan } from "@/lib/api/billing-capabilities"
 import { fundedByCredit, planTopoff } from "@/lib/api/billing-v2"
 
 import { AutoTopoffSettings } from "./auto-topoff-card"
+import type { BillingActionState } from "./billing-account-state"
 import { PlanDetails, PlanOverview, supportChannel } from "./plan-overview"
 
 function toCents(usd: number | null | undefined): number | null {
@@ -34,19 +35,21 @@ function recentlyEffective(effectiveFrom: string): boolean {
 
 export function PlanOverviewSection({
   summary,
+  account = summary,
   details = false,
   billingControls,
 }: {
-  summary: BillingSummaryResponse
+  summary?: BillingSummaryResponse
+  account?: BillingActionState | null
   details?: boolean
   // Payment action and billing problems for the plan card. They stay visible
-  // while the plan loads, settles or fails, because the summary authorizes them.
+  // while the plan loads, settles or fails, when the summary authorizes them.
   billingControls?: ReactNode
 }) {
   const scope = useQueryScope()
   const capabilities = useBillingCapabilities()
   const legacyTransition = useLegacyPlanTransition(
-    summary.plan?.key === "trial" && summary.plan.status !== "trial",
+    summary?.plan?.key === "trial" && summary.plan.status !== "trial",
   )
   const planQuery = useTeamPlan(true)
   const plan = planQuery.data
@@ -70,7 +73,7 @@ export function PlanOverviewSection({
         {billingControls}
       </div>
     )
-  if (!plan || plan.kind === "legacy_payg")
+  if ((!plan || plan.kind === "legacy_payg") && summary)
     return (
       <CurrentPlan
         summary={summary}
@@ -78,12 +81,19 @@ export function PlanOverviewSection({
         legacyTransition={legacyTransition}
       />
     )
-  const commercial = summary.plan?.key === plan.key ? summary.plan : null
+  if (!plan)
+    return (
+      <div className="mx-auto w-full max-w-4xl space-y-3">
+        <p className="text-sm text-muted">Plan details are unavailable.</p>
+        {billingControls}
+      </div>
+    )
+  const commercial = summary?.plan?.key === plan.key ? summary.plan : null
   const matchingPeriod =
     Date.parse(plan.period_start ?? "") ===
-      Date.parse(summary.billing_period?.start ?? "") &&
+      Date.parse(summary?.billing_period?.start ?? "") &&
     Date.parse(plan.period_end ?? "") ===
-      Date.parse(summary.billing_period?.end ?? "")
+      Date.parse(summary?.billing_period?.end ?? "")
   const included = commercial?.included_usage
   const matchingIncluded =
     included &&
@@ -110,7 +120,7 @@ export function PlanOverviewSection({
   if (
     !bridgeMonthlyStartsAt &&
     plan.kind === "subscription" &&
-    summary.plan &&
+    summary?.plan &&
     (summary.plan.key !== plan.key || summary.plan.status === "pending") &&
     recentlyEffective(plan.effective_from)
   )
@@ -125,7 +135,7 @@ export function PlanOverviewSection({
       ? toCents(matchingIncluded.amount_usd)
       : null
   const canManage =
-    scope === "self" && (summary.permissions?.can_manage ?? false)
+    scope === "self" && (account?.permissions?.can_manage ?? false)
   if (details)
     return (
       <>
@@ -148,30 +158,49 @@ export function PlanOverviewSection({
         ) : null}
       </>
     )
+  const knownPlanDetails = !summary ? (
+    <section
+      className="mx-auto w-full max-w-4xl border border-dashed border-border bg-surface/40"
+      aria-label="Current plan"
+    >
+      <PlanDetails
+        plan={{ ...plan, fee_cents: null }}
+        canManage={false}
+        channel={supportChannel(plan, capabilities.data?.offers)}
+      />
+      {plan.kind === "legacy_payg" ? billingControls : null}
+    </section>
+  ) : null
+  if (!summary && plan.kind === "legacy_payg") return knownPlanDetails
   return (
-    <PlanOverview
-      plan={{
-        ...plan,
-        fee_cents:
-          commercial?.billing_interval_months === 1
-            ? toCents(commercial.price_usd)
-            : null,
-        included_cents: includedCents,
-      }}
-      allowancePricing={pricing ?? null}
-      includedUsageStatus={matchingIncluded?.status}
-      allowance={allowance ?? null}
-      prepaid={prepaid ?? null}
-      bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
-      usageCents={matchingPeriod ? toCents(summary.current_charges_usd) : null}
-      funded={funded}
-      canManage={canManage}
-      canPurchase={
-        plan.kind === "free"
-          ? canStartAnyPlan(capabilities.data)
-          : canStartPlan(capabilities.data, plan)
-      }
-      billingControls={billingControls}
-    />
+    <>
+      {knownPlanDetails}
+      <PlanOverview
+        plan={{
+          ...plan,
+          fee_cents:
+            commercial?.billing_interval_months === 1
+              ? toCents(commercial.price_usd)
+              : null,
+          included_cents: includedCents,
+        }}
+        allowancePricing={pricing ?? null}
+        includedUsageStatus={matchingIncluded?.status}
+        allowance={allowance ?? null}
+        prepaid={prepaid ?? null}
+        bridgeMonthlyStartsAt={bridgeMonthlyStartsAt}
+        usageCents={
+          matchingPeriod ? toCents(summary?.current_charges_usd) : null
+        }
+        funded={funded}
+        canManage={canManage}
+        canPurchase={
+          plan.kind === "free"
+            ? canStartAnyPlan(capabilities.data)
+            : canStartPlan(capabilities.data, plan)
+        }
+        billingControls={billingControls}
+      />
+    </>
   )
 }

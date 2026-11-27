@@ -25,9 +25,16 @@ import {
 import { AnimatePresence, LayoutGroup, motion } from "motion/react"
 import { usePostHog } from "posthog-js/react"
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react"
-import { createPortal } from "react-dom"
+import { createPortal, flushSync } from "react-dom"
 
 import { CornerBrackets } from "@/components/corner-brackets"
+import {
+  chosenSizeLine,
+  SizeSection,
+  type SizeSource,
+  snapshotSource,
+  templateSource,
+} from "@/components/sandboxes/sandbox-size-section"
 import type { SecretBindingEntry } from "@/components/secrets/secret-binding-editor"
 import { SecretBindingEditor } from "@/components/secrets/secret-binding-editor"
 import { snapshotLabel } from "@/components/snapshots/snapshot-status-badge"
@@ -39,6 +46,15 @@ import { SANDBOX_EVENTS } from "@/lib/posthog/events"
 import { isSystemTemplate } from "@/lib/templates/is-system-template"
 
 const DEFAULT_TEMPLATE = "superserve/base"
+
+export function generateSandboxName() {
+  const alphabet = "abcdefghijklmnopqrstuvwxyz0123456789"
+  const bytes = crypto.getRandomValues(new Uint8Array(6))
+  const suffix = Array.from(bytes, (byte) =>
+    alphabet.charAt(byte % alphabet.length),
+  ).join("")
+  return `sandbox-${suffix}`
+}
 
 interface PickerItem {
   value: string
@@ -276,6 +292,11 @@ interface FormState {
   templateRef?: string
   /** Saved snapshot to continue from; takes the place of `templateRef`. */
   snapshotId?: string
+  /** Chosen size (null = the source's default); only sent within its range. */
+  vcpu?: number | null
+  memoryMib?: number | null
+  /** The selected template's or snapshot's size and choosable ranges. */
+  size?: SizeSource
 }
 
 /** Max auto-pause timeout (7 days) and auto-delete window (30 days), matching
@@ -308,6 +329,15 @@ export function parseWindowSeconds(
   return n
 }
 
+function inRange(n: number, label: string, min: number, max: number): number {
+  if (!Number.isSafeInteger(n) || n < min || n > max) {
+    throw new Error(
+      `${label} must be a whole number between ${min} and ${max}.`,
+    )
+  }
+  return n
+}
+
 /**
  * Build the CreateSandboxRequest payload from the dialog's form state.
  *
@@ -332,6 +362,9 @@ export function parseWindowSeconds(
  *  - `from_snapshot` is included when `snapshotId` is set, and then
  *    `from_template` never is; otherwise `from_template` is included when
  *    `templateRef` is non-empty.
+ *  - `vcpu` / `memory_mib` are only included when chosen (non-null) and the
+ *    source's `size` has a range for that dimension, validated to the range
+ *    (memory in 2 MiB steps from the minimum). The default sends nothing.
  *  - `preview_access` is always explicit so new console sandboxes use the
  *    published-port model instead of the compatibility-only legacy mode.
  */
@@ -379,6 +412,26 @@ export function buildCreateSandboxRequest(
     MAX_AUTO_DELETE_SECONDS,
   )
 
+  const vcpuRange = state.size?.vcpuRange
+  const memoryRange = state.size?.memoryRange
+  const vcpu =
+    vcpuRange && state.vcpu != null
+      ? inRange(state.vcpu, "vCPU", vcpuRange.min, vcpuRange.max)
+      : undefined
+  const memoryMib =
+    memoryRange && state.memoryMib != null
+      ? inRange(state.memoryMib, "Memory", memoryRange.min, memoryRange.max)
+      : undefined
+  if (
+    memoryMib !== undefined &&
+    memoryRange &&
+    (memoryMib - memoryRange.min) % 2 !== 0
+  ) {
+    throw new Error(
+      `Memory must be ${memoryRange.min} MiB plus a multiple of 2 MiB.`,
+    )
+  }
+
   return {
     name: state.name.trim(),
     preview_access: state.previewAccess,
@@ -387,6 +440,8 @@ export function buildCreateSandboxRequest(
       : state.templateRef
         ? { from_template: state.templateRef }
         : {}),
+    ...(vcpu !== undefined ? { vcpu } : {}),
+    ...(memoryMib !== undefined ? { memory_mib: memoryMib } : {}),
     ...(timeoutSeconds !== undefined
       ? { timeout_seconds: timeoutSeconds }
       : {}),
@@ -438,6 +493,8 @@ export function CreateSandboxDialog({
   const open = controlledOpen ?? internalOpen
   const setOpen = onOpenChange ?? setInternalOpen
   const [name, setName] = useState("")
+  const [nameError, setNameError] = useState<string>()
+  const nameInputRef = useRef<HTMLInputElement>(null)
   const [timeout, setTimeout] = useState("")
   const [idleTimeout, setIdleTimeout] = useState("")
   const [autoDelete, setAutoDelete] = useState("")
@@ -465,6 +522,18 @@ export function CreateSandboxDialog({
     initialSnapshotId ? "snapshot" : "template",
   )
   const [snapshotId, setSnapshotId] = useState(initialSnapshotId ?? "")
+  // Chosen size; both null means the template's default.
+  const [vcpu, setVcpu] = useState<number | null>(null)
+  const [memoryMib, setMemoryMib] = useState<number | null>(null)
+
+  useLayoutEffect(() => {
+    if (open) {
+      setName(generateSandboxName())
+    } else {
+      setName("")
+    }
+    setNameError(undefined)
+  }, [open])
 
   // Keep `templateRef` in sync when the caller changes `initialTemplateRef`
   // (e.g. a different Launch action was fired).
@@ -530,12 +599,28 @@ export function CreateSandboxDialog({
   )
   const selectedSnapshot = readySnapshots.find((s) => s.id === snapshotId)
   const fromSnapshot = source === "snapshot"
+  const selectedTemplate = templateOptions.find(
+    (t) => t.name === templateRef || t.id === templateRef,
+  )
+  const sizeSource = fromSnapshot
+    ? selectedSnapshot && snapshotSource(selectedSnapshot.resources)
+    : selectedTemplate && templateSource(selectedTemplate)
+  const size = sizeSource && chosenSizeLine(sizeSource, vcpu, memoryMib)
+  // A new source starts at its default size.
+  const changeSource =
+    <T,>(set: (v: T) => void) =>
+    (v: T) => {
+      set(v)
+      setVcpu(null)
+      setMemoryMib(null)
+    }
 
   const createMutation = useCreateSandbox()
   const { addToast } = useToast()
 
   const handleReset = () => {
     setName("")
+    setNameError(undefined)
     setTimeout("")
     setIdleTimeout("")
     setAutoDelete("")
@@ -550,9 +635,19 @@ export function CreateSandboxDialog({
     setTemplateRef(initialTemplateRef ?? DEFAULT_TEMPLATE)
     setSnapshotId(initialSnapshotId ?? "")
     setSource(initialSnapshotId ? "snapshot" : "template")
+    setVcpu(null)
+    setMemoryMib(null)
   }
 
   const handleCreate = () => {
+    // Ignore a late click or Enter during the closing animation.
+    if (!open) return
+    if (!name.trim()) {
+      flushSync(() => setNameError("Enter a name for this sandbox."))
+      nameInputRef.current?.focus()
+      return
+    }
+
     let payload: CreateSandboxRequest
     try {
       payload = buildCreateSandboxRequest({
@@ -568,6 +663,9 @@ export function CreateSandboxDialog({
         previewAccess,
         templateRef: fromSnapshot ? undefined : templateRef || undefined,
         snapshotId: fromSnapshot ? snapshotId : undefined,
+        vcpu,
+        memoryMib,
+        size: sizeSource,
       })
     } catch (e) {
       addToast(e instanceof Error ? e.message : "Invalid input", "error")
@@ -591,6 +689,8 @@ export function CreateSandboxDialog({
       advanced_expanded: showAdvanced,
       from_template: !!payload.from_template,
       from_snapshot: !!payload.from_snapshot,
+      has_vcpu: payload.vcpu !== undefined,
+      has_memory_mib: payload.memory_mib !== undefined,
       preview_access: payload.preview_access,
     })
 
@@ -679,11 +779,15 @@ export function CreateSandboxDialog({
         {mode === "form" ? (
           <>
             <div className="max-h-[60vh] space-y-5 overflow-y-auto p-6 pt-4">
-              <Field label="Sandbox Name" required>
+              <Field label="Sandbox name" required error={nameError}>
                 <Input
-                  placeholder="my-sandbox"
+                  ref={nameInputRef}
                   value={name}
-                  onChange={(e) => setName(e.target.value)}
+                  onChange={(e) => {
+                    const value = e.target.value
+                    setName(value)
+                    if (value.trim()) setNameError(undefined)
+                  }}
                 />
               </Field>
 
@@ -694,7 +798,7 @@ export function CreateSandboxDialog({
                       key={s.value}
                       type="button"
                       aria-pressed={source === s.value}
-                      onClick={() => setSource(s.value)}
+                      onClick={() => changeSource(setSource)(s.value)}
                       className={cn(
                         "relative inline-flex cursor-pointer items-center px-3 py-1 font-mono text-xs transition-colors",
                         source === s.value
@@ -715,14 +819,14 @@ export function CreateSandboxDialog({
                   required
                   description={
                     selectedSnapshot
-                      ? `Starts where the snapshot left off, with ${selectedSnapshot.resources.vcpu_count} vCPU, ${selectedSnapshot.resources.memory_mib} MiB memory and ${selectedSnapshot.resources.disk_mib} MiB disk.`
+                      ? `Starts where the snapshot left off, with its size and ${selectedSnapshot.resources.disk_mib} MiB disk.`
                       : "Starts where the snapshot left off. The snapshot sets vCPU, memory and disk."
                   }
                 >
                   <SourcePicker
                     value={snapshotId}
                     items={snapshotItems}
-                    onChange={setSnapshotId}
+                    onChange={changeSource(setSnapshotId)}
                     emptyText="No ready snapshots available"
                     placeholder="Select a snapshot"
                   />
@@ -736,10 +840,22 @@ export function CreateSandboxDialog({
                   <SourcePicker
                     value={templateRef}
                     items={selectItems}
-                    onChange={setTemplateRef}
+                    onChange={changeSource(setTemplateRef)}
                     emptyText="No ready templates available"
                   />
                 </Field>
+              )}
+
+              {sizeSource && (
+                <SizeSection
+                  source={sizeSource}
+                  vcpu={vcpu}
+                  memoryMib={memoryMib}
+                  onChange={(v, m) => {
+                    setVcpu(v)
+                    setMemoryMib(m)
+                  }}
+                />
               )}
 
               <button
@@ -1059,20 +1175,26 @@ export function CreateSandboxDialog({
               </AnimatePresence>
             </div>
 
-            <DialogFooter>
-              <Button variant="outline" onClick={() => setOpen(false)}>
-                Cancel
-              </Button>
-              <Button
-                disabled={
-                  !name.trim() ||
-                  (fromSnapshot && !snapshotId) ||
-                  createMutation.isPending
-                }
-                onClick={handleCreate}
+            <DialogFooter className="flex-wrap items-center justify-between">
+              <span
+                data-testid="size-summary"
+                className="basis-full font-mono text-xs text-muted tabular-nums sm:basis-auto"
               >
-                {createMutation.isPending ? "Creating..." : "Create Sandbox"}
-              </Button>
+                {size ?? ""}
+              </span>
+              <div className="flex gap-3">
+                <Button variant="outline" onClick={() => setOpen(false)}>
+                  Cancel
+                </Button>
+                <Button
+                  disabled={
+                    (fromSnapshot && !snapshotId) || createMutation.isPending
+                  }
+                  onClick={handleCreate}
+                >
+                  {createMutation.isPending ? "Creating..." : "Create Sandbox"}
+                </Button>
+              </div>
             </DialogFooter>
           </>
         ) : (

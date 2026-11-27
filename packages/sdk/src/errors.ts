@@ -74,6 +74,7 @@ export class TimeoutError extends SandboxError {
  * - `too_many_builds` — team has reached its concurrent build limit.
  * - `too_many_templates` — team has reached its total template count limit.
  * - `too_many_sandboxes` — team has reached its active sandbox count limit.
+ * - `host_capacity` — the host chosen for the sandbox is full; retry later.
  */
 export class RateLimitError extends SandboxError {
   constructor(message = "Rate limit exceeded", code?: string) {

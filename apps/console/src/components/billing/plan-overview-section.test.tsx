@@ -979,3 +979,48 @@ it("doesn't promise postpaid overages for a credit-funded plan", () => {
   ).toBeNull()
   expect(screen.queryByText(/at the end of the period/)).toBeNull()
 })
+
+describe("independently available plan data", () => {
+  it("shows known subscription details with unavailable usage and no payment authority", () => {
+    mocks.plan.mockReturnValue({ data: plan({}), isError: false })
+    render(<PlanOverviewSection />)
+    expect(screen.getAllByText("Pro").length).toBeGreaterThan(0)
+    expect(screen.getByText("Subscription")).toBeTruthy()
+    expect(screen.getByText("Usage couldn't be loaded.")).toBeTruthy()
+    expect(screen.queryByText(/\$250|\$0|of .* used/)).toBeNull()
+    expect(
+      screen.queryByRole("link", { name: /Upgrade|Add more|Manage/ }),
+    ).toBeNull()
+  })
+
+  it("retains independently loaded free allowance while withholding management", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ key: "free", kind: "free", name: "Free" }),
+      isError: false,
+    })
+    mocks.allowance.mockReturnValue({ data: allowance({}) })
+    render(<PlanOverviewSection />)
+    expect(screen.getByText("Free")).toBeTruthy()
+    expect(
+      screen.getByText("Daily compute allowance", { exact: false }),
+    ).toBeTruthy()
+    expect(screen.queryByRole("link", { name: "Upgrade" })).toBeNull()
+  })
+
+  it("does not infer a plan from a null assignment without a summary", () => {
+    render(<PlanOverviewSection />)
+    expect(screen.getByText("Plan details are unavailable.")).toBeTruthy()
+    expect(screen.queryByTestId("legacy-plan")).toBeNull()
+  })
+
+  it("shows a known legacy assignment without manufacturing its account or credits", () => {
+    mocks.plan.mockReturnValue({
+      data: plan({ kind: "legacy_payg", name: "Legacy" }),
+      isError: false,
+    })
+    render(<PlanOverviewSection />)
+    expect(screen.getByText("Legacy")).toBeTruthy()
+    expect(screen.queryByText(/\$250|\$0|Credits remaining/)).toBeNull()
+    expect(screen.queryByTestId("legacy-plan")).toBeNull()
+  })
+})

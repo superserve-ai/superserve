@@ -10,9 +10,21 @@ import {
 
 import { apiClient } from "./client"
 
+export const billingAccountSchema = z.object({
+  billing_mode: z.enum(["shadow", "live"]),
+  permissions: z.object({ can_view: z.boolean(), can_manage: z.boolean() }),
+  checkout_available: z.boolean(),
+  portal_available: z.boolean(),
+  subscription_status: z.string().nullable(),
+  trial_ended: z.boolean(),
+})
+
+export type BillingAccount = z.infer<typeof billingAccountSchema>
+
 export const billingCapabilitiesSchema = z
   .object({
     schema_version: z.literal(1),
+    account: billingAccountSchema.nullable().optional(),
     team_id: z.string().uuid(),
     pricing_version: z.enum(["legacy", "v2"]),
     admission_source: z.enum([
