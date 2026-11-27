@@ -31,10 +31,17 @@ describe("TemplateDetailPageClient", () => {
     })
   })
 
-  it("surfaces backend API errors instead of preempting them in the page gate", () => {
+  it("shows stable copy for backend API errors", () => {
     render(<TemplateDetailPageClient />)
 
-    expect(screen.getByText("Forbidden: team RBAC denied")).toBeInTheDocument()
+    expect(
+      screen.queryByText("Forbidden: team RBAC denied"),
+    ).not.toBeInTheDocument()
     expect(screen.getByText("Something went wrong")).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        "An error occurred while loading data. Please try again.",
+      ),
+    ).toBeInTheDocument()
   })
 })

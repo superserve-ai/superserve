@@ -11,7 +11,7 @@ import Link from "next/link"
 import { useParams, useRouter } from "next/navigation"
 import { useState } from "react"
 
-import { ErrorState } from "@/components/error-state"
+import { ErrorState, errorStateMessage } from "@/components/error-state"
 import { BuildHistorySection } from "@/components/templates/build-history-section"
 import { CurrentBuildPanel } from "@/components/templates/current-build-panel"
 import { DeleteTemplateDialog } from "@/components/templates/delete-template-dialog"
@@ -46,7 +46,8 @@ export default function TemplateDetailPageClient() {
           </Link>
         </div>
         <ErrorState
-          message={error?.message ?? "Template not found"}
+          error={error}
+          message={errorStateMessage(error, "Template not found")}
           onRetry={() => refetch()}
         />
       </div>

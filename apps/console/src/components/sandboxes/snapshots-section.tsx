@@ -52,7 +52,7 @@ export function SnapshotsSection({ sandbox }: { sandbox: SandboxResponse }) {
           ))}
         </div>
       ) : error ? (
-        <ErrorState message={error.message} onRetry={() => refetch()} />
+        <ErrorState error={error} onRetry={() => refetch()} />
       ) : !snapshots || snapshots.length === 0 ? (
         <div className="flex min-h-60 items-center justify-center py-10">
           <EmptyState
