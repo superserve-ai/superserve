@@ -1,6 +1,7 @@
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query"
 import { render, screen } from "@testing-library/react"
 import type { ReactNode } from "react"
+import { renderToString } from "react-dom/server"
 import { describe, expect, it, vi } from "vitest"
 
 vi.mock("next/image", () => ({
@@ -24,6 +25,7 @@ vi.mock("@/hooks/use-posthog-identify", () => ({
 vi.mock("./sidebar-context", () => ({
   useSidebar: () => ({
     isCollapsed: false,
+    isOverlayOpen: false,
     toggle: vi.fn(),
   }),
   SidebarProvider: ({ children }: { children: ReactNode }) => children,
@@ -50,6 +52,51 @@ vi.mock("./sidebar-nav", () => ({
 import { Sidebar } from "./sidebar"
 
 describe("Sidebar", () => {
+  it("hides the server-rendered sidebar at rail width below md", () => {
+    const container = document.createElement("div")
+    container.innerHTML = renderToString(<Sidebar />)
+
+    expect(container.querySelector("aside")).toHaveClass(
+      "max-md:invisible",
+      "max-md:w-16",
+      "w-64",
+    )
+  })
+
+  it("omits the pre-hydration classes on the client", () => {
+    render(<Sidebar />)
+
+    const aside = screen.getByRole("complementary")
+    expect(aside).not.toHaveClass("max-md:invisible")
+    expect(aside).not.toHaveClass("max-md:w-16")
+  })
+
+  it("disables the sidebar transition for reduced motion", () => {
+    render(<Sidebar />)
+
+    expect(screen.getByRole("complementary")).toHaveClass(
+      "motion-reduce:transition-none",
+    )
+  })
+
+  it("gives sidebar links and buttons a 44 px minimum height below md", () => {
+    render(<Sidebar />)
+
+    expect(screen.getByRole("complementary")).toHaveClass(
+      "max-md:[&_a]:min-h-11",
+      "max-md:[&_button]:min-h-11",
+    )
+  })
+
+  it("lets the expanded sidebar scroll vertically below md", () => {
+    render(<Sidebar />)
+
+    expect(screen.getByRole("complementary")).toHaveClass(
+      "max-md:overflow-x-hidden",
+      "max-md:overflow-y-auto",
+    )
+  })
+
   it("shows Billing & Usage without a separate Billing nav item", () => {
     const queryClient = new QueryClient({
       defaultOptions: {
