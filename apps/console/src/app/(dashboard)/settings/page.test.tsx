@@ -197,7 +197,7 @@ function renderPage() {
   return render(<SettingsPage />)
 }
 
-describe("Settings billing", () => {
+describe("Settings layout and billing", () => {
   beforeEach(() => {
     useUser.mockReturnValue({
       user: {
@@ -218,6 +218,28 @@ describe("Settings billing", () => {
       isPending: false,
       error: null,
     })
+  })
+
+  it("uses the Settings scroll area as a query container", () => {
+    const { container } = renderPage()
+
+    expect(container.querySelector(".overflow-y-auto")).toHaveClass(
+      "@container",
+    )
+  })
+
+  it("only enables two columns inside a wide Settings container", () => {
+    const { container } = renderPage()
+    const sections = container.querySelectorAll(".overflow-y-auto > .grid")
+
+    expect(sections).toHaveLength(5)
+    for (const section of sections) {
+      expect(section).toHaveClass(
+        "grid-cols-1",
+        "@2xl:grid-cols-[240px_minmax(0,1fr)]",
+      )
+      expect(section).not.toHaveClass("grid-cols-[240px_1fr]")
+    }
   })
 
   it("shows tracked-only storage even when a positive rate exists", () => {
