@@ -272,8 +272,8 @@ export function sortEntries(entries: DirEntry[]): DirEntry[] {
  * control-plane API (`GET /sandboxes/:id/files`) rather than the data plane. The
  * API lists via boxd's FilesystemService.ListDir, which every sandbox supports
  * regardless of boxd version — so existing sandboxes list without a reseed.
- * `apiClient` throws `ApiError` (404 → "Folder not found", 400 → bad path),
- * surfaced directly by the UI.
+ * `apiClient` throws `ApiError` (404 → "Folder not found", 400 → bad path);
+ * the UI shows API error copy and stable copy for other failures.
  */
 export async function listDir(
   sandbox: FileSandbox,
