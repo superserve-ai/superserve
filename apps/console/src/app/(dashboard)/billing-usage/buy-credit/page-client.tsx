@@ -123,6 +123,11 @@ export function BuyCreditPageClient({
   const canManage =
     ready && Boolean(summary?.permissions?.can_manage) && scope === "self"
   const canRecover = canManage && allowRecovery
+  const showsAutoReload = (credit: PrepaidCreditSummary) =>
+    topoffOnly ||
+    plan === undefined ||
+    starterTeam ||
+    credit.auto_recharge.enabled
   const retained = useRetainedPrepaidOperations(data?.purchases)
   const queryClient = useQueryClient()
   const existingStarter = usePendingStarterCheckout({
@@ -186,6 +191,14 @@ export function BuyCreditPageClient({
                 Credit purchases are temporarily unavailable. Please try again
                 later.
               </p>
+            ) : null}
+            {scope === "self" &&
+            (purchasable || retained.length > 0 || showsAutoReload(data)) ? (
+              <BillingAccessNotice
+                failed={summaryQuery.isError}
+                denied={summary?.permissions?.can_manage === false}
+                retry={() => void summaryQuery.refetch()}
+              />
             ) : null}
             <ServerStarterRecovery
               recovery={existingStarter}
@@ -258,10 +271,7 @@ export function BuyCreditPageClient({
                 ))}
               </div>
             ) : null}
-            {topoffOnly ||
-            plan === undefined ||
-            starterTeam ||
-            data.auto_recharge.enabled ? (
+            {showsAutoReload(data) ? (
               <>
                 {!allowRecharge ? (
                   <p className="text-sm text-muted">
@@ -294,6 +304,36 @@ export function BuyCreditPageClient({
       </div>
     </div>
   )
+}
+
+// Says why the purchase and Auto Reload controls are off, when they are off
+// for lack of billing access or because that access couldn't be read.
+function BillingAccessNotice({
+  failed,
+  denied,
+  retry,
+}: {
+  failed: boolean
+  denied: boolean
+  retry: () => void
+}) {
+  if (failed)
+    return (
+      <div role="alert" className="space-y-2 text-sm text-destructive">
+        <p>
+          We couldn&apos;t check whether you can manage billing for this team.
+        </p>
+        <Button onClick={retry}>Try again</Button>
+      </div>
+    )
+  if (denied)
+    return (
+      <p className="text-sm text-muted">
+        Only your team&apos;s billing administrators can buy credit or change
+        Auto Reload. Contact your team&apos;s billing administrator.
+      </p>
+    )
+  return null
 }
 
 function BalanceCard({
