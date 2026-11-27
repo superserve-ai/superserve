@@ -4,7 +4,7 @@ import type { SandboxStatus } from "@/lib/api/types"
 
 export const STATUS_BADGE_VARIANT: Record<SandboxStatus, BadgeVariant> = {
   active: "active",
-  paused: "muted",
+  paused: "info",
   resuming: "warning",
   failed: "destructive",
 }

@@ -47,8 +47,8 @@ const STATUS_CONFIG: Record<
   },
   paused: {
     label: "Paused",
-    bg: "bg-foreground/[0.02]",
-    dot: "bg-muted",
+    bg: "bg-info/[0.04]",
+    dot: "bg-info",
     pulse: false,
   },
   resuming: {
