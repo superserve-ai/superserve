@@ -65,20 +65,92 @@ OpenClaw reads `ANTHROPIC_API_KEY` as usual, but its value is a [stand-in token]
 
 Open the sandbox in the [console](https://console.superserve.ai?utm_source=docs&utm_medium=link), launch the terminal, and run `openclaw onboard` to start the setup wizard.
 
-## Keep it running
+## Set up without prompts
 
-Start OpenClaw inside `tmux` so it survives closing the terminal or browser tab:
+To skip the wizard, run onboarding with flags. `--secret-input-mode ref` saves a reference to the `ANTHROPIC_API_KEY` env var, not its value. `--skip-daemon` skips the background service install; run the gateway in `tmux` instead (see [Keep it running](#keep-it-running)).
 
 ```bash
-tmux new -s openclaw
-openclaw gateway run
+openclaw onboard --non-interactive --accept-risk \
+  --auth-choice apiKey \
+  --secret-input-mode ref \
+  --skip-daemon --skip-health
 ```
 
-Press `Ctrl+b` then `d` to detach. Reattach later with:
+Then run one agent turn. `--local` runs the agent in this process, without a gateway:
+
+```bash
+openclaw agent --local --agent main --message "Run uname -sm and reply with only its output."
+```
+
+To run the same steps from your code, pass them to `commands.run()`. Onboarding and an agent turn can take longer than the 30-second default timeout, so set one:
+
+<CodeGroup>
+```typescript TypeScript
+await sandbox.commands.run(
+  "openclaw onboard --non-interactive --accept-risk --auth-choice apiKey " +
+    "--secret-input-mode ref --skip-daemon --skip-health",
+  { timeoutMs: 120_000 },
+)
+
+const turn = await sandbox.commands.run(
+  'openclaw agent --local --agent main --message "Run uname -sm and reply with only its output."',
+  { timeoutMs: 300_000 },
+)
+console.log(turn.stdout)
+```
+
+```python Python
+sandbox.commands.run(
+    "openclaw onboard --non-interactive --accept-risk --auth-choice apiKey "
+    "--secret-input-mode ref --skip-daemon --skip-health",
+    timeout_seconds=120,
+)
+
+turn = sandbox.commands.run(
+    "openclaw agent --local --agent main "
+    '--message "Run uname -sm and reply with only its output."',
+    timeout_seconds=300,
+)
+print(turn.stdout)
+```
+</CodeGroup>
+
+## Keep it running
+
+The gateway is the long-running OpenClaw process that connects chat channels to your agent. It starts only after onboarding. Start it inside `tmux` so it survives closing the terminal or browser tab:
+
+```bash
+tmux new -d -s openclaw 'openclaw gateway run'
+```
+
+Check that it is up with `openclaw health`. While the gateway runs, drop `--local` from `openclaw agent` to send turns through the gateway. To watch the gateway logs, attach to the session:
 
 ```bash
 tmux attach -t openclaw
 ```
+
+Press `Ctrl+b` then `d` to detach.
+
+## Connect Telegram
+
+The gateway can take messages from a Telegram bot. It uses long polling by default, so the sandbox needs no public URL.
+
+1. In Telegram, chat with `@BotFather`, run `/newbot`, and copy the bot token.
+2. With the gateway running, add the token and check the channel:
+
+   ```bash
+   openclaw channels add --channel telegram --token <bot-token>
+   openclaw channels status --probe
+   ```
+
+3. Send any message to your bot. Then approve the pairing code it creates:
+
+   ```bash
+   openclaw pairing list telegram
+   openclaw pairing approve telegram <CODE>
+   ```
+
+For groups, privacy mode, and access control, see the [OpenClaw Telegram docs](https://docs.openclaw.ai/channels/telegram).
 
 ## Persist sessions
 
