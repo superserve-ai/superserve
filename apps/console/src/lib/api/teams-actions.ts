@@ -6,7 +6,11 @@ import {
   writeTeamSelection,
 } from "@/lib/api/active-team"
 import { PromotionEvidenceError } from "@/lib/api/promotion-device-evidence"
-import { isPersonalTeam, ownsTeam, renameTeam } from "@/lib/api/team-conversion"
+import {
+  isPersonalTeam,
+  ownsTeam,
+  renameOwnedTeam,
+} from "@/lib/api/team-conversion"
 import {
   invalidateMembershipDirectory,
   listTeamsForUser,
@@ -174,21 +178,19 @@ export async function createTeamAction(
         throw new Error("Could not read your account team. Try again.")
       return teamConversionUnavailable()
     }
-    if (!(await ownsTeam(targetRegion, user.id, target.id)))
-      return teamConversionUnavailable()
     // A retry after the converted response was lost finds the new name.
-    if (target.name !== trimmed) {
-      if (!isPersonalTeam(target, user.email))
-        return teamConversionUnavailable()
-      const renamed = await renameTeam(
-        targetRegion,
-        target.id,
-        target.name,
-        trimmed,
-      )
-      if (renamed === "name_taken") return teamNameConflict()
-      if (renamed === "changed") return teamConversionUnavailable()
-    }
+    if (target.name !== trimmed && !isPersonalTeam(target, user.email))
+      return teamConversionUnavailable()
+    const renamed = await renameOwnedTeam(
+      targetRegion,
+      user.id,
+      target.id,
+      target.name,
+      trimmed,
+    )
+    if (renamed === "name_taken") return teamNameConflict()
+    if (renamed === "not_owner" || renamed === "changed")
+      return teamConversionUnavailable()
     invalidateMembershipDirectory(user.id)
     await writeTeamSelection({ region: targetRegion, teamId: target.id })
     return { id: target.id, name: trimmed, region: targetRegion }
