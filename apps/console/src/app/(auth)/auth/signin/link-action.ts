@@ -1,8 +1,17 @@
 "use server"
 
+import type { User } from "@supabase/supabase-js"
 import { after } from "next/server"
 import * as z from "zod"
 
+import { readClientIp } from "@/lib/auth/client-ip"
+import { findAuthUserByEmail } from "@/lib/auth/find-auth-user"
+import { type AuthRateLimit, consumeAuthRateLimit } from "@/lib/auth/rate-limit"
+import {
+  type RecoveryEmailReservation,
+  reserveRecoveryEmail,
+  takeRecoveryNetworkLimit,
+} from "@/lib/auth/recovery-email-limits"
 import {
   isSignupReviewBlocked,
   signupReviewStatus,
@@ -19,6 +28,25 @@ const linkSchema = z.object({
   email: z.string().email(),
 })
 
+// Per client IP, the same as Supabase Auth's default for its own email
+// endpoints: 30 requests per 5 minutes.
+const LINK_IP_LIMIT: AuthRateLimit = {
+  bucket: "signin_link_ip",
+  max: 30,
+  windowSeconds: 5 * 60,
+}
+
+const RESERVATION_FAILURE_REASONS: Record<
+  Exclude<RecoveryEmailReservation, "reserved">,
+  string
+> = {
+  address_limit: "address_limit",
+  cooldown: "cooldown",
+  account_limit: "account_hourly_limit",
+  budget_used_up: "email_budget",
+  budget_busy: "email_budget_busy",
+}
+
 function safeNext(raw: unknown): string | null {
   if (typeof raw !== "string") return null
   if (
@@ -34,6 +62,18 @@ function safeNext(raw: unknown): string | null {
   return raw
 }
 
+/**
+ * Verifying the link would confirm an unconfirmed address, so only confirmed
+ * accounts that are not banned or waiting for signup review get one.
+ */
+function canGetSignInLink(user: User): boolean {
+  const banned =
+    !!user.banned_until && new Date(user.banned_until).getTime() > Date.now()
+  const confirmedOrApproved =
+    !!user.email_confirmed_at || signupReviewStatus(user) === "approved"
+  return confirmedOrApproved && !banned && !isSignupReviewBlocked(user)
+}
+
 async function trackLinkFailure(reason: string, userId?: string) {
   await trackEvent(
     AUTH_EVENTS.SIGN_IN_LINK_FAILED,
@@ -44,8 +84,49 @@ async function trackLinkFailure(reason: string, userId?: string) {
 
 // Runs after the response is sent, so the response and its timing are the
 // same whether or not the address belongs to an eligible account.
-async function deliverSignInLink(email: string, next: string | null) {
+async function deliverSignInLink(
+  email: string,
+  next: string | null,
+  clientIp: string | undefined,
+) {
   try {
+    // Checked here, after the response, so a limited request gets the same
+    // answer as any other.
+    if (clientIp && !(await consumeAuthRateLimit(LINK_IP_LIMIT, clientIp))) {
+      await trackLinkFailure("rate_limited")
+      return
+    }
+    // Before the lookup, so the caller's own limit is used the same way
+    // whether or not the address has an account.
+    if (!(await takeRecoveryNetworkLimit(clientIp))) {
+      await trackLinkFailure("ip_hourly_limit")
+      return
+    }
+    const user = await findAuthUserByEmail(email)
+    if (!user) {
+      await trackLinkFailure("no_account")
+      return
+    }
+
+    // Staff approval already emails an unconfirmed account a confirming magic
+    // link, and the token generated below replaces it, so approved accounts
+    // get this link in its place.
+    if (!canGetSignInLink(user)) {
+      await trackLinkFailure("not_eligible", user.id)
+      return
+    }
+
+    // A new token replaces the one in any email already sent, so take from
+    // the email limits before creating the token, never after.
+    const reservation = await reserveRecoveryEmail({
+      userId: user.id,
+      email,
+    })
+    if (reservation !== "reserved") {
+      await trackLinkFailure(RESERVATION_FAILURE_REASONS[reservation], user.id)
+      return
+    }
+
     const appUrl =
       process.env.NEXT_PUBLIC_APP_URL || "https://console.superserve.ai"
     const callbackUrl = new URL("/auth/callback", appUrl)
@@ -59,27 +140,16 @@ async function deliverSignInLink(email: string, next: string | null) {
       options: { redirectTo: callbackUrl.toString() },
     })
 
-    if (error || !data?.properties?.hashed_token || !data.user) {
-      const noAccount =
-        error?.status === 404 || error?.code === "user_not_found"
-      if (!noAccount) {
-        console.error("Error generating sign-in link:", error?.message)
-      }
-      await trackLinkFailure(noAccount ? "no_account" : "generate_failed")
+    if (error || !data?.properties?.hashed_token) {
+      console.error("Error generating sign-in link:", error?.message)
+      await trackLinkFailure("generate_failed", user.id)
       return
     }
 
-    // Verifying the link would confirm an unconfirmed address, so only
-    // confirmed accounts that are not waiting for signup review get one.
-    // Staff approval already emails an unconfirmed account a confirming magic
-    // link, and the token generated above replaced it, so approved accounts
-    // get this link in its place.
-    const user = data.user
-    const banned =
-      !!user.banned_until && new Date(user.banned_until).getTime() > Date.now()
-    const confirmedOrApproved =
-      !!user.email_confirmed_at || signupReviewStatus(user) === "approved"
-    if (!confirmedOrApproved || banned || isSignupReviewBlocked(user)) {
+    // The token belongs to the account generateLink found. Send it only when
+    // that is the account checked above and it can still get a link, so an
+    // address that changed hands in between gets nothing.
+    if (data.user?.id !== user.id || !canGetSignInLink(data.user)) {
       await trackLinkFailure("not_eligible", user.id)
       return
     }
@@ -123,8 +193,9 @@ export const sendSignInLink = async (
   if (!recaptcha.verified) {
     return { success: false, errorCode: "captcha_failed" }
   }
-  // verifyRecaptcha also passes when the provider is down. This action has no
-  // other throttle, so it must not send email without a real verdict.
+  // verifyRecaptcha also passes when the provider is down. The other limits
+  // only slow a caller down, so this action must not send email without a
+  // real verdict.
   if (recaptcha.providerOutcome === "unavailable") {
     return { success: false, errorCode: "captcha_unavailable" }
   }
@@ -132,7 +203,8 @@ export const sendSignInLink = async (
   const parsed = linkSchema.safeParse({ email })
   if (parsed.success) {
     const address = parsed.data.email
-    after(() => deliverSignInLink(address, safeNext(next)))
+    const clientIp = await readClientIp()
+    after(() => deliverSignInLink(address, safeNext(next), clientIp))
   }
 
   // Always the same result, to prevent email enumeration.
