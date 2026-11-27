@@ -105,8 +105,13 @@ function ToastContainer({
   toasts: Toast[]
   removeToast: (id: string) => void
 }) {
+  // z-60 keeps toasts above dialogs, menus and popovers (all z-50), so a
+  // click on a toast reaches the toast, not the dialog backdrop under it.
   return (
-    <div className="pointer-events-none fixed top-4 right-4 z-50 flex flex-col gap-3">
+    <div
+      data-slot="toast-region"
+      className="pointer-events-none fixed top-4 right-4 z-60 flex flex-col gap-3"
+    >
       <AnimatePresence>
         {toasts.map((toast) => (
           <ToastItem key={toast.id} toast={toast} onRemove={removeToast} />
