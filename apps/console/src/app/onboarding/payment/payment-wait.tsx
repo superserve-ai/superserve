@@ -18,6 +18,15 @@ import { checkoutLocator } from "@/lib/billing/signup-checkout-paths"
 
 import { checkSignupPaymentAction } from "./actions"
 
+const SUPPORT_EMAIL = "support@superserve.ai"
+
+// Names the team so support can find the payment without asking for it.
+function supportHref(team: string) {
+  const subject = encodeURIComponent("Payment still confirming")
+  const body = encodeURIComponent(`Team: ${team}`)
+  return `mailto:${SUPPORT_EMAIL}?subject=${subject}&body=${body}`
+}
+
 export function PaymentWait() {
   const router = useRouter()
   const locator = checkoutLocator(useSearchParams())
@@ -75,13 +84,31 @@ export function PaymentWait() {
         </div>
         <div className="flex flex-col items-center text-center">
           {account && team ? (
-            <PaymentProcessing
-              waiting={!timedOut}
-              onRetry={() => {
-                setTimedOut(false)
-                setRound((value) => value + 1)
-              }}
-            />
+            <>
+              <PaymentProcessing
+                waiting={!timedOut}
+                retryLabel="Check again"
+                onRetry={() => {
+                  setTimedOut(false)
+                  setRound((value) => value + 1)
+                }}
+              />
+              {/* The console sends a team whose payment is settling back here,
+                  so support is the way forward if it never settles. */}
+              {timedOut && (
+                <p className="mt-4 text-xs text-muted">
+                  Checking again only looks up this payment and never starts a
+                  new one. Still waiting? Email{" "}
+                  <a
+                    href={supportHref(team)}
+                    className="text-foreground underline underline-offset-4 hover:text-primary"
+                  >
+                    {SUPPORT_EMAIL}
+                  </a>{" "}
+                  and we&apos;ll look into it.
+                </p>
+              )}
+            </>
           ) : (
             <Button render={<Link href="/sandboxes" />} size="sm">
               Back to console
