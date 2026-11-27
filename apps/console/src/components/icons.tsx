@@ -1,6 +1,6 @@
 "use client"
 
-import { motion } from "motion/react"
+import { cn } from "@superserve/ui"
 
 export function GoogleIcon() {
   return (
@@ -31,10 +31,14 @@ export function Spinner({
   className?: string
 }) {
   return (
-    <motion.div
-      className={`h-5 w-5 rounded-full border-2 border-t-transparent ${className}`}
-      animate={{ rotate: 360 }}
-      transition={{ duration: 0.8, repeat: Infinity, ease: "linear" }}
-    />
+    <output
+      className={`border-t-transparent ${cn(
+        "block h-5 w-5 rounded-full border-2 motion-safe:animate-[spin_0.8s_linear_infinite]",
+        className,
+      )}`}
+      aria-label="Loading"
+    >
+      <span className="sr-only">Loading</span>
+    </output>
   )
 }

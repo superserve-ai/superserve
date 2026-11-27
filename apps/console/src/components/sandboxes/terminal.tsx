@@ -272,8 +272,9 @@ export function SandboxTerminal({
     if (!container) return
     isMountedRef.current = true
 
+    const mq = window.matchMedia("(prefers-reduced-motion: reduce)")
     const term = new Terminal({
-      cursorBlink: true,
+      cursorBlink: !mq.matches,
       cursorStyle: "block",
       cursorInactiveStyle: "outline",
       fontFamily: resolveTerminalFontFamily(container),
@@ -300,6 +301,10 @@ export function SandboxTerminal({
         selectionBackground: "#525252",
       },
     })
+    const handleMotionChange = () => {
+      term.options.cursorBlink = !mq.matches
+    }
+    mq.addEventListener("change", handleMotionChange)
 
     // Order matters: Unicode11 must be activated before measuring any cells.
     const unicode11 = new Unicode11Addon()
@@ -518,6 +523,7 @@ export function SandboxTerminal({
       if (resizeTimerRef.current) clearTimeout(resizeTimerRef.current)
       clearReconnectTimer()
       window.removeEventListener("pagehide", handlePageHide)
+      mq.removeEventListener("change", handleMotionChange)
       ro.disconnect()
       wsRef.current?.close(1000, "unmount")
 
@@ -687,7 +693,7 @@ export function SandboxTerminal({
 
       {status === "connecting" && (
         <div className="pointer-events-none absolute inset-0 flex items-center justify-center">
-          <span className="animate-pulse font-mono text-xs text-muted">
+          <span className="font-mono text-xs text-muted motion-safe:animate-pulse">
             Connecting...
           </span>
         </div>

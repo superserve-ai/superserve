@@ -9,11 +9,12 @@ import {
   SelectPopup,
   SelectTrigger,
   SelectValue,
-  Spinner,
+  Spinner as UiSpinner,
 } from "@superserve/ui"
 import Link from "next/link"
 import { type FormEvent, useEffect, useState } from "react"
 
+import { Spinner } from "@/components/icons"
 import { useSignOut } from "@/hooks/use-sign-out"
 import { useSubmitOnce } from "@/hooks/use-submit-once"
 import { ENTERPRISE_MEETING_URL } from "@/lib/api/billing-v2"
@@ -162,7 +163,7 @@ function PlanOption({
       >
         {submitting === plan.offer ? (
           <>
-            <Spinner size="sm" />
+            <UiSpinner size="sm" />
             Opening checkout…
           </>
         ) : (
@@ -255,7 +256,7 @@ function OtherTeams({ locator }: { locator: CheckoutLocator }) {
           disabled={switching}
           onClick={() => void open()}
         >
-          {switching ? <Spinner size="sm" /> : null}
+          {switching ? <UiSpinner size="sm" /> : null}
           Open team
         </Button>
       </div>
@@ -311,7 +312,10 @@ export function PlanPickerOptions({
 
   if (current === undefined)
     return (
-      <div className="mt-5 h-5 w-5 animate-spin border-2 border-primary border-t-transparent" />
+      <div className="mt-5 flex items-center justify-center gap-2">
+        <Spinner className="border-primary" />
+        <span className="text-sm text-muted">Loading plans…</span>
+      </div>
     )
   // Only billing administrators can buy; anyone else would only be refused.
   if (adminRequired || current.canManage === false)
@@ -381,7 +385,7 @@ export function PlanPickerOptions({
               variant={highlighted(offer) ? "default" : "outline"}
               disabled={submitting !== null}
             >
-              {submitting === offer ? <Spinner size="sm" /> : null}
+              {submitting === offer ? <UiSpinner size="sm" /> : null}
               {label}
             </Button>
           </form>

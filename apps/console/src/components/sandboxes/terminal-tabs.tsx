@@ -294,7 +294,7 @@ function StatusDot({
       }
       className={cn(
         "size-1 shrink-0 rounded-full",
-        isConnecting ? "animate-pulse bg-orange-400" : "bg-red-500",
+        isConnecting ? "bg-orange-400 motion-safe:animate-pulse" : "bg-red-500",
       )}
     />
   )

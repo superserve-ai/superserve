@@ -43,10 +43,10 @@ export function ActivitySection({
               key={i}
               className="flex items-center gap-6 border-b border-border px-4 py-3 last:border-b-0"
             >
-              <div className="h-3 w-24 animate-pulse bg-muted/20" />
-              <div className="h-3 w-16 animate-pulse bg-muted/20" />
-              <div className="h-3 w-20 animate-pulse bg-muted/20" />
-              <div className="h-3 w-12 animate-pulse bg-muted/20" />
+              <div className="h-3 w-24 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-3 w-16 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-3 w-20 bg-muted/20 motion-safe:animate-pulse" />
+              <div className="h-3 w-12 bg-muted/20 motion-safe:animate-pulse" />
             </div>
           ))}
         </div>

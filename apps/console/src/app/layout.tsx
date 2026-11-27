@@ -4,6 +4,7 @@ import { Geist_Mono, Instrument_Sans } from "next/font/google"
 import { Suspense } from "react"
 
 import { FingerprintProvider } from "@/components/fingerprint-provider"
+import { MotionProvider } from "@/components/motion-provider"
 import { PostHogPageView } from "@/components/posthog-pageview"
 import { PostHogProvider } from "@/components/posthog-provider"
 
@@ -63,12 +64,14 @@ export default function RootLayout({
     <PostHogProvider>
       <html lang="en" className={cn(sansFont.variable, monoFont.variable)}>
         <body className="font-sans antialiased" suppressHydrationWarning>
-          <Suspense fallback={null}>
-            <PostHogPageView />
-          </Suspense>
-          <FingerprintProvider>
-            <ToastProvider>{children}</ToastProvider>
-          </FingerprintProvider>
+          <MotionProvider>
+            <Suspense fallback={null}>
+              <PostHogPageView />
+            </Suspense>
+            <FingerprintProvider>
+              <ToastProvider>{children}</ToastProvider>
+            </FingerprintProvider>
+          </MotionProvider>
         </body>
       </html>
     </PostHogProvider>
