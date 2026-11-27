@@ -1,8 +1,6 @@
 import type { Metadata } from "next"
 
-import { FingerprintAccountDeviceObserver } from "@/components/fingerprint-account-device-observer"
 import { FingerprintSignupObserver } from "@/components/fingerprint-signup-observer"
-import { configuredRegions } from "@/lib/cells"
 
 export const metadata: Metadata = {
   robots: { index: false, follow: false },
@@ -16,12 +14,6 @@ export default function AuthLayout({
   return (
     <>
       <FingerprintSignupObserver />
-      {/* Plan selection and checkout are reached here before the dashboard.
-          No cookie reads in this layout: they would render every auth page
-          per request, showing the form before it is interactive. */}
-      <FingerprintAccountDeviceObserver
-        regions={configuredRegions().join(",")}
-      />
       {children}
     </>
   )
