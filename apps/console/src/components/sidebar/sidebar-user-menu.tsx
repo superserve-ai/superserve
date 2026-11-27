@@ -61,6 +61,8 @@ export function SidebarUserMenu() {
     <div className="relative px-2.5" ref={menuRef}>
       <button
         type="button"
+        aria-label={isCollapsed ? `Account menu for ${name}` : undefined}
+        aria-expanded={open}
         onClick={() => setOpen(!open)}
         className={cn(
           "flex w-full cursor-pointer items-center gap-2.5 px-2.5 py-2.5 text-foreground/70 transition-colors hover:bg-surface-hover hover:text-foreground",
