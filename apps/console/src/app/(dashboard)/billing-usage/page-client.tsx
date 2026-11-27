@@ -729,6 +729,7 @@ export function PlanUsagePageClient() {
                   value={dateRange ?? billingPeriod ?? null}
                   billingPeriod={billingPeriod}
                   onChange={handleRangeChange}
+                  className="flex-wrap lg:shrink-0"
                 />
               </div>
 

@@ -23,6 +23,35 @@ describe("DateRangeFilter", () => {
     expect(parseDateInput("2026-13-01")).toBeNull()
   })
 
+  it("places the date range buttons in a row that wraps only when requested", () => {
+    const props = {
+      value: null,
+      billingPeriod: {
+        start: new Date("2026-06-01T00:00:00"),
+        end: new Date("2026-07-01T00:00:00"),
+      },
+      onChange: vi.fn(),
+    }
+    const { rerender } = render(<DateRangeFilter {...props} />)
+
+    const row = screen.getByRole("button", {
+      name: "Billing Period",
+    }).parentElement
+    for (const name of [
+      "Today",
+      "Yesterday",
+      "7D",
+      "30D",
+      "Select a custom date range",
+    ]) {
+      expect(screen.getByRole("button", { name }).parentElement).toBe(row)
+    }
+    expect(row).not.toHaveClass("flex-wrap")
+
+    rerender(<DateRangeFilter {...props} className="flex-wrap" />)
+    expect(row).toHaveClass("flex-wrap")
+  })
+
   it("displays the inclusive end date for custom ranges", () => {
     render(
       <DateRangeFilter

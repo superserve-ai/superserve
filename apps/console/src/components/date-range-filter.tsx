@@ -19,6 +19,7 @@ interface DateRangeFilterProps {
   value: DateRange | null
   billingPeriod?: DateRange | null
   onChange: (range: DateRange | null) => void
+  className?: string
 }
 
 type PresetKey = "billing-period" | "today" | "yesterday" | "7d" | "30d"
@@ -204,6 +205,7 @@ export function DateRangeFilter({
   value,
   billingPeriod,
   onChange,
+  className,
 }: DateRangeFilterProps) {
   const [customStart, setCustomStart] = useState<Date | null>(null)
   const [customEnd, setCustomEnd] = useState<Date | null>(null)
@@ -278,7 +280,7 @@ export function DateRangeFilter({
   }
 
   return (
-    <div className="flex items-center gap-1">
+    <div className={cn("flex items-center gap-1", className)}>
       {billingPeriod && (
         <button
           type="button"
