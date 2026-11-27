@@ -17,6 +17,7 @@ import {
   issueGoogleSignupProof,
 } from "@/lib/auth/google-signup-proof"
 import { inviteReturnPath } from "@/lib/auth/invite-return-path"
+import { passwordTooLongError } from "@/lib/auth/password-rule"
 import { normalizeSignupRequestedOffer } from "@/lib/auth/requested-offer"
 import {
   beginSignupEvidenceAttempt,
@@ -80,7 +81,15 @@ import { ycReturnPath } from "@/lib/yc/return-path"
 
 const signUpSchema = z.object({
   email: z.string().email("Invalid email address."),
-  password: z.string().min(8, "Password must be at least 8 characters."),
+  password: z
+    .string()
+    .min(8, "Password must be at least 8 characters.")
+    .superRefine((password, ctx) => {
+      // Auth's bcrypt hash reads only 72 bytes; the form checks this too,
+      // but a direct call to this action skips the form.
+      const message = passwordTooLongError(password)
+      if (message) ctx.addIssue({ code: "custom", message })
+    }),
   fullName: z.string().min(1, "Name is required.").max(200),
 })
 
