@@ -269,7 +269,7 @@ export function InvitationsSection({
 }
 
 export const LEAVE_BLOCKED_REASON =
-  "This is your only team, so you can't leave it. Create or join another team first."
+  "This is your only team, so you can't leave it. Create a team in Settings or join another team first."
 
 // The scope comes from the page: an extra observer of a failed management
 // query would refetch it on mount, sending the page back to its loading state.

@@ -44,7 +44,7 @@ export interface TeamMember {
   email: string
   full_name?: string | null
   status: TeamMemberStatus
-  roles?: string[]
+  roles?: string[] | null
   created_at: string
   updated_at: string
 }

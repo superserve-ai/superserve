@@ -63,6 +63,7 @@ const mockListTeamMembershipsForUserDetailed = vi.fn(
   async (_userId: string, _opts?: { maxAgeMs?: number }) => directoryState,
 )
 const mockTrackEvent = vi.fn()
+const mockInvalidateMembershipDirectory = vi.fn()
 const mockEvaluateSignupRestriction = vi.fn()
 
 vi.mock("@/lib/auth/signup-restrictions", () => ({
@@ -241,11 +242,16 @@ vi.mock("@/lib/cells", () => ({
 }))
 
 let directoryTeams: Array<{ id: string; name: string; region: string }> = []
+let directoryDegradedRegions: string[] = []
 // Teams in a cell that the directory could not read and omitted.
 let omittedTeams: Array<{ id: string; region: string }> = []
 let cellLookupFails = false
 vi.mock("@/lib/api/team-directory", () => ({
   listTeamsForUser: async () => directoryTeams,
+  listTeamsForUserDetailed: async () => ({
+    teams: directoryTeams,
+    degradedRegions: directoryDegradedRegions,
+  }),
   listTeamMembershipsForUserDetailed: (
     ...args: [string, { maxAgeMs?: number }?]
   ) => mockListTeamMembershipsForUserDetailed(...args),
@@ -259,7 +265,8 @@ vi.mock("@/lib/api/team-directory", () => ({
       (t) => t.id === teamId && t.region === region,
     )
   },
-  invalidateMembershipDirectory: () => {},
+  invalidateMembershipDirectory: (...args: unknown[]) =>
+    mockInvalidateMembershipDirectory(...args),
 }))
 vi.mock("@/lib/auth/google-signup-proof", () => ({
   GoogleSignupRecoveryRequiredError: class GoogleSignupRecoveryRequiredError extends Error {
@@ -340,6 +347,7 @@ describe("createTeamAction", () => {
   beforeEach(() => {
     regions = ["use", "usw"]
     directoryTeams = []
+    directoryDegradedRegions = []
     omittedTeams = []
     cellLookupFails = false
     currentUser = { id: "u1", email: "pavitra@superserve.ai" }
@@ -762,6 +770,8 @@ function expectUnavailable(
 
 describe("active team", () => {
   beforeEach(() => {
+    directoryDegradedRegions = []
+    mockInvalidateMembershipDirectory.mockClear()
     regions = ["use", "usw"]
     existingRbacAssignment = true
     unfinishedTeamId = null
@@ -783,6 +793,16 @@ describe("active team", () => {
     const { activeTeamId, activeRegion } = await listTeamsAction()
     expect(activeTeamId).toBe("team-w")
     expect(activeRegion).toBe("usw")
+  })
+
+  it("directory reports regions whose teams could not be read", async () => {
+    directoryTeams = [directoryTeams[0]!]
+    directoryDegradedRegions = ["usw"]
+
+    expect(await listTeamsAction()).toMatchObject({
+      teams: directoryTeams,
+      degradedRegions: ["usw"],
+    })
   })
 
   it("directory offers to convert the user's own account", async () => {
@@ -858,11 +878,15 @@ describe("active team", () => {
     expect(cookieSets).toEqual([
       { name: "ss-active-team", value: "usw:team-w" },
     ])
+    expect(mockInvalidateMembershipDirectory).not.toHaveBeenCalled()
   })
 
   it("setActiveTeamAction rejects a team the user is not in", async () => {
     await expect(setActiveTeamAction("intruder", "usw")).rejects.toThrow(
       "not a member",
+    )
+    expect(mockInvalidateMembershipDirectory).toHaveBeenCalledExactlyOnceWith(
+      "u1",
     )
     expect(cookieSets).toEqual([])
   })
