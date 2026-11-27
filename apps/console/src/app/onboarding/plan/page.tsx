@@ -3,6 +3,7 @@ import { redirect } from "next/navigation"
 import { after } from "next/server"
 
 import { PlanSelectionLoader } from "@/components/onboarding/plan-selection-loader"
+import { skippedPlanEvent } from "@/lib/api/signup-plan"
 import {
   getSignupPlanPage,
   type SignupPlanPageParams,
@@ -52,6 +53,14 @@ export default async function PlanSelectionPage({
           params.billing === "success")))
   ) {
     after(async () => {
+      if (context.state === "legacy") {
+        await trackEvent(
+          "signup_plan_action",
+          context.userId,
+          skippedPlanEvent(context, params.billing),
+        )
+        return
+      }
       const properties = {
         requested_offer: context.requestedOffer ?? "not_specified",
         selected_offer: context.offer ?? "free",
