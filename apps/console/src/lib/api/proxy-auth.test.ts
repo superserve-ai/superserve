@@ -186,7 +186,10 @@ vi.mock("@/lib/cells", () => ({
 import { ensureImpersonationKeyRow } from "@/lib/admin/impersonation-key"
 import { platformImpersonationReadScopes } from "@/lib/admin/permissions"
 import { publishPromotionIdentity } from "@/lib/api/promotion-identity"
-import { listTeamMembershipsForUserDetailed } from "@/lib/api/team-directory"
+import {
+  invalidateMembershipDirectory,
+  listTeamMembershipsForUserDetailed,
+} from "@/lib/api/team-directory"
 import {
   completedMemberships,
   provisionTeam,
@@ -299,6 +302,7 @@ describe("proxy-auth cell targeting", () => {
       "test-secret-must-be-at-least-thirty-two-chars-long-abcdef"
     missingProfileExists = false
     activeTeamCookie = undefined
+    vi.mocked(invalidateMembershipDirectory).mockClear()
     vi.mocked(listTeamMembershipsForUserDetailed).mockReset()
     vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
       memberships: [{ teamId: "team-west", region: "usw" }],
@@ -350,6 +354,152 @@ describe("proxy-auth cell targeting", () => {
         key_hash: hashKey(apiKey),
         created_by: "paired-context-user",
       }),
+    )
+  })
+
+  it("refreshes a stale directory before caching the selected team", async () => {
+    const user = { id: "stale-directory-selected-team-user" }
+    activeTeamCookie = "use:team-new"
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({
+        memberships: [{ teamId: "team-old", region: "use" }],
+        degradedRegions: [],
+      })
+      .mockResolvedValueOnce({
+        memberships: [
+          { teamId: "team-old", region: "use" },
+          { teamId: "team-new", region: "use" },
+        ],
+        degradedRegions: [],
+      })
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-new"),
+      team: { teamId: "team-new", region: "use" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      1,
+      user.id,
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      2,
+      user.id,
+      { publish: false },
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+    expect(invalidateMembershipDirectory).toHaveBeenCalledExactlyOnceWith(
+      user.id,
+    )
+
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
+      memberships: [{ teamId: "team-old", region: "use" }],
+      degradedRegions: [],
+    })
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-new"),
+      team: { teamId: "team-new", region: "use" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+  })
+
+  it("uses the deterministic fallback when a fresh directory lacks the selected team", async () => {
+    const user = { id: "fresh-directory-removed-team-user" }
+    activeTeamCookie = "use:removed-team"
+    vi.mocked(listTeamMembershipsForUserDetailed).mockResolvedValue({
+      memberships: [
+        { teamId: "team-b", region: "use" },
+        { teamId: "team-a", region: "use" },
+      ],
+      degradedRegions: [],
+    })
+    vi.mocked(provisionTeam).mockClear()
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-a"),
+      team: { teamId: "team-a", region: "use" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      2,
+      user.id,
+      { publish: false },
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("keeps the cached fallback when the fresh directory cannot read its region", async () => {
+    const user = { id: "degraded-refresh-fallback-user" }
+    activeTeamCookie = "usw:removed-team"
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({
+        memberships: [{ teamId: "team-west", region: "usw" }],
+        degradedRegions: [],
+      })
+      .mockResolvedValueOnce({
+        memberships: [],
+        degradedRegions: ["usw"],
+      })
+    vi.mocked(provisionTeam).mockClear()
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "usw" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+      2,
+      user.id,
+      { publish: false },
+    )
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+    expect(invalidateMembershipDirectory).not.toHaveBeenCalled()
+    expect(provisionTeam).not.toHaveBeenCalled()
+  })
+
+  it("keeps the cached fallback when the fresh directory read rejects", async () => {
+    const user = { id: "failed-refresh-fallback-user" }
+    activeTeamCookie = "usw:removed-team"
+    vi.mocked(listTeamMembershipsForUserDetailed)
+      .mockResolvedValueOnce({
+        memberships: [{ teamId: "team-west", region: "usw" }],
+        degradedRegions: [],
+      })
+      .mockRejectedValueOnce(new Error("default cell unavailable"))
+    vi.mocked(provisionTeam).mockClear()
+    const warn = vi.spyOn(console, "warn").mockImplementation(() => {})
+
+    try {
+      await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual(
+        {
+          apiKey: deriveRawKey(user.id, "team-west"),
+          team: { teamId: "team-west", region: "usw" },
+        },
+      )
+      expect(listTeamMembershipsForUserDetailed).toHaveBeenNthCalledWith(
+        2,
+        user.id,
+        { publish: false },
+      )
+      expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledTimes(2)
+      expect(invalidateMembershipDirectory).not.toHaveBeenCalled()
+      expect(provisionTeam).not.toHaveBeenCalled()
+      expect(warn).toHaveBeenCalledExactlyOnceWith(
+        "Membership directory refresh failed; using cached directory",
+        { userId: user.id, stage: "proxy-auth" },
+      )
+    } finally {
+      warn.mockRestore()
+    }
+  })
+
+  it("reads the directory once when no team is selected", async () => {
+    const user = { id: "no-selection-single-directory-read-user" }
+
+    await expect(getAuthApiKeyAndTeamForUser(user as never)).resolves.toEqual({
+      apiKey: deriveRawKey(user.id, "team-west"),
+      team: { teamId: "team-west", region: "usw" },
+    })
+    expect(listTeamMembershipsForUserDetailed).toHaveBeenCalledExactlyOnceWith(
+      user.id,
     )
   })
 

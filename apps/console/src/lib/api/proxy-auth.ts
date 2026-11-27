@@ -104,6 +104,49 @@ async function getTeamForUser(
     userId,
     await listTeamMembershipsForUserDetailed(userId),
   )
+  // Teams created or joined elsewhere may be missing from this module's cache.
+  // Refresh without publishing failures, then invalidate after a healthy read.
+  if (
+    selection &&
+    !directory.memberships.some(
+      (membership) =>
+        membership.teamId === selection.teamId &&
+        membership.region === selection.region,
+    )
+  ) {
+    try {
+      const fresh = await completedMemberships(
+        userId,
+        await listTeamMembershipsForUserDetailed(userId, { publish: false }),
+      )
+      if (fresh.degradedRegions.length === 0) {
+        invalidateMembershipDirectory(userId)
+      }
+      // Keep completed cached memberships only for unreadable regions;
+      // successful reads must still respect confirmed removals.
+      directory = {
+        memberships: [
+          ...fresh.memberships.filter(
+            (membership) => !fresh.degradedRegions.includes(membership.region),
+          ),
+          ...directory.memberships.filter((membership) =>
+            fresh.degradedRegions.includes(membership.region),
+          ),
+        ],
+        degradedRegions: fresh.degradedRegions.filter((region) =>
+          directory.degradedRegions.includes(region),
+        ),
+      }
+    } catch {
+      console.warn(
+        "Membership directory refresh failed; using cached directory",
+        {
+          userId,
+          stage: "proxy-auth",
+        },
+      )
+    }
+  }
   let memberships = directory.memberships
   if (googleUser && memberships.length === 0) {
     // A fresh, complete directory read is required before deciding this is a
