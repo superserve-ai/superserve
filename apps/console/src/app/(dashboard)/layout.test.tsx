@@ -71,6 +71,9 @@ vi.mock("@/components/layout/dashboard-shell", () => ({
 vi.mock("@/components/billing/plan-banner", () => ({
   PlanBanner: () => <p>Plan banner</p>,
 }))
+vi.mock("@/components/trial-billing-banner", () => ({
+  TrialCheckAnnouncer: () => <p>Trial check announcer</p>,
+}))
 vi.mock("@/components/admin/impersonation-banner", () => ({
   ImpersonationBanner: () => null,
 }))
@@ -148,6 +151,8 @@ describe("dashboard layout when the plan read fails", () => {
     await renderLayout()
     expect(screen.getByText("Sandboxes")).toBeVisible()
     expect(screen.getByText("Plan banner")).toBeVisible()
+    // Mounted before the banner loads its data, so late text is announced.
+    expect(screen.getByText("Trial check announcer")).toBeInTheDocument()
     expect(screen.queryByText(/We couldn’t load your plan details/)).toBeNull()
   })
 
