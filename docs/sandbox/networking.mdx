@@ -14,7 +14,7 @@ By default, a sandbox can reach any public IP on the internet. The platform alwa
 
 ## Allow specific destinations
 
-`allowOut` / `allow_out` accepts a mix of CIDRs and domain patterns. Combine it with `denyOut: ["0.0.0.0/0"]` to build a strict allowlist - deny everything, then add exceptions. Do not rely on `allowOut` without `denyOut` to keep other egress open: it can also block destinations that are not on the list, so list every host the workload needs.
+`allowOut` / `allow_out` accepts a mix of CIDRs and domain patterns. Combine it with `denyOut: ["0.0.0.0/0"]` to build a strict allowlist - deny everything, then add exceptions. `allowOut` without `denyOut` is not a lockdown. It blocks HTTP and HTTPS on ports 80 and 443 to destinations that are not on the list, but traffic on other ports and DNS queries to any resolver still go out. To block all other egress, add `denyOut: ["0.0.0.0/0"]`.
 
 <CodeGroup>
 ```typescript TypeScript
@@ -71,7 +71,7 @@ Allow rules take precedence over deny rules when they overlap.
 
 ## Update rules on a running sandbox
 
-Networking can be updated after creation - changes apply immediately to new connections. The sandbox must be `active`; updating `network` on a paused sandbox returns a `ConflictError`. Resume it first, or set the rules at creation so they follow the sandbox through every pause and resume.
+Networking can be updated after creation - changes apply immediately to new connections. An update replaces the whole rule set: send the complete `allowOut` and `denyOut` lists every time. A list you leave out is cleared, and `network: {}` / `NetworkConfig()` removes every rule, which opens the sandbox to the internet again. The sandbox must be `active`; updating `network` on a paused sandbox returns a `ConflictError`. Resume it first, or set the rules at creation so they follow the sandbox through every pause and resume.
 
 <CodeGroup>
 ```typescript TypeScript
