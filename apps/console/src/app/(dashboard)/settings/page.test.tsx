@@ -251,6 +251,15 @@ describe("Settings billing", () => {
     expect(screen.getByText("$0.0144 / GiB-hour")).toBeInTheDocument()
   })
 
+  it("sets the resource rate columns based on the card width", () => {
+    renderPage()
+
+    const rates = screen.getByText("$0.0720 / vCPU-hour").closest("dl")
+    expect(rates?.parentElement).toHaveClass("@container")
+    expect(rates).toHaveClass("@lg:grid-cols-3", "wrap-anywhere")
+    expect(rates).not.toHaveClass("md:grid-cols-3")
+  })
+
   it("shows permitted shadow teams without using billing mode as storage eligibility", () => {
     useBillingSummary.mockReturnValue({
       data: { ...summary(true), billing_mode: "shadow" },
