@@ -5,7 +5,12 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query"
 import { useUser } from "@/hooks/use-user"
 import { ApiError } from "@/lib/api/client"
 import { billingKeys, teamKeys } from "@/lib/api/query-keys"
+import {
+  TEAM_CREATION_NAME_LENGTH_MESSAGE,
+  TEAM_CREATION_PENDING_MESSAGE,
+} from "@/lib/api/team-creation-errors"
 import { renameTeamAction } from "@/lib/api/team-rename-actions"
+import { RenameTeamActionFailure } from "@/lib/api/team-rename-error"
 import {
   createTeamAction,
   listTeamsAction,
@@ -117,7 +122,7 @@ export function useCreateTeam() {
     }) => {
       if (!user) throw new Error("Not authenticated")
       if (!name.trim() || new TextEncoder().encode(name).length > 256)
-        throw new Error("Enter a team name between 1 and 256 bytes")
+        throw new Error(TEAM_CREATION_NAME_LENGTH_MESSAGE)
       const { key, region: targetRegion } = pickIntentKey(
         user.id,
         region,
@@ -140,10 +145,7 @@ export function useCreateTeam() {
           (intent.convertTeamId && intent.region !== targetRegion))
       )
         intent = fresh()
-      if (intent.name !== name)
-        throw new Error(
-          "Retry the pending team creation using its original name",
-        )
+      if (intent.name !== name) throw new Error(TEAM_CREATION_PENDING_MESSAGE)
       // This attempt can commit even if its response is lost, so only its own
       // conflict marks the name rejected again.
       delete intent.nameRejected
@@ -219,7 +221,8 @@ export function useRenameTeam() {
         { teamId: team.id, region: team.region },
         name,
       )
-      if (!result.ok) throw new Error(result.message)
+      if (!result.ok)
+        throw new RenameTeamActionFailure(result.code, result.message)
       return result.team
     },
     onSuccess: async (team) => {
