@@ -121,6 +121,47 @@ describe("apiClient", () => {
     }
   })
 
+  it("keeps a 402 action_url on the ApiError", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: {
+            code: "trial_exhausted",
+            message: "Your free trial credit is used up.",
+            action_url: "https://console.superserve.ai/plan-usage",
+          },
+        }),
+        { status: 402, headers: { "content-type": "application/json" } },
+      ),
+    )
+
+    const err = await apiClient("/sandboxes", { method: "POST" }).catch(
+      (e: unknown) => e,
+    )
+    expect(err).toBeInstanceOf(ApiError)
+    expect(err).toMatchObject({
+      status: 402,
+      code: "trial_exhausted",
+      actionUrl: "https://console.superserve.ai/plan-usage",
+    })
+  })
+
+  it("ignores an action_url that is not a string", async () => {
+    fetchSpy.mockResolvedValue(
+      new Response(
+        JSON.stringify({
+          error: { code: "trial_exhausted", message: "x", action_url: 7 },
+        }),
+        { status: 402, headers: { "content-type": "application/json" } },
+      ),
+    )
+
+    const err = (await apiClient("/sandboxes").catch(
+      (e: unknown) => e,
+    )) as ApiError
+    expect(err.actionUrl).toBeUndefined()
+  })
+
   it("throws ApiError with defaults when the error body isn't valid JSON", async () => {
     fetchSpy.mockResolvedValue(
       new Response("<html>500</html>", {

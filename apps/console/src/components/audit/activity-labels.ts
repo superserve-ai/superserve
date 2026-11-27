@@ -1,7 +1,13 @@
 import type { ActivityResponse } from "@/lib/api/types"
 import { roleLabel } from "@/lib/team/roles"
 
-const TEAM_ACTION_LABELS: Record<string, string> = {
+// Plain words for activity actions the server records as codes. The server
+// writes "<cause>_paused" for an automatic pause; billing_ineligible means the
+// team had no trial credit or plan left at that time.
+export const BILLING_PAUSE_ACTIVITY = "billing_ineligible_paused"
+
+const ACTIVITY_ACTION_LABELS: Record<string, string> = {
+  [BILLING_PAUSE_ACTIVITY]: "Paused: trial credit used up or no plan",
   team_invitation_created: "Invitation created",
   team_invitation_resent: "Invitation resent",
   team_invitation_revoked: "Invitation revoked",
@@ -14,8 +20,8 @@ const TEAM_ACTION_LABELS: Record<string, string> = {
 }
 
 export function activityActionLabel(action: string): string {
-  return Object.hasOwn(TEAM_ACTION_LABELS, action)
-    ? TEAM_ACTION_LABELS[action]!
+  return Object.hasOwn(ACTIVITY_ACTION_LABELS, action)
+    ? ACTIVITY_ACTION_LABELS[action]!
     : action
 }
 
