@@ -807,7 +807,8 @@ export function CreateSandboxDialog({
                       )}
                     >
                       {source === s.value && <CornerBrackets size="sm" />}
-                      {s.label}
+                      {/* Keep translated text out of the brackets' insertion target. */}
+                      <span>{s.label}</span>
                     </button>
                   ))}
                 </div>
